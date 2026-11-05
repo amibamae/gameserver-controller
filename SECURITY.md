@@ -65,7 +65,7 @@ External transmission must use encrypted transport. Stored logs must have approp
 
 Necessary local records used to operate and protect the service are distinct from optional telemetry. Examples include controller startup failures, backup/restore outcomes, provisioning events, and infrastructure authentication failures. These records must still follow data minimization, access control, and retention requirements.
 
-If a local security record includes identifiable player information, the project must apply the player-consent requirements above unless a clearly documented, narrowly scoped security necessity and applicable law justify a different treatment. This exception must not enable general analytics or external telemetry without consent.
+Any telemetry or optional monitoring record that includes identifiable player information requires both server-owner opt-in and separate opt-in from each affected player. There is no general security-monitoring exemption from this consent rule. If a security function genuinely requires processing player-identifying information without consent, it must be designed and documented as a separate necessary service-security operation, not optional telemetry, and reviewed for necessity, proportionality, and applicable legal requirements. It must not be repurposed for analytics or external telemetry.
 
 ### Central enforcement
 
