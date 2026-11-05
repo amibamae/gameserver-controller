@@ -23,6 +23,14 @@ The first reference deployment is Vultr + Wasabi + Minecraft Java Edition (Paper
 - **Privacy by default:** optional telemetry is disabled unless explicitly enabled; identifiable player telemetry requires separate server-owner and player consent.
 - **Community extensibility:** contributors can add adapters without rewriting core functionality.
 
+## AI-assisted development
+
+This project currently uses AI-assisted tools during its early architecture and proof-of-concept work. AI helps with design exploration, documentation drafts, comparing approaches, prototyping, and troubleshooting. AI-assisted output is not automatically trusted or accepted; maintainers remain responsible for review, testing, security, licensing, and project decisions.
+
+AI is not intended to be a runtime dependency. The controller's normal operation should not require an AI model, AI API, subscription, or external AI service. We are open to reworking, simplifying, or replacing AI-assisted designs and code with conventional, independently maintained implementations as the project matures. Contributors are not required to use AI, and non-AI contributions are equally welcome.
+
+See [AI Use and Development Transparency](docs/AI_DISCLOSURE.md) for the full disclosure and review commitments.
+
 ## Planned capabilities
 
 - Hosting-provider, storage-provider, game, and integration adapters.
