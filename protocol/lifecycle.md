@@ -158,7 +158,23 @@ Restoring over existing data requires a separate safety plan and approval accord
 
 Replacement preserves `server_id` but creates a new instance reference. The old instance MUST remain recorded until its state and data disposition are reconciled. A replacement MUST restore from a specifically selected verified backup or use an explicitly documented data migration capability. The controller MUST NOT route to the replacement until it is `ready` and proxy integration confirms registration.
 
-## 6. Readiness and routing
+## 6. Persistent-data generation
+
+To determine whether a backup represents the current persistent data before destruction, every logical server tracks a controller-issued `data_generation_id` and a generation status of `known` or `unknown`.
+
+- The controller creates a new generation ID before a game runtime is first started.
+- The ID represents one runtime/write epoch. It remains stable while that runtime may write persistent data.
+- After an offline backup is captured and verified, the backup manifest records the generation ID captured.
+- Before a stopped server is started again, the controller MUST assign a new generation ID. This conservatively makes the prior backup non-current once the game can write again.
+- A restore, migration, release operation that changes persistent data, or approved external data modification MUST assign a new generation ID before the runtime is started.
+- If an out-of-band change or an unknown runtime outcome means the current generation cannot be established, generation status becomes `unknown`; no prior backup may authorize destruction until a new consistent backup is captured and verified.
+- An online/game-native snapshot MAY be used for restore or recovery, but MUST NOT authorize destruction after the runtime has continued writing unless the game adapter provides a verifiable write-watermark/generation guarantee. The conservative default is that resuming the runtime advances the generation and makes that backup non-current.
+
+A backup is eligible to authorize destruction only when it is integrity-verified, belongs to the same logical server and environment, and its `data_generation_id` exactly matches the current known generation. Backup age alone is not sufficient.
+
+The generation ID is opaque and is not a player-visible counter. It MUST be recorded in the logical server record, backup manifest, operation result, and audit evidence. The protocol does not prescribe UUID/ULID generation.
+
+## 7. Readiness and routing
 
 `ready` means all server-specific mandatory checks passed at a recorded time. A process merely existing, a TCP port merely listening, or a provider merely reporting a running VM is insufficient.
 
