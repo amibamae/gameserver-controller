@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.compatibility.check.unknown",
-  "protocol_version": "0.13.0-draft",
+  "protocol_version": "0.14.0-draft",
   "contract_area": "game.compatibility.check",
   "purpose": "Unknown compatibility evidence cannot be treated as compatible.",
   "input": {

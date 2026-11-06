@@ -1,6 +1,6 @@
 {
   "fixture_id": "integration.proxy.register.accepted-is-not-routable",
-  "protocol_version": "0.13.0-draft",
+  "protocol_version": "0.14.0-draft",
   "contract_area": "integration.proxy.backend.register",
   "purpose": "Accepted registration is not confirmed routing state.",
   "input": {

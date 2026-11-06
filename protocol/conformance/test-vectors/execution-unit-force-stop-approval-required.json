@@ -1,0 +1,26 @@
+{
+  "fixture_id": "execution.unit.force-stop.approval-required",
+  "protocol_version": "0.14.0-draft",
+  "contract_area": "execution.unit.force_stop",
+  "purpose": "A force-stop request without an approval reference fails schema validation and is not dispatched.",
+  "input": {
+    "force_stop_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "reason_code": "graceful_stop_timeout"
+    }
+  },
+  "core_preconditions": {
+    "approval_valid": false
+  },
+  "expected": {
+    "schemas_valid": false,
+    "approval_required": true,
+    "dispatch_allowed": false,
+    "termination_confirmed": false
+  }
+}

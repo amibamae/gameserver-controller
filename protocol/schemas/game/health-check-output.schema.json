@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.13.0-draft:game:health-check-output",
+  "$id": "urn:gameserver-controller:0.14.0-draft:game:health-check-output",
   "title": "Game health check output",
   "description": "Health is derived from exactly one result per requested check; unknown evidence cannot be reported as healthy.",
   "type": "object",
@@ -27,7 +27,7 @@
       "maxLength": 200
     },
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.13.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.14.0-draft:common:external-resource-ref"
     },
     "game_release_id": {
       "type": "string",

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.13.0-draft:game:readiness-check-output",
+  "$id": "urn:gameserver-controller:0.14.0-draft:game:readiness-check-output",
   "title": "Game readiness check output",
   "description": "Game-specific observations for the exact requested target. This result does not itself grant a controller readiness assertion.",
   "type": "object",
@@ -25,7 +25,7 @@
       "maxLength": 200
     },
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.13.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.14.0-draft:common:external-resource-ref"
     },
     "game_release_id": {
       "type": "string",

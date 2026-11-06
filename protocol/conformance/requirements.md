@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.13.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.14.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -75,7 +75,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Game migration requires an exactly bound verified backup, a `migration_required` result, exact approval, a distinct stopped target, bounded streams for every manifest object, and new target data generation. The source remains unchanged, all requested migration checks must pass, and an unknown outcome requires reconciliation before retry.
 - A game install verifies every pinned artifact checksum before starting installation; invalid configuration is rejected before application; unknown installation validation blocks start.
 - Execution log reads are bounded and redacted, health `unknown` is not healthy, and deleting a unit preserves persistent data. Proxy registration requires an unexpired readiness assertion bound to the exact instance; accepted or unknown routing state is not routable.
-- Systemd lifecycle results bind the exact unit. A completed start does not establish game readiness, and an unknown start or stop outcome requires inspection before retry.
+- Systemd lifecycle results bind the exact unit. A completed start does not establish game readiness, and an unknown start or stop outcome requires inspection before retry. Force stop requires approval bound to the exact unit and reason; accepted is not complete, unknown requires inspection, and a completed result confirms stopped state only.
 
 ### Proxy routing and player transfer
 - Backend registration requires a current readiness assertion bound to the exact server, environment, and instance.
@@ -171,6 +171,12 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [execution-unit-start-unknown-requires-inspection.json](test-vectors/execution-unit-start-unknown-requires-inspection.json)
 - [execution-unit-start-target-mismatch.json](test-vectors/execution-unit-start-target-mismatch.json)
 - [execution-unit-graceful-stop-completed-stopped.json](test-vectors/execution-unit-graceful-stop-completed-stopped.json)
+- [execution-unit-force-stop-approval-required.json](test-vectors/execution-unit-force-stop-approval-required.json)
+- [execution-unit-force-stop-approval-scope-denied.json](test-vectors/execution-unit-force-stop-approval-scope-denied.json)
+- [execution-unit-force-stop-completed-stopped.json](test-vectors/execution-unit-force-stop-completed-stopped.json)
+- [execution-unit-force-stop-accepted-not-stopped.json](test-vectors/execution-unit-force-stop-accepted-not-stopped.json)
+- [execution-unit-force-stop-target-mismatch.json](test-vectors/execution-unit-force-stop-target-mismatch.json)
+- [execution-unit-force-stop-unknown-requires-inspection.json](test-vectors/execution-unit-force-stop-unknown-requires-inspection.json)
 
 - [hosting-instance-inspect-exact-active.json](test-vectors/hosting-instance-inspect-exact-active.json)
 - [hosting-instance-inspect-unknown-not-active.json](test-vectors/hosting-instance-inspect-unknown-not-active.json)

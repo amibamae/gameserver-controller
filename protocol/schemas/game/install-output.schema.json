@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.13.0-draft:game:install-output",
+  "$id": "urn:gameserver-controller:0.14.0-draft:game:install-output",
   "title": "Game install output",
   "description": "Confirmed installation outcome and artifact verification state for the requested release.",
   "type": "object",
@@ -16,7 +16,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.13.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.14.0-draft:game:game-instance-target"
     },
     "release_id": {
       "type": "string",
@@ -52,7 +52,7 @@
       }
     },
     "installation_ref": {
-      "$ref": "urn:gameserver-controller:0.13.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.14.0-draft:common:external-resource-ref"
     },
     "observed_at": {
       "type": "string",

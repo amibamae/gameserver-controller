@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.13.0-draft:rpc:adapter-invoke-result",
+  "$id": "urn:gameserver-controller:0.14.0-draft:rpc:adapter-invoke-result",
   "title": "Adapter invoke JSON-RPC result",
   "type": "object",
   "additionalProperties": false,
@@ -14,7 +14,7 @@
       "required": ["outcome", "output", "observed_at"],
       "properties": {
         "outcome": {"enum": ["completed", "accepted", "outcome_unknown"]},
-        "external_operation_ref": {"$ref": "urn:gameserver-controller:0.13.0-draft:common:external-resource-ref"},
+        "external_operation_ref": {"$ref": "urn:gameserver-controller:0.14.0-draft:common:external-resource-ref"},
         "output": {"type": "object"},
         "observed_at": {"type": "string", "format": "date-time"}
       }
