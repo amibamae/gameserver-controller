@@ -1,0 +1,41 @@
+{
+  "adapter_id": "execution.systemd",
+  "category": "execution",
+  "display_name": "systemd execution adapter",
+  "implementation_version": "0.1.0",
+  "protocol_versions": ["0.1.0-draft"],
+  "contract_versions": ["execution.v1-draft"],
+  "required_permissions": ["runtime.inspect", "runtime.start", "runtime.stop"],
+  "capabilities": [
+    {
+      "name": "execution.unit.inspect",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:example:schema:execution-inspect-input",
+      "output_schema_uri": "urn:example:schema:execution-inspect-output",
+      "required_permissions": ["runtime.inspect"]
+    },
+    {
+      "name": "execution.unit.start",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:example:schema:execution-start-input",
+      "output_schema_uri": "urn:example:schema:execution-start-output",
+      "required_permissions": ["runtime.start"]
+    },
+    {
+      "name": "execution.unit.graceful_stop",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:example:schema:execution-stop-input",
+      "output_schema_uri": "urn:example:schema:execution-stop-output",
+      "required_permissions": ["runtime.stop"]
+    }
+  ],
+  "constraints": {
+    "operating_systems": ["linux"],
+    "service_manager": "systemd",
+    "requires_preexisting_host": true,
+    "requires_container_runtime": false
+  }
+}
