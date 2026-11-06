@@ -100,4 +100,4 @@ Every protocol release MUST validate:
 - Unknown optional fields and unknown safety-critical enum/state values.
 - In-flight operation recovery when the controller or adapter implementation version changes.
 
-Before 1.0, at least two independently built implementations in different languages MUST pass the same published conformance suite. A schema-valid message alone is not evidence of behavioral interoperability.
+The initial Go implementation MUST pass the published conformance suite before release. Other-language implementations are welcome community contributions and MAY run the same suite, but a second language is not a release requirement. A schema-valid message alone is not evidence of behavioral interoperability.

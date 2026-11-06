@@ -110,20 +110,21 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Client never assumes request timeout means operation failure.
 - Authentication and authorization failures do not disclose protected resource details.
 
-## 5. Cross-language interoperability gate
+## 5. Optional implementations in other languages
 
-Before a stable 1.0 release, at least two independently built implementations in different programming languages MUST:
+The initial Go implementation MUST pass the published conformance suite before release. Implementations in other languages are welcome as community contributions and MAY run the same suite, but a second language is not a release requirement.
+
+A contributed implementation SHOULD:
+
 1. Validate the same published schemas.
 2. Parse and emit the same canonical examples.
 3. Execute the same lifecycle and operation test vectors.
 4. Agree on structured error codes and legal transitions.
-5. Demonstrate an end-to-end adapter exchange using the selected transport or in-process contract.
-6. Demonstrate compatibility behavior for unknown optional fields and unsupported capabilities.
+5. Demonstrate an adapter exchange using the selected transport or in-process contract.
+6. Handle unknown optional fields and unsupported capabilities compatibly.
 
-At least one implementation MUST be developed without importing code generated from the other implementation. Generated bindings MAY be used after the language-neutral schemas are authoritative.
-
-Test results, implementation versions, protocol version, schema registry digest, and fixture suite digest MUST be published. A self-reported checklist alone is not evidence of interoperability.
-
+A contributed implementation SHOULD preserve the published protocol meaning. Generated bindings MAY be used after the language-neutral schemas are authoritative. Contributors claiming conformance SHOULD publish the implementation and protocol versions, schema registry digest, and fixture-suite digest.
+ 
 ## 6. Test vector index
 
 - [valid-provision-request.json](test-vectors/valid-provision-request.json)

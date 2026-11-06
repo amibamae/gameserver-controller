@@ -2,31 +2,26 @@
 
 ## Our commitment
 
-We are committed to providing a welcoming, respectful, and harassment-free experience for everyone who participates in this project, regardless of experience, identity, background, or level of contribution.
+This project welcomes people of every experience level and background. When you take part, help us keep the conversation respectful, useful, and free from harassment.
 
-## Expected behavior
+## How we work together
 
-- Be respectful, constructive, and considerate.
-- Assume good faith while discussing technical disagreements.
-- Give actionable feedback focused on the work, not the person.
-- Welcome questions and contributions from people with different experience levels.
-- Respect privacy. Never publish another person's credentials, personal information, or private infrastructure details.
-- Follow the project's security disclosure process.
+- Critique the proposal or code. Do not attack the person who wrote it.
+- Give specific, actionable feedback, especially when a technical choice could put data or users at risk.
+- Discuss disagreements in good faith and leave room for people to ask basic questions.
+- Protect privacy. Do not publish another person's credentials, personal information, or private infrastructure details.
+- Follow the private vulnerability-reporting process in [SECURITY.md](SECURITY.md).
 
-## Unacceptable behavior
+## Behavior we do not accept
 
-- Harassment, discrimination, intimidation, or personal attacks.
-- Threats, abusive language, or deliberate disruption.
-- Publishing private information without permission.
-- Deliberately submitting malicious code or attempting to compromise project infrastructure.
-- Retaliation against people who report concerns in good faith.
+Harassment, discrimination, intimidation, threats, abusive language, personal attacks, and deliberate disruption have no place here. Do not publish private information, submit malicious code, try to compromise project infrastructure, or retaliate against someone who reports a concern in good faith.
 
-## Maintainer responsibilities
+## Maintainer response
 
-Project maintainers may edit, reject, or remove contributions and may restrict participation when necessary to protect the community or project. Reports will be reviewed and handled as fairly and confidentially as practical.
+Maintainers may edit, reject, or remove contributions and may restrict participation when needed to protect the project or its community. We will review reports fairly and keep them confidential where practical.
 
-## Reporting
+## Report a concern
 
-Report conduct concerns privately to the repository owner through their GitHub profile. Do not use public issues for sensitive personal information.
+Contact the repository owner privately through their GitHub profile. Do not post sensitive personal information in a public issue.
 
-This code of conduct applies to project spaces, including issues, pull requests, discussions, and other official community channels.
+This policy applies to project spaces, including issues, pull requests, discussions, and other official community channels.

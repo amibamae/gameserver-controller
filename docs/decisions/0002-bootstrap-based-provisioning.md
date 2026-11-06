@@ -1,4 +1,4 @@
-# 0002 — Bootstrap-based instance provisioning
+# ADR 0002: Bootstrap-Based Instance Provisioning
 
 - **Status:** Accepted
 - **Date:** 2026-11-06
@@ -6,51 +6,51 @@
 
 ## Context
 
-The project considered distributing preinstalled base-system artifacts or custom installation media. That approach would introduce a separate host-artifact build, upload, storage, versioning, promotion, and provider-specific lifecycle process.
+We considered distributing preinstalled base-system images or custom installation media. That would add a second artifact lifecycle: build, upload, store, version, promote, and maintain provider-specific host images.
 
-The initial reference deployment already uses a repeatable bootstrap process to prepare standard Debian instances. Persistent game data is kept separately in object storage and restored after instance provisioning.
+The reference deployment already prepares standard Debian instances with repeatable bootstrap scripts. Minecraft worlds live in object storage and return after the instance is provisioned.
 
-The project should publish reusable source code and let each operator customize and run it in their own infrastructure account. It should not require operators to use a preinstalled base system created or distributed by the project.
+I want operators to use source they can inspect and adapt in their own provider accounts. They should not depend on a base image built or hosted by this project.
 
 ## Decision
 
-The default provisioning workflow uses a standard operating-system offering supplied by the hosting provider, followed by project-provided, operator-customizable bootstrap scripts.
+The default workflow starts with an operating-system offering supplied by the hosting provider, then applies project bootstrap scripts that each operator can customize.
 
-The controller and protocol should model:
+The controller and protocol will model:
 
-1. Selection of a provider-supported operating-system distribution/version.
-2. Instance creation with the requested region, plan, networking, and access references.
-3. Application of an explicitly selected and versioned bootstrap revision plus operator configuration.
-4. Validation of bootstrap completion and resulting host readiness.
-5. Secure, separately authorized delivery of credentials only to the operation steps that require them.
-6. Restore of the selected verified game-data backup from persistent storage.
-7. Game startup and game-specific readiness validation.
+1. The provider-supported operating system and version.
+2. Instance creation, including region, plan, networking, and access references.
+3. An explicitly chosen, versioned bootstrap revision and operator configuration.
+4. Bootstrap completion and host-readiness checks.
+5. Secure, separately authorized delivery of credentials only to steps that need them.
+6. Restore of one selected, verified game-data backup.
+7. Game startup and game-specific readiness checks.
 
-Bootstrap source, configuration inputs, and execution results should be recorded so an operator can identify exactly how an instance was prepared and reproduce it later.
+Record the bootstrap source, inputs, and execution result so you can reproduce how an instance was prepared.
 
-The public repository distributes source code, templates, protocol specifications, tests, and documentation. Each operator provisions standard provider OS instances and runs a customized copy or release of the bootstrap scripts in their own account.
+The public repository distributes source, templates, protocol specifications, tests, and documentation. Each operator provisions a standard OS instance and runs a customized copy or release of the scripts in their own account.
 
-Project-maintained preinstalled base systems, custom installation-media workflows, and provider-specific preinstallation/promotion pipelines are not part of the default architecture.
+Project-maintained preinstalled images, custom installation media, and provider-specific image-promotion pipelines are outside the default architecture.
 
-## Rationale
+## Why this fits
 
-- Avoids recurring storage costs and provider-specific preinstalled-system artifact management.
-- Avoids assuming that snapshot restoration is faster than ordinary instance provisioning.
-- Keeps provisioning behavior visible, reviewable, and customizable as source code.
-- Makes the deployment protocol independent of provider-specific preinstalled-system features.
-- Preserves a clean boundary between replaceable compute and persistent world data.
-- Lets operators control their own OS selection, package choices, security policy, and bootstrap configuration.
+- Avoids ongoing storage and provider-specific image management.
+- Does not assume image restoration is faster than ordinary VM provisioning.
+- Keeps host preparation visible, reviewable, and customizable.
+- Keeps the protocol independent of provider-specific preinstalled-image features.
+- Separates replaceable compute from persistent world data.
+- Lets operators choose the OS, packages, security policy, and bootstrap settings.
 
 ## Consequences
 
-- Hosting adapters must model standard OS offerings and provider-specific OS identifiers as instance-creation inputs.
-- The protocol must represent bootstrap references/revisions, configuration inputs, execution state, and validation results.
-- Bootstrap scripts are privileged code and require review, integrity checks, isolated testing, and clear versioning.
-- Bootstrap scripts must not contain secret values. Credentials are injected or resolved separately with least-privilege scope.
-- New bootstrap revisions should be tested against fresh instances created from supported standard OS offerings before being recommended for production.
-- Persistent worlds, backups, and release artifacts remain separate from the instance bootstrap.
-- Rollback to an earlier host-preparation baseline means reprovisioning with a previously approved bootstrap revision; it does not require reverting a preinstalled machine artifact.
+- Hosting adapters must model standard OS offerings and provider-specific identifiers.
+- The protocol must represent bootstrap revisions, configuration inputs, execution state, and validation results.
+- Bootstrap scripts run with elevated privileges, so review them, verify their integrity, test them on isolated instances, and version them clearly.
+- Never put secret values in bootstrap scripts. Resolve credentials separately with least-privilege scope.
+- Test new bootstrap revisions on fresh instances before recommending them for production.
+- Keep worlds, backups, and release artifacts separate from host bootstrap.
+- To return to an earlier host baseline, reprovision with a previously approved bootstrap revision.
 
-## Reconsideration criteria
+## When to reconsider
 
-Preinstalled host artifacts or custom installation-media workflows may be considered as optional provider-specific extensions only if measured deployment tests demonstrate a meaningful operational benefit or a concrete operator requirement justifies them. They must not become a required project artifact or default deployment dependency without a separate reviewed decision.
+We may consider preinstalled images or custom installation media as optional provider-specific extensions if measured tests show a meaningful benefit or an operator has a concrete need. They must not become a required artifact or default dependency without a separate reviewed decision.

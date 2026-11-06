@@ -1,78 +1,87 @@
-# Security and Privacy Policy
+# Security and Privacy
 
-Security and privacy are core project requirements. This document describes vulnerability reporting expectations and the rules governing security logs and telemetry.
+Security and privacy are requirements for this project. Use this page to report a vulnerability and to understand the rules for security records and optional telemetry.
 
-## Reporting a vulnerability
+## Report a vulnerability
 
-Please do not disclose exploitable vulnerability details in a public issue before maintainers have had a reasonable opportunity to investigate.
+Please give maintainers a reasonable chance to investigate before you disclose exploitable details.
 
-Use GitHub's **Report a vulnerability** feature in the repository's Security tab when it is enabled. If private vulnerability reporting is not available, contact the repository owner through their GitHub profile and request a private reporting channel. Do not include exploit details in a public issue.
+Use GitHub’s **Report a vulnerability** option on the repository’s Security tab when it is available. If private reporting is unavailable, contact the repository owner through their GitHub profile and ask for a private channel. Do not include exploit details in a public issue.
 
-Reports are welcome for vulnerabilities involving authentication, authorization, credential handling, command execution, provider APIs, storage access, backups, restores, destructive lifecycle operations, update mechanisms, telemetry, and privacy.
+Reports are welcome for problems with authentication, authorization, credentials, command execution, provider APIs, storage, backups, restores, destructive lifecycle actions, updates, telemetry, or privacy.
 
-Only test systems you own or have explicit permission to test. Do not access, modify, or delete another person's infrastructure or data.
+Test only systems you own or have explicit permission to test. Do not access, change, or delete another person’s infrastructure or data.
 
-## Security design principles
+## Security design rules
 
-- Least privilege for provider, storage, operating-system, and game-server permissions.
-- Credentials must be kept out of source control, logs, telemetry, and test fixtures.
-- Destructive operations must be guarded and should fail safely.
+- Give each provider, storage service, operating-system process, and game component only the permissions it needs.
+- Keep credentials out of source control, logs, telemetry, and test fixtures.
+- Guard destructive operations and make them fail safely.
 - Verify backups and required synchronization before destroying infrastructure.
-- Staging environments must be isolated from production write access.
-- Extensions and adapters must use documented, narrowly scoped interfaces.
-- Security-sensitive changes require maintainer review and relevant tests.
+- Isolate staging from production write access.
+- Keep extensions and adapters within documented, narrowly scoped interfaces.
+- Require maintainer review and relevant tests for security-sensitive changes.
 
-## Telemetry and consent
+## Optional telemetry
 
-### Default: disabled
+### Off by default
 
-Optional telemetry must be disabled by default. Installation, upgrades, updates, or configuration migrations must not silently enable it. Telemetry must not be transmitted externally unless the server administrator has explicitly enabled the relevant telemetry category and destination.
+Optional telemetry starts disabled. Installers, upgrades, and migrations must not turn it on silently. The system must not send optional telemetry externally unless the administrator explicitly enables that category and destination.
 
-### Two levels of consent
+### Two separate consents
 
-Telemetry involving identifiable player information requires **both**:
+Optional telemetry that identifies a player requires both:
 
-1. Explicit opt-in by the server owner or administrator; and
-2. Separate, informed opt-in by each affected player.
+1. Explicit opt-in from the server owner or administrator.
+2. Separate, informed opt-in from each affected player.
 
-Server-owner consent does not enroll players. If either consent is absent or withdrawn, the system must not collect or transmit the optional identifiable player telemetry for that person.
+The owner cannot opt in on a player’s behalf. If either consent is missing or withdrawn, the system must stop collecting and transmitting that player’s optional identifiable telemetry.
 
-Players who decline optional telemetry should retain ordinary gameplay access. A separate, narrowly tailored security control may be necessary to protect the service, but it must not be used as a pretext to bypass optional telemetry consent.
+Players who decline optional telemetry keep ordinary gameplay access. A narrowly scoped service-security function may still be necessary, but it must not become a pretext for bypassing the optional telemetry rules.
 
-### Data minimization and prohibited data
+### Minimize data
 
-Permitted security or operational telemetry may include carefully limited events such as service failures, suspicious authentication attempts, firewall events, backup failures, and unauthorized access attempts.
+Security and operations telemetry may include limited events such as service failures, suspicious sign-in attempts, firewall events, backup failures, and unauthorized access attempts. Collect only the fields needed for the stated purpose.
 
-Collection must be limited to fields reasonably necessary for the documented purpose. Player usernames, UUIDs, IP addresses, connection histories, gameplay activity, and player-specific security events are player-related information and require the two levels of consent above when collected as optional telemetry.
+Usernames, UUIDs, IP addresses, connection history, gameplay activity, and player-specific security events identify or relate to a player. If you collect these as optional telemetry, get the two separate consents above.
 
-Never collect passwords, API keys, access tokens, private keys, or other authentication secrets. Do not collect private player messages or chat content for general analytics. Telemetry must not be used for advertising, sale of personal data, unrelated profiling, or unrelated commercial purposes.
+Never collect passwords, API keys, access tokens, private keys, or other authentication secrets. Do not use private player messages for general analytics. Do not use telemetry for advertising, selling personal data, or unrelated profiling.
 
-### Transparency and controls
+### Explain each telemetry feature
 
-Every telemetry feature must document:
+Document:
 
-- Its purpose and the security or operational need.
-- Every data field collected and whether it can identify a person.
-- Whether collection is local or transmitted externally.
-- Destination, transport security, and recipients.
-- Retention period, deletion behavior, and access controls.
-- How server-owner and player consent are obtained, reviewed, and withdrawn.
-- What functionality remains when telemetry is disabled.
+- Why you collect the data and what need it serves.
+- Every field collected and whether it can identify someone.
+- Whether data stays local or leaves the server.
+- The destination, transport protection, and recipients.
+- Retention, deletion, and access controls.
+- How the owner and players give, review, and withdraw consent.
+- What still works when telemetry is off.
 
-External transmission must use encrypted transport. Stored logs must have appropriate access controls, integrity protections, and retention/rotation limits.
+Encrypt external transmission. Protect stored logs from unauthorized access and modification. Set retention and rotation limits.
 
 ### Local operational and security records
 
-Necessary local records used to operate and protect the service are distinct from optional telemetry. Examples include controller startup failures, backup/restore outcomes, provisioning events, and infrastructure authentication failures. These records must still follow data minimization, access control, and retention requirements.
+Necessary local records used to run and protect the service differ from optional telemetry. Examples include controller startup failures, backup and restore results, provisioning events, and infrastructure authentication failures. Still minimize these records, limit access, and define retention.
 
-Any telemetry or optional monitoring record that includes identifiable player information requires both server-owner opt-in and separate opt-in from each affected player. There is no general security-monitoring exemption from this consent rule. If a security function genuinely requires processing player-identifying information without consent, it must be designed and documented as a separate necessary service-security operation, not optional telemetry, and reviewed for necessity, proportionality, and applicable legal requirements. It must not be repurposed for analytics or external telemetry.
+If a record identifies a player and is collected as optional monitoring, both the owner and that player must opt in. There is no general security-monitoring exception to this rule. If a necessary service-security function genuinely must process identifying data without consent, design it as a separate, necessary security operation. Review its necessity, proportionality, and legal requirements before implementation. Do not relabel it as telemetry or reuse it for analytics.
 
-### Central enforcement
+### Enforce consent centrally
 
-Consent must be enforced by a centralized project component or policy interface. Individual games, hosting providers, storage providers, plugins, and integrations must not create alternate paths that bypass consent decisions.
+A central project component or policy interface must enforce consent. Games, hosting and storage providers, plugins, and integrations must not create a second path around that decision.
 
-Contributors adding or changing telemetry must include tests proving that collection and external transmission do not occur when the required consent is absent or withdrawn.
+When you add or change telemetry, include tests showing that collection and external transmission stop when required consent is missing or withdrawn.
+
+## Security design principles
+
+- Use least privilege for provider, storage, operating-system, and game-server access.
+- Keep credentials out of source control, logs, telemetry, and fixtures.
+- Verify a backup before destructive cleanup.
+- Isolate staging from production writes.
+- Review adapter and extension trust boundaries.
+- Keep an audit trail for security-sensitive changes.
 
 ## Incident response
 
-Maintainers should assess reports promptly, determine affected versions and components, coordinate a fix, and communicate mitigations and release information when appropriate. Public disclosure should be coordinated to reduce harm to users.
+Maintainers should assess reports promptly, identify affected versions and components, coordinate a fix, and share mitigations or release details when appropriate. Coordinate public disclosure to reduce harm to users.

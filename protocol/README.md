@@ -1,6 +1,6 @@
 # Protocol Specification
 
-**Status:** Draft specification, version 0.21.0-draft. The repository now contains initial normative prose, JSON Schemas, RPC and management API bindings, examples, and conformance vectors. It is not a stable 1.0 release, and no implementation has yet demonstrated cross-language conformance.
+**Status:** Draft specification, version 0.21.0-draft. The repository contains normative draft prose, JSON Schemas, RPC and management API bindings, examples, and conformance vectors. Go is the initial implementation language and is used for protocol tooling. The full controller and production adapters are not yet implemented.
 
 ## Purpose
 
@@ -148,7 +148,7 @@ protocol/
     └── test-vectors/
 ```
 
-The tree reflects the initial draft package. The schema inventory is indexed in [schemas/index.json](schemas/index.json). The operation catalog defines the initial standard mutating operation types; operation-specific coverage and cross-language conformance remain review work.
+The tree reflects the initial draft package. The schema inventory is indexed in [schemas/index.json](schemas/index.json). The operation catalog defines standard mutating operation types; operation-specific coverage and conformance gaps remain review work.
 
 ## Initial design sequence
 
@@ -161,9 +161,9 @@ The tree reflects the initial draft package. The schema inventory is indexed in 
 7. Define the optional management API for independent clients.
 8. Define security, authorization, consent, audit, and environment isolation across both surfaces.
 9. Publish and validate language-neutral schemas, examples, and conformance vectors.
-10. Demonstrate interoperability using independent implementations in at least two programming languages before a stable 1.0 release.
+10. Validate the initial Go implementation against the published schemas and conformance vectors; welcome optional implementations in other languages.
 
-This draft snapshot is version 0.21.0-draft. It remains draft until semantics, schemas, compatibility rules, security requirements, and conformance tests are reviewed and at least two independent language implementations pass the published interoperability suite.
+This draft snapshot is version 0.21.0-draft. It remains draft until its semantics, schemas, compatibility rules, security requirements, and conformance tests are reviewed and the initial Go implementation passes the published suite. Contributions in other languages are welcome but are not a release requirement.
 
 ## Core design decisions
 
