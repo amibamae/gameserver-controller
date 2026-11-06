@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.reboot.target-mismatch",
-  "protocol_version": "0.20.0-draft",
+  "protocol_version": "0.21.0-draft",
   "contract_area": "hosting.instance.reboot",
   "purpose": "A result for another instance cannot complete the reboot request.",
   "input": {

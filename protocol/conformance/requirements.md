@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.20.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.21.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -73,7 +73,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Game health results bind to the exact release and instance, contain exactly one result per requested check, and do not promote unknown evidence to healthy. Game backup validation uses bounded streams for the exact manifest objects; `unknown` validation never verifies a backup.
 - Game compatibility checks bind the exact backup manifest and target release, contain exactly one result per requested check, and derive aggregate status from all results. Unknown or incomplete evidence cannot be compatible, and a compatibility result does not verify backup integrity or authorize restore.
 - Game migration requires an exactly bound verified backup, a `migration_required` result, exact approval, a distinct stopped target, bounded streams for every manifest object, and new target data generation. The source remains unchanged, all requested migration checks must pass, and an unknown outcome requires reconciliation before retry.
-- A game install verifies every pinned artifact checksum before starting installation; invalid configuration is rejected before application; unknown installation validation blocks start.
+- A game install verifies every pinned artifact before start and reports exactly the pinned artifact IDs; a `valid` installation check binds the exact target/release and contains exactly one `verified` result with matching expected/observed checksums per pinned artifact. Missing or contradictory artifact evidence, invalid configuration, and unknown installation validation block start.
 - Execution log reads are bounded and redacted, health `unknown` is not healthy, and deleting a unit preserves persistent data. Proxy registration requires an unexpired readiness assertion bound to the exact instance; accepted or unknown routing state is not routable.
 - Systemd lifecycle results bind the exact unit. A completed start does not establish game readiness, and an unknown start or stop outcome requires inspection before retry. Force stop requires approval bound to the exact unit and reason; accepted is not complete, unknown requires inspection, and a completed result confirms stopped state only.
 
@@ -138,7 +138,13 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [game-readiness-unknown-blocks-ready.json](test-vectors/game-readiness-unknown-blocks-ready.json)
 - [game-release-install-configure-fail-closed.json](test-vectors/game-release-install-configure-fail-closed.json)
 - [game-install-repeat-same-release.json](test-vectors/game-install-repeat-same-release.json)
+- [game-install-completed-verifies-exact-artifacts.json](test-vectors/game-install-completed-verifies-exact-artifacts.json)
+- [game-install-incomplete-artifact-set-requires-reconciliation.json](test-vectors/game-install-incomplete-artifact-set-requires-reconciliation.json)
 - [game-validate-installation-unknown-blocks-start.json](test-vectors/game-validate-installation-unknown-blocks-start.json)
+- [game-validate-installation-valid-exact-artifacts.json](test-vectors/game-validate-installation-valid-exact-artifacts.json)
+- [game-validate-installation-valid-incomplete-artifacts-blocks-start.json](test-vectors/game-validate-installation-valid-incomplete-artifacts-blocks-start.json)
+- [game-validate-installation-valid-claim-with-unverified-artifact.json](test-vectors/game-validate-installation-valid-claim-with-unverified-artifact.json)
+- [game-validate-installation-valid-claim-with-checksum-mismatch.json](test-vectors/game-validate-installation-valid-claim-with-checksum-mismatch.json)
 - [execution-logs-health-delete-safety.json](test-vectors/execution-logs-health-delete-safety.json)
 - [proxy-register-expired-readiness.json](test-vectors/proxy-register-expired-readiness.json)
 - [proxy-register-accepted-not-routable.json](test-vectors/proxy-register-accepted-not-routable.json)

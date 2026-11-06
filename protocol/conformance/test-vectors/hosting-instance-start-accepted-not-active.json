@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.start.accepted-not-active",
-  "protocol_version": "0.20.0-draft",
+  "protocol_version": "0.21.0-draft",
   "contract_area": "hosting.instance.start",
   "purpose": "Provider acceptance with a returned operation reference does not confirm active state.",
   "input": {

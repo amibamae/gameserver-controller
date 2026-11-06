@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:hosting:instance-wait-output",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-output",
   "title": "Hosting instance wait output",
   "description": "Provider operation status and any observed instance state. A succeeded provider operation is not a confirmed instance postcondition unless the exact expected state is observed.",
   "type": "object",
@@ -13,10 +13,10 @@
   ],
   "properties": {
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
     },
     "provider_operation_ref": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
     },
     "operation_status": {
       "enum": [

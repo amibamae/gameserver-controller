@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:storage:object-get-input",
+  "$id": "urn:gameserver-controller:0.21.0-draft:storage:object-get-input",
   "title": "Storage object get input",
   "type": "object",
   "additionalProperties": false,
@@ -12,12 +12,12 @@
   ],
   "properties": {
     "object_ref": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:storage:storage-object-reference"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-object-reference"
     },
     "destination_transfer": {
       "allOf": [
         {
-          "$ref": "urn:gameserver-controller:0.20.0-draft:storage:storage-transfer-reference"
+          "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-transfer-reference"
         },
         {
           "type": "object",
@@ -38,7 +38,7 @@
       "maximum": 9007199254740991
     },
     "expected_checksum": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:storage:storage-checksum"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum"
     }
   }
 }

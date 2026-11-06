@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:execution:systemd-unit-start-output",
+  "$id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-start-output",
   "title": "Systemd execution unit start output",
   "description": "A successful start confirms the unit is running, not that the game is ready. Accepted or unknown outcomes carry a reference for reconciliation.",
   "allOf": [
     {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:execution:systemd-unit-lifecycle-result"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-lifecycle-result"
     },
     {
       "properties": {

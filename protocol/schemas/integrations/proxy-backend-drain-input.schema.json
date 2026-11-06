@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:integrations:proxy-backend-drain-input",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-drain-input",
   "title": "Proxy backend drain input",
   "type": "object",
   "additionalProperties": false,
@@ -9,7 +9,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:integrations:proxy-backend-target"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-target"
     }
   }
 }

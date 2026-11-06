@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:storage:storage-object-target",
+  "$id": "urn:gameserver-controller:0.21.0-draft:storage:storage-object-target",
   "title": "Storage object target",
   "type": "object",
   "additionalProperties": false,

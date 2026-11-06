@@ -1,7 +1,7 @@
 {
   "operation_id": "operation-provision-002",
   "operation_type": "server.provision",
-  "protocol_version": "0.20.0-draft",
+  "protocol_version": "0.21.0-draft",
   "target": {
     "server_id": "minecraft-test",
     "environment_id": "test",

@@ -1,0 +1,59 @@
+{
+  "fixture_id": "game.install.incomplete-artifact-set-requires-reconciliation",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "game.install",
+  "purpose": "A started installation that omits a pinned artifact from its verification result is not accepted as complete and requires reconciliation.",
+  "input": {
+    "required_artifact_ids": [
+      "paper-server-jar",
+      "paper-plugin"
+    ],
+    "install_request": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3"
+    },
+    "install_output": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3",
+      "outcome": "installed",
+      "artifact_verification": "verified",
+      "installation_started": true,
+      "verified_artifact_ids": [
+        "paper-server-jar"
+      ],
+      "installation_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "installation",
+        "external_id": "paper-install-002"
+      },
+      "observed_at": "2026-11-06T10:00:00Z"
+    },
+    "release_id": "paper-1.21.11-build-3"
+  },
+  "expected": {
+    "schema_valid": true,
+    "target_bound": true,
+    "artifact_set_complete": false,
+    "installation_result_accepted": false,
+    "operation_reconciliation_required": true
+  }
+}

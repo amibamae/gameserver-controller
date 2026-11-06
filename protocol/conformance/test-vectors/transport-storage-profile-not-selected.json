@@ -1,6 +1,6 @@
 {
   "fixture_id": "transport.storage.profile-not-selected",
-  "protocol_version": "0.20.0-draft",
+  "protocol_version": "0.21.0-draft",
   "contract_area": "rpc.transport",
   "purpose": "A descriptor declaring put/get is rejected if the offered stream profile is not selected.",
   "input": {
@@ -10,7 +10,7 @@
       "method": "adapter.initialize",
       "params": {
         "protocol_versions": [
-          "0.20.0-draft"
+          "0.21.0-draft"
         ],
         "stream_transport": {
           "profile": "local-unix-stream-v1",
@@ -26,7 +26,7 @@
       "jsonrpc": "2.0",
       "id": "init-001",
       "result": {
-        "selected_protocol_version": "0.20.0-draft",
+        "selected_protocol_version": "0.21.0-draft",
         "session_id": "session-example"
       }
     },
@@ -36,7 +36,7 @@
       "display_name": "example storage adapter",
       "implementation_version": "1.0.0",
       "protocol_versions": [
-        "0.20.0-draft"
+        "0.21.0-draft"
       ],
       "contract_versions": [
         "storage.v1-draft"
@@ -53,8 +53,8 @@
           "name": "storage.object.put",
           "version": "1",
           "mutating": true,
-          "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-put-input",
-          "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-put-output",
+          "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:storage:object-put-input",
+          "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:storage:object-put-output",
           "required_permissions": [
             "storage.backup.write"
           ]
@@ -63,8 +63,8 @@
           "name": "storage.object.get",
           "version": "1",
           "mutating": false,
-          "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-get-input",
-          "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-get-output",
+          "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:storage:object-get-input",
+          "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:storage:object-get-output",
           "required_permissions": [
             "storage.backup.read"
           ]

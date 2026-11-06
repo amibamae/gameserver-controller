@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:game:install-input",
+  "$id": "urn:gameserver-controller:0.21.0-draft:game:install-input",
   "title": "Game install input",
   "description": "Install the exact pinned release on one exact execution target. Artifact selection and integrity digests come from game.release.describe.",
   "type": "object",
@@ -11,7 +11,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target"
     },
     "release_id": {
       "type": "string",

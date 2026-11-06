@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.wait.failed-terminal-requires-inspection",
-  "protocol_version": "0.20.0-draft",
+  "protocol_version": "0.21.0-draft",
   "contract_area": "hosting.instance.wait",
   "purpose": "A terminal provider failure ends polling but requires exact-instance inspection before any retry.",
   "input": {

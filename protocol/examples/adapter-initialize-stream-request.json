@@ -4,7 +4,7 @@
   "method": "adapter.initialize",
   "params": {
     "protocol_versions": [
-      "0.20.0-draft"
+      "0.21.0-draft"
     ],
     "stream_transport": {
       "profile": "local-unix-stream-v1",

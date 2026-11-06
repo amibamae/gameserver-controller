@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:hosting:instance-wait-input",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-input",
   "title": "Hosting instance wait input",
   "description": "Wait for one provider operation on one exact instance. The wait deadline bounds this request and does not cancel the provider operation.",
   "type": "object",
@@ -13,10 +13,10 @@
   ],
   "properties": {
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
     },
     "provider_operation_ref": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
     },
     "expected_state": {
       "enum": [
