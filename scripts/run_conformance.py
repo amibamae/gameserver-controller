@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Execute the protocol's language-neutral behavioral conformance vectors.
-
-Schema validation remains in validate_protocol.py. This runner checks the
-state and safety rules represented by behavioral fixtures using only Python's
-standard library, so it does not prescribe a controller implementation.
-"""
+"""Execute the protocol's language-neutral conformance vectors."""
 from __future__ import annotations
 
 import json
@@ -13,8 +8,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from jsonschema import Draft202012Validator, FormatChecker
+from referencing import Registry, Resource
+
 ROOT = Path(__file__).resolve().parents[1]
-VECTORS = ROOT / "protocol" / "conformance" / "test-vectors"
+PROTOCOL = ROOT / "protocol"
+VECTORS = PROTOCOL / "conformance" / "test-vectors"
+INDEX = PROTOCOL / "schemas" / "index.json"
+PROVISION_SCHEMA_ID = "urn:gameserver-controller:0.1.0-draft:hosting:provision-request"
 
 LEGAL_TRANSITIONS = {
     ("unprovisioned", "provisioning"),
@@ -47,15 +48,34 @@ def parse_time(value: str) -> datetime:
     return datetime.fromisoformat(value[:-1] + "+00:00")
 
 
+def validate_registered_schema(schema_id: str, value: Any) -> bool:
+    index = json.loads(INDEX.read_text(encoding="utf-8"))
+    schemas: dict[str, dict[str, Any]] = {}
+    for entry in index["schemas"]:
+        schema = json.loads((PROTOCOL / "schemas" / entry["path"]).read_text(encoding="utf-8"))
+        require(schema.get("$id") == entry["id"], f"schema index ID mismatch for {entry['path']}")
+        schemas[entry["id"]] = schema
+    require(schema_id in schemas, f"schema is not registered: {schema_id}")
+    registry = Registry()
+    for registered_id, schema in schemas.items():
+        registry = registry.with_resource(registered_id, Resource.from_contents(schema))
+    validator = Draft202012Validator(schemas[schema_id], registry=registry, format_checker=FormatChecker())
+    errors = sorted(validator.iter_errors(value), key=lambda error: (list(map(str, error.absolute_path)), error.message))
+    if errors:
+        details = "; ".join(f"{list(error.absolute_path)}: {error.message}" for error in errors)
+        raise ValueError(f"schema validation failed: {details}")
+    return True
+
+
 def evaluate(fixture: dict[str, Any]) -> dict[str, Any]:
     fixture_id = fixture["fixture_id"]
-    expected = fixture["expected"]
-
     if fixture_id == "lifecycle.reject.unlisted-transition":
         transition = fixture["requested_transition"]
         allowed = (fixture["initial_state"], transition["to"]) in LEGAL_TRANSITIONS
-        return {"accepted": allowed, "side_effect_permitted": allowed,
-                **({"error_code": "core.lifecycle.invalid_transition"} if not allowed else {})}
+        result = {"accepted": allowed, "side_effect_permitted": allowed}
+        if not allowed:
+            result["error_code"] = "core.lifecycle.invalid_transition"
+        return result
 
     if fixture_id == "operations.reconcile.unknown-create-outcome":
         initial = fixture["initial"]
@@ -90,10 +110,13 @@ def evaluate(fixture: dict[str, Any]) -> dict[str, Any]:
     if fixture_id == "security.staging.cannot-write-production-backup":
         actor = fixture["actor_environment"]
         target = fixture["target_environment"]
-        required = f"storage.backup.write:{target}"
-        allowed = actor == target or required in fixture["credential_scope"]
-        return {"accepted": allowed, "side_effect_permitted": allowed,
-                "error_category": None if allowed else "authorization"}
+        required_scope = f"storage.backup.write:{target}"
+        allowed = actor == target or required_scope in fixture["credential_scope"]
+        return {
+            "accepted": allowed,
+            "side_effect_permitted": allowed,
+            "error_category": None if allowed else "authorization",
+        }
 
     if fixture_id == "readiness-required-before-transfer":
         assertion = fixture["input"]["readiness_assertion"]
@@ -115,41 +138,45 @@ def evaluate(fixture: dict[str, Any]) -> dict[str, Any]:
         for item in results:
             require(item.get("outcome") in counts, f"unknown transfer outcome: {item.get('outcome')!r}")
             counts[item["outcome"]] += 1
-        unknown = counts["outcome_unknown"] > 0
-        return {"requested_count": len(sessions), "outcome_counts": counts,
-                "retry_unknown_without_reconciliation": not unknown}
+        has_unknown = counts["outcome_unknown"] > 0
+        return {
+            "requested_count": len(sessions),
+            "outcome_counts": counts,
+            "retry_unknown_without_reconciliation": not has_unknown,
+        }
 
     if fixture_id == "operations.idempotency.same-key-different-request":
         first, second = fixture["first_request"], fixture["second_request"]
         same_binding = first["actor_id"] == second["actor_id"] and first["idempotency_key"] == second["idempotency_key"]
-        same_request = first == second
-        conflict = same_binding and not same_request
-        return {"second_request_accepted": not conflict,
-                "error_code": "core.operation.idempotency_conflict" if conflict else None,
-                "operation_count": 1 if conflict else 2}
+        conflict = same_binding and first != second
+        return {
+            "second_request_accepted": not conflict,
+            "error_code": "core.operation.idempotency_conflict" if conflict else None,
+            "operation_count": 1 if conflict else 2,
+        }
 
     if fixture_id == "operations.events.monotonic-sequence":
         events = fixture["events"]
         require(bool(events), "event sequence must not be empty")
         operation_ids = {event["operation_id"] for event in events}
         sequences = [event["sequence"] for event in events]
-        increasing = len(operation_ids) == 1 and all(a < b for a, b in zip(sequences, sequences[1:]))
-        return {"schema_valid": all(isinstance(event.get("sequence"), int) and event["sequence"] > 0 for event in events),
-                "sequence_strictly_increasing": increasing}
+        return {
+            "schema_valid": all(isinstance(value, int) and not isinstance(value, bool) and value > 0 for value in sequences),
+            "sequence_strictly_increasing": len(operation_ids) == 1 and all(
+                left < right for left, right in zip(sequences, sequences[1:])
+            ),
+        }
 
     if fixture_id == "hosting.provision.valid.standard-os":
-        request = fixture["input"]
-        required = ("server_id", "environment_id", "hosting_adapter_id", "region_id",
-                    "plan_id", "os", "bootstrap", "game", "execution")
-        valid_shape = all(key in request for key in required)
-        return {"schema_valid": valid_shape, "side_effect_permitted": False}
+        valid = validate_registered_schema(PROVISION_SCHEMA_ID, fixture["input"])
+        return {"schema_valid": valid, "side_effect_permitted": False}
 
-    raise ValueError(f"no behavioral evaluator registered for fixture {fixture_id!r}")
+    raise ValueError(f"no evaluator registered for fixture {fixture_id!r}")
 
 
 def compare_expected(actual: Any, expected: Any, path: str = "$") -> None:
     if isinstance(expected, dict):
-        require(isinstance(actual, dict), f"{path}: expected object")
+        require(isinstance(actual, dict), f"{path}: expected an object")
         for key, value in expected.items():
             compare_expected(actual.get(key), value, f"{path}.{key}")
     else:
@@ -166,18 +193,17 @@ def main() -> int:
     for path in paths:
         try:
             fixture = json.loads(path.read_text(encoding="utf-8"))
-            actual = evaluate(fixture)
-            compare_expected(actual, fixture["expected"])
+            compare_expected(evaluate(fixture), fixture["expected"])
         except Exception as exc:
             failures.append(f"{path.name}: {exc}")
 
     if failures:
-        print("Behavioral conformance failed:")
+        print("Conformance failed:")
         for failure in failures:
             print(f" - {failure}")
         return 1
 
-    print(f"Behavioral conformance passed: {len(paths)} fixtures.")
+    print(f"Conformance passed: {len(paths)} fixtures.")
     return 0
 
 
