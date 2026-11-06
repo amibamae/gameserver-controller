@@ -10,7 +10,7 @@ A local CLI, web panel, desktop application, automation, or another controller c
 
 ## 2. Binding
 
-The initial management binding is HTTP with JSON request/response bodies. The machine-readable interface is [openapi.yaml](openapi.yaml), using OpenAPI 3.2.1.
+The initial management binding is HTTP with JSON request/response bodies. The machine-readable interface is [openapi.yaml](openapi.yaml), using OpenAPI 3.2.1. That document describes the remote bearer-authenticated profile. A local-only implementation MAY expose the same application operations through an OS-authenticated local socket or in-process API as defined in [authentication.md](authentication.md).
 
 The base path is `/v1`. Implementations MUST identify supported API versions and MUST NOT silently serve an incompatible request under a different version.
 
@@ -22,7 +22,7 @@ Mutating operations are asynchronous: validate the request; authenticate and aut
 - `GET /v1/servers`: list authorized logical servers.
 - `POST /v1/servers`: define a logical server using the durable `server.define` operation.
 - `GET /v1/servers/{server_id}`: inspect a logical server and current references/states.
-- `POST /v1/servers/{server_id}/operations`: request a typed operation (provision, start, stop, backup, restore, replace, destroy).
+- `POST /v1/servers/{server_id}/operations`: request a typed operation (provision, start, stop, backup, restore, or destroy).
 - `GET /v1/operations/{operation_id}`: inspect durable operation status and result.
 - `POST /v1/operations/{operation_id}/cancel`: request cancellation under operation-specific rules.
 - `GET /v1/operations/{operation_id}/events?after_sequence={n}`: optional Server-Sent Events stream where supported. Events use the canonical operation event schema; polling the operation resource remains authoritative.
