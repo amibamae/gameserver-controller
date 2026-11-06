@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.inspect.exact-active",
-  "protocol_version": "0.12.0-draft",
+  "protocol_version": "0.13.0-draft",
   "contract_area": "hosting.instance.inspect",
   "purpose": "Inspect returns the exact active provider instance.",
   "input": {

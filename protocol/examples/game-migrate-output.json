@@ -1,0 +1,33 @@
+{
+  "migration_id": "migration-010-to-011",
+  "source_backup_id": "backup-compat-010",
+  "source_data_generation_id": "generation-010",
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-target-011"
+    }
+  },
+  "target_release_id": "paper-1.21.5-r1",
+  "outcome": "migrated",
+  "migrated_data_generation_id": "generation-011",
+  "observed_at": "2026-11-06T08:40:00Z",
+  "check_results": [
+    {
+      "check_id": "world.data-conversion",
+      "check_version": "1",
+      "result": "pass",
+      "observed_at": "2026-11-06T08:39:00Z"
+    },
+    {
+      "check_id": "world.post-migration-integrity",
+      "check_version": "1",
+      "result": "pass",
+      "observed_at": "2026-11-06T08:39:30Z"
+    }
+  ]
+}

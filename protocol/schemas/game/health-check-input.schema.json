@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.12.0-draft:game:health-check-input",
+  "$id": "urn:gameserver-controller:0.13.0-draft:game:health-check-input",
   "title": "Game health check input",
   "description": "Evaluate selected game-specific health checks against one exact server, environment, instance, and release.",
   "type": "object",
@@ -24,7 +24,7 @@
       "maxLength": 200
     },
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.12.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.13.0-draft:common:external-resource-ref"
     },
     "game_release_id": {
       "type": "string",

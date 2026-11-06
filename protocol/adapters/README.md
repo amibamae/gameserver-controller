@@ -1,6 +1,6 @@
 # Adapter Contracts
 
-**Status:** Draft protocol contracts, version 0.12.0-draft.
+**Status:** Draft protocol contracts, version 0.13.0-draft.
 
 Adapters connect the controller core to infrastructure and external systems. Adapter contracts are language-neutral. An adapter may be implemented in-process or as a separate process using the optional RPC binding.
 

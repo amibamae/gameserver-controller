@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.13.0-draft:game:migrate-output",
+  "title": "Game data migration output",
+  "description": "Output binds a migration result to its exact verified source backup, distinct target instance, and target release. A confirmed migration creates a new data generation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "migration_id",
+    "source_backup_id",
+    "source_data_generation_id",
+    "target",
+    "target_release_id",
+    "outcome",
+    "observed_at",
+    "check_results"
+  ],
+  "properties": {
+    "migration_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "source_backup_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "source_data_generation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "target": {
+      "$ref": "urn:gameserver-controller:0.13.0-draft:game:game-instance-target"
+    },
+    "target_release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "outcome": {
+      "enum": [
+        "migrated",
+        "rejected",
+        "outcome_unknown"
+      ]
+    },
+    "migrated_data_generation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "check_results": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "check_id",
+          "check_version",
+          "result",
+          "observed_at"
+        ],
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-z][a-z0-9._-]*$"
+          },
+          "check_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "result": {
+            "enum": [
+              "pass",
+              "fail",
+              "unknown"
+            ]
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason_code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9._-]*$"
+          }
+        }
+      }
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9._-]*$"
+    },
+    "reconciliation_ref": {
+      "$ref": "urn:gameserver-controller:0.13.0-draft:common:external-resource-ref"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "migrated"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "migrated_data_generation_id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "rejected"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "reason_code"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "outcome_unknown"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "reconciliation_ref"
+        ]
+      }
+    }
+  ]
+}

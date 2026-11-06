@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.12.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.13.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -72,6 +72,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Data-set descriptions are release-bound, use unique IDs and safe relative paths, and advertise supported consistency modes. Confirmed game saves require completion evidence; unknown save or backup preparation outcomes require reconciliation references.
 - Game health results bind to the exact release and instance, contain exactly one result per requested check, and do not promote unknown evidence to healthy. Game backup validation uses bounded streams for the exact manifest objects; `unknown` validation never verifies a backup.
 - Game compatibility checks bind the exact backup manifest and target release, contain exactly one result per requested check, and derive aggregate status from all results. Unknown or incomplete evidence cannot be compatible, and a compatibility result does not verify backup integrity or authorize restore.
+- Game migration requires an exactly bound verified backup, a `migration_required` result, exact approval, a distinct stopped target, bounded streams for every manifest object, and new target data generation. The source remains unchanged, all requested migration checks must pass, and an unknown outcome requires reconciliation before retry.
 - A game install verifies every pinned artifact checksum before starting installation; invalid configuration is rejected before application; unknown installation validation blocks start.
 - Execution log reads are bounded and redacted, health `unknown` is not healthy, and deleting a unit preserves persistent data. Proxy registration requires an unexpired readiness assertion bound to the exact instance; accepted or unknown routing state is not routable.
 - Systemd lifecycle results bind the exact unit. A completed start does not establish game readiness, and an unknown start or stop outcome requires inspection before retry.
@@ -155,6 +156,16 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [game-compatibility-check-incomplete.json](test-vectors/game-compatibility-check-incomplete.json)
 - [game-compatibility-check-unknown-reported-compatible.json](test-vectors/game-compatibility-check-unknown-reported-compatible.json)
 - [game-compatibility-check-target-mismatch.json](test-vectors/game-compatibility-check-target-mismatch.json)
+- [game-migrate-approved-copy-success.json](test-vectors/game-migrate-approved-copy-success.json)
+- [game-migrate-approval-required.json](test-vectors/game-migrate-approval-required.json)
+- [game-migrate-verified-backup-required.json](test-vectors/game-migrate-verified-backup-required.json)
+- [game-migrate-target-stopped.json](test-vectors/game-migrate-target-stopped.json)
+- [game-migrate-backup-result-binding.json](test-vectors/game-migrate-backup-result-binding.json)
+- [game-migrate-distinct-target-required.json](test-vectors/game-migrate-distinct-target-required.json)
+- [game-migrate-target-binding.json](test-vectors/game-migrate-target-binding.json)
+- [game-migrate-complete-checks-required.json](test-vectors/game-migrate-complete-checks-required.json)
+- [game-migrate-compatibility-required.json](test-vectors/game-migrate-compatibility-required.json)
+- [game-migrate-unknown-requires-reconciliation.json](test-vectors/game-migrate-unknown-requires-reconciliation.json)
 
 - [execution-unit-start-accepted-not-ready.json](test-vectors/execution-unit-start-accepted-not-ready.json)
 - [execution-unit-start-unknown-requires-inspection.json](test-vectors/execution-unit-start-unknown-requires-inspection.json)

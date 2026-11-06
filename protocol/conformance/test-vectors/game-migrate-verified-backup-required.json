@@ -1,0 +1,193 @@
+{
+  "fixture_id": "game.migrate.verified-backup-required",
+  "protocol_version": "0.13.0-draft",
+  "contract_area": "game.migrate",
+  "purpose": "An unverified backup is rejected before data streams are sent to the migration adapter.",
+  "input": {
+    "migration_input": {
+      "approval_id": "approval-world-migrate-010-to-011",
+      "source_backup": {
+        "outcome_summary": "Backup uploaded and verified for the exact source data generation.",
+        "operation_type": "server.backup",
+        "affected_resources": [
+          {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-source-010"
+          }
+        ],
+        "completed_steps": [
+          {
+            "step_id": "verify-backup",
+            "step_type": "storage.backup.verify",
+            "summary": "All manifest objects were verified."
+          }
+        ],
+        "failed_steps": [],
+        "warnings": [],
+        "unresolved_conditions": [],
+        "audit_event_ids": [
+          "audit-backup-010"
+        ],
+        "partial": false,
+        "operation_data": {
+          "backup_id": "backup-compat-010",
+          "environment_id": "staging",
+          "data_generation_id": "generation-010",
+          "manifest": {
+            "manifest_version": "1",
+            "backup_id": "backup-compat-010",
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "data_generation_id": "generation-010",
+            "source_instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-source-010"
+            },
+            "created_at": "2026-11-06T08:30:00Z",
+            "source_operation_id": "operation-backup-010",
+            "game": {
+              "adapter_id": "game.minecraft-paper",
+              "name": "Minecraft Java Edition",
+              "version": "paper-1.21.4-r1",
+              "world_format": "paper-world-v1"
+            },
+            "consistency": {
+              "mode": "offline",
+              "evidence": "Runtime stopped after a confirmed game save."
+            },
+            "objects": [
+              {
+                "size_bytes": 4096,
+                "checksum_algorithm": "sha256",
+                "checksum": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "object_ref": {
+                  "adapter_id": "storage.s3-compatible",
+                  "storage_profile_id": "staging-backups",
+                  "environment_id": "staging",
+                  "container": "game-backups",
+                  "key": "minecraft-test/backup-compat-010/world.tar.zst",
+                  "version_id": "object-v010"
+                }
+              }
+            ]
+          },
+          "verified_at": "2026-11-06T08:31:00Z",
+          "final_lifecycle_state": "stopped"
+        }
+      },
+      "compatibility_result": {
+        "backup_id": "backup-compat-010",
+        "environment_id": "staging",
+        "data_generation_id": "generation-010",
+        "source_game_adapter_id": "game.minecraft-paper",
+        "source_game_version": "paper-1.21.4-r1",
+        "target_game_adapter_id": "game.minecraft-paper",
+        "target_release_id": "paper-1.21.5-r1",
+        "target_game_version": "paper-1.21.5-r1",
+        "compatibility_status": "migration_required",
+        "observed_at": "2026-11-06T08:32:00Z",
+        "check_results": [
+          {
+            "check_id": "world.format",
+            "check_version": "1",
+            "result": "compatible",
+            "observed_at": "2026-11-06T08:31:00Z"
+          },
+          {
+            "check_id": "target.release",
+            "check_version": "1",
+            "result": "migration_required",
+            "observed_at": "2026-11-06T08:31:10Z"
+          }
+        ]
+      },
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-target-011"
+        }
+      },
+      "target_release": {
+        "game_adapter_id": "game.minecraft-paper",
+        "game_name": "Minecraft Java Edition",
+        "release_id": "paper-1.21.5-r1",
+        "game_version": "paper-1.21.5-r1",
+        "targets": [
+          {
+            "os_family": "linux",
+            "architecture": "x86_64"
+          }
+        ],
+        "artifacts": [
+          {
+            "artifact_id": "paper-server",
+            "artifact_uri": "https://artifacts.example.invalid/paper-1.21.5.jar",
+            "checksum": {
+              "algorithm": "sha256",
+              "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          }
+        ],
+        "runtime_requirements": [
+          {
+            "runtime_id": "java",
+            "version_requirement": "21"
+          }
+        ],
+        "configuration_schema_uri": "https://schemas.example.invalid/paper/config-1.json",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "data_format": {
+          "format_id": "paper-world",
+          "version": "1"
+        },
+        "required_execution_capabilities": [
+          "process.start"
+        ]
+      },
+      "object_streams": [
+        {
+          "object_ref": {
+            "adapter_id": "storage.s3-compatible",
+            "storage_profile_id": "staging-backups",
+            "environment_id": "staging",
+            "container": "game-backups",
+            "key": "minecraft-test/backup-compat-010/world.tar.zst",
+            "version_id": "object-v010"
+          },
+          "transfer_ref": {
+            "transfer_id": "transfer-backup-compat-010-world",
+            "direction": "controller_to_adapter",
+            "maximum_bytes": 4096,
+            "expires_at": "2026-11-06T09:00:00Z"
+          }
+        }
+      ],
+      "required_check_ids": [
+        "world.data-conversion",
+        "world.post-migration-integrity"
+      ]
+    }
+  },
+  "core_preconditions": {
+    "approval_valid": true,
+    "backup_verified": false,
+    "target_stopped": true
+  },
+  "expected": {
+    "schemas_valid": true,
+    "dispatch_allowed": false,
+    "migration_confirmed": false,
+    "source_preserved": true
+  }
+}
