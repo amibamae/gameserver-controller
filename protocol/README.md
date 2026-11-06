@@ -44,9 +44,9 @@ The project has two related but distinct communication surfaces.
 
 ### Adapter protocol
 
-The adapter protocol connects the core to provider-, storage-, game-, and integration-specific implementations. Adapters are subordinate to core policy and receive only the permissions and secret references needed for their declared capabilities.
+The adapter protocol connects the core to hosting, storage, execution, game-, and integration-specific implementations. Adapters are subordinate to core policy and receive only the permissions and secret references needed for their declared capabilities.
 
-A local process transport (for example, structured messages over standard input/output) is a possible initial binding. It is not yet selected. In-process adapters MAY also implement the same logical contracts, provided they satisfy the same conformance requirements.
+The initial optional process binding is `jsonrpc-stdio-v1`, defined in [rpc/transport.md](rpc/transport.md). In-process adapters MAY implement the same logical contracts without using a wire transport, provided they satisfy the same conformance requirements.
 
 ### Management API
 
