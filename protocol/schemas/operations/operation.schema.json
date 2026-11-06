@@ -228,6 +228,12 @@
     },
     "error": {
       "$ref": "urn:gameserver-controller:0.1.0-draft:common:protocol-error"
+    },
+    "schema_package_revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Optional immutable identifier for the exact schema/specification package used to accept this operation, such as a release tag or content digest."
     }
   },
   "allOf": [

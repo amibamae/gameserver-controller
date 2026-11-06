@@ -39,7 +39,9 @@ The current `0.1.0-draft` is pre-1.0. It is not covered by a stable compatibilit
 3. Update examples, conformance fixtures, and the schema inventory in the same change.
 4. Preserve a tagged or commit-pinned copy of each published draft snapshot so an implementation can validate the exact contract it negotiated.
 
-A draft consumer SHOULD pin a release tag or commit and MUST NOT assume that the moving default branch is an immutable specification.
+The moving, untagged `0.1.0-draft` working branch is not an immutable package: maintainers may revise it, including incompatibly, while design is in progress. The protocol version string alone therefore does not identify the exact working-tree contents. An implementation built from an untagged draft MUST retain its exact source/specification revision in deployment metadata and SHOULD store that revision with each durable operation. Consumers MUST NOT assume that two builds advertising the same draft string necessarily use identical schema content.
+
+Before publishing a versioned draft snapshot, maintainers MUST assign a protocol version to that snapshot and update version-scoped schema IDs together. A published tag or package is immutable. Any later incompatible change requires a new protocol version and new version-scoped schema IDs. Draft consumers SHOULD pin a release tag, package digest, or commit and MUST NOT rely on the moving default branch.
 
 After protocol 1.0:
 - A **major** version change may remove or change the meaning of fields, values, states, capability behavior, or required safety guarantees.
