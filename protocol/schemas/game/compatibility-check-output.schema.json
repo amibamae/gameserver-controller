@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.10.0-draft:game:compatibility-check-output",
+  "title": "Game backup compatibility check output",
+  "description": "Output is bound to the source backup and target release; only a complete compatible result is a successful compatibility determination.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "backup_id",
+    "environment_id",
+    "data_generation_id",
+    "source_game_adapter_id",
+    "source_game_version",
+    "target_game_adapter_id",
+    "target_release_id",
+    "target_game_version",
+    "compatibility_status",
+    "observed_at",
+    "check_results"
+  ],
+  "properties": {
+    "backup_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "environment_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "data_generation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "source_game_adapter_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^game\\.[a-z][a-z0-9.-]*$"
+    },
+    "source_game_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "target_game_adapter_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^game\\.[a-z][a-z0-9.-]*$"
+    },
+    "target_release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "target_game_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "compatibility_status": {
+      "enum": [
+        "compatible",
+        "migration_required",
+        "incompatible",
+        "unknown"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "check_results": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "check_id",
+          "check_version",
+          "result",
+          "observed_at"
+        ],
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-z][a-z0-9._-]*$"
+          },
+          "check_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "result": {
+            "enum": [
+              "compatible",
+              "migration_required",
+              "incompatible",
+              "unknown"
+            ]
+          },
+          "observed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reason_code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9._-]*$"
+          }
+        }
+      }
+    }
+  }
+}

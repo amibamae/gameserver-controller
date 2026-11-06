@@ -1,0 +1,26 @@
+{
+  "backup_id": "backup-compat-010",
+  "environment_id": "staging",
+  "data_generation_id": "generation-010",
+  "source_game_adapter_id": "game.minecraft-paper",
+  "source_game_version": "paper-1.21.4-r1",
+  "target_game_adapter_id": "game.minecraft-paper",
+  "target_release_id": "paper-1.21.5-r1",
+  "target_game_version": "paper-1.21.5-r1",
+  "compatibility_status": "compatible",
+  "observed_at": "2026-11-06T08:32:00Z",
+  "check_results": [
+    {
+      "check_id": "world.format",
+      "check_version": "1",
+      "result": "compatible",
+      "observed_at": "2026-11-06T08:31:00Z"
+    },
+    {
+      "check_id": "target.release",
+      "check_version": "1",
+      "result": "compatible",
+      "observed_at": "2026-11-06T08:31:10Z"
+    }
+  ]
+}

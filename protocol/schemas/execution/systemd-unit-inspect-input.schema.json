@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.9.0-draft:execution:systemd-unit-inspect-input",
+  "$id": "urn:gameserver-controller:0.10.0-draft:execution:systemd-unit-inspect-input",
   "title": "Systemd execution unit inspect input",
   "type": "object",
   "additionalProperties": false,
@@ -9,7 +9,7 @@
   ],
   "properties": {
     "unit_ref": {
-      "$ref": "urn:gameserver-controller:0.9.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.10.0-draft:common:external-resource-ref"
     }
   }
 }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.9.0-draft:rpc:adapter-initialize-result",
+  "$id": "urn:gameserver-controller:0.10.0-draft:rpc:adapter-initialize-result",
   "title": "Adapter initialize JSON-RPC result",
   "type": "object",
   "additionalProperties": false,

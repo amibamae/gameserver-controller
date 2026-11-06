@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.9.0-draft:game:backup-prepare-input",
+  "$id": "urn:gameserver-controller:0.10.0-draft:game:backup-prepare-input",
   "title": "Game backup preparation input",
   "description": "Prepare an exact, release-bound set of persistent data for a backup capture.",
   "type": "object",
@@ -15,7 +15,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.9.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.10.0-draft:game:game-instance-target"
     },
     "release_id": {
       "type": "string",

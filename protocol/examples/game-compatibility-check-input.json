@@ -1,0 +1,86 @@
+{
+  "source_manifest": {
+    "manifest_version": "1",
+    "backup_id": "backup-compat-010",
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "data_generation_id": "generation-010",
+    "source_instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-010"
+    },
+    "created_at": "2026-11-06T08:30:00Z",
+    "source_operation_id": "operation-backup-010",
+    "game": {
+      "adapter_id": "game.minecraft-paper",
+      "name": "Minecraft Java Edition",
+      "version": "paper-1.21.4-r1",
+      "world_format": "paper-world-v1"
+    },
+    "consistency": {
+      "mode": "offline",
+      "evidence": "Runtime stopped after a confirmed game save."
+    },
+    "objects": [
+      {
+        "size_bytes": 4096,
+        "checksum_algorithm": "sha256",
+        "checksum": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "object_ref": {
+          "adapter_id": "storage.s3-compatible",
+          "storage_profile_id": "staging-backups",
+          "environment_id": "staging",
+          "container": "game-backups",
+          "key": "minecraft-test/backup-compat-010/world.tar.zst",
+          "version_id": "object-v010"
+        }
+      }
+    ]
+  },
+  "target_release": {
+    "game_adapter_id": "game.minecraft-paper",
+    "game_name": "Minecraft Java Edition",
+    "release_id": "paper-1.21.5-r1",
+    "game_version": "paper-1.21.5-r1",
+    "targets": [
+      {
+        "os_family": "linux",
+        "architecture": "x86_64"
+      }
+    ],
+    "artifacts": [
+      {
+        "artifact_id": "paper-server",
+        "artifact_uri": "https://artifacts.example.invalid/paper-1.21.5.jar",
+        "checksum": {
+          "algorithm": "sha256",
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ],
+    "runtime_requirements": [
+      {
+        "runtime_id": "java",
+        "version_requirement": "21"
+      }
+    ],
+    "configuration_schema_uri": "https://schemas.example.invalid/paper/config-1.json",
+    "configuration_schema_checksum": {
+      "algorithm": "sha256",
+      "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "data_format": {
+      "format_id": "paper-world",
+      "version": "1"
+    },
+    "required_execution_capabilities": [
+      "process.start"
+    ]
+  },
+  "required_check_ids": [
+    "world.format",
+    "target.release"
+  ]
+}

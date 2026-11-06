@@ -1,6 +1,6 @@
 {
   "fixture_id": "security.staging.cannot-write-production-backup",
-  "protocol_version": "0.9.0-draft",
+  "protocol_version": "0.10.0-draft",
   "contract": "storage.object.put",
   "actor_environment": "staging",
   "target_environment": "production",

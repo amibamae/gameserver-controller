@@ -1,6 +1,6 @@
 # Standard Operation Catalog
 
-**Status:** Draft, protocol version 0.9.0-draft.
+**Status:** Draft, protocol version 0.10.0-draft.
 
 This catalog defines the initial standard management operations. An implementation MUST use the operation names and semantics here when it advertises them. Vendor/game-specific operations may be namespaced extensions and MUST NOT redefine a standard operation.
 
@@ -30,7 +30,7 @@ A request's `parameters` object MUST validate against the schema named in the ta
 | `server.restore` | `restore-parameters.schema.json` | Restore one explicit verified backup to a prepared target. |
 | `server.destroy` | `destroy-parameters.schema.json` | Ensure a verified backup, then destroy the exact recorded instance. |
 
-`server.replace` is intentionally not a standard 0.9.0-draft operation. Safe replacement may require simultaneous old/new instance references and cutover semantics beyond the single-current-instance model. It will be specified only after a multi-instance transition model is reviewed.
+`server.replace` is intentionally not a standard 0.10.0-draft operation. Safe replacement may require simultaneous old/new instance references and cutover semantics beyond the single-current-instance model. It will be specified only after a multi-instance transition model is reviewed.
 
 ## 3. Operation semantics
 

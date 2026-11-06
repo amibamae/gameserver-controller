@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.9.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.10.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -70,6 +70,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Game readiness output is bound to the exact requested instance and release; every requested required check has exactly one result, and `unknown` never permits `ready`.
 - Data-set descriptions are release-bound, use unique IDs and safe relative paths, and advertise supported consistency modes. Confirmed game saves require completion evidence; unknown save or backup preparation outcomes require reconciliation references.
 - Game health results bind to the exact release and instance, contain exactly one result per requested check, and do not promote unknown evidence to healthy. Game backup validation uses bounded streams for the exact manifest objects; `unknown` validation never verifies a backup.
+- Game compatibility checks bind the exact backup manifest and target release, contain exactly one result per requested check, and derive aggregate status from all results. Unknown or incomplete evidence cannot be compatible, and a compatibility result does not verify backup integrity or authorize restore.
 - A game install verifies every pinned artifact checksum before starting installation; invalid configuration is rejected before application; unknown installation validation blocks start.
 - Execution log reads are bounded and redacted, health `unknown` is not healthy, and deleting a unit preserves persistent data. Proxy registration requires an unexpired readiness assertion bound to the exact instance; accepted or unknown routing state is not routable.
 
@@ -144,6 +145,14 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [storage-checksum-mismatch-blocks-restore.json](test-vectors/storage-checksum-mismatch-blocks-restore.json)
 - [storage-etag-is-not-checksum.json](test-vectors/storage-etag-is-not-checksum.json)
 - [storage-staging-delete-denied.json](test-vectors/storage-staging-delete-denied.json)
+
+- [game-compatibility-check-compatible.json](test-vectors/game-compatibility-check-compatible.json)
+- [game-compatibility-check-migration-required.json](test-vectors/game-compatibility-check-migration-required.json)
+- [game-compatibility-check-incompatible.json](test-vectors/game-compatibility-check-incompatible.json)
+- [game-compatibility-check-unknown.json](test-vectors/game-compatibility-check-unknown.json)
+- [game-compatibility-check-incomplete.json](test-vectors/game-compatibility-check-incomplete.json)
+- [game-compatibility-check-unknown-reported-compatible.json](test-vectors/game-compatibility-check-unknown-reported-compatible.json)
+- [game-compatibility-check-target-mismatch.json](test-vectors/game-compatibility-check-target-mismatch.json)
 
 ## 7. Certification status
 
