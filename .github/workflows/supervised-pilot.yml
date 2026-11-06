@@ -35,4 +35,6 @@ jobs:
           fi
       - name: Build supervised pilot
         run: go build -o /tmp/gsc-pilot ./cmd/supervised-pilot
+      - name: Test supervised pilot
+        run: go test ./...
 
