@@ -140,6 +140,12 @@ paths:
           $ref: "#/components/responses/NotFound"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /operations/{operation_id}/cancel:
+    parameters:
+      - name: operation_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 200 }
     post:
       operationId: cancelOperation
       summary: Request cancellation where operation semantics permit it
