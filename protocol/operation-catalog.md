@@ -1,6 +1,6 @@
 # Standard Operation Catalog
 
-**Status:** Draft, protocol version 0.6.0-draft.
+**Status:** Draft, protocol version 0.7.0-draft.
 
 This catalog defines the initial standard management operations. An implementation MUST use the operation names and semantics here when it advertises them. Vendor/game-specific operations may be namespaced extensions and MUST NOT redefine a standard operation.
 
@@ -30,13 +30,13 @@ A request's `parameters` object MUST validate against the schema named in the ta
 | `server.restore` | `restore-parameters.schema.json` | Restore one explicit verified backup to a prepared target. |
 | `server.destroy` | `destroy-parameters.schema.json` | Ensure a verified backup, then destroy the exact recorded instance. |
 
-`server.replace` is intentionally not a standard 0.6.0-draft operation. Safe replacement may require simultaneous old/new instance references and cutover semantics beyond the single-current-instance model. It will be specified only after a multi-instance transition model is reviewed.
+`server.replace` is intentionally not a standard 0.7.0-draft operation. Safe replacement may require simultaneous old/new instance references and cutover semantics beyond the single-current-instance model. It will be specified only after a multi-instance transition model is reviewed.
 
 ## 3. Operation semantics
 
 ### 3.1 `server.define`
 
-Creates a logical server definition and initial lifecycle record `unprovisioned`. It MUST NOT create infrastructure, install software, or access game data. The operation result contains the created `server_id` and a server resource reference. The server ID MUST be unique within the controller installation.
+Creates a logical server definition and initial lifecycle record `unprovisioned`. It MUST NOT create infrastructure, install software, or access game data. The typed result identifies the new record by `server_id` and `environment_id`, confirms its initial `unprovisioned` state, and contains no external affected resources. The management API exposes the record at `GET /v1/servers/{server_id}`. The server ID MUST be unique within the controller installation.
 
 ### 3.2 `server.provision`
 
@@ -88,12 +88,15 @@ Successful operation results use the canonical envelope from [operation-result.s
 
 | Operation | Result schema |
 |---|---|
+| `server.define` | [server-define-result.schema.json](schemas/operations/server-define-result.schema.json) |
 | `server.provision` | [server-provision-result.schema.json](schemas/operations/server-provision-result.schema.json) |
+| `server.start` | [server-start-result.schema.json](schemas/operations/server-start-result.schema.json) |
+| `server.stop` | [server-stop-result.schema.json](schemas/operations/server-stop-result.schema.json) |
 | `server.backup` | [server-backup-result.schema.json](schemas/operations/server-backup-result.schema.json) |
 | `server.restore` | [server-restore-result.schema.json](schemas/operations/server-restore-result.schema.json) |
 | `server.destroy` | [server-destroy-result.schema.json](schemas/operations/server-destroy-result.schema.json) |
 
-The other standard operations retain the canonical summary until their typed result contracts are specified.
+Every standard operation now has a registered typed result schema; the conformance suite checks the operation type and exact target binding.
 
 ## 5. Input schemas
 

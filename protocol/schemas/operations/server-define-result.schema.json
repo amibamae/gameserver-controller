@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.7.0-draft:operations:server-define-result",
+  "title": "Durable server.define operation result",
+  "description": "Canonical operation result with typed data for server.define.",
+  "allOf": [
+    {
+      "$ref": "urn:gameserver-controller:0.7.0-draft:operations:operation-result"
+    },
+    {
+      "type": "object",
+      "required": [
+        "operation_type",
+        "operation_data"
+      ],
+      "properties": {
+        "operation_type": {
+          "const": "server.define"
+        },
+        "operation_data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "server_id",
+            "environment_id",
+            "lifecycle_state"
+          ],
+          "properties": {
+            "server_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "lifecycle_state": {
+              "const": "unprovisioned"
+            }
+          }
+        },
+        "affected_resources": {
+          "maxItems": 0
+        }
+      }
+    }
+  ]
+}

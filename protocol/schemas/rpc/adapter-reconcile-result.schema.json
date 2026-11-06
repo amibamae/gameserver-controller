@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.6.0-draft:rpc:adapter-reconcile-result",
+  "$id": "urn:gameserver-controller:0.7.0-draft:rpc:adapter-reconcile-result",
   "title": "Adapter reconcile JSON-RPC result",
   "type": "object",
   "additionalProperties": false,
@@ -15,10 +15,10 @@
       "properties": {
         "outcome": {"enum": ["completed", "not_applied", "still_pending", "indeterminate"]},
         "observed_at": {"type": "string", "format": "date-time"},
-        "external_operation_ref": {"$ref": "urn:gameserver-controller:0.6.0-draft:common:external-resource-ref"},
+        "external_operation_ref": {"$ref": "urn:gameserver-controller:0.7.0-draft:common:external-resource-ref"},
         "external_resource_refs": {
           "type": "array",
-          "items": {"$ref": "urn:gameserver-controller:0.6.0-draft:common:external-resource-ref"}
+          "items": {"$ref": "urn:gameserver-controller:0.7.0-draft:common:external-resource-ref"}
         },
         "safe_diagnostics": {"type": "array", "items": {"type": "string", "maxLength": 1000}}
       }

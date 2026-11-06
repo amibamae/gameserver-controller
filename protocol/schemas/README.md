@@ -1,6 +1,6 @@
 # JSON Schema Package
 
-**Status:** Draft, protocol version 0.6.0-draft.
+**Status:** Draft, protocol version 0.7.0-draft.
 
 All schemas in this directory use JSON Schema Draft 2020-12 and UTF-8 JSON. The schema identifiers use stable URNs so that validators do not need to fetch executable or mutable content from the network.
 

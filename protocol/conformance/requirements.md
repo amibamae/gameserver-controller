@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.6.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.7.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -50,6 +50,8 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 
 ### Operations
 - Event sequence numbers increase monotonically per operation; consumers detect gaps and recover by reading the operation resource.
+- Successful standard operations validate their typed result schema and bind result server/environment/instance fields to the durable operation target.
+- `server.define` leaves the logical server `unprovisioned` and creates no external resource; `server.start` includes a readiness assertion bound to the exact instance; `server.stop` confirms game save and runtime termination.
 - Operation record commits before side effect.
 - Same idempotency key and same request maps to the same operation.
 - Same key and changed request is conflict.
