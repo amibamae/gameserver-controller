@@ -1,0 +1,32 @@
+{
+  "manifest_version": "1",
+  "backup_id": "backup-test-001",
+  "server_id": "minecraft-test",
+  "environment_id": "test",
+  "source_instance_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "test",
+    "resource_kind": "instance",
+    "external_id": "instance-test-001"
+  },
+  "created_at": "2026-11-05T22:45:00Z",
+  "source_operation_id": "operation-backup-001",
+  "game": {
+    "adapter_id": "game.minecraft-paper",
+    "name": "Minecraft Java Edition",
+    "version": "26.3",
+    "world_format": "game-adapter-defined"
+  },
+  "consistency": {
+    "mode": "offline",
+    "evidence": "Game process stopped and execution adapter confirmed process exit before capture."
+  },
+  "objects": [
+    {
+      "key": "test/minecraft-test/backup-test-001/world.tar.zst",
+      "size_bytes": 1024,
+      "checksum_algorithm": "sha256",
+      "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  ]
+}
