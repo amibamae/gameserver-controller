@@ -4,7 +4,7 @@
   "title": "Adapter descriptor",
   "type": "object",
   "additionalProperties": false,
-  "required": ["adapter_id", "category", "display_name", "implementation_version", "protocol_versions", "capabilities", "required_permissions"],
+  "required": ["adapter_id", "category", "display_name", "implementation_version", "protocol_versions", "contract_versions", "capabilities", "required_permissions"],
   "properties": {
     "adapter_id": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9.-]+$"},
     "category": {"enum": ["hosting", "storage", "execution", "game", "integration"]},
