@@ -34,13 +34,13 @@ The core determines which server may be routed. The proxy adapter performs the r
 
 ## 4. Velocity player transfer
 
-The initial Velocity transfer capability is `integration.velocity.players.transfer`. Its input and output contracts are defined by [velocity-player-transfer-request.schema.json](../schemas/integrations/velocity-player-transfer-request.schema.json) and [velocity-player-transfer-result.schema.json](../schemas/integrations/velocity-player-transfer-result.schema.json).
+The initial Velocity transfer capability is `integration.velocity.players.transfer`. Its input and output contracts are defined by [velocity-player-transfer-request.schema.json](../schemas/integrations/velocity-player-transfer-request.schema.json) and [velocity-player-transfer-result.schema.json](../schemas/integrations/velocity-player-transfer-result.schema.json). The illustrative [Velocity adapter descriptor](../examples/adapter-descriptor.velocity.json) advertises the capability with those registered schema IDs.
 
 The controller MUST select the exact `waiting_cohort_id` and explicit list of proxy-scoped `player_session_ids`. The adapter MUST verify that each selected session still belongs to that cohort and is still connected to the declared source backend. It MUST NOT infer that every player on the source backend should be moved.
 
 Before invoking the capability, the core MUST confirm that:
 - The logical server is still in `ready` state.
-- The supplied readiness assertion is current, unexpired, and bound to the exact server, environment, and instance reference being targeted.
+- The supplied [readiness assertion](../schemas/lifecycle/readiness-assertion.schema.json) is current, unexpired, and bound to the exact server, environment, and instance reference being targeted.
 - The destination backend is registered and routable for that exact instance.
 - Source and destination backend IDs match the controller's current proxy registration state.
 - The selected sessions remain members of the named waiting cohort.

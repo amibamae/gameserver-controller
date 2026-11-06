@@ -48,6 +48,16 @@ The following states are normative for this draft.
 
 The protocol does not use `deleted` as a synonym for `destroyed`. Permanent deletion of logical-server metadata and backup data is a separate administrative/data-retention concern and is outside this lifecycle state machine.
 
+## 3.1 Readiness assertions
+
+The `ready` lifecycle state records the controller's current logical-server state; it is not, by itself, a portable proof that a particular external routing action may proceed. When a routing or cutover action requires fresh readiness evidence, the controller MUST issue a short-lived readiness assertion conforming to [readiness-assertion.schema.json](schemas/lifecycle/readiness-assertion.schema.json).
+
+An assertion MUST bind the exact `server_id`, `environment_id`, current infrastructure `instance_ref`, and `readiness_check_set_id`, with `observed_at` and `expires_at` timestamps. The check-set identifier names the versioned set of checks whose successful completion supports the assertion. An assertion is valid only while the current time is earlier than `expires_at`; the controller MUST enforce a maximum staleness period for each check set and MUST NOT extend an assertion merely because the server remains in the `ready` state.
+
+Before a routing side effect, the controller MUST re-read the logical server state and current instance reference, confirm they still match the assertion, and confirm that no newer failed health observation or lifecycle transition invalidated it. Instance replacement, transition out of `ready`, check-set revision, or expiry invalidates the assertion. An assertion is evidence of a recent observation, not caller authorization or adapter permission; normal authorization and routing policy still apply.
+
+An assertion for one instance MUST NOT be reused for a replacement instance, another environment, or another logical server. Implementations SHOULD keep assertions short-lived and avoid exposing them in ordinary logs.
+
 ## 4. Legal transitions
 
 Only the following transitions are permitted in this draft. A transition MUST be associated with a durable operation and recorded with its actor, cause, time, previous state, next state, and relevant evidence.

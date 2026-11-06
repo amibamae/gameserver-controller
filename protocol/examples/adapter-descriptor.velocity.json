@@ -1,0 +1,36 @@
+{
+  "adapter_id": "integration.velocity",
+  "category": "integration",
+  "display_name": "Velocity proxy integration",
+  "implementation_version": "0.1.0",
+  "protocol_versions": [
+    "0.1.0-draft"
+  ],
+  "contract_versions": [
+    "integration.proxy.v1-draft"
+  ],
+  "required_permissions": [
+    "proxy.backend.manage"
+  ],
+  "capabilities": [
+    {
+      "name": "integration.velocity.players.transfer",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.1.0-draft:integrations:velocity-player-transfer-request",
+      "output_schema_uri": "urn:gameserver-controller:0.1.0-draft:integrations:velocity-player-transfer-result",
+      "required_permissions": [
+        "proxy.backend.manage"
+      ],
+      "constraints": {
+        "max_sessions_per_invocation": 100,
+        "requires_current_readiness_assertion": true,
+        "reconciliation_required_for_unknown_outcome": true
+      }
+    }
+  ],
+  "constraints": {
+    "proxy_platform": "Velocity",
+    "requires_proxy_session_identity": true
+  }
+}

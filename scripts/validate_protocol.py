@@ -18,6 +18,7 @@ INDEX_PATH = SCHEMA_ROOT / "index.json"
 
 EXAMPLE_SCHEMA_IDS = {
     "adapter-descriptor.systemd.json": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor",
+    "adapter-descriptor.velocity.json": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor",
     "adapter-invoke-request.json": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-invoke-request",
     "backup-manifest.json": "urn:gameserver-controller:0.1.0-draft:storage:backup-manifest",
     "operation-accepted.json": "urn:gameserver-controller:0.1.0-draft:operations:operation",

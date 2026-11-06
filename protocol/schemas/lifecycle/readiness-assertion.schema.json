@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:lifecycle:readiness-assertion",
+  "title": "Logical server readiness assertion",
+  "description": "A short-lived observation bound to one exact server, environment, instance, and readiness check set.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "assertion_id",
+    "server_id",
+    "environment_id",
+    "instance_ref",
+    "readiness_check_set_id",
+    "observed_at",
+    "expires_at"
+  ],
+  "properties": {
+    "assertion_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "server_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "environment_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "instance_ref": {
+      "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+    },
+    "readiness_check_set_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
