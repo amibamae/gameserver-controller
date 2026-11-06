@@ -1,37 +1,101 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.2.0-draft:storage:backup-manifest",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:backup-manifest",
   "title": "Backup manifest",
   "type": "object",
   "additionalProperties": false,
-  "required": ["manifest_version", "backup_id", "server_id", "environment_id", "data_generation_id", "created_at", "source_operation_id", "game", "consistency", "objects"],
+  "required": [
+    "manifest_version",
+    "backup_id",
+    "server_id",
+    "environment_id",
+    "data_generation_id",
+    "created_at",
+    "source_operation_id",
+    "game",
+    "consistency",
+    "objects"
+  ],
   "properties": {
-    "manifest_version": {"type": "string", "minLength": 1, "maxLength": 40},
-    "backup_id": {"type": "string", "minLength": 1, "maxLength": 200},
-    "server_id": {"type": "string", "minLength": 1, "maxLength": 200},
-    "environment_id": {"type": "string", "minLength": 1, "maxLength": 200},
-    "data_generation_id": {"type": "string", "minLength": 1, "maxLength": 200},
-    "source_instance_ref": {"$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"},
-    "created_at": {"type": "string", "format": "date-time"},
-    "source_operation_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "manifest_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+    },
+    "backup_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "server_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "environment_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "data_generation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "source_instance_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:common:external-resource-ref"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_operation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
     "game": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["adapter_id", "name", "version"],
+      "required": [
+        "adapter_id",
+        "name",
+        "version"
+      ],
       "properties": {
-        "adapter_id": {"type": "string"},
-        "name": {"type": "string"},
-        "version": {"type": "string"},
-        "world_format": {"type": "string"}
+        "adapter_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "world_format": {
+          "type": "string"
+        }
       }
     },
     "consistency": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "evidence"],
+      "required": [
+        "mode",
+        "evidence"
+      ],
       "properties": {
-        "mode": {"enum": ["offline", "game_native", "other"]},
-        "evidence": {"type": "string", "maxLength": 2000}
+        "mode": {
+          "enum": [
+            "offline",
+            "game_native",
+            "other"
+          ]
+        },
+        "evidence": {
+          "type": "string",
+          "maxLength": 2000
+        }
       }
     },
     "objects": {
@@ -40,15 +104,33 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["key", "size_bytes", "checksum_algorithm", "checksum"],
+        "required": [
+          "object_ref",
+          "size_bytes",
+          "checksum_algorithm",
+          "checksum"
+        ],
         "properties": {
-          "key": {"type": "string", "minLength": 1, "maxLength": 2048},
-          "version_id": {"type": "string", "maxLength": 500},
-          "size_bytes": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
-          "checksum_algorithm": {"enum": ["sha256"]},
-          "checksum": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "checksum_algorithm": {
+            "enum": [
+              "sha256"
+            ]
+          },
+          "checksum": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          },
+          "object_ref": {
+            "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-reference"
+          }
         }
       }
     }
-  }
+  },
+  "description": "A backup manifest binds each checksummed object to its exact storage profile, environment, container, key, and version where available."
 }

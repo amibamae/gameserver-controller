@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-versioning-inspect-input",
+  "title": "Storage object versioning inspection input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "container_ref"
+  ],
+  "properties": {
+    "container_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-container-reference"
+    }
+  }
+}

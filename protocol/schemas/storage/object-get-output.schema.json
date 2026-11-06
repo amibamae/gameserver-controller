@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-get-output",
+  "title": "Storage object get output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_ref",
+    "transfer_state",
+    "bytes_sent",
+    "observed_at"
+  ],
+  "properties": {
+    "object_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-reference"
+    },
+    "transfer_state": {
+      "enum": [
+        "complete",
+        "partial",
+        "unknown"
+      ]
+    },
+    "bytes_sent": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "computed_checksum": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-checksum"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "transfer_state": {
+            "const": "complete"
+          }
+        },
+        "required": [
+          "transfer_state"
+        ]
+      },
+      "then": {
+        "required": [
+          "computed_checksum"
+        ],
+        "properties": {
+          "bytes_sent": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      }
+    }
+  ]
+}

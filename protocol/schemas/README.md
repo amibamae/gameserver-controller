@@ -1,6 +1,6 @@
 # JSON Schema Package
 
-**Status:** Draft, protocol version 0.2.0-draft.
+**Status:** Draft, protocol version 0.3.0-draft.
 
 All schemas in this directory use JSON Schema Draft 2020-12 and UTF-8 JSON. The schema identifiers use stable URNs so that validators do not need to fetch executable or mutable content from the network.
 
@@ -23,4 +23,4 @@ Passing schema validation does not prove authorization, a legal lifecycle transi
 
 ## Schema inventory
 
-See [index.json](index.json) for the machine-readable list of schema files and their IDs. The current draft includes common identifiers, resource references, request contexts, structured errors, secret references and capability descriptors; operation, lifecycle, and execution schemas; hosting, storage, integration, and adapter RPC schemas. The initial integration package defines Velocity player-transfer requests and results. The package is intentionally a draft and may gain or revise schemas before 1.0.
+See [index.json](index.json) for the machine-readable list of schema files and their IDs. The current draft includes common identifiers, resource references, request contexts, structured errors, secret references and capability descriptors; operation, lifecycle, execution, hosting, storage, integration, and adapter RPC schemas. Storage schemas cover all nine initial object capabilities, exact container/object references, checksums, and bounded stream handles. The optional stdio transport still needs a separate byte-stream binding before it can support storage put/get. The integration package defines Velocity player-transfer requests and results. The package is intentionally a draft and may gain or revise schemas before 1.0.

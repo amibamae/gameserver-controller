@@ -1,0 +1,15 @@
+{
+  "object_ref": {
+    "adapter_id": "storage.s3-compatible",
+    "storage_profile_id": "profile-test",
+    "environment_id": "test",
+    "container": "test-backups",
+    "key": "test/minecraft-test/backup-test-001/world.tar.zst",
+    "version_id": "object-version-001"
+  },
+  "mode": "governance",
+  "legal_hold": "off",
+  "retain_until": "2027-11-06T12:00:00Z",
+  "observed_at": "2026-11-06T12:00:00Z",
+  "state": "observed"
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-target",
+  "title": "Storage object target",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "adapter_id",
+    "storage_profile_id",
+    "environment_id",
+    "container",
+    "key"
+  ],
+  "properties": {
+    "adapter_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "storage_profile_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "environment_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "container": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    }
+  },
+  "description": "Write destination for an object. It intentionally has no provider version ID."
+}

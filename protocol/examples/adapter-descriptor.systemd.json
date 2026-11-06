@@ -4,7 +4,7 @@
   "display_name": "systemd execution adapter",
   "implementation_version": "0.1.0",
   "protocol_versions": [
-    "0.2.0-draft"
+    "0.3.0-draft"
   ],
   "contract_versions": [
     "execution.v1-draft"
@@ -19,8 +19,8 @@
       "name": "execution.unit.inspect",
       "version": "1",
       "mutating": false,
-      "input_schema_uri": "urn:gameserver-controller:0.2.0-draft:execution:systemd-unit-inspect-input",
-      "output_schema_uri": "urn:gameserver-controller:0.2.0-draft:execution:systemd-unit-inspect-output",
+      "input_schema_uri": "urn:gameserver-controller:0.3.0-draft:execution:systemd-unit-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.3.0-draft:execution:systemd-unit-inspect-output",
       "required_permissions": [
         "runtime.inspect"
       ]
@@ -29,8 +29,8 @@
       "name": "execution.unit.start",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.2.0-draft:execution:systemd-unit-start-input",
-      "output_schema_uri": "urn:gameserver-controller:0.2.0-draft:execution:systemd-unit-lifecycle-result",
+      "input_schema_uri": "urn:gameserver-controller:0.3.0-draft:execution:systemd-unit-start-input",
+      "output_schema_uri": "urn:gameserver-controller:0.3.0-draft:execution:systemd-unit-lifecycle-result",
       "required_permissions": [
         "runtime.start"
       ]
@@ -39,8 +39,8 @@
       "name": "execution.unit.graceful_stop",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.2.0-draft:execution:systemd-unit-graceful-stop-input",
-      "output_schema_uri": "urn:gameserver-controller:0.2.0-draft:execution:systemd-unit-lifecycle-result",
+      "input_schema_uri": "urn:gameserver-controller:0.3.0-draft:execution:systemd-unit-graceful-stop-input",
+      "output_schema_uri": "urn:gameserver-controller:0.3.0-draft:execution:systemd-unit-lifecycle-result",
       "required_permissions": [
         "runtime.stop"
       ]

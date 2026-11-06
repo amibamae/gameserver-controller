@@ -1,0 +1,25 @@
+{
+  "fixture_id": "storage.backup.partial-upload-not-verified",
+  "protocol_version": "0.3.0-draft",
+  "contract_area": "storage.object.put",
+  "purpose": "A partially uploaded multi-object backup never becomes verified or eligible for destruction.",
+  "input": {
+    "required_object_ids": [
+      "world",
+      "manifest"
+    ],
+    "uploaded_object_ids": [
+      "world"
+    ],
+    "manifest_verified": false,
+    "data_generation_id": "generation-003"
+  },
+  "expected": {
+    "all_required_objects_uploaded": false,
+    "backup_verified": false,
+    "destruction_allowed": false,
+    "partial": true
+  },
+  "side_effect_expectation": "simulated",
+  "notes": "The world object uploaded, but the manifest object did not. Upload acknowledgment alone cannot authorize destruction."
+}

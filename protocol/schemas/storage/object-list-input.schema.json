@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-list-input",
+  "title": "Storage object list input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "container_ref",
+    "prefix",
+    "maximum_items"
+  ],
+  "properties": {
+    "container_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-container-reference"
+    },
+    "prefix": {
+      "type": "string",
+      "maxLength": 2048
+    },
+    "continuation_token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "maximum_items": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
+    }
+  }
+}

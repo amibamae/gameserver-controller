@@ -1,6 +1,6 @@
 # ADR 0001: Initial Implementation Language and Runtime
 
-- **Status:** Proposed / decision pending
+- **Status:** Accepted
 - **Date:** 2026-11-05
 - **Decision owners:** Project maintainers
 
@@ -46,7 +46,7 @@ Rust, Java, and other options remain possible if maintainability, contributor ac
 
 ## Decision
 
-No implementation language is selected in this ADR. Phase 1 contracts and schemas remain language-neutral until maintainers explicitly choose a runtime.
+Go is selected for the controller core and its protocol tooling. Protocol contracts, schemas, and conformance fixtures remain language-neutral and do not encode Go-specific behavior.
 
 ## Decision criteria
 
@@ -61,6 +61,6 @@ Evaluate candidates against:
 
 ## Consequences
 
-- No language-specific source tree or runtime dependency is introduced by Phase 1 documentation.
-- Adapter contracts must be implementable in the selected language without changing core semantics.
-- A later ADR must record the selected language, minimum supported version, dependency policy, packaging model, and supported Debian versions.
+- The controller implementation and repository-owned protocol tooling use Go.
+- Adapter contracts remain implementable in other languages without changing core semantics.
+- Before implementation release, record the minimum supported Go version, dependency policy, packaging model, and supported Debian versions.

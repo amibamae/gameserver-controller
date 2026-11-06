@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-retention-inspect-input",
+  "title": "Storage object retention inspection input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_ref"
+  ],
+  "properties": {
+    "object_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-reference"
+    }
+  }
+}

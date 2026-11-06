@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:storage-checksum",
+  "title": "Storage object checksum",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "algorithm",
+    "digest"
+  ],
+  "properties": {
+    "algorithm": {
+      "enum": [
+        "sha256"
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    }
+  }
+}

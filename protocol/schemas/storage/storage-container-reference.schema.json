@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:storage-container-reference",
+  "title": "Storage container reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "adapter_id",
+    "storage_profile_id",
+    "environment_id",
+    "container"
+  ],
+  "properties": {
+    "adapter_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "storage_profile_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "environment_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "container": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    }
+  },
+  "description": "Non-secret identity of one storage account/profile and bucket or container in one environment."
+}

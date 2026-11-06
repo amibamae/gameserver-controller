@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-verify-checksum-input",
+  "title": "Storage object checksum verification input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_ref",
+    "expected_size_bytes",
+    "expected_checksum"
+  ],
+  "properties": {
+    "object_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-reference"
+    },
+    "expected_size_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "expected_checksum": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-checksum"
+    }
+  }
+}

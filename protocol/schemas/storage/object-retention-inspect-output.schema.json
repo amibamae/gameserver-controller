@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-retention-inspect-output",
+  "title": "Storage object retention inspection output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_ref",
+    "state",
+    "mode",
+    "legal_hold",
+    "observed_at"
+  ],
+  "properties": {
+    "object_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-reference"
+    },
+    "state": {
+      "enum": [
+        "observed",
+        "unsupported",
+        "unknown"
+      ]
+    },
+    "mode": {
+      "enum": [
+        "none",
+        "governance",
+        "compliance",
+        "unknown"
+      ]
+    },
+    "legal_hold": {
+      "enum": [
+        "on",
+        "off",
+        "unknown"
+      ]
+    },
+    "retain_until": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:storage-transfer-reference",
+  "title": "Bounded storage data transfer reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "transfer_id",
+    "direction",
+    "maximum_bytes",
+    "expires_at"
+  ],
+  "properties": {
+    "transfer_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "direction": {
+      "enum": [
+        "controller_to_adapter",
+        "adapter_to_controller"
+      ]
+    },
+    "maximum_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "description": "Opaque, controller-issued, one-use, operation-scoped handle for a bounded byte stream. A transport binding maps it to the stream."
+}

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-copy-output",
+  "title": "Storage object copy output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "destination",
+    "copy_state",
+    "observed_at"
+  ],
+  "properties": {
+    "destination": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-target"
+    },
+    "copy_state": {
+      "enum": [
+        "copied",
+        "not_copied",
+        "unknown"
+      ]
+    },
+    "object_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-reference"
+    },
+    "bytes_copied": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "provider_etag": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "copy_state": {
+            "const": "copied"
+          }
+        },
+        "required": [
+          "copy_state"
+        ]
+      },
+      "then": {
+        "required": [
+          "bytes_copied"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-verify-checksum-output",
+  "title": "Storage object checksum verification output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_ref",
+    "verification_state",
+    "verification_method",
+    "observed_at"
+  ],
+  "properties": {
+    "object_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-reference"
+    },
+    "verification_state": {
+      "enum": [
+        "verified",
+        "mismatch",
+        "missing",
+        "unsupported",
+        "unknown"
+      ]
+    },
+    "actual_size_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "actual_checksum": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-checksum"
+    },
+    "verification_method": {
+      "enum": [
+        "downloaded_bytes",
+        "trusted_provider_checksum",
+        "unsupported",
+        "object_missing",
+        "unknown"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "verification_state": {
+            "enum": [
+              "verified",
+              "mismatch"
+            ]
+          }
+        },
+        "required": [
+          "verification_state"
+        ]
+      },
+      "then": {
+        "required": [
+          "actual_size_bytes",
+          "actual_checksum"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "verification_state": {
+            "const": "missing"
+          }
+        },
+        "required": [
+          "verification_state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "verification_method": {
+            "const": "object_missing"
+          }
+        }
+      }
+    }
+  ]
+}

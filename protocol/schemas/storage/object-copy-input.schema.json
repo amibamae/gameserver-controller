@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-copy-input",
+  "title": "Storage object copy input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "destination",
+    "expected_size_bytes",
+    "expected_checksum"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-reference"
+    },
+    "destination": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-target"
+    },
+    "expected_size_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "expected_checksum": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-checksum"
+    }
+  }
+}
