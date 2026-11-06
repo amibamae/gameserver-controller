@@ -1,6 +1,6 @@
 # Protocol Security and Privacy Requirements
 
-**Status:** Draft, version 0.13.0-draft. This document specifies protocol-level security requirements; it is not a security certification.
+**Status:** Draft, version 0.14.0-draft. This document specifies protocol-level security requirements; it is not a security certification.
 
 ## 1. Trust boundaries
 

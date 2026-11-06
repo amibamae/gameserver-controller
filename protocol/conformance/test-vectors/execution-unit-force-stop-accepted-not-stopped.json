@@ -1,0 +1,45 @@
+{
+  "fixture_id": "execution.unit.force-stop.accepted-not-stopped",
+  "protocol_version": "0.14.0-draft",
+  "contract_area": "execution.unit.force_stop",
+  "purpose": "Provider acceptance is not evidence that the unit has stopped.",
+  "input": {
+    "force_stop_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "approval_id": "approval-force-stop-017",
+      "reason_code": "graceful_stop_timeout"
+    },
+    "force_stop_output": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "outcome": "accepted",
+      "state": "stopping",
+      "observed_at": "2026-11-06T11:10:00Z",
+      "external_operation_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-operation",
+        "external_id": "systemd-job-381"
+      }
+    }
+  },
+  "core_preconditions": {
+    "approval_valid": true
+  },
+  "expected": {
+    "schemas_valid": true,
+    "dispatch_allowed": true,
+    "target_bound": true,
+    "termination_confirmed": false,
+    "accepted_not_complete": true
+  }
+}

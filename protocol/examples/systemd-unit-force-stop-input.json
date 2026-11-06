@@ -1,0 +1,10 @@
+{
+  "unit_ref": {
+    "adapter_id": "execution.systemd",
+    "environment_id": "staging",
+    "resource_kind": "systemd-unit",
+    "external_id": "paper-server"
+  },
+  "approval_id": "approval-force-stop-017",
+  "reason_code": "graceful_stop_timeout"
+}

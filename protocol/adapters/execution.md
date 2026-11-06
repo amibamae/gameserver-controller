@@ -1,6 +1,6 @@
 # Execution Adapter Contract
 
-**Status:** Draft, version 0.13.0-draft.
+**Status:** Draft, version 0.14.0-draft.
 
 ## 1. Purpose
 
@@ -58,7 +58,7 @@ Systemd start and graceful-stop capabilities use operation-specific result schem
 - Create defines the unit and does not imply it is running.
 - Start returns accepted/observed state separately; readiness is established by the game adapter and controller validation workflow.
 - Graceful stop asks the game runtime to save and exit using the game adapter's save semantics, then waits for process/unit termination.
-- Force stop is an exceptional capability. It requires explicit policy/authorization and must report that graceful save could not be confirmed.
+- Force stop is an exceptional capability. The controller MUST validate an approval bound to the exact unit and reason before dispatch; the input schema requires an approval reference. It must report that graceful save could not be confirmed. A completed result confirms only that the unit stopped, not that game data was saved. Accepted and unknown outcomes carry a reference; unknown requires inspection before retry.
 - Inspect reports current observed state, identity, version, timestamps, and safe diagnostics.
 - Delete removes only the execution-unit definition. It MUST NOT delete world data, backups, or the logical server record unless a separate contract explicitly authorizes that effect. Its result MUST explicitly confirm persistent data was preserved.
 - Logs are read with a caller-supplied byte bound, counting UTF-8 line bytes and one newline separator between adjacent lines, and MUST be redacted before leaving the adapter. Health inspection reports `unknown` when it cannot confirm health; it MUST NOT infer healthy from an active process.

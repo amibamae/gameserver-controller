@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.13.0-draft:game:backup-validate-output",
+  "$id": "urn:gameserver-controller:0.14.0-draft:game:backup-validate-output",
   "title": "Game backup validation output",
   "description": "Unknown validation is not valid; `valid` requires all requested game-specific checks to pass.",
   "type": "object",

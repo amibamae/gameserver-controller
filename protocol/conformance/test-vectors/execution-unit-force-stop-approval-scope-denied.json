@@ -1,0 +1,27 @@
+{
+  "fixture_id": "execution.unit.force-stop.approval-scope-denied",
+  "protocol_version": "0.14.0-draft",
+  "contract_area": "execution.unit.force_stop",
+  "purpose": "A present approval that is not valid for this exact unit and reason blocks dispatch.",
+  "input": {
+    "force_stop_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "approval_id": "approval-force-stop-017",
+      "reason_code": "graceful_stop_timeout"
+    }
+  },
+  "core_preconditions": {
+    "approval_valid": false
+  },
+  "expected": {
+    "schemas_valid": true,
+    "approval_required": true,
+    "dispatch_allowed": false,
+    "termination_confirmed": false
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "fixture_id": "execution.unit.force-stop.completed-stopped",
+  "protocol_version": "0.14.0-draft",
+  "contract_area": "execution.unit.force_stop",
+  "purpose": "An approved force stop is confirmed only when the exact unit is observed stopped.",
+  "input": {
+    "force_stop_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "approval_id": "approval-force-stop-017",
+      "reason_code": "graceful_stop_timeout"
+    },
+    "force_stop_output": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "outcome": "completed",
+      "state": "stopped",
+      "observed_at": "2026-11-06T11:10:00Z"
+    }
+  },
+  "core_preconditions": {
+    "approval_valid": true
+  },
+  "expected": {
+    "schemas_valid": true,
+    "approval_required": true,
+    "dispatch_allowed": true,
+    "target_bound": true,
+    "termination_confirmed": true,
+    "accepted_not_complete": false,
+    "must_inspect_before_retry": false
+  }
+}

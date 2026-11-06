@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.14.0-draft:execution:systemd-unit-force-stop-output",
+  "title": "Systemd execution unit force-stop output",
+  "description": "A completed force stop confirms the exact unit is stopped; accepted and unknown outcomes carry a reference for inspection and reconciliation.",
+  "allOf": [
+    {
+      "$ref": "urn:gameserver-controller:0.14.0-draft:execution:systemd-unit-lifecycle-result"
+    },
+    {
+      "properties": {
+        "state": {
+          "enum": [
+            "stopping",
+            "stopped",
+            "unknown"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "completed"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "const": "stopped"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "accepted"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "enum": [
+              "stopping",
+              "stopped"
+            ]
+          }
+        },
+        "required": [
+          "external_operation_ref"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "outcome_unknown"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "external_operation_ref"
+        ]
+      }
+    }
+  ]
+}

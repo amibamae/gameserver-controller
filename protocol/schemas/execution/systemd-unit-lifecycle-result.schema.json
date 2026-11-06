@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.13.0-draft:execution:systemd-unit-lifecycle-result",
+  "$id": "urn:gameserver-controller:0.14.0-draft:execution:systemd-unit-lifecycle-result",
   "title": "Systemd execution unit lifecycle result",
   "type": "object",
   "additionalProperties": false,
@@ -12,7 +12,7 @@
   ],
   "properties": {
     "unit_ref": {
-      "$ref": "urn:gameserver-controller:0.13.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.14.0-draft:common:external-resource-ref"
     },
     "outcome": {
       "enum": [
@@ -36,7 +36,7 @@
       "format": "date-time"
     },
     "external_operation_ref": {
-      "$ref": "urn:gameserver-controller:0.13.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.14.0-draft:common:external-resource-ref"
     }
   },
   "allOf": [

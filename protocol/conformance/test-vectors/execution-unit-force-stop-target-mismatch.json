@@ -1,0 +1,39 @@
+{
+  "fixture_id": "execution.unit.force-stop.target-mismatch",
+  "protocol_version": "0.14.0-draft",
+  "contract_area": "execution.unit.force_stop",
+  "purpose": "A stopped result for another unit cannot complete the request.",
+  "input": {
+    "force_stop_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "approval_id": "approval-force-stop-017",
+      "reason_code": "graceful_stop_timeout"
+    },
+    "force_stop_output": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "different-paper-unit"
+      },
+      "outcome": "completed",
+      "state": "stopped",
+      "observed_at": "2026-11-06T11:10:00Z"
+    }
+  },
+  "core_preconditions": {
+    "approval_valid": true
+  },
+  "expected": {
+    "schemas_valid": true,
+    "dispatch_allowed": true,
+    "target_bound": false,
+    "termination_confirmed": false,
+    "must_inspect_before_retry": true
+  }
+}
