@@ -50,17 +50,17 @@ Starts the current recorded execution unit on the current recorded instance. The
 
 ### 3.4 `server.stop`
 
-Default behavior drains new player routing when the configured proxy integration supports it, requests game-native save/flush, gracefully stops the execution unit, and confirms termination. Force stop is not a default behavior. If force stop is supported, it requires a separate capability, permission, explicit parameter, and approval according to environment policy.
+Default behavior is `drain=true` and `force=false` when omitted. It drains new player routing when the configured proxy integration supports it, requests game-native save/flush, gracefully stops the execution unit, and confirms termination. Force stop is not a default behavior. If force stop is supported, it requires a separate capability, permission, explicit `force=true` parameter, and a valid `approval_id`; the parameter schema rejects `force=true` without an approval reference. Environment policy may impose additional approval requirements.
 
 A successful stop leaves the logical server `stopped`; it does not destroy the VM or delete data.
 
 ### 3.5 `server.backup`
 
-Captures a consistent backup using the game adapter's declared consistency mode, transfers objects, writes a manifest, and verifies every required object. If the server was `ready`, `resume_after_backup=true` requests restart and readiness validation after verification. If the server was already `stopped`, it remains stopped. A failed or unverified backup MUST NOT be recorded as verified.
+Captures a consistent backup using the game adapter's declared consistency mode, transfers objects, writes a manifest, and verifies every required object. If the server was `ready`, omitted `resume_after_backup` defaults to `true`; it requests restart and readiness validation after verification. Setting it to `false` leaves the server stopped. If the server was already `stopped`, it remains stopped. A failed or unverified backup MUST NOT be recorded as verified.
 
 ### 3.6 `server.restore`
 
-Restores the immutable backup identified by `backup_id`. Integrity, environment ownership, data format, and game compatibility MUST pass before data is made available to the game runtime. Replacing existing data requires `replace_existing_data=true` plus explicit approval where policy requires it. Default final state is `stopped`; `start_after_restore=true` triggers startup and validation.
+Restores the immutable backup identified by `backup_id`. Integrity, environment ownership, data format, and game compatibility MUST pass before data is made available to the game runtime. Replacing existing data requires `replace_existing_data=true` plus explicit approval where policy requires it. Default final state is `stopped`; `start_after_restore` defaults to `false` and when set to `true` triggers startup and validation. `replace_existing_data` defaults to `false`.
 
 ### 3.7 `server.destroy`
 
