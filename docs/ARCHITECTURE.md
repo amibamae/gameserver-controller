@@ -22,12 +22,12 @@ The platform coordinates game-server infrastructure while keeping the orchestrat
                        Adapter Contracts
           +------------------+------------------+
           |                  |                  |
-     Hosting Adapter    Storage Adapter     Game Adapter
-       (Vultr)             (Wasabi)         (Minecraft/Paper)
-          |                  |                  |
-       Provider           Object store       Game process,
-       API / VM            backups and        config, health,
-       lifecycle           release files      compatibility
+     Hosting Adapter    Storage Adapter    Execution Adapter    Game Adapter
+       (Vultr)             (Wasabi)           (systemd)          (Minecraft/Paper)
+          |                  |                  |                    |
+       Provider           Object store       Process/service      Game config,
+       API / VM            backups and        lifecycle            save, health,
+       lifecycle           release files                            compatibility
                              |
                        Integrations
                     (Velocity, monitoring,
