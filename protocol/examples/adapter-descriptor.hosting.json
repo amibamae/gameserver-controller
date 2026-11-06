@@ -1,0 +1,24 @@
+{
+  "adapter_id": "hosting.example",
+  "category": "hosting",
+  "display_name": "example hosting adapter",
+  "implementation_version": "0.1.0",
+  "protocol_versions": ["0.1.0-draft"],
+  "contract_versions": ["hosting.v1-draft"],
+  "required_permissions": ["instance.create"],
+  "capabilities": [
+    {
+      "name": "hosting.instance.create",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.1.0-draft:hosting:instance-create-input",
+      "output_schema_uri": "urn:gameserver-controller:0.1.0-draft:hosting:instance-create-output",
+      "required_permissions": ["instance.create"]
+    }
+  ],
+  "constraints": {
+    "supports_standard_os_offerings": true,
+    "supports_idempotent_create": true,
+    "supports_create_reconciliation": true
+  }
+}
