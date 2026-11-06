@@ -57,7 +57,7 @@ An accepted upload is not automatically a verified backup. Core must require ver
 
 Execution adapters manage a process or workload unit on an already provisioned environment. The initial reference is `execution.systemd` on a conventional Linux VM. Container, Kubernetes, and Agones implementations are optional. The execution adapter reports process/unit state; the game adapter defines installation, save semantics, game readiness, data paths, and version compatibility. See the [execution adapter protocol](../protocol/adapters/execution.md).
 
-## Execution contract\n\nExecution adapters manage the process or workload on an already provisioned environment. The initial reference is systemd on a conventional Linux VM. Container, Kubernetes, and Agones implementations are optional. See the [execution adapter protocol](../protocol/adapters/execution.md).\n\n## Game-server contract
+## Game-server contract
 
 Responsibilities: describe and control a game runtime, including installation, configuration, save semantics, readiness, data paths, version compatibility, and migration.
 
@@ -115,8 +115,7 @@ Core tests use fake adapters. Real adapter tests run only against isolated test 
 | Hosting | Vultr | OVH, other providers |
 | Storage | Wasabi (S3-compatible) | Other object stores |
 | Execution | systemd on Debian VM | Container runtime, Kubernetes, Agones |
-| Execution | systemd on Debian VM | Container runtime, Kubernetes, Agones |
 | Game | Minecraft Java / Paper | Terraria, Valheim, ARK |
-| Execution | systemd on Debian VM | Container runtime, Kubernetes, Agones |\n| Integration | Velocity | Other proxies, monitoring, notifications |
+| Integration | Velocity | Other proxies, monitoring, notifications |
 
 This mapping is a starting point, not a claim of identical provider/game capabilities.
