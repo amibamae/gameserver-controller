@@ -229,6 +229,8 @@ The terminal operation record carries its final status and `completed_at` timest
 - Related audit event IDs.
 - A `partial` flag indicating whether only part of the requested outcome was achieved.
 
+Each result identifies its `operation_type`, which MUST match the enclosing operation. Successful provisioning, backup, restore, and destruction results MUST include `operation_data` validated against the corresponding registered result schema: [provision](schemas/operations/server-provision-result.schema.json), [backup](schemas/operations/server-backup-result.schema.json), [restore](schemas/operations/server-restore-result.schema.json), or [destroy](schemas/operations/server-destroy-result.schema.json). These schemas add operation-specific facts while preserving the canonical result envelope.
+
 A failed operation MUST include a structured operation-level `error`. When known side effects or partial completion exist, the operation SHOULD also retain a result with `partial: true`. A successful operation MUST include a result and completion timestamp. A cancelled operation MUST include a completion timestamp and preserve any known external state.
 
 The canonical [operation.schema.json](schemas/operations/operation.schema.json) requires the trusted `actor_id` and immutable `request_snapshot`. The snapshot MUST contain validated request parameters and secret references only; resolved secret values MUST NOT be stored. A request fingerprint MAY be stored to support deterministic duplicate-request checks. When an implementation runs from an untagged draft, it SHOULD preserve the exact source/specification revision in protected operation metadata; a released implementation SHOULD populate `schema_package_revision` with the immutable package/tag identity.
