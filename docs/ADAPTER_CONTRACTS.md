@@ -22,17 +22,17 @@ Each adapter exposes a stable ID (for example `hosting.vultr`), display name, ad
 Responsibilities: translate logical infrastructure requests into provider-specific operations; own provider API details, resource IDs, asynchronous polling, and error normalization.
 
 Proposed operations:
-- Discover capabilities, regions, plans, and images where supported.
+- Discover capabilities, regions, plans, and provider-supported operating-system offerings/versions where supported.
 - Inspect an instance.
 - Create an instance from a provider-neutral specification.
 - Wait for provider operation completion.
 - Start, stop, reboot, and destroy instances where supported.
 - Inspect networking/firewall state where supported.
-- Create/list/inspect images where supported.
+- Apply or report the status of a referenced bootstrap mechanism where supported.
 
-An instance specification may include region, plan, approved image reference, hostname/labels, SSH key references, firewall policy references, protected bootstrap reference, environment, logical server identity, architecture, and minimum resource requirements. It must never contain raw passwords, private keys, API tokens, or storage credentials.
+An instance specification may include region, plan, provider OS selection (using the provider's opaque OS identifier plus a human-readable distribution/version), hostname/labels, SSH key references, firewall policy references, protected bootstrap reference and revision, environment, logical server identity, architecture, and minimum resource requirements. It must never contain raw passwords, private keys, API tokens, or storage credentials.
 
-Example capabilities: `instance.create`, `instance.inspect`, `instance.start`, `instance.stop`, `instance.destroy`, `image.create`, `image.list`, `firewall.manage`, `operation.poll`. Core must not assume every provider supports custom images, snapshots, private networking, or identical lifecycle semantics.
+Example capabilities: `instance.create`, `instance.inspect`, `instance.start`, `instance.stop`, `instance.destroy`, `instance.bootstrap`, `firewall.manage`, `operation.poll`. Core must not assume every provider exposes the same OS catalog, bootstrap-delivery mechanism, private networking, or lifecycle semantics.
 
 ## Storage-provider contract
 
