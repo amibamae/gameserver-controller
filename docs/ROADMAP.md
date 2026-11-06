@@ -37,7 +37,7 @@
 - [ ] Validate the selected standards, validators, generators, and transport binding across target languages.
 - [x] Publish an initial set of language-neutral schemas, examples, test vectors, and conformance requirements.
 - [x] Publish a canonical durable-operation result schema and initial Velocity player-transfer request/result schemas.
-- [ ] Expand capability-specific input/output schemas across hosting, storage, execution, game, and integration operations; validate all schema references and fixture expectations.
+- [x] Add CI validation and an executable behavioral conformance runner for the initial ten fixtures.\n- [x] Publish registered input/output schemas for the hosting instance-create capability.\n- [ ] Expand capability-specific input/output schemas across storage, execution, game, and integration operations; complete hosting coverage and typed operation results.
 - [x] Publish initial draft compatibility rules for negotiation, schema identity, evolution, and in-flight operations.
 - [ ] Review the complete protocol and freeze compatibility rules.
 - [ ] Build independent implementations in at least two programming languages and pass the same conformance suite.
@@ -50,7 +50,7 @@
 - Evaluate programming languages against the completed protocol, maintainability, reliability, development speed, contributor accessibility, and available libraries.
 - Select an implementation language only after protocol review; keep language choice separate from protocol authority.
 - Select the initial state persistence and configuration-validation approach.
-- Build language-neutral conformance fixtures and a test harness.
+- Extend the language-neutral behavioral suite and test harness as additional protocol contracts are specified.
 - Implement fake hosting, storage, execution, game, and integration adapters.
 - Test protocol compatibility, error behavior, idempotency, timeout handling, and recovery without contacting production services.
 - Establish build, test, dependency, and release practices that do not require AI services.
@@ -132,4 +132,4 @@ The first end-to-end target is Vultr + Wasabi + Paper + Velocity on Debian. Exis
 
 The project is in **Phase 1 — Language-independent protocol design**. The protocol principles, common types, and first durable operation protocol draft are published. The protocol remains 0.1.0-draft. Initial JSON, JSON Schema, JSON-RPC, OpenAPI, timestamp, and canonicalization choices, lifecycle model, five adapter contracts, security draft, management API, schemas, examples, and test vectors are published. They have not all been independently validated or reviewed, and no controller or production adapter implementation has been built.
 
-Initial lifecycle, five adapter, RPC, management API, security, schema, example, and conformance drafts have been published. The initial operation-result and Velocity transfer contracts now have schemas and examples, and a local validator plus CI workflow has been added. The next work is to review those contracts, extend capability-specific schemas, validate the remaining edge cases, and build independent cross-language interoperability tests.
+Initial lifecycle, five adapter, RPC, management API, security, schema, example, and conformance drafts have been published. CI validates the schema package and executes the initial ten conformance fixtures. The hosting instance-create capability now has registered input and output schemas; operation-specific results and storage/game capability schemas remain work in progress. The next work is to expand those contracts, add edge-case vectors, and build independent cross-language interoperability tests.
