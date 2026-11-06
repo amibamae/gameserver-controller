@@ -10,7 +10,7 @@ Authentication establishes the identity of an operator or service calling the ma
 
 ### Local-only profile
 
-A local controller MAY expose an API only on a loopback interface or protected local socket. It MAY derive the actor identity from the operating-system peer identity. A local TCP listener without authenticated peer identity MUST NOT be treated as trusted merely because it listens on loopback; local process compromise is within the threat model.
+A local controller MAY expose an API only through a protected local socket (such as a Unix-domain socket) or in-process application interface. It MAY derive the actor identity from the operating-system peer identity. This local profile is not represented by the remote bearer-authentication OpenAPI security scheme; an implementation MUST document how local peer identity is established and passed to the core. A local TCP listener without authenticated peer identity MUST NOT be treated as trusted merely because it listens on loopback; local process compromise is within the threat model.
 
 ### Remote profile
 
