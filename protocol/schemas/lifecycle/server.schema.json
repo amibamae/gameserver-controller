@@ -42,5 +42,8 @@
     "created_at": {"type": "string", "format": "date-time"},
     "updated_at": {"type": "string", "format": "date-time"},
     "last_ready_at": {"type": "string", "format": "date-time"}
-  }
+  },
+  "if": {"properties": {"data_generation_status": {"const": "known"}}, "required": ["data_generation_status"]},
+  "then": {"required": ["data_generation_id"]}
+
 }
