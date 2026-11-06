@@ -68,6 +68,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 
 ### Storage and security
 - A checksum-valid backup from an older data generation does not authorize destruction of the current instance.
+- A forced stop request without an approval reference is rejected by schema/policy.
 - Incomplete upload cannot be marked verified.
 - Checksum/length mismatch blocks restore and destruction.
 - Staging cannot write/delete production objects.
