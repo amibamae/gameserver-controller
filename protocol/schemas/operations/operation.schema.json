@@ -332,6 +332,98 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.provision"
+          },
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation_type",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "urn:gameserver-controller:0.1.0-draft:operations:server-provision-result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          },
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation_type",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "urn:gameserver-controller:0.1.0-draft:operations:server-backup-result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.restore"
+          },
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation_type",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "urn:gameserver-controller:0.1.0-draft:operations:server-restore-result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.destroy"
+          },
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation_type",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "urn:gameserver-controller:0.1.0-draft:operations:server-destroy-result"
+          }
+        }
+      }
     }
   ]
 }
