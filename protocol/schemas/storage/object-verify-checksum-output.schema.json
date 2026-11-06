@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.15.0-draft:storage:object-verify-checksum-output",
+  "$id": "urn:gameserver-controller:0.16.0-draft:storage:object-verify-checksum-output",
   "title": "Storage object checksum verification output",
   "type": "object",
   "additionalProperties": false,
@@ -12,7 +12,7 @@
   ],
   "properties": {
     "object_ref": {
-      "$ref": "urn:gameserver-controller:0.15.0-draft:storage:storage-object-reference"
+      "$ref": "urn:gameserver-controller:0.16.0-draft:storage:storage-object-reference"
     },
     "verification_state": {
       "enum": [
@@ -29,7 +29,7 @@
       "maximum": 9007199254740991
     },
     "actual_checksum": {
-      "$ref": "urn:gameserver-controller:0.15.0-draft:storage:storage-checksum"
+      "$ref": "urn:gameserver-controller:0.16.0-draft:storage:storage-checksum"
     },
     "verification_method": {
       "enum": [

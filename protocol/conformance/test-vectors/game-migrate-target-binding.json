@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.migrate.target-binding",
-  "protocol_version": "0.15.0-draft",
+  "protocol_version": "0.16.0-draft",
   "contract_area": "game.migrate",
   "purpose": "An adapter result for a different instance cannot confirm the requested migration.",
   "input": {

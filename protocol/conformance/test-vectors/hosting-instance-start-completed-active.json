@@ -1,0 +1,34 @@
+{
+  "fixture_id": "hosting.instance.start.completed-active",
+  "protocol_version": "0.16.0-draft",
+  "contract_area": "hosting.instance.start",
+  "purpose": "A completed start confirms active state for the exact instance.",
+  "input": {
+    "action": "start",
+    "hosting_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    },
+    "hosting_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      },
+      "outcome": "completed",
+      "state": "active",
+      "observed_at": "2026-11-06T11:40:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "completion_confirmed": true,
+    "unknown_requires_inspection": false
+  }
+}

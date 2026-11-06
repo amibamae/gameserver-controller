@@ -1,0 +1,35 @@
+{
+  "fixture_id": "hosting.instance.start.target-mismatch",
+  "protocol_version": "0.16.0-draft",
+  "contract_area": "hosting.instance.start",
+  "purpose": "A result for a different provider instance cannot complete a start request.",
+  "input": {
+    "action": "start",
+    "hosting_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    },
+    "hosting_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "different-instance"
+      },
+      "outcome": "completed",
+      "state": "active",
+      "observed_at": "2026-11-06T11:40:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": false,
+    "completion_confirmed": false,
+    "unknown_requires_inspection": false,
+    "result_requires_inspection": true
+  }
+}

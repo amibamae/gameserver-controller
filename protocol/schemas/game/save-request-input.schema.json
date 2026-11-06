@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.15.0-draft:game:save-request-input",
+  "$id": "urn:gameserver-controller:0.16.0-draft:game:save-request-input",
   "title": "Game save request input",
   "description": "Request a game-native save or flush for one exact instance and release.",
   "type": "object",
@@ -12,7 +12,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.15.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.16.0-draft:game:game-instance-target"
     },
     "release_id": {
       "type": "string",

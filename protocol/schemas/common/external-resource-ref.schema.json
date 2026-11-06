@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.15.0-draft:common:external-resource-ref",
+  "$id": "urn:gameserver-controller:0.16.0-draft:common:external-resource-ref",
   "title": "External resource reference",
   "type": "object",
   "additionalProperties": false,

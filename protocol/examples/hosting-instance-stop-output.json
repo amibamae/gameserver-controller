@@ -1,0 +1,11 @@
+{
+  "instance_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "staging",
+    "resource_kind": "instance",
+    "external_id": "instance-paper-021"
+  },
+  "outcome": "completed",
+  "state": "stopped",
+  "observed_at": "2026-11-06T11:36:00Z"
+}

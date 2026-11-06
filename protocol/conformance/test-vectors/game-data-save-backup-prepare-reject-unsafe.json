@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.data.save.backup-prepare.reject-unsafe-datasets",
-  "protocol_version": "0.15.0-draft",
+  "protocol_version": "0.16.0-draft",
   "contract_area": "game.backup",
   "purpose": "Path traversal and duplicate data-set IDs are rejected before a game backup can use them.",
   "input": {

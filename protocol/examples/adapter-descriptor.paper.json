@@ -4,7 +4,7 @@
   "display_name": "Minecraft Paper game adapter",
   "implementation_version": "0.1.0",
   "protocol_versions": [
-    "0.15.0-draft"
+    "0.16.0-draft"
   ],
   "contract_versions": [
     "game.v1-draft"
@@ -21,8 +21,8 @@
       "name": "game.configure",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.15.0-draft:game:configure-input",
-      "output_schema_uri": "urn:gameserver-controller:0.15.0-draft:game:configure-output",
+      "input_schema_uri": "urn:gameserver-controller:0.16.0-draft:game:configure-input",
+      "output_schema_uri": "urn:gameserver-controller:0.16.0-draft:game:configure-output",
       "required_permissions": [
         "game.configure"
       ],
@@ -35,8 +35,8 @@
       "name": "game.install",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.15.0-draft:game:install-input",
-      "output_schema_uri": "urn:gameserver-controller:0.15.0-draft:game:install-output",
+      "input_schema_uri": "urn:gameserver-controller:0.16.0-draft:game:install-input",
+      "output_schema_uri": "urn:gameserver-controller:0.16.0-draft:game:install-output",
       "required_permissions": [
         "game.install"
       ],
@@ -49,8 +49,8 @@
       "name": "game.readiness.check",
       "version": "1",
       "mutating": false,
-      "input_schema_uri": "urn:gameserver-controller:0.15.0-draft:game:readiness-check-input",
-      "output_schema_uri": "urn:gameserver-controller:0.15.0-draft:game:readiness-check-output",
+      "input_schema_uri": "urn:gameserver-controller:0.16.0-draft:game:readiness-check-input",
+      "output_schema_uri": "urn:gameserver-controller:0.16.0-draft:game:readiness-check-output",
       "required_permissions": [
         "runtime.inspect"
       ],
@@ -68,8 +68,8 @@
       "name": "game.release.describe",
       "version": "1",
       "mutating": false,
-      "input_schema_uri": "urn:gameserver-controller:0.15.0-draft:game:release-describe-input",
-      "output_schema_uri": "urn:gameserver-controller:0.15.0-draft:game:release-describe-output",
+      "input_schema_uri": "urn:gameserver-controller:0.16.0-draft:game:release-describe-input",
+      "output_schema_uri": "urn:gameserver-controller:0.16.0-draft:game:release-describe-output",
       "required_permissions": [
         "game.release.inspect"
       ]
@@ -78,8 +78,8 @@
       "name": "game.validate_installation",
       "version": "1",
       "mutating": false,
-      "input_schema_uri": "urn:gameserver-controller:0.15.0-draft:game:validate-installation-input",
-      "output_schema_uri": "urn:gameserver-controller:0.15.0-draft:game:validate-installation-output",
+      "input_schema_uri": "urn:gameserver-controller:0.16.0-draft:game:validate-installation-input",
+      "output_schema_uri": "urn:gameserver-controller:0.16.0-draft:game:validate-installation-output",
       "required_permissions": [
         "game.inspect"
       ],

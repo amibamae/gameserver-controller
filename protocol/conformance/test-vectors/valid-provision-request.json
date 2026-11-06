@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.provision.valid.standard-os",
-  "protocol_version": "0.15.0-draft",
+  "protocol_version": "0.16.0-draft",
   "contract": "hosting.instance.create",
   "purpose": "A provider-neutral request selects an explicit standard OS and pinned bootstrap.",
   "input": {

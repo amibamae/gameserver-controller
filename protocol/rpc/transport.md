@@ -1,6 +1,6 @@
 # Adapter Transport Binding
 
-**Status:** Draft, version 0.15.0-draft.
+**Status:** Draft, version 0.16.0-draft.
 
 ## 1. Separation of semantics and transport
 

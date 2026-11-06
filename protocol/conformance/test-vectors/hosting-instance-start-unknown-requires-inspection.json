@@ -1,0 +1,34 @@
+{
+  "fixture_id": "hosting.instance.start.unknown-requires-inspection",
+  "protocol_version": "0.16.0-draft",
+  "contract_area": "hosting.instance.start",
+  "purpose": "An unknown start result requires inspection before retry or dependent work.",
+  "input": {
+    "action": "start",
+    "hosting_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    },
+    "hosting_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      },
+      "outcome": "outcome_unknown",
+      "state": "unknown",
+      "observed_at": "2026-11-06T11:40:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "completion_confirmed": false,
+    "unknown_requires_inspection": true
+  }
+}
