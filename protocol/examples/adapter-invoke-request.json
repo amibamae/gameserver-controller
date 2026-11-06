@@ -1,0 +1,24 @@
+{
+  "jsonrpc": "2.0",
+  "id": "request-001",
+  "method": "adapter.invoke",
+  "params": {
+    "protocol_version": "0.1.0-draft",
+    "capability": "hosting.instance.inspect",
+    "request_context": {
+      "request_id": "request-001",
+      "correlation_id": "correlation-001",
+      "environment_id": "test",
+      "server_id": "minecraft-test",
+      "deadline": "2026-11-05T23:00:00Z"
+    },
+    "input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "test",
+        "resource_kind": "instance",
+        "external_id": "opaque-instance-id"
+      }
+    }
+  }
+}
