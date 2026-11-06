@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func installFakeSSH(t *testing.T, failPreflight, failStart bool) (string, string) {
+func installFakeSSH(t *testing.T, failPreflight, failStart bool, sameInvocation ...bool) (string, string) {
 	t.Helper()
 
 	bin := t.TempDir()
@@ -18,6 +18,9 @@ func installFakeSSH(t *testing.T, failPreflight, failStart bool) (string, string
 	t.Setenv("SSH_LOG", logPath)
 	t.Setenv("FAIL_PREFLIGHT", map[bool]string{true: "1", false: "0"}[failPreflight])
 	t.Setenv("FAIL_START", map[bool]string{true: "1", false: "0"}[failStart])
+	same := len(sameInvocation) > 0 && sameInvocation[0]
+	t.Setenv("SAME_INVOCATION", map[bool]string{true: "1", false: "0"}[same])
+	t.Setenv("SHOW_COUNT_FILE", logPath+".show-count")
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	script := strings.Join([]string{
@@ -25,10 +28,16 @@ func installFakeSSH(t *testing.T, failPreflight, failStart bool) (string, string
 		"printf '%s\\n' \"$*\" >> \"$SSH_LOG\"",
 		"case \"$*\" in",
 		"  *\"systemctl show\"*)",
+		"    show_count=0",
+		"    if [ -f \"$SHOW_COUNT_FILE\" ]; then show_count=$(cat \"$SHOW_COUNT_FILE\"); fi",
+		"    show_count=$((show_count + 1))",
+		"    printf '%s' \"$show_count\" > \"$SHOW_COUNT_FILE\"",
+		"    invocation_id=00000000000000000000000000000001",
+		"    if [ \"$show_count\" -gt 1 ] && [ \"$SAME_INVOCATION\" != \"1\" ]; then invocation_id=00000000000000000000000000000002; fi",
 		"    if [ \"$FAIL_PREFLIGHT\" = \"1\" ]; then",
-		"      printf 'ActiveState=failed\\nSubState=failed\\nResult=failed\\nExecMainStatus=1\\n'",
+		"      printf 'ActiveState=failed\\nSubState=failed\\nResult=failed\\nExecMainStatus=1\\nInvocationID=%s\\n' \"$invocation_id\"",
 		"    else",
-		"      printf 'ActiveState=inactive\\nSubState=dead\\nResult=success\\nExecMainStatus=0\\n'",
+		"      printf 'ActiveState=inactive\\nSubState=dead\\nResult=success\\nExecMainStatus=0\\nInvocationID=%s\\n' \"$invocation_id\"",
 		"    fi",
 		"    ;;",
 		"  *\"systemctl start --wait minecraft-backup.service\"*)",
@@ -87,12 +96,15 @@ func TestBackupSuccessIsAuditedAndUsesOnlyBackupUnit(t *testing.T) {
 	if !strings.Contains(output, "completed successfully") {
 		t.Fatalf("expected success output, got %q", output)
 	}
+	if !strings.Contains(output, "does not verify backup contents or storage integrity") {
+		t.Fatalf("expected the unverified-content limitation in success output, got %q", output)
+	}
 	auditPath := filepath.Join(home, ".local", "state", "gsc-pilot", "operations.jsonl")
 	audit, err := os.ReadFile(auditPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(audit), "\"event\":\"started\"") || !strings.Contains(string(audit), "\"event\":\"succeeded\"") {
+	if !strings.Contains(string(audit), "\"event\":\"started\"") || !strings.Contains(string(audit), "\"event\":\"service_succeeded\"") {
 		t.Fatalf("expected started and succeeded audit records, got %s", audit)
 	}
 	info, err := os.Stat(auditPath)
@@ -161,5 +173,52 @@ func TestBackupUnknownRemoteOutcomeIsNotRetriedAndIsAudited(t *testing.T) {
 	}
 	if !strings.Contains(string(audit), "\"event\":\"started\"") || !strings.Contains(string(audit), "\"event\":\"outcome_unknown\"") {
 		t.Fatalf("expected started and unknown audit records, got %s", audit)
+	}
+}
+
+func TestBackupUnknownWhenSystemdInvocationDoesNotChange(t *testing.T) {
+	logPath, home := installFakeSSH(t, false, false, true)
+
+	_, err := runBackup(t, "backup", "--host", "server.example", "--execute", "--confirm-host", "server.example")
+	if err == nil || !strings.Contains(err.Error(), "outcome unknown") {
+		t.Fatalf("expected stale invocation to be treated as unknown, got %v", err)
+	}
+	commands, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(commands), "systemctl start --wait minecraft-backup.service") != 1 {
+		t.Fatalf("stale invocation result was retried; SSH log: %s", commands)
+	}
+	auditPath := filepath.Join(home, ".local", "state", "gsc-pilot", "operations.jsonl")
+	audit, err := os.ReadFile(auditPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(audit), "\"event\":\"outcome_unknown\"") || strings.Contains(string(audit), "\"event\":\"succeeded\"") {
+		t.Fatalf("expected unknown, never success, in audit log; got %s", audit)
+	}
+}
+
+func TestStatusReportsSystemdInvocationID(t *testing.T) {
+	logPath, _ := installFakeSSH(t, false, false)
+	output, err := runBackup(t, "status", "--host", "server.example")
+	if err != nil {
+		t.Fatalf("status failed: %v\n%s", err, output)
+	}
+	for _, invocation := range []string{
+		"invocation=00000000000000000000000000000001",
+		"invocation=00000000000000000000000000000002",
+	} {
+		if !strings.Contains(output, invocation) {
+			t.Fatalf("status output is missing %q: %s", invocation, output)
+		}
+	}
+	commands, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(commands), "systemctl show") != 3 {
+		t.Fatalf("expected status to inspect three units; SSH log: %s", commands)
 	}
 }
