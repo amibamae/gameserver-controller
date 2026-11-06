@@ -1,0 +1,82 @@
+{
+  "fixture_id": "transport.storage.profile-negotiated",
+  "protocol_version": "0.20.0-draft",
+  "contract_area": "rpc.transport",
+  "purpose": "A storage process adapter may expose put/get only when the controller offers the local stream profile and the adapter selects it.",
+  "input": {
+    "initialize_request": {
+      "jsonrpc": "2.0",
+      "id": "init-001",
+      "method": "adapter.initialize",
+      "params": {
+        "protocol_versions": [
+          "0.20.0-draft"
+        ],
+        "stream_transport": {
+          "profile": "local-unix-stream-v1",
+          "endpoint": "/run/user/1000/gameserver-controller/adapter-stream.sock"
+        },
+        "controller": {
+          "implementation_id": "example.controller",
+          "implementation_version": "0.1.0"
+        }
+      }
+    },
+    "initialize_result": {
+      "jsonrpc": "2.0",
+      "id": "init-001",
+      "result": {
+        "selected_protocol_version": "0.20.0-draft",
+        "session_id": "session-example",
+        "selected_stream_transport": "local-unix-stream-v1"
+      }
+    },
+    "adapter_descriptor": {
+      "adapter_id": "storage.example",
+      "category": "storage",
+      "display_name": "example storage adapter",
+      "implementation_version": "1.0.0",
+      "protocol_versions": [
+        "0.20.0-draft"
+      ],
+      "contract_versions": [
+        "storage.v1-draft"
+      ],
+      "stream_transport_profiles": [
+        "local-unix-stream-v1"
+      ],
+      "required_permissions": [
+        "storage.backup.read",
+        "storage.backup.write"
+      ],
+      "capabilities": [
+        {
+          "name": "storage.object.put",
+          "version": "1",
+          "mutating": true,
+          "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-put-input",
+          "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-put-output",
+          "required_permissions": [
+            "storage.backup.write"
+          ]
+        },
+        {
+          "name": "storage.object.get",
+          "version": "1",
+          "mutating": false,
+          "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-get-input",
+          "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-get-output",
+          "required_permissions": [
+            "storage.backup.read"
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "initialization_valid": true,
+    "descriptor_valid": true,
+    "stream_profile_negotiated": true,
+    "storage_stream_capabilities_accepted": true
+  }
+}

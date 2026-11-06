@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.19.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.20.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -89,7 +89,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 
 ### Storage and security
 - Every advertised storage capability validates against its registered input and output schemas.
-- Put/get transfers use one-use, operation-scoped, direction-bound handles with an enforced byte limit and expiry.
+- Put/get transfers use one-use, operation-scoped, direction-bound handles with an enforced byte limit and expiry. Process adapters advertise put/get only after negotiating a declared stream profile; local stream handshakes reject reused, expired, or out-of-scope handles, and interrupted transfers are never treated as complete.
 - A completed object upload is not evidence that a backup is verified.
 - Manifest object references match the manifest environment and authorized storage profile.
 - Exact object/version identity is preserved for head, get, copy, delete, and checksum verification.
@@ -148,6 +148,9 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [storage-checksum-mismatch-blocks-restore.json](test-vectors/storage-checksum-mismatch-blocks-restore.json)
 - [storage-etag-is-not-checksum.json](test-vectors/storage-etag-is-not-checksum.json)
 - [storage-staging-delete-denied.json](test-vectors/storage-staging-delete-denied.json)
+- [transport-storage-profile-negotiated.json](test-vectors/transport-storage-profile-negotiated.json)
+- [transport-storage-profile-not-selected.json](test-vectors/transport-storage-profile-not-selected.json)
+- [transport-storage-selection-not-offered.json](test-vectors/transport-storage-selection-not-offered.json)
 
 - [game-compatibility-check-compatible.json](test-vectors/game-compatibility-check-compatible.json)
 - [game-compatibility-check-migration-required.json](test-vectors/game-compatibility-check-migration-required.json)

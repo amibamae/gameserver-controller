@@ -4,7 +4,7 @@
   "display_name": "example S3-compatible storage adapter",
   "implementation_version": "0.1.0",
   "protocol_versions": [
-    "0.19.0-draft"
+    "0.20.0-draft"
   ],
   "contract_versions": [
     "storage.v1-draft"
@@ -16,11 +16,31 @@
   ],
   "capabilities": [
     {
+      "name": "storage.object.put",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-put-input",
+      "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-put-output",
+      "required_permissions": [
+        "storage.backup.write"
+      ]
+    },
+    {
+      "name": "storage.object.get",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-get-input",
+      "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-get-output",
+      "required_permissions": [
+        "storage.backup.read"
+      ]
+    },
+    {
       "name": "storage.object.head",
       "version": "1",
       "mutating": false,
-      "input_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-head-input",
-      "output_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-head-output",
+      "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-head-input",
+      "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-head-output",
       "required_permissions": [
         "storage.backup.read"
       ]
@@ -29,8 +49,8 @@
       "name": "storage.object.list",
       "version": "1",
       "mutating": false,
-      "input_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-list-input",
-      "output_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-list-output",
+      "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-list-input",
+      "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-list-output",
       "required_permissions": [
         "storage.backup.read"
       ]
@@ -39,8 +59,8 @@
       "name": "storage.object.copy",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-copy-input",
-      "output_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-copy-output",
+      "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-copy-input",
+      "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-copy-output",
       "required_permissions": [
         "storage.backup.read",
         "storage.backup.write"
@@ -50,8 +70,8 @@
       "name": "storage.object.delete",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-delete-input",
-      "output_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-delete-output",
+      "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-delete-input",
+      "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-delete-output",
       "required_permissions": [
         "storage.backup.delete"
       ]
@@ -60,8 +80,8 @@
       "name": "storage.object.verify_checksum",
       "version": "1",
       "mutating": false,
-      "input_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-verify-checksum-input",
-      "output_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-verify-checksum-output",
+      "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-verify-checksum-input",
+      "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-verify-checksum-output",
       "required_permissions": [
         "storage.backup.read"
       ]
@@ -70,8 +90,8 @@
       "name": "storage.object.versioning.inspect",
       "version": "1",
       "mutating": false,
-      "input_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-versioning-inspect-input",
-      "output_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-versioning-inspect-output",
+      "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-versioning-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-versioning-inspect-output",
       "required_permissions": [
         "storage.backup.read"
       ]
@@ -80,8 +100,8 @@
       "name": "storage.object.retention.inspect",
       "version": "1",
       "mutating": false,
-      "input_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-retention-inspect-input",
-      "output_schema_uri": "urn:gameserver-controller:0.19.0-draft:storage:object-retention-inspect-output",
+      "input_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-retention-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.20.0-draft:storage:object-retention-inspect-output",
       "required_permissions": [
         "storage.backup.read"
       ]
@@ -89,6 +109,9 @@
   ],
   "constraints": {
     "provider_etags_are_checksums": false,
-    "bulk_transfer_binding": "not-available-in-jsonrpc-stdio-v1"
-  }
+    "bulk_transfer_binding": "local-unix-stream-v1"
+  },
+  "stream_transport_profiles": [
+    "local-unix-stream-v1"
+  ]
 }

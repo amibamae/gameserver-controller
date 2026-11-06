@@ -8,7 +8,7 @@
     "version_id": "object-version-001"
   },
   "destination_transfer": {
-    "transfer_id": "transfer-download-001",
+    "transfer_id": "a4e7d1c9b3f80562e9a16bc4d7028f35c6a0e1b9f8437d25ac61f08e39b4726d",
     "direction": "adapter_to_controller",
     "maximum_bytes": 2048,
     "expires_at": "2026-11-06T13:00:00Z"

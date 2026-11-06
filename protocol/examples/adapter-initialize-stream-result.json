@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": "init-001",
+  "result": {
+    "selected_protocol_version": "0.20.0-draft",
+    "session_id": "session-example",
+    "selected_stream_transport": "local-unix-stream-v1"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.19.0-draft:storage:storage-transfer-reference",
+  "$id": "urn:gameserver-controller:0.20.0-draft:storage:storage-transfer-reference",
   "title": "Bounded storage data transfer reference",
   "type": "object",
   "additionalProperties": false,
@@ -13,8 +13,10 @@
   "properties": {
     "transfer_id": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 200
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "A controller-generated, unguessable 256-bit bearer capability encoded as 64 lowercase hexadecimal characters."
     },
     "direction": {
       "enum": [

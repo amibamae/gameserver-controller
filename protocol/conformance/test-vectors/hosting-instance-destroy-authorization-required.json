@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.destroy.authorization-required",
-  "protocol_version": "0.19.0-draft",
+  "protocol_version": "0.20.0-draft",
   "contract_area": "hosting.instance.destroy",
   "purpose": "Missing core authorization prevents provider destruction.",
   "input": {

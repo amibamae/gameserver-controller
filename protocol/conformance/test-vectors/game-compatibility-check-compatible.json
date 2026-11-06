@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.compatibility.check.compatible",
-  "protocol_version": "0.19.0-draft",
+  "protocol_version": "0.20.0-draft",
   "contract_area": "game.compatibility.check",
   "purpose": "A complete compatible result is bound to the exact backup and target release.",
   "input": {

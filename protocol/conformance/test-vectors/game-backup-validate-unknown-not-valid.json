@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.backup.validate.unknown-not-valid",
-  "protocol_version": "0.19.0-draft",
+  "protocol_version": "0.20.0-draft",
   "contract_area": "game.backup.validate",
   "purpose": "Unknown content validation is not accepted as a valid backup.",
   "input": {
@@ -58,7 +58,7 @@
             "version_id": "object-v009"
           },
           "transfer_ref": {
-            "transfer_id": "transfer-009",
+            "transfer_id": "a4e7d1c9b3f80562e9a16bc4d7028f35c6a0e1b9f8437d25ac61f08e39b4726d",
             "direction": "controller_to_adapter",
             "maximum_bytes": 8192,
             "expires_at": "2026-11-06T08:35:00Z"

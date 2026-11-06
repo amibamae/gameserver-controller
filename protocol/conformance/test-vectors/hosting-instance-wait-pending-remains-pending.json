@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.wait.pending-remains-pending",
-  "protocol_version": "0.19.0-draft",
+  "protocol_version": "0.20.0-draft",
   "contract_area": "hosting.instance.wait",
   "purpose": "A provider operation still pending after the bounded wait remains pending and is not treated as failed.",
   "input": {
