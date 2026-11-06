@@ -79,7 +79,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/OperationRequest" }
+            schema: { $ref: "#/components/schemas/DefineServerRequest" }
       responses:
         "202":
           description: Definition operation accepted and durably recorded.
@@ -130,7 +130,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/OperationRequest" }
+            schema: { $ref: "#/components/schemas/ServerOperationRequest" }
       responses:
         "202":
           description: Operation accepted and durably recorded.
