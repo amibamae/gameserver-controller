@@ -22,14 +22,21 @@
 - [x] Publish the first durable operation protocol draft covering acceptance, operation and step states, idempotency, timeouts, retries, cancellation, reconciliation, recovery, progress, and partial outcomes.
 - [ ] Review and agree on common types and resolve remaining open decisions.
 - [ ] Review and agree on operation semantics, legal status transitions, and cancellation/recovery rules.
-- [ ] Define lifecycle states, allowed transitions, preconditions, postconditions, and failure semantics.
-- [ ] Define hosting, storage, game-runtime, and integration adapter contracts in protocol terms.
-- [ ] Define adapter identity, protocol compatibility negotiation, capability discovery, and permissions.
+- [x] Publish initial lifecycle states, allowed transitions, preconditions, postconditions, and failure semantics in draft form.
+- [ ] Review and agree on lifecycle semantics and all recovery edge cases.
+- [x] Publish draft hosting, storage, execution, game-runtime, and integration adapter contracts.
+- [ ] Review and agree on each adapter contract and capability operation.
+- [x] Publish initial adapter descriptors, capability declarations, and protocol negotiation draft.
+- [ ] Finalize compatibility negotiation, capability constraints, and permission semantics.
 - [ ] Define management API requirements for independent clients, without requiring a hosted panel.
 - [ ] Define authentication, authorization, audit, privacy, consent, and environment-isolation requirements across protocol surfaces.
-- [ ] Evaluate candidate data formats, schemas, API descriptions, RPC envelopes, and transports; do not treat candidates as decisions until reviewed.
-- [ ] Create language-neutral examples, schemas, test vectors, and conformance requirements.
-- [ ] Review the complete protocol and mark a stable initial protocol version only after compatibility rules and conformance tests are agreed.
+- [x] Select draft standards: JSON, JSON Schema 2020-12, JSON-RPC 2.0, OpenAPI 3.2.1, RFC 3339, and RFC 8785 where canonicalization is required.
+- [ ] Validate the selected standards, validators, generators, and transport binding across target languages.
+- [x] Publish an initial set of language-neutral schemas, examples, test vectors, and conformance requirements.
+- [ ] Expand coverage to every operation and capability; validate all schemas and fixture expectations.
+- [ ] Review the complete protocol and freeze compatibility rules.
+- [ ] Build independent implementations in at least two programming languages and pass the same conformance suite.
+- [ ] Publish stable protocol v1.0 only after independent interoperability evidence.
 
 **Exit criteria:** An implementer in a different programming language can understand the specification and build a conforming implementation without relying on undocumented behavior or language-specific interfaces.
 
@@ -118,6 +125,6 @@ The first end-to-end target is Vultr + Wasabi + Paper + Velocity on Debian. Exis
 
 ## Current status and next work
 
-The project is in **Phase 1 — Language-independent protocol design**. The protocol principles, common types, and first durable operation protocol draft are published. The protocol is not stable, and no implementation language, canonical serialization format, or wire transport has been selected.
+The project is in **Phase 1 — Language-independent protocol design**. The protocol principles, common types, and first durable operation protocol draft are published. The protocol remains 0.1.0-draft. Initial JSON, JSON Schema, JSON-RPC, OpenAPI, timestamp, and canonicalization choices are documented, but are not a stable 1.0 release. No controller or production adapter implementation has been built.
 
-The next planned specification is the lifecycle model: server states, permitted transitions, operation preconditions and postconditions, and safety behavior. Common types and operation semantics will continue to be reviewed alongside it.
+Initial lifecycle, five adapter, RPC, management API, security, schema, example, and conformance drafts have been published. The next work is review and schema/vector validation, then complete operation-specific contracts and independent cross-language interoperability tests.
