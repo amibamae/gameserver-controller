@@ -203,16 +203,19 @@ Recovery MUST NOT:
 
 Operation state is authoritative. Progress notifications and event delivery are supplementary; losing a notification MUST NOT lose the operation or its result.
 
-Progress SHOULD identify:
-- Current phase and step.
-- A stable machine-readable phase/step identifier.
-- Human-readable status text.
-- Optional completed/total units or percentage when meaningful.
-- Last-update timestamp.
+The canonical event object is defined by [operation-event.schema.json](schemas/operations/operation-event.schema.json). It contains:
+- `event_id`: unique event identifier within the controller installation.
+- `operation_id`: owning durable operation.
+- `sequence`: monotonically increasing integer within that operation, starting at 1 and never reused.
+- `event_type`: stable namespaced event type, such as `operation.status.changed`, `operation.step.started`, `operation.step.completed`, `operation.progress.updated`, or `operation.reconciliation.required`.
+- `timestamp`: RFC 3339 event time.
+- Optional `step_id`, `status`, and documented safe `data`.
 
-Percentage is optional. Implementations MUST NOT invent precision or imply a reliable completion estimate when the work cannot be measured. Clients MUST remain functional when only status and current step are available.
+The controller MUST persist an event before making it externally observable. Sequence numbers are ordered per operation, not globally. Consumers MUST tolerate duplicate delivery, detect gaps, and retrieve the operation resource as the authoritative state. An event stream MAY replay events after a supplied sequence cursor. Retention and gap recovery behavior MUST be documented by each implementation.
 
-Operation events SHOULD identify the operation, event type, sequence or cursor, timestamp, and relevant safe data. Consumers MUST tolerate duplicate delivery and use operation inspection to recover from gaps. Exact event transport, ordering scope, and retention are deferred to the transport and management API specifications.
+Progress SHOULD identify a stable machine-readable phase/step identifier, human-readable status text, optional completed/total units or percentage when meaningful, and last-update time. Percentage is optional and MUST NOT imply a completion estimate when work cannot be measured.
+
+The management API MAY expose Server-Sent Events for operation events. This is optional; clients MUST remain functional by polling the operation resource if streaming is unavailable or disconnected. A streaming event's data is a JSON serialization of the canonical event object.
 
 Progress, events, results, and errors MUST NOT expose secret values or unnecessary player data.
 
