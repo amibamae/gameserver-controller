@@ -1,6 +1,6 @@
 # Common Protocol Types
 
-**Status:** Draft. These definitions establish shared meanings and constraints; the final serialization format and wire representation have not been selected.
+**Status:** Draft, version 0.1.0-draft. These definitions establish shared meanings and constraints for the JSON-based protocol profile.
 
 This document is the common vocabulary used by adapter contracts, lifecycle operations, and the future management API. Language-specific implementations MUST preserve these meanings.
 
@@ -12,7 +12,11 @@ This document is the common vocabulary used by adapter contracts, lifecycle oper
 - Optional, absent, and explicitly empty values are distinct where the contract says they are.
 - Timestamps represent instants, not local wall-clock times.
 - Secret values MUST NOT appear in ordinary protocol data.
-- Examples are illustrative and do not finalize JSON, JSON Schema, or a transport.
+- The interchange representation is JSON (RFC 8259); structural schemas use JSON Schema Draft 2020-12.
+- Duplicate object member names MUST be rejected.
+- JSON numeric values MUST remain within the exact interoperable integer range ±9,007,199,254,740,991. Larger counters and byte quantities MUST be decimal strings.
+- Protocol schemas use RFC 3339 date-time values for instants. Implementations MUST validate formats even when a JSON Schema validator treats format as annotation only.
+- Canonical request fingerprints MUST use RFC 8785 JCS when a deterministic JSON digest is required; ordinary transmitted JSON does not need canonical property ordering.
 
 ## 2. Identifiers
 
@@ -71,7 +75,7 @@ Illustrative representation:
 
 A timestamp represents an absolute instant.
 
-The eventual serialized representation SHOULD use RFC 3339 with an explicit UTC offset, and protocol-generated timestamps SHOULD be normalized to UTC (for example, `2026-11-05T14:30:00Z`).
+The serialized representation MUST use RFC 3339 with an explicit UTC offset. Protocol-generated timestamps MUST be normalized to UTC (for example, `2026-11-05T14:30:00Z`). Leap-second handling MUST follow RFC 3339 and the implementation's documented time library behavior.
 
 - A timestamp MUST include timezone/offset information.
 - Local timestamps without an offset MUST be rejected for protocol instants.
@@ -80,7 +84,7 @@ The eventual serialized representation SHOULD use RFC 3339 with an explicit UTC 
 
 ### 3.2 Duration and deadlines
 
-Durations are elapsed time intervals, not timestamps. The final schema must select one unambiguous representation and unit. If numeric seconds are selected, field names and schema constraints MUST make that unit explicit.
+Durations are elapsed time intervals, not timestamps. Durations in JSON MUST be non-negative integer milliseconds unless a field explicitly defines another unit. Field names MUST include the unit. The value MUST remain within the interoperable JSON integer range. A deadline is an absolute RFC 3339 timestamp; elapsed-time measurement MUST use a monotonic clock locally.
 
 A deadline is an absolute timestamp by which an operation or request should stop waiting or initiating further work. A deadline does not prove that an external provider operation has been cancelled or reversed.
 
@@ -95,7 +99,7 @@ The proposed compatibility model is semantic versioning:
 - Minor: backward-compatible additions.
 - Patch: clarifications or corrections that do not change interoperability.
 
-The exact negotiation and compatibility rules will be finalized before the protocol is declared stable.
+The 0.1.0-draft uses a SemVer-shaped protocol version string. Implementations advertise supported exact versions and negotiate one exact mutually supported version at initialization. No implicit compatibility across major or minor versions is assumed in this draft. Stable 1.0 compatibility rules require review.
 
 ### 4.2 Schema version
 
@@ -244,3 +248,12 @@ The following remain intentionally undecided:
 - Whether request context is a shared envelope or repeated in individual messages.
 
 These decisions should be resolved with examples and conformance test vectors before implementation language selection.
+
+
+## 10. JSON and schema profile
+
+JSON is encoded as UTF-8 and follows RFC 8259. Duplicate object member names, invalid Unicode, NaN, and infinity MUST be rejected. Identifiers remain strings even when a provider uses numeric identifiers.
+
+JSON Schema Draft 2020-12 files are stored under [schemas](schemas/README.md). Schema `format` values such as `date-time` and `uri` MUST be actively validated by a conforming protocol implementation. A schema validator configured only for format annotations is insufficient unless the implementation performs equivalent checks.
+
+Request/control objects are closed by default; unknown fields are rejected unless an explicit extension point is defined. Response objects MAY be extensible. Clients MUST ignore unknown optional response properties but MUST fail safely when an unknown state, capability semantic, or enum value affects a decision.
