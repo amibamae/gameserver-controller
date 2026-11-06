@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-logs-read-output",
+  "title": "Systemd execution unit logs read output",
+  "description": "Redacted log lines whose UTF-8 bytes, including one newline separator between lines, do not exceed the requested max_bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "unit_ref",
+    "lines",
+    "truncated",
+    "redaction_applied",
+    "observed_at"
+  ],
+  "properties": {
+    "unit_ref": {
+      "$ref": "urn:gameserver-controller:0.6.0-draft:common:external-resource-ref"
+    },
+    "lines": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "string",
+        "maxLength": 4096
+      }
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "next_cursor": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "redaction_applied": {
+      "const": true
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

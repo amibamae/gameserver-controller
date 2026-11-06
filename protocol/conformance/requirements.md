@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.5.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.6.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -67,6 +67,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Adapter logs and errors redact secrets.
 - Game readiness output is bound to the exact requested instance and release; every requested required check has exactly one result, and `unknown` never permits `ready`.
 - A game install verifies every pinned artifact checksum before starting installation; invalid configuration is rejected before application; unknown installation validation blocks start.
+- Execution log reads are bounded and redacted, health `unknown` is not healthy, and deleting a unit preserves persistent data. Proxy registration requires an unexpired readiness assertion bound to the exact instance; accepted or unknown routing state is not routable.
 
 ### Proxy routing and player transfer
 - Backend registration requires a current readiness assertion bound to the exact server, environment, and instance.
@@ -130,6 +131,10 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [game-release-install-configure-fail-closed.json](test-vectors/game-release-install-configure-fail-closed.json)
 - [game-install-repeat-same-release.json](test-vectors/game-install-repeat-same-release.json)
 - [game-validate-installation-unknown-blocks-start.json](test-vectors/game-validate-installation-unknown-blocks-start.json)
+- [execution-logs-health-delete-safety.json](test-vectors/execution-logs-health-delete-safety.json)
+- [proxy-register-expired-readiness.json](test-vectors/proxy-register-expired-readiness.json)
+- [proxy-register-accepted-not-routable.json](test-vectors/proxy-register-accepted-not-routable.json)
+- [proxy-unknown-drain-unregister-requires-inspection.json](test-vectors/proxy-unknown-drain-unregister-requires-inspection.json)
 - [velocity-transfer-partial-results.json](test-vectors/velocity-transfer-partial-results.json)
 - [storage-partial-upload-not-verified.json](test-vectors/storage-partial-upload-not-verified.json)
 - [storage-checksum-mismatch-blocks-restore.json](test-vectors/storage-checksum-mismatch-blocks-restore.json)

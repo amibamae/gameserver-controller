@@ -1,6 +1,6 @@
 # Integration Adapter Contract
 
-**Status:** Draft, version 0.5.0-draft.
+**Status:** Draft, version 0.6.0-draft.
 
 ## 1. Responsibility
 
@@ -30,7 +30,7 @@ A proxy integration MUST:
 - Distinguish accepted registration/removal from confirmed routing state.
 - Avoid logging player identifiers unless necessary and authorized.
 
-The core determines which server may be routed. The proxy adapter performs the requested routing action and reports the result. A proxy integration MUST NOT autonomously route to a server in a transitional, degraded, or failed state.
+The core determines which server may be routed. The proxy adapter performs the requested routing action and reports the result. A proxy integration MUST NOT autonomously route to a server in a transitional, degraded, or failed state. The initial backend lifecycle schemas are [inspect](../schemas/integrations/proxy-backend-inspect-input.schema.json), [register](../schemas/integrations/proxy-backend-register-input.schema.json), [drain](../schemas/integrations/proxy-backend-drain-input.schema.json), and [unregister](../schemas/integrations/proxy-backend-unregister-input.schema.json). An accepted or unknown action is not proof of routability; only an observed state bound to the exact backend and instance may be used for routing.
 
 ## 4. Velocity player transfer
 

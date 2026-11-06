@@ -4,23 +4,64 @@
   "display_name": "systemd execution adapter",
   "implementation_version": "0.1.0",
   "protocol_versions": [
-    "0.5.0-draft"
+    "0.6.0-draft"
   ],
   "contract_versions": [
     "execution.v1-draft"
   ],
   "required_permissions": [
+    "runtime.delete",
     "runtime.inspect",
     "runtime.start",
     "runtime.stop"
   ],
   "capabilities": [
     {
+      "name": "execution.unit.delete",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-delete-input",
+      "output_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-delete-output",
+      "required_permissions": [
+        "runtime.delete"
+      ]
+    },
+    {
+      "name": "execution.unit.graceful_stop",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-graceful-stop-input",
+      "output_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-lifecycle-result",
+      "required_permissions": [
+        "runtime.stop"
+      ]
+    },
+    {
+      "name": "execution.unit.health.inspect",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-health-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-health-inspect-output",
+      "required_permissions": [
+        "runtime.inspect"
+      ]
+    },
+    {
       "name": "execution.unit.inspect",
       "version": "1",
       "mutating": false,
-      "input_schema_uri": "urn:gameserver-controller:0.5.0-draft:execution:systemd-unit-inspect-input",
-      "output_schema_uri": "urn:gameserver-controller:0.5.0-draft:execution:systemd-unit-inspect-output",
+      "input_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-inspect-output",
+      "required_permissions": [
+        "runtime.inspect"
+      ]
+    },
+    {
+      "name": "execution.unit.logs.read",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-logs-read-input",
+      "output_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-logs-read-output",
       "required_permissions": [
         "runtime.inspect"
       ]
@@ -29,20 +70,10 @@
       "name": "execution.unit.start",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.5.0-draft:execution:systemd-unit-start-input",
-      "output_schema_uri": "urn:gameserver-controller:0.5.0-draft:execution:systemd-unit-lifecycle-result",
+      "input_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-start-input",
+      "output_schema_uri": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-lifecycle-result",
       "required_permissions": [
         "runtime.start"
-      ]
-    },
-    {
-      "name": "execution.unit.graceful_stop",
-      "version": "1",
-      "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.5.0-draft:execution:systemd-unit-graceful-stop-input",
-      "output_schema_uri": "urn:gameserver-controller:0.5.0-draft:execution:systemd-unit-lifecycle-result",
-      "required_permissions": [
-        "runtime.stop"
       ]
     }
   ],

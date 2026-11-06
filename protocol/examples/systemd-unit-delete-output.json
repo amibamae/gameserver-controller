@@ -1,0 +1,11 @@
+{
+  "unit_ref": {
+    "adapter_id": "execution.systemd",
+    "environment_id": "staging",
+    "resource_kind": "systemd-unit",
+    "external_id": "paper-server"
+  },
+  "outcome": "deleted",
+  "persistent_data_preserved": true,
+  "observed_at": "2026-11-06T09:20:03Z"
+}

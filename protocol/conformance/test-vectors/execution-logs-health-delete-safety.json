@@ -1,0 +1,82 @@
+{
+  "fixture_id": "execution.logs.health.delete.safety",
+  "protocol_version": "0.6.0-draft",
+  "contract_area": "execution.unit",
+  "purpose": "Diagnostic reads are bounded and redacted, unknown health stays unknown, and deleting a unit preserves persistent data.",
+  "input": {
+    "logs_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "max_bytes": 1024
+    },
+    "logs_output": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "lines": [
+        "[INFO] Paper startup complete.",
+        "[INFO] token=[REDACTED]"
+      ],
+      "truncated": false,
+      "redaction_applied": true,
+      "observed_at": "2026-11-06T09:20:01Z"
+    },
+    "health_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      }
+    },
+    "health_output": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "health": "unknown",
+      "diagnostics_redacted": true,
+      "safe_diagnostics": [
+        "health source unavailable."
+      ],
+      "observed_at": "2026-11-06T09:20:02Z"
+    },
+    "delete_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      }
+    },
+    "delete_output": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "outcome": "deleted",
+      "persistent_data_preserved": true,
+      "observed_at": "2026-11-06T09:20:03Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "unit_targets_bound": true,
+    "logs_within_bound": true,
+    "logs_redacted": true,
+    "unknown_health_not_healthy": true,
+    "persistent_data_preserved": true
+  },
+  "side_effect_expected": "none"
+}

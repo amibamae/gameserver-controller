@@ -1,0 +1,14 @@
+{
+  "unit_ref": {
+    "adapter_id": "execution.systemd",
+    "environment_id": "staging",
+    "resource_kind": "systemd-unit",
+    "external_id": "paper-server"
+  },
+  "health": "healthy",
+  "diagnostics_redacted": true,
+  "safe_diagnostics": [
+    "systemd reports the unit active."
+  ],
+  "observed_at": "2026-11-06T09:20:02Z"
+}
