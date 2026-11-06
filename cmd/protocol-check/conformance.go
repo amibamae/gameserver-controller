@@ -132,12 +132,15 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			return nil, err
 		}
 		var totalBytes int64
-		for _, rawLine := range arrayValue(logsOutput, "lines") {
+		for i, rawLine := range arrayValue(logsOutput, "lines") {
 			line, ok := rawLine.(string)
 			if !ok {
 				return nil, fmt.Errorf("log lines must be strings")
 			}
 			totalBytes += int64(len([]byte(line)))
+			if i > 0 {
+				totalBytes++
+			}
 		}
 		return map[string]any{
 			"schemas_valid": true, "unit_targets_bound": logsBound && healthBound && deleteBound,
@@ -154,9 +157,13 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			return nil, fmt.Errorf("register output does not match schema: %w", err)
 		}
 		requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
+		targetInstance := asObject(requestTarget["instance_ref"])
+		assertedInstance := asObject(assertion["instance_ref"])
 		bound := reflect.DeepEqual(requestTarget, registerOutput["target"]) &&
 			stringValue(requestTarget, "server_id") == stringValue(assertion, "server_id") &&
 			stringValue(requestTarget, "environment_id") == stringValue(assertion, "environment_id") &&
+			stringValue(requestTarget, "environment_id") == stringValue(targetInstance, "environment_id") &&
+			stringValue(assertion, "environment_id") == stringValue(assertedInstance, "environment_id") &&
 			reflect.DeepEqual(requestTarget["instance_ref"], assertion["instance_ref"])
 		current, err := parseTime(stringValue(input, "validation_time"))
 		if err != nil { return nil, err }
@@ -179,9 +186,13 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			return nil, fmt.Errorf("register output does not match schema: %w", err)
 		}
 		requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
+		targetInstance := asObject(requestTarget["instance_ref"])
+		assertedInstance := asObject(assertion["instance_ref"])
 		bound := reflect.DeepEqual(requestTarget, registerOutput["target"]) &&
 			stringValue(requestTarget, "server_id") == stringValue(assertion, "server_id") &&
 			stringValue(requestTarget, "environment_id") == stringValue(assertion, "environment_id") &&
+			stringValue(requestTarget, "environment_id") == stringValue(targetInstance, "environment_id") &&
+			stringValue(assertion, "environment_id") == stringValue(assertedInstance, "environment_id") &&
 			reflect.DeepEqual(requestTarget["instance_ref"], assertion["instance_ref"])
 		current, err := parseTime(stringValue(input, "validation_time"))
 		if err != nil { return nil, err }
@@ -194,7 +205,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			stringValue(registerOutput, "routability") == "routable"
 		return map[string]any{
 			"schemas_valid": true, "target_bound": bound, "readiness_current": readinessCurrent,
-			"registration_confirmed": confirmed, "routing_permitted": routingPermitted,
+			"registration_confirmed": confirmed, "accepted_not_routable": stringValue(registerOutput, "request_outcome") != "accepted" || stringValue(registerOutput, "routability") != "routable", "routing_permitted": routingPermitted,
 		}, nil
 	case "integration.proxy.unknown-drain-and-unregister-require-inspection":
 		drainInput, drainOutput := asObject(input["drain_input"]), asObject(input["drain_output"])

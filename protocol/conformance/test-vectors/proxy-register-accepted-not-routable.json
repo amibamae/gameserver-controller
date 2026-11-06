@@ -55,7 +55,8 @@
     "target_bound": true,
     "readiness_current": true,
     "registration_confirmed": false,
-    "routing_permitted": false
+    "routing_permitted": false,
+    "accepted_not_routable": true
   },
   "side_effect_expected": "simulated"
 }

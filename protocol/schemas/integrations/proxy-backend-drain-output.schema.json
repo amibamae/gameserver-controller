@@ -94,6 +94,28 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "request_outcome": {
+            "const": "accepted"
+          }
+        },
+        "required": [
+          "request_outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "routability": {
+            "enum": [
+              "not_routable",
+              "unknown"
+            ]
+          }
+        }
+      }
     }
   ]
 }
