@@ -1,0 +1,26 @@
+{
+  "fixture_id": "operations.idempotency.same-key-different-request",
+  "protocol_version": "0.1.0-draft",
+  "contract": "operation.accept",
+  "first_request": {
+    "actor_id": "operator-test",
+    "idempotency_key": "same-key",
+    "operation_type": "server.provision",
+    "server_id": "minecraft-test",
+    "environment_id": "test",
+    "parameters": {"plan_id": "plan-small"}
+  },
+  "second_request": {
+    "actor_id": "operator-test",
+    "idempotency_key": "same-key",
+    "operation_type": "server.provision",
+    "server_id": "minecraft-test",
+    "environment_id": "test",
+    "parameters": {"plan_id": "plan-large"}
+  },
+  "expected": {
+    "second_request_accepted": false,
+    "error_code": "core.operation.idempotency_conflict",
+    "operation_count": 1
+  }
+}
