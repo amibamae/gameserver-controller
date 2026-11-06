@@ -33,7 +33,7 @@ Implementations MUST enforce per-resource authorization and environment scoping 
 
 The request identifies an operation type and a type-specific parameter object. It includes an idempotency key in a documented header or request field. The server binds that key to actor, operation type, target, environment, and canonical validated parameters. A changed request with the same key returns conflict. An identical retry returns the original operation.
 
-A restore request MUST identify one immutable backup. A destroy request MUST identify the intended target or bind to the current instance through a plan that is rechecked immediately before execution.
+For server-specific operations, the path server ID MUST match the corresponding target ID in the validated parameters. A restore request MUST identify one immutable backup. A destroy request MUST identify the intended target or bind to the current instance through a plan that is rechecked immediately before execution.
 
 ## 5. Authentication and authorization
 
