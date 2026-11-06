@@ -82,6 +82,19 @@ An operation MUST NOT become `succeeded` until its listed postconditions are con
 | `server.restore` | Selected backup is restored and game validation passes; final state is `stopped` or `ready` according to request. |
 | `server.destroy` | Exact provider instance absence confirmed; verified backup remains associated with the logical server; state `destroyed`. |
 
+## Result schemas
+
+Successful operation results use the canonical envelope from [operation-result.schema.json](schemas/operations/operation-result.schema.json). The current typed payload schemas are:
+
+| Operation | Result schema |
+|---|---|
+| `server.provision` | [server-provision-result.schema.json](schemas/operations/server-provision-result.schema.json) |
+| `server.backup` | [server-backup-result.schema.json](schemas/operations/server-backup-result.schema.json) |
+| `server.restore` | [server-restore-result.schema.json](schemas/operations/server-restore-result.schema.json) |
+| `server.destroy` | [server-destroy-result.schema.json](schemas/operations/server-destroy-result.schema.json) |
+
+The other standard operations retain the canonical summary until their typed result contracts are specified.
+
 ## 5. Input schemas
 
 Schemas are published under [schemas/operations](schemas/operations/). Provisioning uses [hosting/provision-request.schema.json](schemas/hosting/provision-request.schema.json). The schema registry is [schemas/index.json](schemas/index.json).
