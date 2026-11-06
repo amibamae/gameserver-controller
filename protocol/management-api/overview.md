@@ -20,6 +20,7 @@ Mutating operations are asynchronous: validate the request; authenticate and aut
 
 - `GET /v1/capabilities`: discover controller and adapter capabilities.
 - `GET /v1/servers`: list authorized logical servers.
+- `POST /v1/servers`: define a logical server using the durable `server.define` operation.
 - `GET /v1/servers/{server_id}`: inspect a logical server and current references/states.
 - `POST /v1/servers/{server_id}/operations`: request a typed operation (provision, start, stop, backup, restore, replace, destroy).
 - `GET /v1/operations/{operation_id}`: inspect durable operation status and result.
