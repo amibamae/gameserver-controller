@@ -26,7 +26,7 @@ An identifier is a non-empty, bounded string that uniquely identifies an entity 
 
 Implementations MUST treat identifiers received from another implementation as opaque. They MUST NOT parse, normalize, case-fold, or derive meaning from an identifier unless its specific type defines that behavior.
 
-The protocol does not yet mandate UUID, ULID, or another generation algorithm. Implementations SHOULD use collision-resistant identifiers and MUST document their uniqueness scope.
+The protocol does not mandate UUID, ULID, or another generation algorithm. Implementations SHOULD use collision-resistant identifiers and MUST document their uniqueness scope. Unless a field schema specifies otherwise, identifiers are limited to 200 UTF-8 characters.
 
 ### 2.2 Identifier types
 
@@ -94,12 +94,12 @@ A deadline is an absolute timestamp by which an operation or request should stop
 
 The protocol has a version independent of the software release version.
 
-The proposed compatibility model is semantic versioning:
+The draft uses a SemVer-shaped compatibility model:
 - Major: incompatible contract or behavior change.
 - Minor: backward-compatible additions.
 - Patch: clarifications or corrections that do not change interoperability.
 
-The 0.1.0-draft uses a SemVer-shaped protocol version string. Implementations advertise supported exact versions and negotiate one exact mutually supported version at initialization. No implicit compatibility across major or minor versions is assumed in this draft. Stable 1.0 compatibility rules require review.
+The 0.1.0-draft uses a SemVer-shaped protocol version string. Implementations advertise supported exact protocol versions and negotiate one exact mutually supported version during initialization. For the 0.x draft series, no implicit compatibility across versions is assumed. A stable 1.x compatibility rule will be finalized before 1.0. Stable 1.0 compatibility rules require review.
 
 ### 4.2 Schema version
 
@@ -126,7 +126,7 @@ Required conceptual fields:
 | `adapter_id` | Stable unique adapter identity |
 | `display_name` | Human-readable name |
 | `implementation_version` | Adapter software version |
-| `protocol_versions` | Supported protocol version range(s) |
+| `protocol_versions` | Exact supported protocol version strings |
 | `contract_versions` | Supported contract/schema versions |
 | `capabilities` | Explicit list of supported capabilities |
 | `required_permissions` | Permission scopes needed to perform declared capabilities |
@@ -139,15 +139,15 @@ A descriptor is descriptive, not an authorization grant. Core policy decides whe
 
 A capability is a named, versioned declaration that an implementation supports a defined operation or behavior.
 
-Capability names SHOULD be stable, namespaced identifiers, such as:
-- `instance.create`
-- `instance.inspect`
-- `instance.destroy`
-- `object.put`
-- `object.verify_checksum`
-- `runtime.graceful_stop`
-- `runtime.readiness_check`
-- `proxy.backend.drain`
+Capability names MUST be stable, namespaced identifiers, such as:
+- `hosting.instance.create`
+- `hosting.instance.inspect`
+- `hosting.instance.destroy`
+- `storage.object.put`
+- `storage.object.verify_checksum`
+- `execution.unit.graceful_stop`
+- `game.readiness.check`
+- `integration.proxy.backend.drain`
 
 A capability declaration SHOULD include:
 - Capability name and version.
