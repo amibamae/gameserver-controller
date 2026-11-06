@@ -19,8 +19,9 @@
 - [x] Establish separate adapter-protocol and management-API communication surfaces.
 - [x] Establish that the controller must be usable without a web panel; future web, desktop, and mobile clients may be developed independently.
 - [x] Draft common protocol concepts: identifiers, external resource references, timestamps, versions, adapter identity, capabilities, structured errors, request context, and secret references.
+- [x] Draft the durable operation protocol covering acceptance, operation and step states, idempotency, timeouts, retries, cancellation, reconciliation, recovery, progress, and partial outcomes.
 - [ ] Review and agree on common types and resolve remaining open decisions.
-- [ ] Define durable operation model and messages: create, inspect, progress, completion, failure, cancellation, and recovery.
+- [ ] Review and agree on operation semantics, legal status transitions, and cancellation/recovery rules.
 - [ ] Define lifecycle states, allowed transitions, preconditions, postconditions, and failure semantics.
 - [ ] Define hosting, storage, game-runtime, and integration adapter contracts in protocol terms.
 - [ ] Define adapter identity, protocol compatibility negotiation, capability discovery, and permissions.
@@ -117,6 +118,6 @@ The first end-to-end target is Vultr + Wasabi + Paper + Velocity on Debian. Exis
 
 ## Current status and next work
 
-The project is in **Phase 1 — Language-independent protocol design**. The initial protocol principles and common types are drafted, but the protocol is not stable and no implementation language or wire transport has been selected.
+The project is in **Phase 1 — Language-independent protocol design**. The protocol principles, common types, and first durable operation protocol draft are published. The protocol is not stable, and no implementation language, canonical serialization format, or wire transport has been selected.
 
-The next planned specification is the durable operation protocol, including progress, idempotency, timeouts, cancellation, ambiguous outcomes, and interrupted-operation recovery.
+The next planned specification is the lifecycle model: server states, permitted transitions, operation preconditions and postconditions, and safety behavior. Common types and operation semantics will continue to be reviewed alongside it.
