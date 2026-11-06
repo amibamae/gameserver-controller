@@ -48,7 +48,9 @@ The management API must keep authentication, authorization, approvals, audit, an
 
 ## Current protocol status
 
-The protocol is still a draft. Initial documents establish protocol principles and common concepts, including identifiers, resource references, timestamps, versions, adapter identity, capabilities, structured errors, request context, and secret references.
+The protocol is still a draft. The initial specifications cover protocol principles and common types, plus a first draft of the durable operation model.
+
+The [durable operation protocol](protocol/operations.md) describes how long-running work is accepted, tracked, retried, cancelled, and recovered. It emphasizes durable operation records, idempotency, progress, partial outcomes, and reconciliation when an external provider's result is uncertain.
 
 The following decisions have **not** been finalized:
 
@@ -58,7 +60,7 @@ The following decisions have **not** been finalized:
 - Management API transport and endpoint definitions.
 - Protocol version negotiation and compatibility details.
 
-Candidate standards are being evaluated rather than treated as settled decisions. The next planned specification is the durable operation protocol, including progress, idempotency, timeouts, cancellation, ambiguous outcomes, and interrupted-operation recovery.
+Candidate standards are being evaluated rather than treated as settled decisions. The next protocol work is to review and refine the common types and operation semantics, then define lifecycle states and transitions, adapter contracts, and conformance requirements.
 
 ## Planned capabilities
 
@@ -100,6 +102,7 @@ See [AI Use and Development Transparency](docs/AI_DISCLOSURE.md) for the full di
 
 - [Protocol overview and design principles](protocol/README.md)
 - [Common protocol types](protocol/common-types.md)
+- [Durable operation protocol](protocol/operations.md)
 
 ### Project policies
 
