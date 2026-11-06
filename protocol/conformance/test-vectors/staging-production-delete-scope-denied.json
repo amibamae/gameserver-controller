@@ -1,0 +1,16 @@
+{
+  "fixture_id": "storage.staging.production-delete-scope-denied",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "storage.object.delete",
+  "purpose": "A production delete scope accidentally attached to a staging actor still cannot authorize deletion of a production backup.",
+  "actor_environment": "staging",
+  "target_environment": "production",
+  "credential_scope": ["storage.backup.delete:production"],
+  "expected": {
+    "accepted": false,
+    "error_category": "authorization",
+    "side_effect_permitted": false,
+    "adapter_delete_calls": 0
+  },
+  "side_effect_expectation": "none"
+}

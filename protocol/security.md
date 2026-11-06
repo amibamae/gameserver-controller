@@ -76,7 +76,7 @@ Bootstrap source, command-line arguments, provider user-data, release archives, 
 
 Every resource and operation belongs to an environment. Cross-environment operations are denied by default.
 
-Production backup credentials MUST NOT be available to staging for write/delete. Staging may receive narrowly scoped read access to selected production backup objects, and writes only to staging-owned destinations.
+Production backup credentials MUST NOT be available to staging for write/delete. Staging may receive narrowly scoped read access to selected production backup objects, and writes only to staging-owned destinations. A staging actor MUST NOT cross this boundary even when a production write/delete scope is mistakenly attached to its credentials; backup writes and deletes require both an exact environment match and the action-specific scope.
 
 Restore must reject path traversal, absolute paths, unsafe symbolic links, hard-link escapes, device nodes, and archive entries outside the approved data root. Extraction must not follow attacker-controlled links.
 

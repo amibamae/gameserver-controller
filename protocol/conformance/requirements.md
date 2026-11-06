@@ -99,7 +99,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - A forced stop request without an approval reference is rejected by schema/policy.
 - Incomplete upload cannot be marked verified.
 - Checksum/length mismatch blocks restore and destruction.
-- Staging cannot write/delete production objects.
+- Staging cannot write/delete production objects, even if a production write/delete scope is attached to the staging actor; same-environment backup writes and deletes require their exact action scope.
 - Unsafe archive paths and symlinks are rejected.
 - Destruction requires exact target, verified backup, and authorization.
 

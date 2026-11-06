@@ -129,11 +129,11 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"accepted": accepted, "error_code": code,
 			"provider_destroy_calls": calls, "logical_server_state": lifecycle,
 		}, nil
-	case "security.staging.cannot-write-production-backup":
+	case "security.staging.cannot-write-production-backup", "security.staging.production-write-scope-denied", "security.production.backup-write-authorized":
 		actor := stringValue(fixture, "actor_environment")
 		target := stringValue(fixture, "target_environment")
 		requiredScope := "storage.backup.write:" + target
-		allowed := actor == target || contains(arrayValue(fixture, "credential_scope"), requiredScope)
+		allowed := actor == target && contains(arrayValue(fixture, "credential_scope"), requiredScope)
 		category := any(nil)
 		if !allowed {
 			category = "authorization"
@@ -1387,10 +1387,11 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			source = "trusted_checksum"
 		}
 		return map[string]any{"verified": verified, "verification_source": source}, nil
-	case "storage.staging.cannot-delete-production-object":
+	case "storage.staging.cannot-delete-production-object", "storage.staging.production-delete-scope-denied", "storage.production.backup-delete-authorized":
+		actor := stringValue(fixture, "actor_environment")
 		target := stringValue(fixture, "target_environment")
 		requiredScope := "storage.backup.delete:" + target
-		allowed := contains(arrayValue(fixture, "credential_scope"), requiredScope)
+		allowed := actor == target && contains(arrayValue(fixture, "credential_scope"), requiredScope)
 		category := any(nil)
 		calls := 0
 		if allowed {
