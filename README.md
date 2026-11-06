@@ -1,157 +1,90 @@
 # Game Server Controller
 
-An open, protocol-first project for safely provisioning and operating disposable game servers with customizable bootstrap scripts, provider adapters, durable lifecycle operations, backups, restores, staging, and rollback.
+Game Server Controller is a protocol-first design for automating disposable Minecraft and other game servers. The goal is to start a backend when players need it, restore its world from object storage, route players only after the server is ready, then verify a backup before removing the idle VM.
 
-> **Project status: protocol design.** The project is currently defining its language-independent protocol and architecture. The controller engine, management API, CLI, and production adapters are planned; they are not yet implemented. See the [development roadmap](docs/ROADMAP.md).
+I’m shaping the project around a real reference setup: Debian on Vultr, Minecraft Java with Paper, a Velocity proxy, and Wasabi object storage. Those tools are the first test of the design, not a limit on which providers or games the protocol can support.
 
-## Vision
+> **Current status: protocol design.** This repository contains draft specifications, JSON Schemas, examples, and conformance fixtures. It does not yet contain a full controller, management API implementation, or production adapters. It does include a Go protocol validator and a limited supervised backup pilot; neither is a general-purpose controller for a live server. The current schema snapshot is 0.21.0-draft. The initial implementation is in Go. Contributions in other languages are welcome, but alternate-language implementations are not a release requirement. See the [roadmap](docs/ROADMAP.md).
 
-Game Server Controller aims to coordinate disposable game-server infrastructure without tying its core to one programming language, hosting provider, game, storage service, or user interface.
+## Why I’m building it
 
-The initial reference deployment is **Vultr + Wasabi + Minecraft Java Edition (Paper) + Velocity on Debian**. This is the first target for validating the design, not a limitation on the intended platform.
+I want the server to handle its own routine lifecycle: create a VM, prepare Debian with a reviewed bootstrap, restore the selected world, start Paper, and send players over from the lobby once readiness checks pass. When the server goes idle, it should save and verify the world backup before it destroys the VM. Compute can be temporary. The world cannot.
 
-## Core design principles
+That workflow raises the hard questions this project is trying to make explicit: what happens when a provider times out after creating a VM, how do you know a backup matches the data on disk, and who can approve a destructive action? I’d rather settle those contracts before building an engine that can lose a world.
 
-- **Protocol first:** Define language-independent contracts before selecting the implementation language or building the controller.
-- **Language independence:** The protocol is authoritative. Independent implementations and adapters should be able to interoperate across programming languages.
-- **Provider independence:** Provider-specific behavior belongs in hosting adapters.
-- **Game independence:** Game-specific installation, lifecycle, health checks, versioning, save semantics, and migration rules belong in game adapters.
-- **Bootstrap-first provisioning:** Create instances from provider-supported standard operating-system offerings, then prepare them with customizable, versioned bootstrap scripts. The project distributes source code and bootstrap scripts, not preinstalled server environments.
-- **Storage independence:** Backup and artifact operations use documented storage contracts and explicitly declared capabilities.
-- **Fail safely:** Never destroy an instance containing data that has not been safely backed up and verified.
-- **Core authority:** The controller core owns lifecycle policy, authorization, environment isolation, approvals, audit, and safety checks. Clients and adapters cannot bypass them.
-- **Capability discovery:** Adapters declare what they support. Unsupported operations fail explicitly rather than being silently approximated.
-- **Production/staging isolation:** Staging cannot overwrite or delete production world data or production backups.
-- **Least privilege:** Credentials and permissions are separated by role, adapter, and environment.
-- **Reproducible releases:** Manifests, checksums, compatibility information, and validation results accompany releases.
-- **Privacy by default:** Optional telemetry is disabled by default. Identifiable player telemetry requires separate informed consent from the server owner and each affected player.
-- **Community extensibility:** Contributors can implement adapters and clients without rewriting the controller core.
+If you build game-server automation, cloud adapters, storage tooling, or operator clients, I want you to challenge the design. Point out unsafe assumptions, unclear protocol behavior, and work that should be simpler. The specs are drafts and should be treated that way.
 
-## Protocol-first architecture
+## What exists now
 
-The protocol specifications—not a particular programming language implementation—are intended to be the authoritative source for interoperability. The initial draft is execution-agnostic: ordinary VMs and systemd are the reference path; containers, Kubernetes, and Agones are optional integrations.
+- Draft language-neutral contracts for lifecycle operations and adapters.
+- JSON Schemas, examples, and a growing behavioral conformance suite validated in Go CI.
+- A validation workflow for the schema package and fixture runner.
+- An initial design for hosting, storage, execution, game, and proxy integrations.
+- A roadmap that separates documented goals from implemented software.
 
-The design separates two communication surfaces:
+The full controller engine, management API, and production adapters are planned. Go is the initial implementation language. The protocol remains documented in a portable form, and other-language contributions are welcome without being required for release. This draft does not authorize use against production infrastructure.
 
-### Adapter protocol
+## Design in brief
 
-The adapter protocol connects the controller core to hosting, storage, game-runtime, and integration adapters. Adapter implementations should be replaceable and may be written in different programming languages.
+The controller core should own lifecycle policy, authorization, approvals, audit records, and production/staging boundaries. Adapters should report what they can do and what happened. They must not make safety decisions for the core.
 
-Adapters report capabilities, results, and observed state. They do not make core authorization or safety decisions.
+The protocol keeps these concerns separate:
 
-### Management API and independent clients
+- **Hosting:** create and inspect provider instances.
+- **Storage:** upload, restore, and verify world backups and release artifacts.
+- **Execution:** run a process or service on an allocated host.
+- **Game:** install Paper or another game runtime, check readiness, and define safe save and migration behavior.
+- **Integration:** connect a proxy such as Velocity and route players to a confirmed-ready backend.
 
-The project intends to define a documented, versioned management API for operators and independently developed tools. This can support future web panels, desktop applications, or mobile clients without requiring changes to the controller core.
+A normal VM and systemd are the first reference path. Containers, Kubernetes, and Agones may fit through optional adapters, but none is required.
 
-**A web panel is not part of the initial project requirement.** The controller must be usable without a browser interface, and the project does not require its maintainers to host a web panel. A local CLI is planned as the initial operator interface.
+The draft requires a durable operation record before a mutating external call. If a provider response disappears, the controller must inspect the real resource before it retries. An accepted upload is not a verified backup, and a running process is not proof that a game is ready. A failed or uncertain backup blocks destruction.
 
-The management API must keep authentication, authorization, approvals, audit, and lifecycle safeguards in the controller. It must not expose unrestricted provider credentials or allow clients to bypass core policy.
+## The lifecycle I’m designing
 
-## Current protocol status
+1. A player joins the lobby, and the controller accepts a provisioning operation.
+2. The hosting adapter creates an instance from a provider-supported OS image.
+3. A pinned, reviewed bootstrap prepares the host. Credentials arrive separately through scoped secret references.
+4. The game adapter installs the selected release and restores one explicitly identified backup.
+5. Paper starts. The controller checks game and network readiness before Velocity routes players to it.
+6. When the server is idle, the controller drains traffic, saves the world, uploads and verifies the backup, then destroys the exact VM.
+7. For updates, an isolated test or staging deployment checks the candidate before promotion. Major Minecraft upgrades and world migrations require explicit approval.
 
-The protocol is still a draft. The initial specifications cover protocol principles and common types, plus a first draft of the durable operation model.
+These are design goals. The repository does not yet implement this lifecycle.
 
-The [durable operation protocol](protocol/operations.md) describes how long-running work is accepted, tracked, retried, cancelled, and recovered. It emphasizes durable operation records, idempotency, progress, partial outcomes, and reconciliation when an external provider's result is uncertain.
+## Protocol and implementation
 
-The draft protocol standards and bindings have been selected and recorded in [ADR 0004](docs/decisions/0004-protocol-encoding-and-bindings.md): JSON, JSON Schema 2020-12, JSON-RPC 2.0, the optional `jsonrpc-stdio-v1` adapter process binding, OpenAPI 3.2.1, RFC 3339 timestamps, and RFC 8785 canonicalization where required.
+The current draft uses JSON, JSON Schema 2020-12, JSON-RPC 2.0, and OpenAPI 3.2.1. It keeps protocol meaning independent of a programming language and allows clients to work without a hosted web panel. See [protocol/README.md](protocol/README.md) and the [compatibility rules](protocol/COMPATIBILITY.md).
 
-The following remain open:
+The first deployment uses ordinary provider-supported Debian offerings and versioned bootstrap scripts. I’m not building a project-owned preinstalled VM image as the default. That keeps the host setup reviewable and leaves world data in separately managed storage. The [architecture decision](docs/decisions/0002-bootstrap-based-provisioning.md) explains the trade-offs.
 
-- Implementation programming language and runtime.
-- Management API authentication profile and final endpoint/resource semantics.
-- Final adapter capability input/output schemas and capability version policies.
-- Compatibility negotiation and migration rules beyond the initial draft policy.
-- Validation and interoperability evidence across independent language implementations.
+## Start with these documents
 
-The [protocol compatibility rules](protocol/COMPATIBILITY.md) define fail-closed negotiation, schema package versioning, compatibility boundaries, and recovery of in-flight operations across upgrades. The selected standards remain draft choices and may be revised before 1.0 if interoperability testing demonstrates a material problem.
-
-## Planned capabilities
-
-The longer-term project aims to support:
-
-- Hosting-provider, storage-provider, game-runtime, and integration adapters.
-- Lifecycle orchestration, idle shutdown, provisioning, and destruction.
-- Verified backup and restore workflows.
-- Staging deployments based on copies of selected production backups.
-- Software release management and rollback.
-- Repeatable instance provisioning from standard provider OS offerings using customizable, versioned bootstrap scripts.
-- Proxy and player-routing integrations.
-- Durable, auditable operations and recovery.
-- Policy controls, least-privilege permissions, and optional consent-based telemetry.
-- Independent implementations and third-party management clients.
-
-These are project goals, not a claim that these features already exist.
-
-## AI and development transparency
-
-AI may assist with design exploration, documentation drafts, comparisons, prototyping, and troubleshooting. AI-assisted output is not automatically trusted or accepted; maintainers remain responsible for review, testing, security, licensing, and project decisions.
-
-**AI will never be required to develop, build, install, configure, operate, maintain, or use this project.** The controller's functionality must not depend on an AI model, AI API, subscription, or external AI service. Contributors are not required to use AI, and contributions made without AI assistance are equally welcome.
-
-See [AI Use and Development Transparency](docs/AI_DISCLOSURE.md) for the full disclosure and commitments.
-
-## Documentation
-
-### Project and architecture
-
-- [Development roadmap](docs/ROADMAP.md)
+- [Roadmap and current status](docs/ROADMAP.md)
 - [Architecture](docs/ARCHITECTURE.md)
-- [Core design and lifecycle model](docs/CORE_DESIGN.md)
+- [Lifecycle and core design](docs/CORE_DESIGN.md)
 - [Adapter contracts](docs/ADAPTER_CONTRACTS.md)
-- [Configuration and secret reference model](docs/CONFIGURATION.md)
+- [Configuration and secret references](docs/CONFIGURATION.md)
 - [Security model](docs/SECURITY_MODEL.md)
-
-### Protocol specifications
-
-- [Protocol overview and design principles](protocol/README.md)
-- [Protocol and schema compatibility rules](protocol/COMPATIBILITY.md)
-- [Common protocol types](protocol/common-types.md)
-- [Durable operation protocol](protocol/operations.md)
+- [Protocol overview](protocol/README.md)
+- [Lifecycle state machine](protocol/lifecycle.md)
+- [Durable operation model](protocol/operations.md)
 - [Standard operation catalog](protocol/operation-catalog.md)
-- [Lifecycle protocol](protocol/lifecycle.md)
-- [Adapter contracts](protocol/adapters/README.md)
-- [RPC methods and transport](protocol/rpc/methods.md)
-- [Management API and OpenAPI definition](protocol/management-api/overview.md)
-- [Management API authentication](protocol/management-api/authentication.md)
-- [Management API authorization](protocol/management-api/authorization.md)
-- [Protocol security](protocol/security.md)
-- [Conformance and test vectors](protocol/conformance/requirements.md)
+- [Conformance requirements](protocol/conformance/requirements.md)
+- [Contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md)
 
-### Project policies
+## Review the reference stack
 
-- [Contributing](CONTRIBUTING.md)
-- [Security and privacy reporting](SECURITY.md)
-- [Code of conduct](CODE_OF_CONDUCT.md)
-- [AI-use disclosure](docs/AI_DISCLOSURE.md)
-- [License](LICENSE) — GNU AGPL-3.0-only
+The initial target is Minecraft Java with Paper behind Velocity, on a Debian VM. These vendor docs explain the components the first adapters will have to account for: [Paper setup](https://docs.papermc.io/paper/getting-started/), [Velocity player forwarding](https://docs.papermc.io/velocity/player-information-forwarding/), [Vultr Cloud-Init](https://docs.vultr.com/products/compute/instances/cloud-compute/features/cloud-init), and the [Wasabi S3 API](https://docs.wasabi.com/apidocs/getting-started-with-wasabi-apis). The protocol must still work when an operator chooses a different provider or game.
 
-## Safety model
+## Safety and privacy
 
-The design is governed by these operational safeguards:
+The project treats player worlds and credentials as valuable data. The design requires verified backups before destructive cleanup, isolated staging storage, scoped credentials, explicit approval for risky operations, and reconciliation when an external outcome is unknown.
 
-1. A server containing unsaved data must not be destroyed until a backup is complete and verified.
-2. Staging receives a copy of a selected production backup and has no permission to write to or delete production backup locations.
-3. Credentials must never be stored in source control, bootstrap scripts, user-data, release artifacts, or logs.
-4. Update promotion is gated by validation; process startup alone is insufficient.
-5. Major game-version upgrades and world migrations require explicit approval and a recoverable pre-migration backup.
-6. Rollback must respect world compatibility; old software must not be launched against an incompatible migrated world.
-7. Timeouts and interrupted external operations must be reconciled before retrying or proceeding with dependent destructive actions.
-8. Clients and adapters must not bypass core authorization, approvals, environment boundaries, or audit requirements.
+Optional telemetry is disabled by default. Optional telemetry that identifies a player requires separate informed consent from the server owner and each affected player. Read the full [security and privacy policy](SECURITY.md).
 
-## Development approach
-
-Development is proceeding in phases to reduce risk:
-
-1. Define and review the language-independent protocol.
-2. Build language-neutral examples, schemas, conformance fixtures, and tests.
-3. Select an implementation language and supporting technologies based on the completed protocol.
-4. Build a local controller using fake adapters before connecting to real infrastructure.
-5. Validate real adapters against isolated test resources before considering production use.
-
-Existing infrastructure remains operational while this project is developed and tested separately. Existing production scripts should not be replaced until equivalent functionality is implemented, tested, and deliberately migrated.
-
-No production credentials, live world data, private configuration, or deployment secrets belong in this repository.
+AI tools may assist development, but the controller must never depend on an AI model or service to build, run, or operate. Contributors do not need to use AI. See the [AI-use disclosure](docs/AI_DISCLOSURE.md).
 
 ## License
 
-GNU Affero General Public License, version 3.0 only. See [LICENSE](LICENSE).
+This project is licensed under GNU AGPL-3.0-only. See [LICENSE](LICENSE).

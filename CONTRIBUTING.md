@@ -1,95 +1,80 @@
 # Contributing
 
-Thank you for your interest in contributing! This project welcomes contributions from everyone, regardless of experience level. We want people to report bugs, propose features, improve documentation and tests, and develop game, hosting-provider, and storage-provider adapters.
+I welcome bug reports, design criticism, documentation fixes, tests, features, and adapters for games, hosting providers, and storage providers. You do not need to be an expert, and you do not need to use AI.
 
-**Open participation does not mean automatic acceptance.** The project maintainers are responsible for protecting the security, reliability, and integrity of the official project.
+Contributions still need review. The maintainers are responsible for the security, reliability, licensing, and integrity of the official project.
 
-## Ways to contribute
+## Before you make a large change
 
-- Report bugs and propose improvements.
-- Submit fixes, tests, documentation, and features.
-- Develop adapters and integrations.
-- Review proposals and improve project documentation.
+For a substantial proposal, open an issue or discussion first. That gives us a chance to review the design before you invest time in an implementation.
 
-For substantial changes, open an issue or discussion first so the design can be considered before significant work begins.
+For a pull request, explain:
 
-## Pull request process
+1. What you changed and why it matters.
+2. Which components it affects, including compatibility changes and side effects.
+3. Which tests you added or ran, or why testing does not apply.
+4. Which docs and examples changed with the behavior or configuration.
+5. Any new dependency, its purpose, and its license.
+6. That you have the right to contribute the work under this project’s license.
 
-All changes to the official repository must be submitted through a pull request. Contributors should:
+Submit all changes through a pull request. Do not merge your own pull request into the official project. Maintainers may request changes, decline a contribution, or close a pull request. A green CI run does not guarantee acceptance.
 
-1. Explain what the change does and why it is useful.
-2. Identify affected components, compatibility implications, and possible side effects.
-3. Include tests or explain why tests are not applicable.
-4. Update documentation and examples when behavior or configuration changes.
-5. Disclose new dependencies, their purpose, and their licenses.
-6. Confirm they have the right to submit the contribution under the project's licensing terms.
-
-Do not include credentials, private keys, access tokens, production data, player data, or private infrastructure details in commits, issues, pull requests, logs, or test fixtures.
-
-No contributor may merge their own pull request into the official project. Maintainers may request changes, reject a contribution, or close a pull request. Passing automated checks does not guarantee acceptance.
+Never include credentials, private keys, access tokens, production data, player data, or private infrastructure details in commits, issues, pull requests, logs, or test fixtures.
 
 ## Security-sensitive changes
 
-Additional scrutiny is required for changes involving:
+Give extra detail when your change touches:
 
-- Hosting-provider authentication and API access.
-- Storage-provider authentication, bucket permissions, and object deletion.
-- Provisioning, shutdown, destruction, and lifecycle operations.
-- SSH access, firewall rules, operating-system permissions, and privilege boundaries.
-- Backup, restore, synchronization, and data retention.
-- Release management, software updates, deployment, and rollback.
-- Telemetry, logging, consent, and personal information.
-- Plugin, adapter, extension, and third-party code execution.
+- Provider authentication or API access.
+- Storage credentials, bucket permissions, or object deletion.
+- Provisioning, shutdown, destruction, or other lifecycle operations.
+- SSH, firewall rules, operating-system permissions, or privilege boundaries.
+- Backups, restores, synchronization, or retention.
+- Releases, software updates, deployment, or rollback.
+- Telemetry, logging, consent, or personal information.
+- Plugins, adapters, extensions, or third-party code execution.
 
-Security-sensitive changes must explain their threat model, permissions, failure behavior, and tests. Prefer least privilege and fail-safe behavior. Destructive actions must include safeguards against accidental data loss.
+Explain the threat model, permissions, failure behavior, and tests. Prefer least privilege and safe failure. Guard destructive actions against accidental data loss.
 
-Contributors must not introduce backdoors, hidden behavior, credential exfiltration, undocumented network connections, intentionally harmful functionality, or changes designed to weaken security or reliability.
+Do not add backdoors, hidden behavior, credential exfiltration, undocumented network connections, harmful functionality, or changes that weaken security or reliability.
 
-## Testing and dependencies
+## Tests and dependencies
 
-Contributors should provide relevant unit, integration, and security tests. Tests involving infrastructure must use isolated test resources and must never target production systems or production data.
+Add relevant unit, integration, and security tests. If a test uses infrastructure, isolate it. Never point a test at production systems or production data.
 
-New dependencies must be justified and reviewed for maintenance health, security, licensing, and necessity. Avoid uncontrolled downloads and unpinned executable artifacts.
+Explain why a dependency is needed. Review its maintenance, security, license, and whether the project can avoid it. Do not add uncontrolled downloads or unpinned executable artifacts.
 
-## Telemetry and privacy
+## Privacy and telemetry
 
-Telemetry is subject to the requirements in [SECURITY.md](SECURITY.md) and the project's telemetry/privacy design. In particular:
+Follow the telemetry rules in [SECURITY.md](SECURITY.md). Optional telemetry must be off by default and requires explicit server-owner opt-in. If it identifies a player, that player must opt in separately. The owner’s choice does not enroll players.
 
-- Optional telemetry is disabled by default and requires explicit server-owner opt-in.
-- Telemetry involving identifiable player information requires both server-owner consent and the individual player's opt-in.
-- A server owner's consent does not enroll players.
-- Contributors must document every collected field, purpose, destination, retention period, access controls, and consent behavior.
-- Consent must be enforced centrally and cannot be bypassed by an adapter, plugin, or integration.
-- Never collect passwords, API keys, authentication tokens, or private credentials.
-- Do not collect private player messages for general analytics.
+For each telemetry field, document its purpose, destination, retention, access controls, and consent behavior. Enforce consent centrally. An adapter, plugin, or integration must not bypass it. Never collect passwords, API keys, tokens, or private credentials. Do not use private player messages for general analytics.
 
-Necessary local operational or security records are distinct from optional telemetry. Any collection of player-identifying information for security monitoring must follow the project's consent requirements and applicable law.
+Necessary local records that help operate or secure a server are not automatically optional telemetry. If a local security record identifies a player, follow the project’s consent rules and applicable law.
 
 ## Production safety
 
-The software may control real servers and valuable player data. Changes must be designed to preserve data and contain failures:
+The controller may eventually operate real servers and valuable player worlds. Keep those consequences in view:
 
-- Verify backups before destroying infrastructure that contains data requiring preservation.
-- Do not allow staging to write to production backup locations.
-- Do not promote an update solely because a process started; validate required services and health checks.
-- Failed updates must not silently replace a working production release.
-- Keep credentials outside source control and out of logs.
-- Use least-privilege credentials and explicit permission boundaries.
+- Verify the backup before destroying infrastructure that holds data.
+- Prevent staging from writing to production backup locations.
+- Validate required services and health checks before promoting an update. A process starting is not enough.
+- Do not silently replace a working release after a failed update.
+- Keep credentials out of source control and logs.
+- Use credentials with the least authority needed.
 
-## Security vulnerability reports
+## Report a vulnerability privately
 
-Do not publish details of an exploitable vulnerability in a public issue before maintainers have had an opportunity to investigate. Use the repository's private vulnerability reporting feature when available. See [SECURITY.md](SECURITY.md).
+Do not post an exploitable vulnerability in a public issue before maintainers can investigate. Use GitHub’s private vulnerability reporting feature when available. If it is unavailable, contact the repository owner privately. See [SECURITY.md](SECURITY.md).
 
-Do not test vulnerabilities against systems you do not own or have explicit permission to test.
+Only test systems you own or have clear permission to test.
 
-## License and contribution terms
+## License and ownership
 
-The project is licensed under **GNU Affero General Public License version 3.0 only (AGPL-3.0-only)**. By submitting a contribution, you confirm that you have the right to submit it and agree that the contribution may be distributed under that license. You retain ownership of your contribution; no copyright assignment is requested by this policy.
+The project uses GNU AGPL-3.0-only. By contributing, you confirm you have the right to submit your work and agree that it may be distributed under that license. You keep ownership of your contribution; this policy does not ask you to assign copyright.
 
-If you are unsure whether a contribution's license is compatible, disclose its origin and license before submitting it. Do not copy code from sources whose licensing is unknown or incompatible.
+If you are unsure whether a source’s license is compatible, disclose its origin and license before contributing. Do not copy code with unknown or incompatible terms.
 
-## Maintainer authority
+## Maintainer responsibility
 
-Maintainers control merging, releases, repository permissions, security requirements, and project direction. They may revert changes that introduce security, reliability, licensing, or compatibility problems.
-
-We aim to be welcoming and community-driven while maintaining high standards for the official project. **Contributions are welcome; the security and integrity of the project are not negotiable.**
+Maintainers decide what to merge, release, and support. They may revert work that creates security, reliability, licensing, or compatibility problems. We want a welcoming project, and we will protect the integrity of its official code.

@@ -1,26 +1,26 @@
-# Configuration and Secret Reference Model
+# Configuration and Secret References
 
-**Status:** Proposed Phase 1 specification. No loader or schema implementation is implied.
+**Status:** Proposed Phase 1 specification. There is no configuration loader or implemented schema yet.
 
-## Goals
+## What configuration must do
 
-Configuration must be validated before external side effects, versioned, environment-scoped, free of embedded credentials, explicit about adapter capabilities, and safe to display after redaction. Unknown critical fields must not be silently ignored.
+Validate settings before external side effects. Scope them to an environment. Declare adapter capabilities. Keep secrets out of ordinary values and make displayed configuration safe to share after redaction. Reject unknown critical fields instead of ignoring them.
 
-## Configuration categories
+## Configuration areas
 
-1. Controller: runtime mode, state-store reference, audit settings, operation timeouts.
-2. Environment: environment ID, safety classification, network/storage boundaries.
-3. Logical server: game adapter, hosting/storage profiles, release channel, health policy.
-4. Adapter: non-secret endpoints, region/profile mapping, feature flags, secret references.
-5. Policy: permissions, approvals, retention, telemetry consent, destructive-action gates.
+1. **Controller:** runtime mode, state-store reference, audit settings, and operation deadlines.
+2. **Environment:** environment ID, safety classification, network boundary, and storage boundary.
+3. **Logical server:** game adapter, hosting and storage profiles, release channel, and health policy.
+4. **Adapter:** non-secret endpoints, region/profile mapping, feature flags, and secret references.
+5. **Policy:** permissions, approvals, retention, telemetry consent, and destructive-action gates.
 
-Secrets are not ordinary configuration values. Config may contain a protected secret reference, never the secret value.
+A secret is not a normal configuration value. Configuration may point to a protected secret; it must never contain the secret itself.
 
 ## Illustrative configuration
 
-This YAML is conceptual only. Names and schema are provisional.
+This example shows the proposed shape only. Names and schema are not final.
 
-```yaml
+~~~yaml
 schema_version: 1
 
 controller:
@@ -78,67 +78,57 @@ servers:
     lifecycle:
       idle_shutdown_minutes: 10
       require_verified_backup_before_destroy: true
-```
+~~~
 
-Bucket and environment values above are placeholders. The example contains secret references, not credentials. A real schema should model production approval gates explicitly rather than relying only on a boolean.
+The bucket and environment values are placeholders. The example contains references, not credential values. A production schema should represent approval gates directly; a boolean alone is not enough.
 
 ## Secret reference contract
 
-The protocol representation of a secret reference is defined in [secret-reference.schema.json](../protocol/schemas/common/secret-reference.schema.json). Configuration syntax may differ by implementation, but the secret-reference meaning and least-privilege requirements are shared.
+The shared JSON representation is defined by [secret-reference.schema.json](../protocol/schemas/common/secret-reference.schema.json). An implementation may use different configuration syntax, but it must preserve the same meaning and least-privilege rules.
 
-Possible resolvers:
-- Environment variables for local development.
-- Root-readable or service-account-readable files with restrictive permissions.
-- External secret manager in a future deployment.
+Possible resolvers include environment variables for local development, permission-restricted files readable by root or a service account, and a future external secrets manager.
 
-Requirements:
+A resolver must:
+
 - Reject literal secret values where a reference is required.
-- Never print resolved secrets.
-- Resolve secrets at point of use and keep their lifetime short.
-- Never embed credentials in bootstrap scripts, cloud-init/user-data, release archives, source control, command-line arguments, or ordinary logs.
-- Support credential rotation without source changes.
+- Never print a resolved secret.
+- Resolve a secret only when needed and keep it in memory for as little time as practical.
+- Keep credentials out of bootstrap scripts, Cloud-Init/user-data, release archives, source control, command-line arguments, and ordinary logs.
+- Allow credential rotation without source changes.
 - Separate credentials by provider, environment, and permission scope.
-- A resolver failure blocks the dependent operation; never fall back to empty/default/broader credentials.
+- Fail closed if lookup or authorization fails. Never fall back to empty or broader credentials.
 
-## Environment isolation
+## Environment boundaries
 
-Every resource and operation belongs to exactly one environment. Cross-environment access is denied unless a narrow policy explicitly permits it.
+Every resource and operation belongs to one environment. Deny cross-environment access unless a narrow policy allows it.
 
-**Production:** owns live world data and production backup write permissions. Staging credentials cannot write to it.
+**Production** owns live world data and production backup write permissions. Staging credentials cannot write there.
 
-**Staging:** reads only the production backup objects explicitly needed for a test, using read-only credentials; writes to staging-owned storage; cannot delete or overwrite production objects; cannot sync its world back to production.
+**Staging** may read only the production backup objects selected for a test. It uses read-only credentials for those objects, writes to staging-owned storage, and cannot delete or overwrite production data or sync its world back.
 
-**Bootstrap execution:** prepares an instance created from a provider-supported standard OS offering. Bootstrap source and user-data contain no credential values or live world data. Credentials are supplied separately through scoped secret references only to the operation steps that require them.
+**Bootstrap execution** prepares an instance created from a provider-supported OS offering. Bootstrap source and user-data contain no credential values or live world data. Supply credentials through scoped references only to the steps that need them.
 
-## Validation rules
+## Validate before acting
 
-Before any operation:
-- Validate schema version and required fields.
-- Reject unknown adapter IDs and unknown critical fields.
-- Check required adapter capabilities.
-- Verify environment/resource ownership.
-- Bound timeouts and retry limits.
-- Check authorization and approval path for destructive actions.
-- Verify production/staging credential scopes are distinct.
-- Ensure secret fields contain references.
-- Validate paths against traversal and unsafe symlinks.
-- Validate network destinations and ports against policy.
+Before an operation, validate:
 
-Configuration validation and plan/preview must be side-effect free.
+- Schema version and required fields.
+- Adapter IDs and all critical fields.
+- Required adapter capabilities.
+- Environment and resource ownership.
+- Deadline and retry bounds.
+- Authorization and approval for destructive actions.
+- Distinct production and staging credential scopes.
+- Secret references instead of values.
+- Paths against traversal and unsafe symlinks.
+- Network destinations and ports against policy.
 
-## Configuration changes
+Validation and plan/preview must have no side effects.
 
-- Record exact configuration version used by each operation.
-- Validate proposed changes before applying them.
-- Show redacted diffs.
-- Require explicit approval for permission broadening, production storage changes, retention changes, or enabling destructive actions.
-- Keep a known-good configuration version for recovery.
+## Changing configuration
+
+Record the exact configuration version used by each operation. Validate changes before applying them and show a redacted diff. Require explicit approval for broader permissions, production storage changes, retention changes, or enabling destructive actions. Keep a known-good version for recovery.
 
 ## Open decisions
 
-- Final schema format and validation library.
-- Whether SQLite is sufficient for the initial single-controller deployment.
-- Secret resolver implementation and precedence.
-- Configuration migration policy.
-- Provider profiles embedded or separately referenced.
-- Operator identity and approval representation in CLI/future API.
+Maintainers still need to choose the schema format and validator, determine whether SQLite fits the first single-controller deployment, select secret resolvers and precedence, define configuration migrations, decide how to represent provider profiles, and specify operator identity and approvals for the CLI and future API.

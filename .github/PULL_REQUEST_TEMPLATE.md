@@ -1,48 +1,42 @@
-## Summary
+## What changed?
 
-Describe what this change does and why it is needed.
+Explain the change and why it belongs in the project.
 
 ## Scope and impact
 
 - Affected components:
 - Configuration or compatibility changes:
-- New dependencies (include versions and licenses):
+- New dependencies, including versions and licenses:
 - Security or privacy implications:
 
 ## Validation
 
-- [ ] Relevant tests added or updated.
-- [ ] Tests run successfully (describe below).
-- [ ] Documentation and examples updated where needed.
-- [ ] No credentials, tokens, private keys, production data, or player data included.
-- [ ] Destructive operations and failure paths have been reviewed.
-- [ ] Staging/test resources are isolated from production.
+- [ ] I added or updated relevant tests.
+- [ ] I ran the relevant checks and described them below.
+- [ ] I updated docs and examples affected by this change.
+- [ ] I included no credentials, tokens, private keys, production data, or player data.
+- [ ] I reviewed destructive actions and failure paths.
+- [ ] I kept staging and test resources isolated from production.
 
-## AI assistance disclosure (optional)
+## AI assistance (optional)
 
-We welcome contributions written with or without AI assistance. AI use is not required and does not affect whether a contribution is considered.
+Contributions with or without AI assistance are welcome. AI use is not required and does not affect review.
 
-If AI materially assisted this contribution, you may briefly disclose:
+If AI materially helped with this change, you may say which parts it assisted with and what you reviewed or tested. Do not include private prompts, credentials, personal data, or confidential information. AI-assisted work follows the same review, testing, security, licensing, and maintainer-acceptance rules as other contributions.
 
-- Whether AI tools assisted, and which parts (for example: brainstorming, documentation, code drafting, debugging, or tests):
-- What you personally reviewed, changed, or verified:
-- What tests or other validation you performed:
+## Telemetry (if relevant)
 
-Do not include private prompts, credentials, personal data, or confidential information in this disclosure. AI-assisted work is subject to the same review, testing, security, licensing, and maintainer-acceptance requirements as any other contribution.
+- [ ] This change does not add or alter telemetry.
+- [ ] I documented the purpose and every field collected.
+- [ ] Optional telemetry stays disabled until the server owner opts in.
+- [ ] Identifiable player telemetry also requires each affected player’s separate opt-in.
+- [ ] Withdrawal stops collection; no adapter or plugin can bypass consent.
+- [ ] I documented destinations, retention, access controls, and transport protection.
 
-## Telemetry (if applicable)
+## Security-sensitive changes (if relevant)
 
-- [ ] No telemetry added or changed.
-- [ ] If changed: purpose and every collected field are documented.
-- [ ] Server-owner opt-in is explicit; optional telemetry remains disabled by default.
-- [ ] Identifiable player telemetry requires separate player opt-in as well.
-- [ ] Consent withdrawal is enforced; no adapter or plugin bypass exists.
-- [ ] Destinations, retention, access controls, and transmission security are documented.
+Describe permissions, threat model, failure behavior, and safeguards.
 
-## Security-sensitive changes (if applicable)
+## Reviewer notes
 
-Explain permissions, threat model, failure behavior, and safeguards.
-
-## Additional notes
-
-Anything reviewers should know.
+What else should reviewers know?

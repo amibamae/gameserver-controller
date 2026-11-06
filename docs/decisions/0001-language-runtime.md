@@ -1,66 +1,25 @@
 # ADR 0001: Initial Implementation Language and Runtime
 
 - **Status:** Accepted
-- **Date:** 2026-11-05
+- **Date:** 2026-11-06
 - **Decision owners:** Project maintainers
-
-## Context
-
-The controller needs a maintainable CLI and orchestration runtime with:
-- Testable contracts between core and adapters.
-- Strong validation for configuration and operation records.
-- Reliable asynchronous provider operations, retries, and timeouts.
-- HTTP/API client support for hosting and object-storage providers.
-- Safe process, filesystem, and system-service integration on Linux.
-- A practical path for community adapter contributions.
-- Installation and upgrades on small Debian-based controller hosts.
-
-Existing operational scripts are primarily shell-based. Shell remains useful for bootstrap and system tasks, but alone is not an ideal long-term foundation for provider-independent orchestration, durable state, structured errors, concurrency control, and contract testing.
-
-## Options to evaluate
-
-### Go
-Potential strengths:
-- Static typing and interfaces.
-- Concurrency and cancellation primitives.
-- Convenient single-binary Linux deployment.
-- Strong fit for CLI/controller software and HTTP integrations.
-
-Potential trade-offs:
-- Contributors need Go familiarity.
-- Some provider/game SDKs may be more mature in other ecosystems.
-
-### Python
-Potential strengths:
-- Accessible contributor ecosystem.
-- Mature HTTP, cloud, YAML/JSON validation, and test tooling.
-- Convenient integration with existing operational scripts.
-
-Potential trade-offs:
-- Runtime and dependency packaging need deliberate management.
-- Type checking and interface discipline require project conventions.
-- Distribution may require a virtual environment or packaged runtime.
-
-### Other languages
-Rust, Java, and other options remain possible if maintainability, contributor access, deployment, and adapter ecosystem justify them.
 
 ## Decision
 
-Go is selected for the controller core and its protocol tooling. Protocol contracts, schemas, and conformance fixtures remain language-neutral and do not encode Go-specific behavior.
+Use Go for the initial controller, command-line tools, and protocol validation tooling. The repository's Go module currently targets Go 1.21.
 
-## Decision criteria
+Keep protocol meaning defined by the published contracts, schemas, and conformance fixtures. Community members may contribute adapters, clients, or implementations in other languages. A second-language implementation is not required for project releases.
 
-Evaluate candidates against:
-1. Contract/type safety and testability.
-2. CLI and long-running orchestration support.
-3. Linux process/filesystem/systemd integration.
-4. HTTP, cloud-provider, and S3-compatible storage ecosystem.
-5. Packaging and upgrades on Debian.
-6. Community contributor accessibility.
-7. Operational reliability and maintainability for a small project.
+## Context
+
+The project needs a maintainable CLI and orchestration runtime with strict validation, asynchronous provider calls, bounded retries and timeouts, HTTP clients, and safe Linux process, filesystem, and systemd integration. Go provides static types, concurrency and cancellation tools, and single-binary deployment.
+
+Existing shell scripts remain appropriate for bootstrap and host tasks. They are not the long-term home for provider-independent orchestration, durable state, structured errors, or contract tests.
 
 ## Consequences
 
-- The controller implementation and repository-owned protocol tooling use Go.
-- Adapter contracts remain implementable in other languages without changing core semantics.
-- Before implementation release, record the minimum supported Go version, dependency policy, packaging model, and supported Debian versions.
+- New controller and tooling code should use Go unless a later accepted ADR changes this decision.
+- Adapters and clients can use other languages when contributors choose to build them.
+- The project will continue to publish schemas and fixtures that describe protocol behavior without relying on Go-specific types.
+- Cross-language implementations are welcome but do not gate a release.
+- A later ADR may revise the Go version, dependency policy, packaging model, or supported Debian releases.

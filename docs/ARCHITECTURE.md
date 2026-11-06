@@ -1,123 +1,112 @@
 # Architecture
 
-**Status:** Proposed architecture. Interfaces and components in this document are design targets, not implemented APIs.
+**Status:** Proposed. The components and interfaces below are design targets, not implemented APIs.
 
-## Goals
+## Goal
 
-The platform coordinates game-server infrastructure while keeping the orchestration core independent of hosting vendors, storage vendors, and game implementations. The first reference deployment is Vultr + Wasabi + Minecraft Paper + Velocity. Other adapters should be addable without embedding their behavior in core lifecycle code.
+The Go controller is designed to coordinate game-server infrastructure without tying its core to one hosting company, storage vendor, or game. The first reference setup is Vultr, Wasabi, Paper, and Velocity. New providers and games should fit through adapters rather than provider-specific branches in lifecycle code. Contributions in other languages are welcome for adapters and clients.
 
-## High-level components
+## Components
 
-```text
-                    Operator / CLI / API
-                             |
-                      Core Controller
-          +------------------+------------------+
-          |                  |                  |
-      Lifecycle           Release            Policy /
-      Orchestrator        Manager            Security
-          |                  |                  |
-          +------------------+------------------+
-                             |
-                       Adapter Contracts
-          +------------------+------------------+
-          |                  |                  |
-     Hosting Adapter    Storage Adapter    Execution Adapter    Game Adapter
-       (Vultr)             (Wasabi)           (systemd)          (Minecraft/Paper)
-          |                  |                  |                    |
-       Provider           Object store       Process/service      Game config,
-       API / VM            backups and        lifecycle            save, health,
-       lifecycle           release files                            compatibility
-                             |
-                       Integrations
-                    (Velocity, monitoring,
-                     notifications, etc.)
-```
+~~~text
+Operator / CLI / API
+        |
+Core Controller
+   | Lifecycle Orchestrator
+   | Release Manager
+   | Policy and Security
+        |
+Adapter Contracts
+   | Hosting     | Storage      | Execution      | Game
+   | Vultr       | Wasabi       | systemd        | Minecraft/Paper
+        |
+Integrations: Velocity, monitoring, notifications
+~~~
 
-## Core responsibilities
+## What the core owns
 
-Core owns orchestration policy and state transitions, not vendor-specific API calls or game-specific commands.
+The core owns workflow policy and state transitions. It does not make vendor API calls or issue game-specific commands directly.
 
-- **Lifecycle:** desired state, operation coordination, locks, retries, timeouts, and safe shutdown.
-- **Provisioning:** request and track instances through hosting adapter capabilities, then apply a selected, versioned bootstrap script and user configuration.
-- **Backups:** coordinate consistent backup, upload, verification, restore, and retention workflows.
-- **Releases:** immutable release manifests, validation, approval, promotion, and retention.
-- **Staging:** isolated candidate environments based on selected production backup snapshots.
-- **Rollback:** coordinate software and infrastructure rollback while respecting world compatibility.
-- **Security:** credential references, permission boundaries, audit events, and consent enforcement.
-- **Configuration:** validate configuration and expose stable, versioned schemas.
+- **Lifecycle:** desired state, operation coordination, locks, retries, deadlines, and safe shutdown.
+- **Provisioning:** request instances through declared hosting capabilities, then apply a selected bootstrap revision and operator configuration.
+- **Backup:** coordinate a consistent save, upload, verification, restore, and retention.
+- **Release management:** track immutable software manifests, validation, approval, promotion, and retention.
+- **Staging:** create isolated candidates from an explicitly selected production backup.
+- **Rollback:** return to an earlier software or host baseline without violating world compatibility.
+- **Security:** manage secret references, permissions, audit, and consent decisions.
+- **Configuration:** validate settings and publish stable, versioned schemas.
 
 ## Adapter boundaries
 
-The protocol is execution-agnostic. A conventional VM and system service manager are first-class; Docker, Kubernetes, and Agones are optional integrations, not prerequisites. See [ADR 0003](decisions/0003-execution-agnostic-runtime.md).
+The protocol works with ordinary virtual machines and service managers. Docker, Kubernetes, and Agones are optional integrations, not prerequisites. See [ADR 0003](decisions/0003-execution-agnostic-runtime.md).
 
-### Hosting-provider adapter
+### Hosting
 
-A hosting adapter translates platform operations into provider-specific API calls. Potential capabilities include instance create/inspect/start/stop/reboot/destroy, region and plan discovery, standard operating-system selection, bootstrap delivery/execution where supported, networking/firewall management, SSH key assignment, and asynchronous operation status.
+A hosting adapter translates instance create, inspect, start, stop, reboot, and destroy requests into provider calls. It may also report regions, plans, standard OS offerings, bootstrap delivery, SSH keys, network state, or firewall capabilities. Vultr is the first target; OVH is a possible later portability check.
 
-Adapters declare capabilities. Core must not assume every provider exposes the same operating-system catalog, bootstrap-delivery mechanism, private networking, or lifecycle semantics. Initial target: Vultr. OVH is a possible later adapter to validate provider portability.
+Capabilities vary by provider. The core must not assume that every provider offers the same OS catalog, bootstrap mechanism, private networking, or instance lifecycle.
 
-### Storage-provider adapter
+### Storage
 
-A storage adapter provides upload/download, object metadata and checksums, listing, retention, and safe deletion where permitted. It must declare optional capabilities such as versioning or object locking rather than assume all object stores behave alike. Initial target: Wasabi through its S3-compatible interface.
+A storage adapter uploads and downloads objects, reports metadata and checksums, lists within an allowed scope, and deletes only when authorized. It declares features such as versioning or object lock. Wasabi’s S3-compatible API is the first target.
 
-### Game-server adapter
+### Game
 
-A game adapter describes installation, runtime requirements, configuration, startup/shutdown, readiness/health, data directories, backup consistency, version compatibility, and migration behavior. Initial target: Minecraft Java Edition with Paper.
+A game adapter defines installation, configuration, runtime needs, startup and shutdown, readiness, health, data paths, backup consistency, compatibility, and migration. Minecraft Java with Paper is the first target.
 
-### Execution adapter
+### Execution
 
-The execution adapter manages the process/workload unit on an already provisioned execution environment. The initial reference is `execution.systemd` on a conventional Linux VM. Optional implementations may support containers, Kubernetes, or Agones, but none is mandatory. The execution adapter does not own provider VM lifecycle or game-specific save/compatibility semantics.
+An execution adapter runs and inspects a unit on an already provisioned environment. The first reference is systemd on a Linux VM. Optional adapters may target containers, Kubernetes, or Agones.
 
-The execution adapter is separate from the game adapter: the execution adapter starts/stops a unit; the game adapter defines installation, configuration, readiness, persistent data, save/backup consistency, and version compatibility.
+Keep game and execution behavior separate. The execution adapter starts a unit. The game adapter defines what to install, how to save it safely, when it is ready, and which versions can open its data.
 
 ### Integrations
 
-Integrations connect the core to proxies, monitoring, alerts, and notifications. They must use documented interfaces and must not bypass lifecycle safety or privacy controls. Velocity is an initial proxy integration, not a hosting provider.
+Integrations connect the core to proxies, monitoring, alerts, and notifications. They use documented interfaces and cannot bypass lifecycle or privacy policy. Velocity is a proxy integration, not a hosting provider.
 
-## Environments and data isolation
+## Production and staging boundaries
 
-- **Production** owns the live world and production backup write credentials. It must not accept staging writes.
-- **Staging** receives a copy of a selected production backup, records its timestamp, and uses separate credentials with read-only access to production backup objects. It writes only to its own workspace and explicitly authorized release/test destinations. It must never sync its world into production.
-- **Bootstrap execution** prepares a newly provisioned instance from a provider-supported standard operating-system offering. Bootstrap code must not contain credentials or live world data; access to storage credentials is granted separately and only when a restore operation requires it.
+- **Production** owns the live world and production backup write credentials. Staging cannot write there.
+- **Staging** restores a timestamped copy of one selected production backup. It uses separate credentials with read-only production access, writes only to its own storage, and cannot sync the test world back into production.
+- **Bootstrap execution** prepares a new instance from a provider-supported OS image. Bootstrap code contains no credentials or live world. Grant storage credentials separately and only to steps that restore data.
 
-## Provisioning and software-release lifecycle
+## Bootstrap and release lifecycles
 
-Bootstrap scripts and game software releases are independently versioned artifacts with separate validation and promotion.
+Bootstrap scripts and game releases are separate, versioned artifacts. Validate and promote them independently.
 
-### Bootstrap lifecycle
+### Bootstrap
 
-Instances begin with a standard operating-system offering supplied by the hosting provider. The controller then applies a selected bootstrap revision and user configuration. Bootstrap scripts are source-controlled, customizable, reviewed, and validated by provisioning fresh isolated instances. Record the exact source revision, integrity checksum, configuration inputs, and outcome for each provisioning operation. The default workflow depends only on provider-supported operating-system offerings and versioned bootstrap scripts.
+Start from the provider’s standard OS offering. Apply one selected, versioned bootstrap revision and operator configuration. Validate it on fresh, isolated instances. Record the source revision, checksum, inputs, and outcome for each provision operation.
 
-### Game software releases
+### Game releases
 
-A release may include Paper, plugin JARs, server configuration, plugin configuration, a manifest, checksums, and compatibility metadata. It must exclude world/player data, operating-system installation media, Java installations, rclone binaries, logs, and temporary staging files.
+A release may contain Paper, plugin JARs, server configuration, plugin configuration, a manifest, checksums, and compatibility metadata. Keep world/player data, OS media, Java installations, rclone binaries, logs, and temporary staging files out of the release.
 
-Artifacts are immutable. The proposed archive retention is five approved software releases (current plus four previous); candidates remain until accepted or rejected. Never delete an artifact referenced by an active deployment or rollback record.
+Treat artifacts as immutable. The proposed archive keeps five approved software releases, current plus four previous. Keep candidates until they are accepted or rejected. Do not delete anything an active deployment or rollback still references.
 
-## Version compatibility and rollback
+## Compatibility and rollback
 
-Software rollback and bootstrap rollback are distinct operations. A replacement instance is created from a provider-supported standard operating-system offering and prepared with an explicitly selected bootstrap revision. Every production backup records the Minecraft version and relevant world-format compatibility. Before a major-version migration, preserve a verified pre-migration backup. Never assume an older Paper version can safely open a world already migrated by a newer version.
+Software rollback differs from bootstrap rollback. To restore an earlier host baseline, create an instance from a provider-standard OS and apply a previously approved bootstrap revision.
 
-Promotion of a bootstrap revision or software release does not itself authorize a world migration. Major Minecraft upgrades and world migrations require explicit operator approval.
+Every production backup records the Minecraft version and world-format compatibility. Before a major-version migration, keep a verified pre-migration backup. Never assume an older Paper release can open a world already migrated by a newer one.
 
-## Lifecycle safety invariants
+Promoting a bootstrap or software release does not approve a world migration. Major Minecraft upgrades and migrations require explicit operator approval.
 
-Lifecycle state is separate from provider instance state, execution-unit state, and durable operation status. See the [lifecycle protocol](../protocol/lifecycle.md) for the normative draft state machine and transitions.
+## Safety invariants
 
-1. Never destroy an instance with required unsaved data until backup upload and verification succeed.
-2. Failed backup or verification blocks destructive cleanup.
+The lifecycle protocol defines public state transitions. These rules must hold across adapters:
+
+1. Do not destroy an instance with unsaved data until its backup is uploaded and verified.
+2. A failed or uncertain backup blocks destructive cleanup.
 3. Staging cannot write to production backup storage.
-4. Credentials are references to protected secret stores/files, never literal config values.
-5. Operations are auditable and have explicit states, timeouts, and recovery behavior.
-6. A failed candidate cannot silently replace a healthy approved production release.
-7. Destructive operations require validated target identity and safeguards against production/staging confusion.
-8. Adapters cannot bypass core authorization, telemetry consent, or environment isolation.
+4. Configuration stores secret references, not literal credentials.
+5. Every operation is auditable and has explicit status, deadlines, and recovery behavior.
+6. A failed candidate cannot silently replace an approved production release.
+7. Destructive operations verify the exact target and environment.
+8. Adapters cannot bypass core authorization, consent, or environment isolation.
 
-## Telemetry and privacy
-
-Optional telemetry is disabled by default. Identifiable player telemetry requires explicit server-owner opt-in and separate informed opt-in by each affected player. Consent must be centrally enforced across all adapters and integrations. See [SECURITY.md](../SECURITY.md).
+Optional telemetry starts disabled. Identifiable player telemetry requires informed opt-in from both the server owner and each affected player. See [SECURITY.md](../SECURITY.md).
 
 ## Open design work
 
-Before implementation, define the language/runtime, durable state store, concurrency and recovery model, adapter contracts and versioning, configuration/secret references, audit schema and retention, release manifest, per-game health checks, and approval policy for destructive operations.
+Go is selected for the initial implementation. Remaining implementation decisions include the durable state store, concurrency and recovery model, adapter versioning, configuration and secret references, audit format and retention, per-game health checks, and approval rules for destructive actions.

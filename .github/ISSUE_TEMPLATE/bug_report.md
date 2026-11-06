@@ -1,28 +1,28 @@
 ---
 name: Bug report
-about: Report a reproducible problem
+about: Report a problem others can reproduce
 title: "[Bug]: "
 labels: bug
 assignees: ""
 ---
 
-## Summary
+## What happened?
 
-Describe the problem.
+Describe the problem and what you were doing when it started.
 
-## Expected behavior
+## What did you expect?
 
-What did you expect to happen?
+Explain the result you expected.
 
-## Actual behavior
+## What happened instead?
 
-What happened instead?
+Describe the observed result. Include exact error text where useful, after redacting sensitive data.
 
 ## Environment
 
-- Project version/commit:
+- Project version or commit:
 - Operating system:
-- Game/provider/storage adapters involved:
+- Game, hosting, or storage adapters involved:
 
 ## Reproduction steps
 
@@ -32,6 +32,8 @@ What happened instead?
 
 ## Logs
 
-Remove credentials, tokens, IP addresses, usernames, player identifiers, and other private information before posting. Do not publish details of a suspected security vulnerability here; follow SECURITY.md instead.
+Before posting logs, remove credentials, tokens, IP addresses, usernames, player identifiers, and other private information. Do not report a suspected security vulnerability here. Follow [SECURITY.md](../../SECURITY.md) instead.
 
-## Additional context
+## Anything else?
+
+Add context, screenshots with sensitive details removed, or other information that may help reproduce the problem.

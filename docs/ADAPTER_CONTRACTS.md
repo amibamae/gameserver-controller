@@ -1,121 +1,93 @@
 # Adapter Contracts
 
-**Status:** Proposed language-neutral contracts, not implemented APIs.
+**Status:** Proposed language-neutral contracts. No adapter API is implemented yet.
 
-## Contract principles
+The detailed drafts live under [protocol/adapters](../protocol/adapters/README.md). They define five categories: hosting, storage, execution, game, and integration.
 
-The detailed, language-neutral contracts are published under [protocol/adapters](../protocol/adapters/README.md). The five categories are hosting, storage, execution, game, and integration.
+## Shared rules
 
-- Core defines contracts; adapters implement them.
-- Adapters declare identity, version, configuration schema, capabilities, constraints, and required permissions.
-- Optional capabilities are discoverable before execution.
-- Unsupported operations return a structured `unsupported_capability` result; never silently emulate them.
-- External IDs are opaque and scoped to adapter and environment.
-- Mutating calls receive operation/correlation IDs and idempotency keys where supported.
-- Adapters redact secrets and sensitive player data.
+- The core defines each contract; adapters implement it.
+- An adapter declares its identity, version, configuration schema, capabilities, constraints, permissions, and compatibility.
+- The controller discovers optional capabilities before it calls them.
+- If an operation is unsupported, return a structured unsupported-capability result. Do not imitate it silently.
+- Treat provider identifiers as opaque and scope them to both adapter and environment.
+- Mutating calls carry operation and correlation IDs, plus an idempotency key where supported.
+- Redact secrets and unnecessary player data from diagnostics.
 - Adapters cannot bypass core authorization, environment isolation, safety policy, or consent enforcement.
 
-## Common adapter descriptor
+Each adapter descriptor includes a stable ID such as hosting.vultr, a display name, adapter and contract versions, a configuration schema version, capabilities, required permission scopes, read-only diagnostics, and compatibility notes. The core records the descriptor and capability snapshot used for each operation. A descriptor describes behavior; it does not grant permission.
 
-Each adapter exposes a stable ID (for example `hosting.vultr`), display name, adapter version, contract version, configuration schema version, capabilities, required permission scopes, read-only diagnostics, and compatibility documentation. Core records the descriptor/capability snapshot used for each operation.
+## Hosting providers
 
-## Hosting-provider contract
+The hosting adapter translates provider-neutral requests into provider API calls. It handles provider IDs, asynchronous polling, and error normalization. Depending on declared capabilities, it can discover regions, plans, and OS offerings; inspect, create, start, stop, reboot, or destroy an instance; inspect network or firewall state; and deliver or report bootstrap status.
 
-Responsibilities: translate logical infrastructure requests into provider-specific operations; own provider API details, resource IDs, asynchronous polling, and error normalization.
+A create request can include an opaque provider OS ID, readable distribution and version, region, plan, hostname, labels, SSH key references, firewall policy references, a protected bootstrap reference and revision, environment, logical server ID, architecture, and minimum resources.
 
-Proposed operations:
-- Discover capabilities, regions, plans, and provider-supported operating-system offerings/versions where supported.
-- Inspect an instance.
-- Create an instance from a provider-neutral specification.
-- Wait for provider operation completion.
-- Start, stop, reboot, and destroy instances where supported.
-- Inspect networking/firewall state where supported.
-- Apply or report the status of a referenced bootstrap mechanism where supported.
+Never include passwords, private keys, API tokens, or storage credentials. Do not assume providers share the same OS catalog, bootstrap mechanism, networking, or lifecycle behavior.
 
-An instance specification may include region, plan, provider OS selection (using the provider's opaque OS identifier plus a human-readable distribution/version), hostname/labels, SSH key references, firewall policy references, protected bootstrap reference and revision, environment, logical server identity, architecture, and minimum resource requirements. It must never contain raw passwords, private keys, API tokens, or storage credentials.
+## Storage providers
 
-Example namespaced capabilities: `hosting.instance.create`, `hosting.instance.inspect`, `hosting.instance.start`, `hosting.instance.stop`, `hosting.instance.destroy`, `hosting.bootstrap.deliver`, and `hosting.firewall.manage`. Core must not assume every provider exposes the same OS catalog, bootstrap-delivery mechanism, private networking, or lifecycle semantics.
+The storage adapter uploads, downloads, inspects, lists, verifies, copies, and, when explicitly authorized, deletes objects. It declares optional capabilities such as versioning and server-side copy.
 
-## Storage-provider contract
+A backup record should capture adapter and bucket identity, object key, length, checksum algorithm and digest, timestamps, artifact category, server and environment, source operation, and available encryption or version metadata.
 
-Responsibilities: upload/download objects, inspect metadata, list objects where supported, verify integrity, and perform deletion only when explicitly authorized.
+An upload acknowledgment is not a verified backup. The core must confirm integrity before it destroys compute. Staging may read selected production backups but cannot write to or delete them. Release-artifact permissions stay separate from world-backup permissions.
 
-Proposed operations:
-- Discover capabilities.
-- Put/get object.
-- Inspect object metadata (HEAD).
-- List objects where supported.
-- Delete object only with explicit authorization.
-- Calculate/verify checksums where supported.
-- Copy objects and inspect versioning where supported.
+## Execution environments
 
-Record adapter/bucket identity, object key, length, checksum algorithm/digest, timestamps, artifact category, logical server/environment, source operation ID, and encryption/version metadata when available.
+The execution adapter manages a process or workload on a provisioned host. The first reference is systemd on a Linux VM. Containers, Kubernetes, and Agones are optional.
 
-An accepted upload is not automatically a verified backup. Core must require verification before destructive cleanup. Production backup credentials are not available to staging for writes/deletes. Release artifact permissions are separate from world backup permissions.
+The execution adapter reports the service state. The game adapter defines installation, save behavior, readiness, data paths, and version compatibility. See the [execution protocol](../protocol/adapters/execution.md).
 
-## Execution contract
+## Game servers
 
-Execution adapters manage a process or workload unit on an already provisioned environment. The initial reference is `execution.systemd` on a conventional Linux VM. Container, Kubernetes, and Agones implementations are optional. The execution adapter reports process/unit state; the game adapter defines installation, save semantics, game readiness, data paths, and version compatibility. See the [execution adapter protocol](../protocol/adapters/execution.md).
+The game adapter defines installation, configuration, runtime needs, readiness and health checks, persistent paths, backup consistency, compatibility, and migration.
 
-## Game-server contract
+Its proposed operations cover release description, install, validation, start and graceful stop, save/flush, health and readiness, data-path description, backup validation, compatibility checks, and explicitly supported migrations.
 
-Responsibilities: describe and control a game runtime, including installation, configuration, save semantics, readiness, data paths, version compatibility, and migration.
+A running process is not necessarily ready. For Paper, startup logs may be one signal; the adapter must also check required health signals and plugins. It must distinguish states such as starting, running but not ready, ready, degraded, stopped, and failed.
 
-Proposed operations:
-- Describe runtime and supported versions.
-- Validate installation.
-- Install a specific release.
-- Inspect runtime/process state.
-- Start and gracefully stop.
-- Request save/flush.
-- Run readiness and health checks.
-- Describe data paths and backup consistency method.
-- Validate a backup.
-- Inspect source/target version compatibility.
-- Perform migration only when explicitly supported and separately approved.
+The game adapter says how to quiesce or save data consistently. The core coordinates transfer and verification. Copying files alone does not prove a backup is valid.
 
-A running process is not necessarily ready. The Paper adapter may use startup logs as one signal, but must also verify expected health signals and required plugin checks. It distinguishes absent, starting, running-not-ready, ready, degraded, stopped, and failed states.
+## Integrations
 
-The game adapter describes how to save/quiesce data consistently. Core coordinates storage transfer and verification; copying files alone does not prove a valid backup.
+Integrations connect the core to Velocity, monitoring, alerts, and notifications. They declare supported events and actions, permissions, whether calls mutate state, retry and idempotency behavior, timeout rules, transmitted fields, and privacy implications.
 
-## Integration contract
+A proxy adapter may inspect, register, drain, and unregister a backend, and report player counts. It routes players only after the core confirms readiness. It must not route to a provisioning, starting, validating, degraded, or failed backend. Any broad transfer must name and validate every affected player and destination.
 
-Integrations connect core to Velocity, monitoring, alerts, or notifications. They declare supported events/actions, permissions, mutating/read-only behavior, retry/idempotency semantics, timeout behavior, transmitted fields, and privacy implications.
+## Request and result shape
 
-A proxy integration may inspect backends, register/unregister them, route selected players only after core confirms readiness, drain a backend, and report player counts. It must never route to a provisioning, starting, validating, degraded, or failed backend. Broad "send all" operations require explicit core selection and validation of every affected player/destination.
+Requests carry an operation ID, correlation ID, logical server and environment where applicable, deadline, idempotency key when supported, trusted authorization context from the core, and secret references only.
 
-## Shared request/result conventions
+Results report status, observed state, opaque resource or provider-operation references, a structured error category, safe diagnostics, retryability, and recovery guidance.
 
-Requests include operation ID, correlation ID, logical server/environment, deadline, idempotency key when applicable, actor/authorization context from core, and secret references only.
-
-Results include status, observed state, opaque resource/provider operation references, structured error category, safe diagnostics, retryability, and recovery guidance.
-
-Normalize errors into the taxonomy in [CORE_DESIGN.md](CORE_DESIGN.md). Raw provider responses may be retained only after redaction and under explicit diagnostic policy.
+Normalize errors using the categories in [core design](CORE_DESIGN.md). Keep raw provider responses only after redaction and under an explicit diagnostic policy.
 
 ## Contract tests
 
-Every adapter must test:
-- Valid descriptor and capability declaration.
-- Explicit failure for unsupported capabilities.
-- Read-only inspection has no side effects.
-- Mutating calls correlate to operation IDs.
+Test each adapter for:
+
+- A valid descriptor and declared capabilities.
+- Explicit errors for unsupported capabilities.
+- Side-effect-free read-only inspection.
+- Operation IDs on mutating calls.
 - Timeout and transient-error classification.
 - Secret and sensitive-data redaction.
-- Environment/resource reference isolation.
-- Destructive calls require core-issued authorization context.
-- Idempotent retries do not duplicate resources where provider semantics allow.
-- Partial provider failures are reported accurately.
+- Environment and resource-reference isolation.
+- Core-issued authorization for destructive calls.
+- Safe idempotent retries where the provider supports them.
+- Accurate reporting of partial provider failures.
 
-Core tests use fake adapters. Real adapter tests run only against isolated test resources, never production.
+Use fake adapters for core tests. Test real adapters only against isolated resources, never production.
 
-## Initial adapter mapping
+## First adapter targets
 
-| Contract | Initial target | Possible later targets |
+| Contract | Reference target | Possible later target |
 |---|---|---|
-| Hosting | Vultr | OVH, other providers |
-| Storage | Wasabi (S3-compatible) | Other object stores |
-| Execution | systemd on Debian VM | Container runtime, Kubernetes, Agones |
-| Game | Minecraft Java / Paper | Terraria, Valheim, ARK |
+| Hosting | Vultr | OVH or another provider |
+| Storage | Wasabi through its S3-compatible API | Other object stores |
+| Execution | systemd on a Debian VM | Containers, Kubernetes, Agones |
+| Game | Minecraft Java with Paper | Terraria, Valheim, ARK |
 | Integration | Velocity | Other proxies, monitoring, notifications |
 
-This mapping is a starting point, not a claim of identical provider/game capabilities.
+This is the first design target. It does not promise that providers or games expose identical capabilities.
