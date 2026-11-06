@@ -1,6 +1,6 @@
 # Execution Adapter Contract
 
-**Status:** Draft, version 0.10.0-draft.
+**Status:** Draft, version 0.11.0-draft.
 
 ## 1. Purpose
 
@@ -52,6 +52,8 @@ A unit specification SHOULD include:
 Secrets MUST be resolved by an authorized controller/runner channel at point of use. They MUST NOT be embedded in process arguments, container images, user-data, or ordinary environment dumps/logs where avoidable.
 
 ## 5. Lifecycle semantics
+
+Systemd start and graceful-stop capabilities use operation-specific result schemas. A completed start confirms the unit is running but does not establish game readiness. Accepted and unknown outcomes carry an external operation reference; an unknown outcome requires inspection before retry.
 
 - Create defines the unit and does not imply it is running.
 - Start returns accepted/observed state separately; readiness is established by the game adapter and controller validation workflow.

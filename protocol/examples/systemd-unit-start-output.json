@@ -1,0 +1,17 @@
+{
+  "unit_ref": {
+    "adapter_id": "execution.systemd",
+    "environment_id": "staging",
+    "resource_kind": "systemd-unit",
+    "external_id": "paper-server"
+  },
+  "outcome": "accepted",
+  "state": "starting",
+  "observed_at": "2026-11-06T10:45:00Z",
+  "external_operation_ref": {
+    "adapter_id": "execution.systemd",
+    "environment_id": "staging",
+    "resource_kind": "operation",
+    "external_id": "systemd-start-011"
+  }
+}

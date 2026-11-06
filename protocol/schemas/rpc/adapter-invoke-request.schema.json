@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.10.0-draft:rpc:adapter-invoke-request",
+  "$id": "urn:gameserver-controller:0.11.0-draft:rpc:adapter-invoke-request",
   "title": "Adapter invoke JSON-RPC request",
   "type": "object",
   "additionalProperties": false,
@@ -16,7 +16,7 @@
       "properties": {
         "protocol_version": {"type": "string", "minLength": 1, "maxLength": 100},
         "capability": {"type": "string", "minLength": 1, "maxLength": 160},
-        "request_context": {"$ref": "urn:gameserver-controller:0.10.0-draft:common:request-context"},
+        "request_context": {"$ref": "urn:gameserver-controller:0.11.0-draft:common:request-context"},
         "input": {"type": "object"}
       }
     }

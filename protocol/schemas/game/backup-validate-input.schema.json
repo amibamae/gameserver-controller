@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.10.0-draft:game:backup-validate-input",
+  "$id": "urn:gameserver-controller:0.11.0-draft:game:backup-validate-input",
   "title": "Game backup validation input",
   "description": "Validate game-specific backup structure using bounded, operation-scoped streams for the exact manifest objects.",
   "type": "object",
@@ -24,7 +24,7 @@
       "maxLength": 200
     },
     "manifest": {
-      "$ref": "urn:gameserver-controller:0.10.0-draft:storage:backup-manifest"
+      "$ref": "urn:gameserver-controller:0.11.0-draft:storage:backup-manifest"
     },
     "object_streams": {
       "type": "array",
@@ -39,12 +39,12 @@
         ],
         "properties": {
           "object_ref": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:storage:storage-object-reference"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:storage:storage-object-reference"
           },
           "transfer_ref": {
             "allOf": [
               {
-                "$ref": "urn:gameserver-controller:0.10.0-draft:storage:storage-transfer-reference"
+                "$ref": "urn:gameserver-controller:0.11.0-draft:storage:storage-transfer-reference"
               },
               {
                 "properties": {

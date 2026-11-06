@@ -1,0 +1,33 @@
+{
+  "fixture_id": "execution.unit.start.target-mismatch",
+  "protocol_version": "0.11.0-draft",
+  "contract_area": "execution.unit.start",
+  "purpose": "A successful result for a different unit is not accepted.",
+  "input": {
+    "execution_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      }
+    },
+    "execution_output": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "another-unit"
+      },
+      "outcome": "completed",
+      "state": "running",
+      "observed_at": "2026-11-06T10:46:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "unit_bound": false,
+    "successful_start_claim_accepted": false
+  },
+  "side_effect_expected": "none"
+}

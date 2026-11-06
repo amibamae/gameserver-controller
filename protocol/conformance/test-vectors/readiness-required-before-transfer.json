@@ -1,6 +1,6 @@
 {
   "fixture_id": "readiness-required-before-transfer",
-  "protocol_version": "0.10.0-draft",
+  "protocol_version": "0.11.0-draft",
   "contract_area": "integration.velocity.players.transfer",
   "purpose": "An expired readiness assertion must prevent any proxy transfer side effect.",
   "input": {

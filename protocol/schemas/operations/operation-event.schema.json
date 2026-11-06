@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.10.0-draft:operations:operation-event",
+  "$id": "urn:gameserver-controller:0.11.0-draft:operations:operation-event",
   "title": "Operation event",
   "type": "object",
   "additionalProperties": false,

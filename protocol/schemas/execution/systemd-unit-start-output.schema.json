@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.11.0-draft:execution:systemd-unit-start-output",
+  "title": "Systemd execution unit start output",
+  "description": "A successful start confirms the unit is running, not that the game is ready. Accepted or unknown outcomes carry a reference for reconciliation.",
+  "allOf": [
+    {
+      "$ref": "urn:gameserver-controller:0.11.0-draft:execution:systemd-unit-lifecycle-result"
+    },
+    {
+      "properties": {
+        "state": {
+          "enum": [
+            "starting",
+            "running",
+            "failed",
+            "unknown"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "completed"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "const": "running"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "accepted"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "enum": [
+              "starting",
+              "running"
+            ]
+          }
+        },
+        "required": [
+          "external_operation_ref"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "outcome_unknown"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "external_operation_ref"
+        ]
+      }
+    }
+  ]
+}

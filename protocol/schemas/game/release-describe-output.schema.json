@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.10.0-draft:game:release-describe-output",
+  "$id": "urn:gameserver-controller:0.11.0-draft:game:release-describe-output",
   "title": "Game release description",
   "description": "Pinned game release metadata, artifact integrity digests, runtime requirements, configuration schema identity, data format, and execution capabilities.",
   "type": "object",
@@ -94,7 +94,7 @@
             "maxLength": 2048
           },
           "checksum": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:storage:storage-checksum"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:storage:storage-checksum"
           }
         }
       }
@@ -129,7 +129,7 @@
       "maxLength": 2048
     },
     "configuration_schema_checksum": {
-      "$ref": "urn:gameserver-controller:0.10.0-draft:storage:storage-checksum"
+      "$ref": "urn:gameserver-controller:0.11.0-draft:storage:storage-checksum"
     },
     "data_format": {
       "type": "object",

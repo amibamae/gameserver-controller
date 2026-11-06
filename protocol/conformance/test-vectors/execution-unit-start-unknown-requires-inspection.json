@@ -1,0 +1,42 @@
+{
+  "fixture_id": "execution.unit.start.unknown-requires-inspection",
+  "protocol_version": "0.11.0-draft",
+  "contract_area": "execution.unit.start",
+  "purpose": "An uncertain start outcome requires inspection before a retry.",
+  "input": {
+    "execution_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      }
+    },
+    "execution_output": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "outcome": "outcome_unknown",
+      "state": "unknown",
+      "observed_at": "2026-11-06T10:45:30Z",
+      "external_operation_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "operation",
+        "external_id": "systemd-start-unknown-011"
+      }
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "unit_bound": true,
+    "reconciliation_required": true,
+    "retry_without_inspection": false,
+    "external_operation_ref_present": true,
+    "operation_ref_environment_matches": true
+  },
+  "side_effect_expected": "none"
+}

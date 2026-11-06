@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.compatibility.check.incomplete",
-  "protocol_version": "0.10.0-draft",
+  "protocol_version": "0.11.0-draft",
   "contract_area": "game.compatibility.check",
   "purpose": "Missing a requested result makes the aggregate unknown even when returned checks pass.",
   "input": {
