@@ -17,6 +17,7 @@ SCHEMA_ROOT = ROOT / "protocol" / "schemas"
 INDEX_PATH = SCHEMA_ROOT / "index.json"
 
 EXAMPLE_SCHEMA_IDS = {
+    "adapter-descriptor.hosting.json": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor",
     "adapter-descriptor.systemd.json": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor",
     "adapter-descriptor.velocity.json": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor",
     "adapter-invoke-request.json": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-invoke-request",
