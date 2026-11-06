@@ -1,0 +1,250 @@
+openapi: 3.2.1
+info:
+  title: Game Server Controller Management API
+  version: 0.1.0-draft
+  description: |
+    Draft, language-independent HTTP/JSON management API. Mutating lifecycle
+    requests are asynchronous and return a durable operation resource only
+    after the operation has been persisted.
+  license:
+    name: AGPL-3.0-only
+servers:
+  - url: https://controller.example.invalid/v1
+    description: Placeholder; replace with the controller deployment URL.
+security:
+  - bearerAuth: []
+paths:
+  /capabilities:
+    get:
+      operationId: listCapabilities
+      summary: List controller and adapter capabilities
+      responses:
+        "200":
+          description: Capabilities visible to the authenticated actor.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [protocol_versions, capabilities]
+                properties:
+                  protocol_versions:
+                    type: array
+                    items: { type: string }
+                  capabilities:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /servers:
+    get:
+      operationId: listServers
+      summary: List logical servers visible to the authenticated actor
+      parameters:
+        - in: query
+          name: environment_id
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+      responses:
+        "200":
+          description: Page of authorized logical servers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Server" }
+                  next_cursor: { type: string }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /servers/{server_id}:
+    parameters:
+      - $ref: "#/components/parameters/ServerId"
+    get:
+      operationId: getServer
+      summary: Inspect one logical server
+      responses:
+        "200":
+          description: Server record.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Server" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /servers/{server_id}/operations:
+    parameters:
+      - $ref: "#/components/parameters/ServerId"
+    post:
+      operationId: createServerOperation
+      summary: Request an asynchronous server operation
+      description: |
+        A 202 response means the operation record is durably committed. It does
+        not mean that provisioning, startup, backup, restore, or destruction
+        has completed. The Idempotency-Key is bound to the authenticated actor,
+        operation type, target, environment, and validated request parameters.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OperationRequest" }
+      responses:
+        "202":
+          description: Operation accepted and durably recorded.
+          headers:
+            Location:
+              description: URL of the operation resource.
+              schema: { type: string, format: uri-reference }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Operation" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Problem"
+  /operations/{operation_id}:
+    parameters:
+      - name: operation_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 200 }
+    get:
+      operationId: getOperation
+      summary: Retrieve durable operation status and result
+      responses:
+        "200":
+          description: Operation resource.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Operation" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: cancelOperation
+      summary: Request cancellation where operation semantics permit it
+      description: Cancellation is a request, not a rollback. The operation may enter cancellation_requested or reconciliation.
+      responses:
+        "202":
+          description: Cancellation request durably recorded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Operation" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Deployment-specific token validation; never place token values in request bodies or logs.
+  parameters:
+    ServerId:
+      name: server_id
+      in: path
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 200 }
+  responses:
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Forbidden:
+      description: Actor is authenticated but not authorized.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    NotFound:
+      description: Resource does not exist or is not visible to this actor.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Conflict:
+      description: State, lock, or idempotency conflict.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    Problem:
+      description: Request rejected before operation acceptance.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+  schemas:
+    OperationRequest:
+      type: object
+      additionalProperties: false
+      required: [operation_type, parameters]
+      properties:
+        operation_type:
+          type: string
+          enum: [server.provision, server.start, server.stop, server.backup, server.restore, server.replace, server.destroy]
+        parameters:
+          type: object
+          description: Operation-specific parameter object defined by the operation contract.
+          additionalProperties: true
+        deadline:
+          type: string
+          format: date-time
+    Operation:
+      type: object
+      additionalProperties: true
+      required: [operation_id, operation_type, status, created_at, updated_at]
+      properties:
+        operation_id: { type: string }
+        operation_type: { type: string }
+        status:
+          type: string
+          enum: [pending, running, waiting, cancellation_requested, reconciling, needs_operator, succeeded, failed, cancelled]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        current_step_id: { type: string }
+        result: { type: object }
+        error: { type: object }
+    Server:
+      type: object
+      additionalProperties: true
+      required: [server_id, environment_id, lifecycle_state]
+      properties:
+        server_id: { type: string }
+        environment_id: { type: string }
+        lifecycle_state:
+          type: string
+          enum: [unprovisioned, provisioning, preparing, restoring, starting, validating, ready, degraded, draining, stopping, backing_up, stopped, destroying, destroyed, failed]
+        instance_ref: { type: object }
+        runtime_observation: { type: object }
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details with protocol-specific extensions.
+      required: [type, title, status]
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference }
+        protocol_error:
+          type: object
+          description: Structured protocol error; see ../rpc/errors.md.
