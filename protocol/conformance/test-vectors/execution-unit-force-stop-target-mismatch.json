@@ -1,6 +1,6 @@
 {
   "fixture_id": "execution.unit.force-stop.target-mismatch",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "execution.unit.force_stop",
   "purpose": "A stopped result for another unit cannot complete the request.",
   "input": {

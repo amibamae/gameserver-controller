@@ -1,0 +1,41 @@
+{
+  "fixture_id": "hosting.instance.destroy.completed-destroyed",
+  "protocol_version": "0.18.0-draft",
+  "contract_area": "hosting.instance.destroy",
+  "purpose": "A completed response confirms the exact instance is destroyed.",
+  "input": {
+    "destroy_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    },
+    "destroy_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      },
+      "outcome": "completed",
+      "state": "destroyed",
+      "observed_at": "2026-11-06T11:55:00Z"
+    }
+  },
+  "core_preconditions": {
+    "authorization_valid": true,
+    "backup_verified": true,
+    "backup_generation_matches": true,
+    "instance_stopped": true
+  },
+  "expected": {
+    "schemas_valid": true,
+    "destroy_dispatch_allowed": true,
+    "provider_destroy_calls": 1,
+    "target_bound": true,
+    "destruction_confirmed": true,
+    "unknown_requires_inspection": false
+  }
+}

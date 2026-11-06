@@ -1,0 +1,30 @@
+{
+  "fixture_id": "hosting.instance.destroy.stopped-required",
+  "protocol_version": "0.18.0-draft",
+  "contract_area": "hosting.instance.destroy",
+  "purpose": "A running instance is not destroyed until the core confirms it is stopped.",
+  "input": {
+    "destroy_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    }
+  },
+  "core_preconditions": {
+    "authorization_valid": true,
+    "backup_verified": true,
+    "backup_generation_matches": true,
+    "instance_stopped": false
+  },
+  "expected": {
+    "schemas_valid": true,
+    "destroy_dispatch_allowed": false,
+    "provider_destroy_calls": 0,
+    "target_bound": false,
+    "destruction_confirmed": false,
+    "unknown_requires_inspection": false
+  }
+}

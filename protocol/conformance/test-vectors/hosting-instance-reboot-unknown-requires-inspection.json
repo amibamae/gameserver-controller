@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.reboot.unknown-requires-inspection",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "hosting.instance.reboot",
   "purpose": "An unknown reboot result requires exact-instance inspection before retry.",
   "input": {

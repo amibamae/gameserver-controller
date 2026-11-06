@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.readiness.unknown-required-check-blocks-ready",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "game.readiness.check",
   "purpose": "An unknown required game check does not authorize a ready lifecycle transition.",
   "input": {

@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.validate-installation.unknown-blocks-start",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "game.validate_installation",
   "purpose": "Unknown installation validation does not permit starting the game process.",
   "input": {

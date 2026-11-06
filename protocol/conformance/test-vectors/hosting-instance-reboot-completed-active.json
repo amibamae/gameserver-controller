@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.reboot.completed-active",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "hosting.instance.reboot",
   "purpose": "A completed reboot confirms the exact provider instance is active.",
   "input": {

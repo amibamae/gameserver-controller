@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.17.0-draft:execution:systemd-unit-graceful-stop-output",
+  "$id": "urn:gameserver-controller:0.18.0-draft:execution:systemd-unit-graceful-stop-output",
   "title": "Systemd execution unit graceful stop output",
   "description": "A successful graceful stop confirms that the exact unit is stopped. Accepted or unknown outcomes carry a reference for reconciliation.",
   "allOf": [
     {
-      "$ref": "urn:gameserver-controller:0.17.0-draft:execution:systemd-unit-lifecycle-result"
+      "$ref": "urn:gameserver-controller:0.18.0-draft:execution:systemd-unit-lifecycle-result"
     },
     {
       "properties": {

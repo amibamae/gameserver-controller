@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.17.0-draft:hosting:instance-reboot-output",
+  "$id": "urn:gameserver-controller:0.18.0-draft:hosting:instance-reboot-output",
   "title": "Hosting instance reboot output",
   "description": "A completed reboot confirms the exact provider instance is active; this does not establish game readiness.",
   "type": "object",
@@ -13,7 +13,7 @@
   ],
   "properties": {
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.17.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.18.0-draft:common:external-resource-ref"
     },
     "outcome": {
       "enum": [
@@ -34,7 +34,7 @@
       "format": "date-time"
     },
     "provider_operation_ref": {
-      "$ref": "urn:gameserver-controller:0.17.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.18.0-draft:common:external-resource-ref"
     },
     "safe_diagnostics": {
       "type": "array",

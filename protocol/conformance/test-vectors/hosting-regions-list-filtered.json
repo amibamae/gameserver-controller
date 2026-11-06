@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.regions.list.filtered",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "hosting.regions.list",
   "purpose": "A region listing returns only the exact opaque provider ID requested and performs no mutation.",
   "input": {
