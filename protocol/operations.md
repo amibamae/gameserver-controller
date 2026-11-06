@@ -1,6 +1,6 @@
 # Durable Operation Protocol
 
-**Status:** Draft. This document defines proposed language-independent operation semantics. It is not an implemented API, finalized message schema, or transport binding.
+**Status:** Draft, version 0.1.0-draft. This document defines language-independent operation semantics. JSON schemas and RPC/management bindings are published separately.
 
 The operation protocol is shared by the controller core, adapters, command-line tools, and future management clients. Implementations in different languages MUST preserve the behavior defined here.
 
@@ -318,7 +318,7 @@ A step marked `succeeded` MUST have its postcondition evidence persisted. An `ou
 
 
 
-## 16. Illustrative example: uncertain destroy result
+## 17. Illustrative example: uncertain destroy result
 
 A destroy operation is accepted and durably recorded. The controller records the intent to request provider destruction and dispatches the adapter call. The connection then drops before a response arrives.
 
@@ -332,7 +332,7 @@ The controller:
 
 This is the required pattern for any mutating external call whose result may be unknown, not only VM destruction.
 
-## 17. Open decisions
+## 18. Open decisions
 
 The following remain intentionally unresolved:
 - Complete operation type registry and the full input/output schema for each operation.
