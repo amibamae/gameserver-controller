@@ -1,6 +1,6 @@
 # Management API Authentication
 
-**Status:** Draft, protocol version 0.8.0-draft.
+**Status:** Draft, protocol version 0.9.0-draft.
 
 ## 1. Purpose
 

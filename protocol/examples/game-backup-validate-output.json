@@ -1,0 +1,21 @@
+{
+  "backup_id": "backup-009",
+  "environment_id": "staging",
+  "data_generation_id": "generation-009",
+  "validation_result": "valid",
+  "observed_at": "2026-11-06T08:32:00Z",
+  "check_results": [
+    {
+      "check_id": "manifest_structure",
+      "check_version": "1",
+      "result": "pass",
+      "observed_at": "2026-11-06T08:31:00Z"
+    },
+    {
+      "check_id": "world_loadable",
+      "check_version": "1",
+      "result": "pass",
+      "observed_at": "2026-11-06T08:31:30Z"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "fixture_id": "operations.idempotency.same-key-different-request",
-  "protocol_version": "0.8.0-draft",
+  "protocol_version": "0.9.0-draft",
   "contract": "operation.accept",
   "first_request": {
     "actor_id": "operator-test",

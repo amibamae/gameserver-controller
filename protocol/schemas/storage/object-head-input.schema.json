@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.8.0-draft:storage:object-head-input",
+  "$id": "urn:gameserver-controller:0.9.0-draft:storage:object-head-input",
   "title": "Storage object head input",
   "type": "object",
   "additionalProperties": false,
@@ -9,7 +9,7 @@
   ],
   "properties": {
     "object_ref": {
-      "$ref": "urn:gameserver-controller:0.8.0-draft:storage:storage-object-reference"
+      "$ref": "urn:gameserver-controller:0.9.0-draft:storage:storage-object-reference"
     }
   }
 }

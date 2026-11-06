@@ -1,0 +1,31 @@
+{
+  "server_id": "minecraft-test",
+  "environment_id": "staging",
+  "instance_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "staging",
+    "resource_kind": "instance",
+    "external_id": "instance-paper-001"
+  },
+  "game_release_id": "paper-1.21.4-r1",
+  "health": "unknown",
+  "diagnostics_redacted": true,
+  "observed_at": "2026-11-06T08:33:00Z",
+  "safe_diagnostics": [
+    "world access could not be confirmed."
+  ],
+  "check_results": [
+    {
+      "check_id": "tick_health",
+      "check_version": "1",
+      "result": "pass",
+      "observed_at": "2026-11-06T08:32:30Z"
+    },
+    {
+      "check_id": "world_access",
+      "check_version": "1",
+      "result": "unknown",
+      "observed_at": "2026-11-06T08:32:40Z"
+    }
+  ]
+}

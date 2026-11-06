@@ -1,6 +1,6 @@
 # Hosting Adapter Contract
 
-**Status:** Draft, version 0.8.0-draft.
+**Status:** Draft, version 0.9.0-draft.
 
 ## 1. Responsibility
 

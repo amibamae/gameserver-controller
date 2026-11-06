@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.8.0-draft:lifecycle:server",
+  "$id": "urn:gameserver-controller:0.9.0-draft:lifecycle:server",
   "title": "Logical server record",
   "type": "object",
   "additionalProperties": false,
@@ -15,7 +15,7 @@
     "desired_state": {"enum": ["running", "stopped", "destroyed"]},
     "data_generation_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 200},
     "data_generation_status": {"enum": ["known", "unknown"]},
-    "instance_ref": {"$ref": "urn:gameserver-controller:0.8.0-draft:common:external-resource-ref"},
+    "instance_ref": {"$ref": "urn:gameserver-controller:0.9.0-draft:common:external-resource-ref"},
     "instance_observation": {
       "type": "object",
       "additionalProperties": false,

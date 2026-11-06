@@ -1,6 +1,6 @@
 {
   "fixture_id": "lifecycle.reject.unlisted-transition",
-  "protocol_version": "0.8.0-draft",
+  "protocol_version": "0.9.0-draft",
   "contract": "lifecycle.transition",
   "initial_state": "unprovisioned",
   "requested_transition": {"to": "ready", "operation_type": "server.provision"},

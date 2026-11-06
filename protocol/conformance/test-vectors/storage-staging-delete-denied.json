@@ -1,6 +1,6 @@
 {
   "fixture_id": "storage.staging.cannot-delete-production-object",
-  "protocol_version": "0.8.0-draft",
+  "protocol_version": "0.9.0-draft",
   "contract_area": "storage.object.delete",
   "purpose": "A staging principal cannot delete a production backup object even when it can delete staging objects.",
   "actor_environment": "staging",
