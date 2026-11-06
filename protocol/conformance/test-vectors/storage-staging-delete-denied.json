@@ -1,0 +1,27 @@
+{
+  "fixture_id": "storage.staging.cannot-delete-production-object",
+  "protocol_version": "0.3.0-draft",
+  "contract_area": "storage.object.delete",
+  "purpose": "A staging principal cannot delete a production backup object even when it can delete staging objects.",
+  "actor_environment": "staging",
+  "target_environment": "production",
+  "credential_scope": [
+    "storage.backup.read:production-selected",
+    "storage.backup.delete:staging"
+  ],
+  "object_ref": {
+    "adapter_id": "storage.s3-compatible",
+    "storage_profile_id": "profile-prod",
+    "environment_id": "production",
+    "container": "prod-backups",
+    "key": "server/backup/world.tar.zst",
+    "version_id": "version-004"
+  },
+  "expected": {
+    "accepted": false,
+    "error_category": "authorization",
+    "side_effect_permitted": false,
+    "adapter_delete_calls": 0
+  },
+  "side_effect_expectation": "none"
+}

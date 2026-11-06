@@ -37,9 +37,11 @@
 - [ ] Validate the selected standards, validators, generators, and transport binding across target languages.
 - [x] Publish an initial set of language-neutral schemas, examples, test vectors, and conformance requirements.
 - [x] Publish a canonical durable-operation result schema, typed provision/backup/restore/destroy results, and Velocity player-transfer request/result schemas.
-- [x] Add CI validation and an executable behavioral conformance runner for the initial ten fixtures.
+- [x] Add CI validation and a behavioral conformance runner; extend the suite as protocol fixtures are added.
 - [x] Publish registered input/output schemas for the hosting instance-create capability.
-- [ ] Expand capability-specific input/output schemas across storage, execution, game, and integration operations; complete hosting coverage and typed operation results.
+- [x] Publish input/output schemas and conformance examples for the initial storage object capabilities.
+- [ ] Specify a bounded data-transfer binding for process adapters; `jsonrpc-stdio-v1` does not yet support storage put/get.
+- [ ] Expand capability-specific input/output schemas across execution, game, and integration operations; complete hosting coverage and typed operation results.
 - [x] Publish initial draft compatibility rules for negotiation, schema identity, evolution, and in-flight operations.
 - [ ] Review the complete protocol and freeze compatibility rules.
 - [ ] Build independent implementations in at least two programming languages and pass the same conformance suite.
@@ -49,8 +51,8 @@
 
 ## Phase 2 — Implementation technology selection and reference test harness
 
-- Evaluate programming languages against the completed protocol, maintainability, reliability, development speed, contributor accessibility, and available libraries.
-- Select an implementation language only after protocol review; keep language choice separate from protocol authority.
+- [x] Select Go for the controller core and repository-owned protocol tooling while keeping the wire contract language-neutral.
+- Finalize the minimum supported Go version, dependency policy, packaging model, and supported Debian versions before the first controller release.
 - Select the initial state persistence and configuration-validation approach.
 - Extend the language-neutral behavioral suite and test harness as additional protocol contracts are specified.
 - Implement fake hosting, storage, execution, game, and integration adapters.
@@ -132,6 +134,6 @@ The first end-to-end target is Vultr + Wasabi + Paper + Velocity on Debian. Exis
 
 ## Current status and next work
 
-The project is in **Phase 1 — Language-independent protocol design**. The protocol principles, common types, and first durable operation protocol draft are published. The protocol remains 0.2.0-draft. Initial JSON, JSON Schema, JSON-RPC, OpenAPI, timestamp, and canonicalization choices, lifecycle model, five adapter contracts, security draft, management API, schemas, examples, and test vectors are published. They have not all been independently validated or reviewed, and no controller or production adapter implementation has been built.
+The project is in **Phase 1 — Language-independent protocol design**. The protocol principles, common types, and first durable operation protocol draft are published. The protocol remains 0.3.0-draft. Initial JSON, JSON Schema, JSON-RPC, OpenAPI, timestamp, and canonicalization choices, lifecycle model, five adapter contracts, security draft, management API, schemas, examples, and test vectors are published. They have not all been independently validated or reviewed, and no controller or production adapter implementation has been built.
 
-Initial lifecycle, five adapter, RPC, management API, security, schema, example, and conformance drafts have been published. CI validates the schema package and executes the initial ten conformance fixtures. The hosting instance-create capability now has registered input and output schemas, and typed result schemas cover provision, backup, restore, and destroy. Other operation results and storage/game capability schemas remain work in progress. The next work is to expand those contracts, add edge-case vectors, and build independent cross-language interoperability tests.
+Initial lifecycle, five adapter, RPC, management API, security, schema, example, and conformance drafts have been published. CI validates the schema package and executes all fourteen current conformance fixtures. The hosting instance-create capability now has registered input and output schemas, and typed result schemas cover provision, backup, restore, and destroy. Other operation results and game capability schemas remain work in progress. The storage capability schemas are published, while process-based bulk transfer still needs a binding. Next, expand game and remaining operation result contracts, add edge-case vectors, and build independent cross-language interoperability tests.

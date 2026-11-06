@@ -1,6 +1,6 @@
 # Adapter Transport Binding
 
-**Status:** Draft, version 0.2.0-draft.
+**Status:** Draft, version 0.3.0-draft.
 
 ## 1. Separation of semantics and transport
 
@@ -34,7 +34,7 @@ On stdin EOF, the adapter MUST stop accepting new requests, finish or safely aba
 - JSON-RPC batch arrays and notifications are not supported by this binding.
 - Request IDs MUST be strings. Numeric IDs are not accepted in this profile to avoid cross-language number precision ambiguity.
 - A line MUST NOT exceed 4 MiB unless a future negotiated profile explicitly raises the limit.
-- Large backup data MUST NOT be embedded in RPC messages. Use bounded streams, file descriptors, or storage object references through a separately specified transfer mechanism.
+- Large backup data MUST NOT be embedded in RPC messages. Storage transfer references are defined by the storage contract, but this profile does not define how they map to a byte stream. A separately versioned transfer binding is required before a process adapter may advertise `storage.object.put` or `storage.object.get`.
 - The receiver MUST reject invalid UTF-8, duplicate JSON object member names, malformed JSON, and messages exceeding the limit.
 - Implementations MUST handle partial reads and writes; operating-system pipe read boundaries are not message boundaries.
 

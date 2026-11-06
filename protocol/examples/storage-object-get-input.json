@@ -1,0 +1,21 @@
+{
+  "object_ref": {
+    "adapter_id": "storage.s3-compatible",
+    "storage_profile_id": "profile-test",
+    "environment_id": "test",
+    "container": "test-backups",
+    "key": "test/minecraft-test/backup-test-001/world.tar.zst",
+    "version_id": "object-version-001"
+  },
+  "destination_transfer": {
+    "transfer_id": "transfer-download-001",
+    "direction": "adapter_to_controller",
+    "maximum_bytes": 2048,
+    "expires_at": "2026-11-06T13:00:00Z"
+  },
+  "expected_size_bytes": 1024,
+  "expected_checksum": {
+    "algorithm": "sha256",
+    "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

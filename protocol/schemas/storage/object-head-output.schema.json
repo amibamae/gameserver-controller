@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-head-output",
+  "title": "Storage object head output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_ref",
+    "object_state",
+    "observed_at"
+  ],
+  "properties": {
+    "object_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-reference"
+    },
+    "object_state": {
+      "enum": [
+        "present",
+        "absent",
+        "unknown"
+      ]
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "provider_etag": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "last_modified": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provider_checksum": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-checksum"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "object_state": {
+            "const": "present"
+          }
+        },
+        "required": [
+          "object_state"
+        ]
+      },
+      "then": {
+        "required": [
+          "size_bytes"
+        ]
+      }
+    }
+  ]
+}

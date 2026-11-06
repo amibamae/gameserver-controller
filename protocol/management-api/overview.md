@@ -1,6 +1,6 @@
 # Management API Overview
 
-**Status:** Draft, version 0.2.0-draft.
+**Status:** Draft, version 0.3.0-draft.
 
 ## 1. Purpose
 

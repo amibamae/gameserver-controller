@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.2.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.3.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -77,6 +77,13 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Transfer messages and logs do not require or expose player UUIDs, account names, IP addresses, or chat.
 
 ### Storage and security
+- Every advertised storage capability validates against its registered input and output schemas.
+- Put/get transfers use one-use, operation-scoped, direction-bound handles with an enforced byte limit and expiry.
+- A completed object upload is not evidence that a backup is verified.
+- Manifest object references match the manifest environment and authorized storage profile.
+- Exact object/version identity is preserved for head, get, copy, delete, and checksum verification.
+- ETag is not treated as a content checksum.
+- A partial or missing object, length mismatch, or checksum mismatch blocks backup verification, restore, and destruction as applicable.
 - A checksum-valid backup from an older data generation does not authorize destruction of the current instance.
 - A forced stop request without an approval reference is rejected by schema/policy.
 - Incomplete upload cannot be marked verified.
@@ -118,6 +125,10 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [operation-event-sequence.json](test-vectors/operation-event-sequence.json)
 - [readiness-required-before-transfer.json](test-vectors/readiness-required-before-transfer.json)
 - [velocity-transfer-partial-results.json](test-vectors/velocity-transfer-partial-results.json)
+- [storage-partial-upload-not-verified.json](test-vectors/storage-partial-upload-not-verified.json)
+- [storage-checksum-mismatch-blocks-restore.json](test-vectors/storage-checksum-mismatch-blocks-restore.json)
+- [storage-etag-is-not-checksum.json](test-vectors/storage-etag-is-not-checksum.json)
+- [storage-staging-delete-denied.json](test-vectors/storage-staging-delete-denied.json)
 
 ## 7. Certification status
 

@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.2.0-draft:operations:destroy-parameters",
+  "$id": "urn:gameserver-controller:0.3.0-draft:operations:destroy-parameters",
   "title": "Server destroy parameters",
   "type": "object",
   "additionalProperties": false,
   "required": ["expected_instance_ref", "backup_profile"],
   "properties": {
-    "expected_instance_ref": {"$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"},
+    "expected_instance_ref": {"$ref": "urn:gameserver-controller:0.3.0-draft:common:external-resource-ref"},
     "backup_profile": {"type": "string", "minLength": 1, "maxLength": 200},
     "verified_backup_id": {"type": "string", "minLength": 1, "maxLength": 200},
     "approval_id": {"type": "string", "minLength": 1, "maxLength": 200},

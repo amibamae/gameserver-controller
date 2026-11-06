@@ -24,10 +24,17 @@
   },
   "objects": [
     {
-      "key": "test/minecraft-test/backup-test-001/world.tar.zst",
       "size_bytes": 1024,
       "checksum_algorithm": "sha256",
-      "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "object_ref": {
+        "adapter_id": "storage.s3-compatible",
+        "storage_profile_id": "profile-test",
+        "environment_id": "test",
+        "container": "test-backups",
+        "key": "test/minecraft-test/backup-test-001/world.tar.zst",
+        "version_id": "object-version-001"
+      }
     }
   ]
 }

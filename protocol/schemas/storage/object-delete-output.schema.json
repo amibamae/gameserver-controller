@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-delete-output",
+  "title": "Storage object delete output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object_ref",
+    "state",
+    "observed_at"
+  ],
+  "properties": {
+    "object_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-reference"
+    },
+    "state": {
+      "enum": [
+        "absent",
+        "present",
+        "unknown"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

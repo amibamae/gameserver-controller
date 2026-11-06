@@ -1,6 +1,6 @@
 # Common Protocol Types
 
-**Status:** Draft, version 0.2.0-draft. These definitions establish shared meanings and constraints for the JSON-based protocol profile.
+**Status:** Draft, version 0.3.0-draft. These definitions establish shared meanings and constraints for the JSON-based protocol profile.
 
 This document is the common vocabulary used by adapter contracts, lifecycle operations, and the future management API. Language-specific implementations MUST preserve these meanings.
 
@@ -99,7 +99,7 @@ The draft uses a SemVer-shaped compatibility model:
 - Minor: backward-compatible additions.
 - Patch: clarifications or corrections that do not change interoperability.
 
-The 0.2.0-draft protocol version is a SemVer 2.0.0 identifier with the `-draft` prerelease label. Implementations advertise supported exact protocol versions and negotiate one exact mutually supported version during initialization. For the 0.x draft series, no implicit compatibility across versions is assumed. A stable 1.x compatibility rule will be finalized before 1.0. Stable 1.0 compatibility rules require review.
+The 0.3.0-draft protocol version is a SemVer 2.0.0 identifier with the `-draft` prerelease label. Implementations advertise supported exact protocol versions and negotiate one exact mutually supported version during initialization. For the 0.x draft series, no implicit compatibility across versions is assumed. A stable 1.x compatibility rule will be finalized before 1.0. Stable 1.0 compatibility rules require review.
 
 ### 4.2 Schema version
 

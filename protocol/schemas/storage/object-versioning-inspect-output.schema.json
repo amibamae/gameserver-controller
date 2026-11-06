@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-versioning-inspect-output",
+  "title": "Storage object versioning inspection output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "container_ref",
+    "state",
+    "observed_at"
+  ],
+  "properties": {
+    "container_ref": {
+      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-container-reference"
+    },
+    "state": {
+      "enum": [
+        "enabled",
+        "suspended",
+        "disabled",
+        "unsupported",
+        "unknown"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
