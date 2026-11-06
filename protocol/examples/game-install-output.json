@@ -1,0 +1,26 @@
+{
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-test-001"
+    }
+  },
+  "release_id": "paper-1.21.11-build-3",
+  "outcome": "installed",
+  "artifact_verification": "verified",
+  "installation_started": true,
+  "verified_artifact_ids": [
+    "paper-server-jar"
+  ],
+  "installation_ref": {
+    "adapter_id": "execution.systemd",
+    "environment_id": "staging",
+    "resource_kind": "installation",
+    "external_id": "paper-install-001"
+  },
+  "observed_at": "2026-11-06T09:15:00Z"
+}

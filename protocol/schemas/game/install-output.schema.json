@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.5.0-draft:game:install-output",
+  "title": "Game install output",
+  "description": "Confirmed installation outcome and artifact verification state for the requested release.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "release_id",
+    "outcome",
+    "artifact_verification",
+    "installation_started",
+    "verified_artifact_ids",
+    "observed_at"
+  ],
+  "properties": {
+    "target": {
+      "$ref": "urn:gameserver-controller:0.5.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "outcome": {
+      "enum": [
+        "installed",
+        "already_installed",
+        "rejected",
+        "outcome_unknown"
+      ]
+    },
+    "artifact_verification": {
+      "enum": [
+        "verified",
+        "mismatch",
+        "unavailable",
+        "unknown"
+      ]
+    },
+    "installation_started": {
+      "type": "boolean"
+    },
+    "verified_artifact_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160
+      }
+    },
+    "installation_ref": {
+      "$ref": "urn:gameserver-controller:0.5.0-draft:common:external-resource-ref"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9._-]*$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "installed"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "artifact_verification": {
+            "const": "verified"
+          },
+          "installation_started": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "already_installed"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "artifact_verification": {
+            "const": "verified"
+          },
+          "installation_started": {
+            "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "artifact_verification": {
+            "const": "mismatch"
+          }
+        },
+        "required": [
+          "artifact_verification"
+        ]
+      },
+      "then": {
+        "properties": {
+          "outcome": {
+            "const": "rejected"
+          },
+          "installation_started": {
+            "const": false
+          }
+        }
+      }
+    }
+  ]
+}

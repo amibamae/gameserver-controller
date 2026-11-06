@@ -1,0 +1,42 @@
+{
+  "game_adapter_id": "game.minecraft-paper",
+  "game_name": "Minecraft Java Edition",
+  "release_id": "paper-1.21.11-build-3",
+  "game_version": "1.21.11+build.3",
+  "targets": [
+    {
+      "os_family": "linux",
+      "architecture": "x86_64"
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "paper-server-jar",
+      "artifact_uri": "https://artifacts.example.test/paper-1.21.11-build-3.jar",
+      "checksum": {
+        "algorithm": "sha256",
+        "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "runtime_requirements": [
+    {
+      "runtime_id": "java",
+      "version_requirement": "21"
+    }
+  ],
+  "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+  "configuration_schema_checksum": {
+    "algorithm": "sha256",
+    "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "data_format": {
+    "format_id": "minecraft-java-world",
+    "version": "region-v1"
+  },
+  "required_execution_capabilities": [
+    "execution.unit.inspect",
+    "execution.unit.start",
+    "execution.unit.graceful_stop"
+  ]
+}

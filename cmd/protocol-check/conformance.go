@@ -105,12 +105,114 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			category = "authorization"
 		}
 		return map[string]any{"accepted": allowed, "side_effect_permitted": allowed, "error_category": category}, nil
+	case "game.release.install.configure.fail-closed":
+		releaseInput := asObject(input["release_describe_input"])
+		releaseOutput := asObject(input["release_describe_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:release-describe-input", releaseInput); err != nil {
+			return nil, fmt.Errorf("release input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:release-describe-output", releaseOutput); err != nil {
+			return nil, fmt.Errorf("release output does not match schema: %w", err)
+		}
+		releaseBound := stringValue(releaseInput, "release_id") == stringValue(releaseOutput, "release_id")
+		if !releaseBound {
+			return nil, fmt.Errorf("release output must describe the exact requested release")
+		}
+		artifacts := arrayValue(releaseOutput, "artifacts")
+		artifactIDs := make([]any, 0, len(artifacts))
+		checksummed := true
+		for _, rawArtifact := range artifacts {
+			artifact := asObject(rawArtifact)
+			artifactIDs = append(artifactIDs, artifact["artifact_id"])
+			checksum := asObject(artifact["checksum"])
+			if stringValue(checksum, "algorithm") != "sha256" || stringValue(checksum, "digest") == "" {
+				checksummed = false
+			}
+		}
+		if !uniqueStrings(artifactIDs) {
+			return nil, fmt.Errorf("release artifact IDs must be unique")
+		}
+		installInput := asObject(input["install_input"])
+		installOutput := asObject(input["install_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:install-input", installInput); err != nil {
+			return nil, fmt.Errorf("install input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:install-output", installOutput); err != nil {
+			return nil, fmt.Errorf("install output does not match schema: %w", err)
+		}
+		installBound := reflect.DeepEqual(installInput["target"], installOutput["target"]) &&
+			stringValue(installInput, "release_id") == stringValue(installOutput, "release_id")
+		if !installBound || stringValue(installInput, "release_id") != stringValue(releaseOutput, "release_id") {
+			return nil, fmt.Errorf("install messages must remain bound to the described release and exact target")
+		}
+		installationBlocked := stringValue(installOutput, "artifact_verification") == "mismatch" &&
+			stringValue(installOutput, "outcome") == "rejected" && !boolValue(installOutput, "installation_started")
+		configureInput := asObject(input["configure_input"])
+		configureOutput := asObject(input["configure_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:configure-input", configureInput); err != nil {
+			return nil, fmt.Errorf("configure input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:configure-output", configureOutput); err != nil {
+			return nil, fmt.Errorf("configure output does not match schema: %w", err)
+		}
+		configureBound := reflect.DeepEqual(configureInput["target"], configureOutput["target"]) &&
+			stringValue(configureInput, "release_id") == stringValue(configureOutput, "release_id")
+		if !configureBound || stringValue(configureInput, "release_id") != stringValue(releaseOutput, "release_id") ||
+			configureInput["configuration_schema_uri"] != releaseOutput["configuration_schema_uri"] ||
+			!reflect.DeepEqual(configureInput["configuration_schema_checksum"], releaseOutput["configuration_schema_checksum"]) {
+			return nil, fmt.Errorf("configuration must remain bound to the described release schema and target")
+		}
+		invalidNotApplied := stringValue(configureOutput, "validation_result") == "invalid" &&
+			stringValue(configureOutput, "outcome") == "rejected" && !boolValue(configureOutput, "application_started")
+		return map[string]any{
+			"release_schema_valid": true, "release_bound": releaseBound, "release_artifacts_checksummed": checksummed,
+			"install_schema_valid": true, "installation_blocked_before_start": installationBlocked,
+			"configure_schema_valid": true, "invalid_configuration_not_applied": invalidNotApplied,
+		}, nil
+	case "game.install.repeat-same-release-is-idempotent":
+		installInput := asObject(input["install_request"])
+		installOutput := asObject(input["install_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:install-input", installInput); err != nil {
+			return nil, fmt.Errorf("install input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:install-output", installOutput); err != nil {
+			return nil, fmt.Errorf("install output does not match schema: %w", err)
+		}
+		bound := reflect.DeepEqual(installInput["target"], installOutput["target"]) &&
+			stringValue(installInput, "release_id") == stringValue(installOutput, "release_id") &&
+			stringValue(installInput, "release_id") == stringValue(input, "release_id")
+		requiredArtifacts := arrayValue(input, "required_artifact_ids")
+		verifiedArtifacts := arrayValue(installOutput, "verified_artifact_ids")
+		complete := uniqueStrings(requiredArtifacts) && uniqueStrings(verifiedArtifacts) && sameStringSet(requiredArtifacts, verifiedArtifacts)
+		noDuplicateInstall := stringValue(installOutput, "outcome") == "already_installed" &&
+			stringValue(installOutput, "artifact_verification") == "verified" && !boolValue(installOutput, "installation_started")
+		return map[string]any{
+			"schema_valid": true, "target_bound": bound, "artifact_set_complete": complete,
+			"duplicate_install_started": !noDuplicateInstall,
+		}, nil
+	case "game.validate-installation.unknown-blocks-start":
+		validateInput := asObject(input["validate_request"])
+		validateOutput := asObject(input["validate_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:validate-installation-input", validateInput); err != nil {
+			return nil, fmt.Errorf("validation input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:validate-installation-output", validateOutput); err != nil {
+			return nil, fmt.Errorf("validation output does not match schema: %w", err)
+		}
+		bound := reflect.DeepEqual(validateInput["target"], validateOutput["target"]) &&
+			stringValue(validateInput, "release_id") == stringValue(validateOutput, "release_id")
+		unknown := stringValue(validateOutput, "validation_result") == "unknown"
+		return map[string]any{
+			"schema_valid": true, "target_bound": bound,
+			"validation_result": stringValue(validateOutput, "validation_result"),
+			"start_permitted":   !unknown && stringValue(validateOutput, "validation_result") == "valid",
+		}, nil
 	case "game.readiness.unknown-required-check-blocks-ready":
-		if err := pkg.validateSchema("urn:gameserver-controller:0.4.0-draft:game:readiness-check-input", input); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:readiness-check-input", input); err != nil {
 			return nil, fmt.Errorf("readiness input does not match schema: %w", err)
 		}
 		output := asObject(fixture["output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.4.0-draft:game:readiness-check-output", output); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:readiness-check-output", output); err != nil {
 			return nil, fmt.Errorf("readiness output does not match schema: %w", err)
 		}
 		bound := input["server_id"] == output["server_id"] &&

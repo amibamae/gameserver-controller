@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.4.0-draft:rpc:adapter-health-result",
+  "$id": "urn:gameserver-controller:0.5.0-draft:rpc:adapter-health-result",
   "title": "Adapter health JSON-RPC result",
   "type": "object",
   "additionalProperties": false,

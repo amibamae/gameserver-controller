@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.5.0-draft:game:configure-output",
+  "title": "Game configure output",
+  "description": "Configuration validation and application result. An unknown result remains subject to operation reconciliation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "release_id",
+    "outcome",
+    "validation_result",
+    "application_started",
+    "configuration_digest",
+    "issues",
+    "observed_at"
+  ],
+  "properties": {
+    "target": {
+      "$ref": "urn:gameserver-controller:0.5.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "outcome": {
+      "enum": [
+        "applied",
+        "unchanged",
+        "rejected",
+        "outcome_unknown"
+      ]
+    },
+    "validation_result": {
+      "enum": [
+        "valid",
+        "invalid",
+        "unknown"
+      ]
+    },
+    "application_started": {
+      "type": "boolean"
+    },
+    "configuration_digest": {
+      "$ref": "urn:gameserver-controller:0.5.0-draft:storage:storage-checksum",
+      "description": "SHA-256 of the RFC 8785 canonical JSON configuration, including only secret references."
+    },
+    "issues": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9._-]*$"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        }
+      }
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "validation_result": {
+            "const": "invalid"
+          }
+        },
+        "required": [
+          "validation_result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "outcome": {
+            "const": "rejected"
+          },
+          "application_started": {
+            "const": false
+          },
+          "issues": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "applied"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "validation_result": {
+            "const": "valid"
+          },
+          "application_started": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "unchanged"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "validation_result": {
+            "const": "valid"
+          },
+          "application_started": {
+            "const": false
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "fixture_id": "game.validate-installation.unknown-blocks-start",
+  "protocol_version": "0.5.0-draft",
+  "contract_area": "game.validate_installation",
+  "purpose": "Unknown installation validation does not permit starting the game process.",
+  "input": {
+    "validate_request": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3"
+    },
+    "validate_output": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3",
+      "validation_result": "unknown",
+      "artifact_results": [
+        {
+          "artifact_id": "paper-server-jar",
+          "result": "unknown"
+        }
+      ],
+      "observed_game_version": "1.21.11+build.3",
+      "observed_at": "2026-11-06T09:17:00Z"
+    }
+  },
+  "expected": {
+    "schema_valid": true,
+    "target_bound": true,
+    "validation_result": "unknown",
+    "start_permitted": false
+  },
+  "side_effect_expected": "none"
+}
