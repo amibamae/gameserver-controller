@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.7.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.8.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -68,6 +68,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Adapter cannot grant itself permissions or bypass core policy.
 - Adapter logs and errors redact secrets.
 - Game readiness output is bound to the exact requested instance and release; every requested required check has exactly one result, and `unknown` never permits `ready`.
+- Data-set descriptions are release-bound, use unique IDs and safe relative paths, and advertise supported consistency modes. Confirmed game saves require completion evidence; unknown save or backup preparation outcomes require reconciliation references.
 - A game install verifies every pinned artifact checksum before starting installation; invalid configuration is rejected before application; unknown installation validation blocks start.
 - Execution log reads are bounded and redacted, health `unknown` is not healthy, and deleting a unit preserves persistent data. Proxy registration requires an unexpired readiness assertion bound to the exact instance; accepted or unknown routing state is not routable.
 

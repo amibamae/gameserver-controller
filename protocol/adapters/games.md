@@ -1,6 +1,6 @@
 # Game Adapter Contract
 
-**Status:** Draft, version 0.7.0-draft.
+**Status:** Draft, version 0.8.0-draft.
 
 ## 1. Responsibility
 
@@ -50,7 +50,7 @@ Unknown readiness MUST NOT be treated as pass. Failed required checks prevent tr
 
 ## 6. Persistent data and backup consistency
 
-The game adapter declares persistent data sets and their paths, exclusions, consistency mode, save/flush sequence, and validation method.
+The `game.data.describe` capability declares release-bound persistent data sets, normalized relative paths, required status, and supported consistency modes. It MUST NOT return absolute host paths, path traversal, or secret values. `game.save.request` returns `confirmed` only after a game-native save/flush has completed; an `outcome_unknown` result MUST carry a reconciliation reference and MUST NOT be retried blindly. `game.backup.prepare` MUST echo the exact target, release, data generation, selected data-set IDs, and consistency mode. It reports `prepared` only with a preparation ID and evidence for the declared consistency guarantee. Schemas: [data describe input](../schemas/game/data-describe-input.schema.json), [data describe output](../schemas/game/data-describe-output.schema.json), [save input](../schemas/game/save-request-input.schema.json), [save output](../schemas/game/save-request-output.schema.json), [backup prepare input](../schemas/game/backup-prepare-input.schema.json), and [backup prepare output](../schemas/game/backup-prepare-output.schema.json).
 
 Supported consistency modes MUST be explicit, for example:
 - `offline`: game is stopped before capture.

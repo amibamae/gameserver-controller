@@ -1,6 +1,6 @@
 # Protocol and Schema Compatibility
 
-**Status:** Draft, protocol version 0.7.0-draft.
+**Status:** Draft, protocol version 0.8.0-draft.
 
 This document defines how independent controllers, adapters, and clients decide whether they can communicate safely. It is normative where it uses MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY.
 
@@ -33,9 +33,9 @@ Capability negotiation is independent. An adapter advertises exact capability na
 
 ## 3. Draft and stable compatibility policy
 
-The current `0.7.0-draft` is an unstable pre-1.0 protocol. It does not provide a stable compatibility guarantee, but `protocol_version` still identifies the wire contract used during negotiation. Peers MUST NOT advertise the same protocol version for different accepted messages or required behavior.
+The current `0.8.0-draft` is an unstable pre-1.0 protocol. It does not provide a stable compatibility guarantee, but `protocol_version` still identifies the wire contract used during negotiation. Peers MUST NOT advertise the same protocol version for different accepted messages or required behavior.
 
-While the protocol is in design, the moving, untagged branch is development source and MUST NOT be used as a compatibility target between independent implementations. Each published draft snapshot MUST be immutable and MUST use a new SemVer-shaped `0.y.0-draft` version; this project increments the minor component for each published pre-1.0 snapshot. A breaking change MUST use a new protocol version and update all version-scoped schema IDs in the same change. For example, an incompatible change after `0.7.0-draft` uses `0.7.0-draft`. Examples, conformance fixtures, and the schema inventory MUST be updated with the snapshot.
+While the protocol is in design, the moving, untagged branch is development source and MUST NOT be used as a compatibility target between independent implementations. Each published draft snapshot MUST be immutable and MUST use a new SemVer-shaped `0.y.0-draft` version; this project increments the minor component for each published pre-1.0 snapshot. A breaking change MUST use a new protocol version and update all version-scoped schema IDs in the same change. For example, an incompatible change after `0.8.0-draft` uses `0.8.0-draft`. Examples, conformance fixtures, and the schema inventory MUST be updated with the snapshot.
 
 A `-draft` prerelease label is used while protocol semantics are being designed and no runnable implementation has demonstrated conformance. The project reserves `-alpha` for a runnable early controller or adapter implementation under evaluation; these labels are project maturity signals, not different compatibility guarantees. Both remain unstable prereleases.
 

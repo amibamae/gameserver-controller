@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.7.0-draft:storage:object-delete-input",
+  "$id": "urn:gameserver-controller:0.8.0-draft:storage:object-delete-input",
   "title": "Storage object delete input",
   "type": "object",
   "additionalProperties": false,
@@ -9,7 +9,7 @@
   ],
   "properties": {
     "object_ref": {
-      "$ref": "urn:gameserver-controller:0.7.0-draft:storage:storage-object-reference"
+      "$ref": "urn:gameserver-controller:0.8.0-draft:storage:storage-object-reference"
     },
     "if_match_etag": {
       "type": "string",

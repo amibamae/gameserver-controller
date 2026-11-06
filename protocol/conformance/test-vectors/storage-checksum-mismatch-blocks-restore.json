@@ -1,6 +1,6 @@
 {
   "fixture_id": "storage.object.checksum-mismatch-blocks-restore",
-  "protocol_version": "0.7.0-draft",
+  "protocol_version": "0.8.0-draft",
   "contract_area": "storage.object.verify_checksum",
   "purpose": "A size or digest mismatch prevents a backup from being used for restore.",
   "input": {

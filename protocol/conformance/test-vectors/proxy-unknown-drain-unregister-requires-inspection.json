@@ -1,6 +1,6 @@
 {
   "fixture_id": "integration.proxy.unknown-drain-and-unregister-require-inspection",
-  "protocol_version": "0.7.0-draft",
+  "protocol_version": "0.8.0-draft",
   "contract_area": "integration.proxy.backend.lifecycle",
   "purpose": "Unknown drain or unregister outcomes require inspection before retry.",
   "input": {

@@ -1,0 +1,49 @@
+{
+  "fixture_id": "game.save.unknown-requires-reconciliation",
+  "protocol_version": "0.8.0-draft",
+  "contract_area": "game.save",
+  "purpose": "An unknown game save outcome carries a reconciliation reference and cannot be retried blindly.",
+  "input": {
+    "save_input": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-001"
+        }
+      },
+      "release_id": "paper-1.21.4-r1",
+      "reason": "backup"
+    },
+    "save_output": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-001"
+        }
+      },
+      "release_id": "paper-1.21.4-r1",
+      "outcome": "outcome_unknown",
+      "observed_at": "2026-11-06T08:03:00Z",
+      "reconciliation_ref": {
+        "adapter_id": "game.minecraft-paper",
+        "environment_id": "staging",
+        "resource_kind": "save-operation",
+        "external_id": "save-operation-008"
+      }
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "reconciliation_reference_present": true,
+    "retry_permitted_without_reconciliation": false
+  },
+  "side_effect_expected": "none"
+}
