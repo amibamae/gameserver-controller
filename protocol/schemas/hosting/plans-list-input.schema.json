@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.15.0-draft:hosting:plans-list-input",
+  "$id": "urn:gameserver-controller:0.16.0-draft:hosting:plans-list-input",
   "title": "Hosting plan list input",
   "type": "object",
   "additionalProperties": false,

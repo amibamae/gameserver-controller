@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.15.0-draft:game:data-describe-output",
+  "$id": "urn:gameserver-controller:0.16.0-draft:game:data-describe-output",
   "title": "Game persistent data describe output",
   "description": "Persistent paths are normalized relative paths under the adapter-declared data root; absolute host paths and traversal paths are forbidden.",
   "type": "object",
@@ -13,7 +13,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.15.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.16.0-draft:game:game-instance-target"
     },
     "release_id": {
       "type": "string",

@@ -1,6 +1,6 @@
 {
   "fixture_id": "execution.unit.start.target-mismatch",
-  "protocol_version": "0.15.0-draft",
+  "protocol_version": "0.16.0-draft",
   "contract_area": "execution.unit.start",
   "purpose": "A successful result for a different unit is not accepted.",
   "input": {
@@ -29,7 +29,8 @@
     "unit_bound": false,
     "successful_start_claim_accepted": false,
     "reconciliation_required": true,
-    "result_requires_inspection": true
+    "result_requires_inspection": true,
+    "retry_without_inspection": false
   },
   "side_effect_expected": "none"
 }

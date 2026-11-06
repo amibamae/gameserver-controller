@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.data.save.backup-prepare.binding",
-  "protocol_version": "0.15.0-draft",
+  "protocol_version": "0.16.0-draft",
   "contract_area": "game.backup",
   "purpose": "Game data sets are release-bound and path-safe; save completion and backup preparation bind to the exact instance and selected consistency mode.",
   "input": {

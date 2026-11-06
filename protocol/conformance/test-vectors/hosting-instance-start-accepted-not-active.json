@@ -1,0 +1,40 @@
+{
+  "fixture_id": "hosting.instance.start.accepted-not-active",
+  "protocol_version": "0.16.0-draft",
+  "contract_area": "hosting.instance.start",
+  "purpose": "Provider acceptance with a returned operation reference does not confirm active state.",
+  "input": {
+    "action": "start",
+    "hosting_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    },
+    "hosting_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      },
+      "outcome": "accepted",
+      "state": "stopped",
+      "observed_at": "2026-11-06T11:40:00Z",
+      "provider_operation_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "operation",
+        "external_id": "host-op-start-021"
+      }
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "completion_confirmed": false,
+    "unknown_requires_inspection": false
+  }
+}

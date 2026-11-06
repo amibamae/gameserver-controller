@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.compatibility.check.migration-required",
-  "protocol_version": "0.15.0-draft",
+  "protocol_version": "0.16.0-draft",
   "contract_area": "game.compatibility.check",
   "purpose": "The adapter reports that a separate migration step is needed; this check does not perform it.",
   "input": {

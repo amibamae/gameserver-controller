@@ -1,6 +1,6 @@
 # Hosting Adapter Contract
 
-**Status:** Draft, version 0.15.0-draft.
+**Status:** Draft, version 0.16.0-draft.
 
 ## 1. Responsibility
 
@@ -52,7 +52,7 @@ A create request MUST NOT include raw API tokens, passwords, private keys, stora
 
 - Create: return a provider operation reference and instance reference when available; do not claim active until the instance postcondition is observed.
 - Inspect: return the exact target identity, normalized state, region/plan/OS facts when available, network observations, and observation timestamp. The result MUST bind the requested instance; `unknown` is not equivalent to `active` or `destroyed`.
-- Start/stop/reboot: distinguish accepted provider request from confirmed resulting instance state.
+- Start and stop use exact-instance schemas. A completed result confirms `active` or `stopped`, respectively; an accepted result requires a provider operation reference and does not confirm completion. An unknown result requires inspection of the exact instance before retry. Reboot follows the same accepted/completed/unknown distinction.
 - Destroy: require a core-authorized operation context, exact instance reference, and destruction plan. The adapter MUST reject missing/mismatched target scope. The core re-checks backup and authorization immediately before dispatch.
 - Wait: bounded by request deadline; timeout means unknown unless the provider's state establishes otherwise.
 
@@ -72,4 +72,4 @@ The adapter MUST report how the bootstrap was initiated, its immutable revision/
 
 ## 7. Conformance cases
 
-Test filtered catalog results, opaque pagination, unknown availability, create success, create timeout/ambiguous outcome, duplicate idempotency key, inspect scope mismatch, provider transient failure, destroy target mismatch, destroy with missing core authorization, and destroy outcome reconciliation.
+Test filtered catalog results, opaque pagination, unknown availability, exact-instance start/stop completion, accepted and unknown provider outcomes, create success, create timeout/ambiguous outcome, duplicate idempotency key, inspect scope mismatch, provider transient failure, destroy target mismatch, destroy with missing core authorization, and destroy outcome reconciliation.
