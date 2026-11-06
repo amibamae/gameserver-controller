@@ -1,6 +1,6 @@
 # Execution Adapter Contract
 
-**Status:** Draft, version 0.10.0-draft.
+**Status:** Draft, version 0.11.0-draft.
 
 ## 1. Purpose
 
@@ -53,6 +53,8 @@ Secrets MUST be resolved by an authorized controller/runner channel at point of 
 
 ## 5. Lifecycle semantics
 
+Systemd start and graceful-stop capabilities use operation-specific result schemas. A completed start confirms the unit is running but does not establish game readiness. Accepted and unknown outcomes carry an external operation reference; an unknown outcome requires inspection before retry.
+
 - Create defines the unit and does not imply it is running.
 - Start returns accepted/observed state separately; readiness is established by the game adapter and controller validation workflow.
 - Graceful stop asks the game runtime to save and exit using the game adapter's save semantics, then waits for process/unit termination.
@@ -62,6 +64,8 @@ Secrets MUST be resolved by an authorized controller/runner channel at point of 
 - Logs are read with a caller-supplied byte bound, counting UTF-8 line bytes and one newline separator between adjacent lines, and MUST be redacted before leaving the adapter. Health inspection reports `unknown` when it cannot confirm health; it MUST NOT infer healthy from an active process.
 
 A timeout while starting/stopping MUST be reconciled by inspection. It MUST NOT be interpreted as a known stopped/running result.
+
+Any unit result whose unit reference does not exactly match the request is untrusted. The controller MUST inspect the requested exact unit before retrying or doing dependent work.
 
 ## 6. Relationship to the game adapter
 

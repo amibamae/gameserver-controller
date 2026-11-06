@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.10.0-draft:storage:object-get-output",
+  "$id": "urn:gameserver-controller:0.11.0-draft:storage:object-get-output",
   "title": "Storage object get output",
   "type": "object",
   "additionalProperties": false,
@@ -12,7 +12,7 @@
   ],
   "properties": {
     "object_ref": {
-      "$ref": "urn:gameserver-controller:0.10.0-draft:storage:storage-object-reference"
+      "$ref": "urn:gameserver-controller:0.11.0-draft:storage:storage-object-reference"
     },
     "transfer_state": {
       "enum": [
@@ -30,7 +30,7 @@
       "maximum": 9007199254740991
     },
     "computed_checksum": {
-      "$ref": "urn:gameserver-controller:0.10.0-draft:storage:storage-checksum"
+      "$ref": "urn:gameserver-controller:0.11.0-draft:storage:storage-checksum"
     },
     "observed_at": {
       "type": "string",

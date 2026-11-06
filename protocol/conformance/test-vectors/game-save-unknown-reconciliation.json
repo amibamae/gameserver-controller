@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.save.unknown-requires-reconciliation",
-  "protocol_version": "0.10.0-draft",
+  "protocol_version": "0.11.0-draft",
   "contract_area": "game.save",
   "purpose": "An unknown game save outcome carries a reconciliation reference and cannot be retried blindly.",
   "input": {

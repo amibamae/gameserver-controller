@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.10.0-draft:execution:systemd-unit-delete-input",
+  "$id": "urn:gameserver-controller:0.11.0-draft:execution:systemd-unit-delete-input",
   "title": "Systemd execution unit delete input",
   "description": "Remove the unit definition for one exact execution unit.",
   "type": "object",
@@ -10,7 +10,7 @@
   ],
   "properties": {
     "unit_ref": {
-      "$ref": "urn:gameserver-controller:0.10.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.11.0-draft:common:external-resource-ref"
     }
   }
 }

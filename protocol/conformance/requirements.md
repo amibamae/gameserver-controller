@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.10.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.11.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -73,6 +73,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Game compatibility checks bind the exact backup manifest and target release, contain exactly one result per requested check, and derive aggregate status from all results. Unknown or incomplete evidence cannot be compatible, and a compatibility result does not verify backup integrity or authorize restore.
 - A game install verifies every pinned artifact checksum before starting installation; invalid configuration is rejected before application; unknown installation validation blocks start.
 - Execution log reads are bounded and redacted, health `unknown` is not healthy, and deleting a unit preserves persistent data. Proxy registration requires an unexpired readiness assertion bound to the exact instance; accepted or unknown routing state is not routable.
+- Systemd lifecycle results bind the exact unit. A completed start does not establish game readiness, and an unknown start or stop outcome requires inspection before retry.
 
 ### Proxy routing and player transfer
 - Backend registration requires a current readiness assertion bound to the exact server, environment, and instance.
@@ -153,6 +154,11 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [game-compatibility-check-incomplete.json](test-vectors/game-compatibility-check-incomplete.json)
 - [game-compatibility-check-unknown-reported-compatible.json](test-vectors/game-compatibility-check-unknown-reported-compatible.json)
 - [game-compatibility-check-target-mismatch.json](test-vectors/game-compatibility-check-target-mismatch.json)
+
+- [execution-unit-start-accepted-not-ready.json](test-vectors/execution-unit-start-accepted-not-ready.json)
+- [execution-unit-start-unknown-requires-inspection.json](test-vectors/execution-unit-start-unknown-requires-inspection.json)
+- [execution-unit-start-target-mismatch.json](test-vectors/execution-unit-start-target-mismatch.json)
+- [execution-unit-graceful-stop-completed-stopped.json](test-vectors/execution-unit-graceful-stop-completed-stopped.json)
 
 ## 7. Certification status
 

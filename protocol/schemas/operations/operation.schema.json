@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.10.0-draft:operations:operation",
+  "$id": "urn:gameserver-controller:0.11.0-draft:operations:operation",
   "title": "Durable operation",
   "type": "object",
   "additionalProperties": false,
@@ -50,7 +50,7 @@
           "maxLength": 200
         },
         "instance_ref": {
-          "$ref": "urn:gameserver-controller:0.10.0-draft:common:external-resource-ref"
+          "$ref": "urn:gameserver-controller:0.11.0-draft:common:external-resource-ref"
         }
       }
     },
@@ -114,7 +114,7 @@
         "secret_refs": {
           "type": "array",
           "items": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:common:secret-reference"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:common:secret-reference"
           }
         }
       }
@@ -204,10 +204,10 @@
             "format": "date-time"
           },
           "external_operation_ref": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:common:external-resource-ref"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:common:external-resource-ref"
           },
           "error": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:common:protocol-error"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:common:protocol-error"
           }
         }
       }
@@ -241,7 +241,7 @@
     "result": {
       "oneOf": [
         {
-          "$ref": "urn:gameserver-controller:0.10.0-draft:operations:operation-result"
+          "$ref": "urn:gameserver-controller:0.11.0-draft:operations:operation-result"
         },
         {
           "type": "null"
@@ -249,7 +249,7 @@
       ]
     },
     "error": {
-      "$ref": "urn:gameserver-controller:0.10.0-draft:common:protocol-error"
+      "$ref": "urn:gameserver-controller:0.11.0-draft:common:protocol-error"
     },
     "schema_package_revision": {
       "type": "string",
@@ -281,7 +281,7 @@
             "format": "date-time"
           },
           "result": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:operations:operation-result"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:operations:operation-result"
           }
         }
       }
@@ -351,7 +351,7 @@
       "then": {
         "properties": {
           "result": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:operations:server-provision-result"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:operations:server-provision-result"
           }
         }
       }
@@ -374,7 +374,7 @@
       "then": {
         "properties": {
           "result": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:operations:server-backup-result"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:operations:server-backup-result"
           }
         }
       }
@@ -397,7 +397,7 @@
       "then": {
         "properties": {
           "result": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:operations:server-restore-result"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:operations:server-restore-result"
           }
         }
       }
@@ -420,7 +420,7 @@
       "then": {
         "properties": {
           "result": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:operations:server-destroy-result"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:operations:server-destroy-result"
           }
         }
       }
@@ -443,7 +443,7 @@
       "then": {
         "properties": {
           "result": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:operations:server-define-result"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:operations:server-define-result"
           }
         }
       }
@@ -466,7 +466,7 @@
       "then": {
         "properties": {
           "result": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:operations:server-start-result"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:operations:server-start-result"
           }
         }
       }
@@ -489,7 +489,7 @@
       "then": {
         "properties": {
           "result": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:operations:server-stop-result"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:operations:server-stop-result"
           }
         }
       }

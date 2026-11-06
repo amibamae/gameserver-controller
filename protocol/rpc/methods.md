@@ -1,6 +1,6 @@
 # Adapter RPC Methods
 
-**Status:** Draft, version 0.10.0-draft. These methods define the logical adapter RPC surface. The process transport is specified separately in [transport.md](transport.md).
+**Status:** Draft, version 0.11.0-draft. These methods define the logical adapter RPC surface. The process transport is specified separately in [transport.md](transport.md).
 
 ## 1. Method model
 
@@ -34,7 +34,7 @@ Illustrative request:
   "id": "req-001",
   "method": "adapter.initialize",
   "params": {
-    "protocol_versions": ["0.10.0-draft"],
+    "protocol_versions": ["0.11.0-draft"],
     "controller": {
       "implementation_id": "example.controller",
       "implementation_version": "0.1.0"
@@ -50,7 +50,7 @@ Illustrative result:
   "jsonrpc": "2.0",
   "id": "req-001",
   "result": {
-    "selected_protocol_version": "0.10.0-draft",
+    "selected_protocol_version": "0.11.0-draft",
     "session_id": "session-example"
   }
 }
@@ -74,7 +74,7 @@ Illustrative request:
   "id": "req-002",
   "method": "adapter.invoke",
   "params": {
-    "protocol_version": "0.10.0-draft",
+    "protocol_version": "0.11.0-draft",
     "capability": "hosting.instance.inspect",
     "request_context": {
       "request_id": "req-002",

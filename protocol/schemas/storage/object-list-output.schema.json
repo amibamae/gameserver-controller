@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.10.0-draft:storage:object-list-output",
+  "$id": "urn:gameserver-controller:0.11.0-draft:storage:object-list-output",
   "title": "Storage object list output",
   "type": "object",
   "additionalProperties": false,
@@ -13,7 +13,7 @@
   ],
   "properties": {
     "container_ref": {
-      "$ref": "urn:gameserver-controller:0.10.0-draft:storage:storage-container-reference"
+      "$ref": "urn:gameserver-controller:0.11.0-draft:storage:storage-container-reference"
     },
     "items": {
       "type": "array",
@@ -27,7 +27,7 @@
         ],
         "properties": {
           "object_ref": {
-            "$ref": "urn:gameserver-controller:0.10.0-draft:storage:storage-object-reference"
+            "$ref": "urn:gameserver-controller:0.11.0-draft:storage:storage-object-reference"
           },
           "size_bytes": {
             "type": "integer",

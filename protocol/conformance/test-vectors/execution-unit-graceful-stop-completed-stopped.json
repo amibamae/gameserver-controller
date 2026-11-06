@@ -1,0 +1,34 @@
+{
+  "fixture_id": "execution.unit.graceful-stop.completed-stopped",
+  "protocol_version": "0.11.0-draft",
+  "contract_area": "execution.unit.graceful_stop",
+  "purpose": "Completed graceful stop confirms the exact unit is stopped.",
+  "input": {
+    "execution_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "grace_period_seconds": 60
+    },
+    "execution_output": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "outcome": "completed",
+      "state": "stopped",
+      "observed_at": "2026-11-06T10:47:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "unit_bound": true,
+    "termination_confirmed": true
+  },
+  "side_effect_expected": "none"
+}
