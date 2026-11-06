@@ -1,0 +1,32 @@
+{
+  "fixture_id": "hosting.instance.reboot.core-no-data-no-gate",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "hosting.instance.reboot.core",
+  "purpose": "An exact instance with confirmed no persistent game data does not require save evidence.",
+  "input": {
+    "reboot_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "production",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    },
+    "core_preconditions": {
+      "persistent_data_status": "absent",
+      "game_save_confirmed": false,
+      "clean_stop_confirmed": false
+    }
+  },
+  "expected": {
+    "core_preconditions_valid": true,
+    "data_safety_gate_required": false,
+    "save_evidence_bound": false,
+    "clean_stop_evidence_bound": false,
+    "routine_reboot_allowed": true,
+    "emergency_approval_bound": false,
+    "provider_reboot_dispatch_allowed": true,
+    "emergency_bypass_used": false,
+    "game_readiness_established": false
+  }
+}

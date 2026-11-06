@@ -204,6 +204,42 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"unknown_requires_inspection": unknownRequiresInspection,
 			"result_requires_inspection":  resultRequiresInspection,
 		}, nil
+	case "hosting.instance.reboot.core-missing-save-blocked", "hosting.instance.reboot.core-save-bound", "hosting.instance.reboot.core-clean-stop-bound", "hosting.instance.reboot.core-save-mismatch-blocked", "hosting.instance.reboot.core-unknown-data-blocked", "hosting.instance.reboot.core-emergency-approved", "hosting.instance.reboot.core-emergency-target-mismatch", "hosting.instance.reboot.core-emergency-wrong-action", "hosting.instance.reboot.core-no-data-no-gate":
+		rebootInput := asObject(input["reboot_input"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:instance-reboot-input", rebootInput); err != nil {
+			return nil, fmt.Errorf("hosting reboot input does not match schema: %w", err)
+		}
+		core := asObject(input["core_preconditions"])
+		target := asObject(rebootInput["instance_ref"])
+		dataStatus := stringValue(core, "persistent_data_status")
+		if dataStatus != "present" && dataStatus != "absent" && dataStatus != "unknown" {
+			return nil, fmt.Errorf("persistent_data_status must be present, absent, or unknown")
+		}
+		dataSafetyGateRequired := dataStatus != "absent"
+		saveEvidenceBound := boolValue(core, "game_save_confirmed") &&
+			reflect.DeepEqual(target, asObject(core["game_save_instance_ref"]))
+		cleanStopEvidenceBound := boolValue(core, "clean_stop_confirmed") &&
+			reflect.DeepEqual(target, asObject(core["clean_stop_instance_ref"]))
+		routineRebootAllowed := !dataSafetyGateRequired || saveEvidenceBound || cleanStopEvidenceBound
+		approval := asObject(core["emergency_approval"])
+		emergencyApprovalBound := boolValue(approval, "valid") &&
+			stringValue(approval, "approval_id") != "" &&
+			stringValue(approval, "approver_id") != "" &&
+			stringValue(approval, "action") == "hosting.instance.reboot.emergency" &&
+			reflect.DeepEqual(target, asObject(approval["instance_ref"]))
+		dispatchAllowed := routineRebootAllowed || emergencyApprovalBound
+		emergencyBypassUsed := dataSafetyGateRequired && !saveEvidenceBound && !cleanStopEvidenceBound && emergencyApprovalBound
+		return map[string]any{
+			"core_preconditions_valid":       true,
+			"data_safety_gate_required":      dataSafetyGateRequired,
+			"save_evidence_bound":            saveEvidenceBound,
+			"clean_stop_evidence_bound":      cleanStopEvidenceBound,
+			"routine_reboot_allowed":         routineRebootAllowed,
+			"emergency_approval_bound":       emergencyApprovalBound,
+			"provider_reboot_dispatch_allowed": dispatchAllowed,
+			"emergency_bypass_used":          emergencyBypassUsed,
+			"game_readiness_established":     false,
+		}, nil
 	case "hosting.instance.reboot.completed-active", "hosting.instance.reboot.accepted-not-complete", "hosting.instance.reboot.unknown-requires-inspection", "hosting.instance.reboot.target-mismatch":
 		rebootInput, rebootOutput := asObject(input["reboot_input"]), asObject(input["reboot_output"])
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:instance-reboot-input", rebootInput); err != nil {

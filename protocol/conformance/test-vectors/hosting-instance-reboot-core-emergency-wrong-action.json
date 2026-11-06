@@ -1,0 +1,44 @@
+{
+  "fixture_id": "hosting.instance.reboot.core-emergency-wrong-action",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "hosting.instance.reboot.core",
+  "purpose": "Approval for routine reboot is not the separate emergency approval required to bypass the save gate.",
+  "input": {
+    "reboot_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "production",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    },
+    "core_preconditions": {
+      "persistent_data_status": "present",
+      "game_save_confirmed": false,
+      "clean_stop_confirmed": false,
+      "emergency_approval": {
+        "valid": true,
+        "approval_id": "approval-021",
+        "approver_id": "operator-007",
+        "action": "hosting.instance.reboot",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "production",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-021"
+        }
+      }
+    }
+  },
+  "expected": {
+    "core_preconditions_valid": true,
+    "data_safety_gate_required": true,
+    "save_evidence_bound": false,
+    "clean_stop_evidence_bound": false,
+    "routine_reboot_allowed": false,
+    "emergency_approval_bound": false,
+    "provider_reboot_dispatch_allowed": false,
+    "emergency_bypass_used": false,
+    "game_readiness_established": false
+  }
+}
