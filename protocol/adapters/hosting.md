@@ -1,6 +1,6 @@
 # Hosting Adapter Contract
 
-**Status:** Draft, version 0.11.0-draft.
+**Status:** Draft, version 0.12.0-draft.
 
 ## 1. Responsibility
 
@@ -51,7 +51,7 @@ A create request MUST NOT include raw API tokens, passwords, private keys, stora
 ## 4. Operations and outcomes
 
 - Create: return a provider operation reference and instance reference when available; do not claim active until the instance postcondition is observed.
-- Inspect: return the exact target identity, normalized state, region/plan/OS facts when available, network observations, and observation timestamp.
+- Inspect: return the exact target identity, normalized state, region/plan/OS facts when available, network observations, and observation timestamp. The result MUST bind the requested instance; `unknown` is not equivalent to `active` or `destroyed`.
 - Start/stop/reboot: distinguish accepted provider request from confirmed resulting instance state.
 - Destroy: require a core-authorized operation context, exact instance reference, and destruction plan. The adapter MUST reject missing/mismatched target scope. The core re-checks backup and authorization immediately before dispatch.
 - Wait: bounded by request deadline; timeout means unknown unless the provider's state establishes otherwise.

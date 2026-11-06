@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.11.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.12.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -67,6 +67,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Adapter timeout/crash leaves outcome uncertain until reconciliation.
 - Adapter cannot grant itself permissions or bypass core policy.
 - Adapter logs and errors redact secrets.
+- Hosting instance inspection is read-only and bound to the exact requested instance; `unknown` is not treated as `active` or `destroyed`.
 - Game readiness output is bound to the exact requested instance and release; every requested required check has exactly one result, and `unknown` never permits `ready`.
 - Data-set descriptions are release-bound, use unique IDs and safe relative paths, and advertise supported consistency modes. Confirmed game saves require completion evidence; unknown save or backup preparation outcomes require reconciliation references.
 - Game health results bind to the exact release and instance, contain exactly one result per requested check, and do not promote unknown evidence to healthy. Game backup validation uses bounded streams for the exact manifest objects; `unknown` validation never verifies a backup.
@@ -159,6 +160,10 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [execution-unit-start-unknown-requires-inspection.json](test-vectors/execution-unit-start-unknown-requires-inspection.json)
 - [execution-unit-start-target-mismatch.json](test-vectors/execution-unit-start-target-mismatch.json)
 - [execution-unit-graceful-stop-completed-stopped.json](test-vectors/execution-unit-graceful-stop-completed-stopped.json)
+
+- [hosting-instance-inspect-exact-active.json](test-vectors/hosting-instance-inspect-exact-active.json)
+- [hosting-instance-inspect-unknown-not-active.json](test-vectors/hosting-instance-inspect-unknown-not-active.json)
+- [hosting-instance-inspect-target-mismatch.json](test-vectors/hosting-instance-inspect-target-mismatch.json)
 
 ## 7. Certification status
 

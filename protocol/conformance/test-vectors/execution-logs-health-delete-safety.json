@@ -1,6 +1,6 @@
 {
   "fixture_id": "execution.logs.health.delete.safety",
-  "protocol_version": "0.11.0-draft",
+  "protocol_version": "0.12.0-draft",
   "contract_area": "execution.unit",
   "purpose": "Diagnostic reads are bounded and redacted, unknown health stays unknown, and deleting a unit preserves persistent data.",
   "input": {

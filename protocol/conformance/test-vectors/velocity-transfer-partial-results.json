@@ -1,6 +1,6 @@
 {
   "fixture_id": "velocity-transfer-partial-results",
-  "protocol_version": "0.11.0-draft",
+  "protocol_version": "0.12.0-draft",
   "contract_area": "integration.velocity.players.transfer",
   "purpose": "A batch transfer records one explicit result per selected proxy session and reconciles unknown outcomes before retry.",
   "input": {

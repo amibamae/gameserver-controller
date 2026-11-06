@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.11.0-draft:storage:object-list-input",
+  "$id": "urn:gameserver-controller:0.12.0-draft:storage:object-list-input",
   "title": "Storage object list input",
   "type": "object",
   "additionalProperties": false,
@@ -11,7 +11,7 @@
   ],
   "properties": {
     "container_ref": {
-      "$ref": "urn:gameserver-controller:0.11.0-draft:storage:storage-container-reference"
+      "$ref": "urn:gameserver-controller:0.12.0-draft:storage:storage-container-reference"
     },
     "prefix": {
       "type": "string",

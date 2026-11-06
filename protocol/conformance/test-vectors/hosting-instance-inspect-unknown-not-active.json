@@ -1,0 +1,38 @@
+{
+  "fixture_id": "hosting.instance.inspect.unknown-not-active",
+  "protocol_version": "0.12.0-draft",
+  "contract_area": "hosting.instance.inspect",
+  "purpose": "Unknown provider state remains distinct from active or destroyed.",
+  "input": {
+    "hosting_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-012"
+      }
+    },
+    "hosting_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-012"
+      },
+      "state": "unknown",
+      "safe_diagnostics": [
+        "Provider response did not identify the instance state."
+      ],
+      "observed_at": "2026-11-06T11:01:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "observed_state": "unknown",
+    "unknown_not_active": true,
+    "safe_to_treat_as_active": false,
+    "inspection_read_only": true
+  },
+  "side_effect_expected": "none"
+}

@@ -1,6 +1,6 @@
 {
   "fixture_id": "execution.unit.start.unknown-requires-inspection",
-  "protocol_version": "0.11.0-draft",
+  "protocol_version": "0.12.0-draft",
   "contract_area": "execution.unit.start",
   "purpose": "An uncertain start outcome requires inspection before a retry.",
   "input": {
