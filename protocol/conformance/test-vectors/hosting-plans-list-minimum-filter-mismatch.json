@@ -1,0 +1,38 @@
+{
+  "fixture_id": "hosting.plans.list.minimum-filter-mismatch",
+  "protocol_version": "0.15.0-draft",
+  "contract_area": "hosting.plans.list",
+  "purpose": "A provider result below the requested CPU floor is rejected as a filter mismatch.",
+  "input": {
+    "catalog_kind": "plans",
+    "catalog_input": {
+      "region_id": "ewr",
+      "minimum_vcpu_count": 4,
+      "minimum_memory_mib": 8192,
+      "page_size": 20,
+      "page_token": "opaque-plan-page-02"
+    },
+    "catalog_output": {
+      "plans": [
+        {
+          "plan_id": "standard-4-8",
+          "region_id": "ewr",
+          "vcpu_count": 2,
+          "memory_mib": 8192,
+          "storage_gib": 160,
+          "availability": "available"
+        }
+      ],
+      "observed_at": "2026-11-06T11:21:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "request_filter_matches": false,
+    "items_unique": true,
+    "within_page_size": true,
+    "read_only": true,
+    "all_items_report_available": true,
+    "pagination_continues": false
+  }
+}

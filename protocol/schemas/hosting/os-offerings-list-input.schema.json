@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.15.0-draft:hosting:os-offerings-list-input",
+  "title": "Hosting OS offerings list input",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "region_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "os_family": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "architecture": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "page_size": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+    },
+    "page_token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "Opaque continuation token bound to this filter set."
+    }
+  }
+}

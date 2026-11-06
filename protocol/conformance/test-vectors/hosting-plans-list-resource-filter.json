@@ -1,0 +1,39 @@
+{
+  "fixture_id": "hosting.plans.list.resource-filter",
+  "protocol_version": "0.15.0-draft",
+  "contract_area": "hosting.plans.list",
+  "purpose": "A plan listing respects region and minimum-resource filters while treating page tokens as opaque.",
+  "input": {
+    "catalog_kind": "plans",
+    "catalog_input": {
+      "region_id": "ewr",
+      "minimum_vcpu_count": 4,
+      "minimum_memory_mib": 8192,
+      "page_size": 20,
+      "page_token": "opaque-plan-page-02"
+    },
+    "catalog_output": {
+      "plans": [
+        {
+          "plan_id": "standard-4-8",
+          "region_id": "ewr",
+          "vcpu_count": 4,
+          "memory_mib": 8192,
+          "storage_gib": 160,
+          "availability": "available"
+        }
+      ],
+      "observed_at": "2026-11-06T11:21:00Z",
+      "next_page_token": "opaque-plan-page-03"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "request_filter_matches": true,
+    "items_unique": true,
+    "within_page_size": true,
+    "read_only": true,
+    "all_items_report_available": true,
+    "pagination_continues": true
+  }
+}

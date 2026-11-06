@@ -1,6 +1,6 @@
 {
   "fixture_id": "execution.unit.force-stop.completed-stopped",
-  "protocol_version": "0.14.0-draft",
+  "protocol_version": "0.15.0-draft",
   "contract_area": "execution.unit.force_stop",
   "purpose": "An approved force stop is confirmed only when the exact unit is observed stopped.",
   "input": {

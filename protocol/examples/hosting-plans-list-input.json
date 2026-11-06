@@ -1,0 +1,7 @@
+{
+  "region_id": "ewr",
+  "minimum_vcpu_count": 4,
+  "minimum_memory_mib": 8192,
+  "page_size": 20,
+  "page_token": "opaque-plan-page-02"
+}

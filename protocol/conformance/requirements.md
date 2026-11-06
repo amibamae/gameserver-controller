@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.14.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.15.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -67,7 +67,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Adapter timeout/crash leaves outcome uncertain until reconciliation.
 - Adapter cannot grant itself permissions or bypass core policy.
 - Adapter logs and errors redact secrets.
-- Hosting instance inspection is read-only and bound to the exact requested instance; `unknown` is not treated as `active` or `destroyed`.
+- Hosting instance inspection is read-only and bound to the exact requested instance; `unknown` is not treated as `active` or `destroyed`. Region, plan, and OS-offering catalog listings preserve opaque IDs, honor requested filters and page bounds, and never treat unknown availability as permission to create.
 - Game readiness output is bound to the exact requested instance and release; every requested required check has exactly one result, and `unknown` never permits `ready`.
 - Data-set descriptions are release-bound, use unique IDs and safe relative paths, and advertise supported consistency modes. Confirmed game saves require completion evidence; unknown save or backup preparation outcomes require reconciliation references.
 - Game health results bind to the exact release and instance, contain exactly one result per requested check, and do not promote unknown evidence to healthy. Game backup validation uses bounded streams for the exact manifest objects; `unknown` validation never verifies a backup.
@@ -181,6 +181,10 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [hosting-instance-inspect-exact-active.json](test-vectors/hosting-instance-inspect-exact-active.json)
 - [hosting-instance-inspect-unknown-not-active.json](test-vectors/hosting-instance-inspect-unknown-not-active.json)
 - [hosting-instance-inspect-target-mismatch.json](test-vectors/hosting-instance-inspect-target-mismatch.json)
+- [hosting-regions-list-filtered.json](test-vectors/hosting-regions-list-filtered.json)
+- [hosting-plans-list-resource-filter.json](test-vectors/hosting-plans-list-resource-filter.json)
+- [hosting-plans-list-minimum-filter-mismatch.json](test-vectors/hosting-plans-list-minimum-filter-mismatch.json)
+- [hosting-os-offerings-list-unknown-not-available.json](test-vectors/hosting-os-offerings-list-unknown-not-available.json)
 
 ## 7. Certification status
 

@@ -3,7 +3,7 @@
   "id": "request-001",
   "method": "adapter.invoke",
   "params": {
-    "protocol_version": "0.14.0-draft",
+    "protocol_version": "0.15.0-draft",
     "capability": "hosting.instance.inspect",
     "request_context": {
       "request_id": "request-001",

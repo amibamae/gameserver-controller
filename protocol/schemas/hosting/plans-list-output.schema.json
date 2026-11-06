@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.15.0-draft:hosting:plans-list-output",
+  "title": "Hosting plan list output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "plans",
+    "observed_at"
+  ],
+  "properties": {
+    "plans": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "plan_id",
+          "region_id",
+          "vcpu_count",
+          "memory_mib",
+          "availability"
+        ],
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "region_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "vcpu_count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "memory_mib": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "storage_gib": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "availability": {
+            "enum": [
+              "available",
+              "unavailable",
+              "unknown"
+            ]
+          }
+        }
+      }
+    },
+    "next_page_token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

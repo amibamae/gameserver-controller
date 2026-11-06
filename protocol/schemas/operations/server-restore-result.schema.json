@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.14.0-draft:operations:server-restore-result",
+  "$id": "urn:gameserver-controller:0.15.0-draft:operations:server-restore-result",
   "title": "Durable server.restore operation result",
   "description": "Canonical operation result with typed data for server.restore.",
   "allOf": [
     {
-      "$ref": "urn:gameserver-controller:0.14.0-draft:operations:operation-result"
+      "$ref": "urn:gameserver-controller:0.15.0-draft:operations:operation-result"
     },
     {
       "type": "object",
@@ -34,7 +34,7 @@
               "maxLength": 200
             },
             "target_instance_ref": {
-              "$ref": "urn:gameserver-controller:0.14.0-draft:common:external-resource-ref"
+              "$ref": "urn:gameserver-controller:0.15.0-draft:common:external-resource-ref"
             },
             "data_generation_id": {
               "type": "string",
@@ -51,7 +51,7 @@
               ]
             },
             "readiness_assertion": {
-              "$ref": "urn:gameserver-controller:0.14.0-draft:lifecycle:readiness-assertion"
+              "$ref": "urn:gameserver-controller:0.15.0-draft:lifecycle:readiness-assertion"
             }
           },
           "allOf": [

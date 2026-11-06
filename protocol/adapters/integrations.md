@@ -1,6 +1,6 @@
 # Integration Adapter Contract
 
-**Status:** Draft, version 0.14.0-draft.
+**Status:** Draft, version 0.15.0-draft.
 
 ## 1. Responsibility
 

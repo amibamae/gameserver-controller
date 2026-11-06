@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.migrate.distinct-target-required",
-  "protocol_version": "0.14.0-draft",
+  "protocol_version": "0.15.0-draft",
   "contract_area": "game.migrate",
   "purpose": "Migration into the source instance is rejected so that the source generation remains available.",
   "input": {

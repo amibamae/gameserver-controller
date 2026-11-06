@@ -1,0 +1,14 @@
+{
+  "regions": [
+    {
+      "region_id": "ewr",
+      "display_name": "New Jersey",
+      "location": {
+        "country_code": "US",
+        "subdivision": "NJ"
+      },
+      "availability": "available"
+    }
+  ],
+  "observed_at": "2026-11-06T11:20:00Z"
+}

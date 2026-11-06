@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.15.0-draft:hosting:regions-list-input",
+  "title": "Hosting region list input",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "region_ids": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "minItems": 1
+    },
+    "page_size": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+    },
+    "page_token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "Opaque continuation token bound to this filter set."
+    }
+  }
+}

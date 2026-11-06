@@ -1,6 +1,6 @@
 # Hosting Adapter Contract
 
-**Status:** Draft, version 0.14.0-draft.
+**Status:** Draft, version 0.15.0-draft.
 
 ## 1. Responsibility
 
@@ -28,9 +28,9 @@ An adapter MAY declare any subset of these capabilities:
 | `hosting.firewall.manage` | Manage firewall policy, when explicitly supported |
 | `hosting.bootstrap.deliver` | Deliver or invoke a protected bootstrap reference |
 
-Capabilities MUST declare constraints, permission scopes, idempotency behavior, and whether the operation can be reconciled after a lost response.
+Capabilities MUST declare constraints, permission scopes, idempotency behavior, and whether the operation can be reconciled after a lost response. Catalog listings are read-only discovery data: region, plan, and OS identifiers remain opaque and MUST be returned unchanged. An `unknown` availability result MUST NOT authorize instance creation.
 
-The adapter-level `hosting.instance.create` contract uses [instance-create-input.schema.json](../schemas/hosting/instance-create-input.schema.json) and [instance-create-output.schema.json](../schemas/hosting/instance-create-output.schema.json). The broader [provision request](../schemas/hosting/provision-request.schema.json) remains the controller's orchestration input and is not passed wholesale to the hosting adapter.
+The read-only `hosting.regions.list`, `hosting.plans.list`, and `hosting.os_offerings.list` capabilities use registered input/output schemas with opaque page tokens. The adapter-level `hosting.instance.create` contract uses [instance-create-input.schema.json](../schemas/hosting/instance-create-input.schema.json) and [instance-create-output.schema.json](../schemas/hosting/instance-create-output.schema.json). The broader [provision request](../schemas/hosting/provision-request.schema.json) remains the controller's orchestration input and is not passed wholesale to the hosting adapter.
 
 ## 3. Create specification
 
@@ -72,4 +72,4 @@ The adapter MUST report how the bootstrap was initiated, its immutable revision/
 
 ## 7. Conformance cases
 
-Test create success, create timeout/ambiguous outcome, duplicate idempotency key, inspect scope mismatch, provider transient failure, destroy target mismatch, destroy with missing core authorization, and destroy outcome reconciliation.
+Test filtered catalog results, opaque pagination, unknown availability, create success, create timeout/ambiguous outcome, duplicate idempotency key, inspect scope mismatch, provider transient failure, destroy target mismatch, destroy with missing core authorization, and destroy outcome reconciliation.
