@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:gameserver-controller:0.1.0-draft:operations:operation-request",
-  "title": "Management operation request",
+  "title": "Standard management operation request",
+  "description": "Generic reference schema. The management API uses the more specific oneOf schema in its OpenAPI document.",
   "type": "object",
   "additionalProperties": false,
   "required": ["operation_type", "parameters"],
@@ -9,12 +10,16 @@
     "operation_type": {
       "enum": ["server.define", "server.provision", "server.start", "server.stop", "server.backup", "server.restore", "server.destroy"]
     },
-    "parameters": {"type": "object", "description": "Validate against the operation-specific schema in protocol/operation-catalog.md."},
-    "deadline": {"type": "string", "format": "date-time"},
-    "extensions": {
-      "type": "object",
-      "description": "Namespaced extension properties; extensions MUST NOT change the meaning of standard fields.",
-      "additionalProperties": {"type": "object"}
-    }
-  }
+    "parameters": {"type": "object"},
+    "deadline": {"type": "string", "format": "date-time"}
+  },
+  "oneOf": [
+    {"properties": {"operation_type": {"const": "server.define"}, "parameters": {"$ref": "urn:gameserver-controller:0.1.0-draft:operations:server-definition"}}},
+    {"properties": {"operation_type": {"const": "server.provision"}, "parameters": {"$ref": "urn:gameserver-controller:0.1.0-draft:hosting:provision-request"}}},
+    {"properties": {"operation_type": {"const": "server.start"}, "parameters": {"$ref": "urn:gameserver-controller:0.1.0-draft:operations:start-parameters"}}},
+    {"properties": {"operation_type": {"const": "server.stop"}, "parameters": {"$ref": "urn:gameserver-controller:0.1.0-draft:operations:stop-parameters"}}},
+    {"properties": {"operation_type": {"const": "server.backup"}, "parameters": {"$ref": "urn:gameserver-controller:0.1.0-draft:operations:backup-parameters"}}},
+    {"properties": {"operation_type": {"const": "server.restore"}, "parameters": {"$ref": "urn:gameserver-controller:0.1.0-draft:operations:restore-parameters"}}},
+    {"properties": {"operation_type": {"const": "server.destroy"}, "parameters": {"$ref": "urn:gameserver-controller:0.1.0-draft:operations:destroy-parameters"}}}
+  ]
 }
