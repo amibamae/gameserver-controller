@@ -53,6 +53,10 @@ Record adapter/bucket identity, object key, length, checksum algorithm/digest, t
 
 An accepted upload is not automatically a verified backup. Core must require verification before destructive cleanup. Production backup credentials are not available to staging for writes/deletes. Release artifact permissions are separate from world backup permissions.
 
+## Execution contract
+
+Execution adapters manage a process or workload unit on an already provisioned environment. The initial reference is `execution.systemd` on a conventional Linux VM. Container, Kubernetes, and Agones implementations are optional. The execution adapter reports process/unit state; the game adapter defines installation, save semantics, game readiness, data paths, and version compatibility. See the [execution adapter protocol](../protocol/adapters/execution.md).
+
 ## Game-server contract
 
 Responsibilities: describe and control a game runtime, including installation, configuration, save semantics, readiness, data paths, version compatibility, and migration.
@@ -110,6 +114,7 @@ Core tests use fake adapters. Real adapter tests run only against isolated test 
 |---|---|---|
 | Hosting | Vultr | OVH, other providers |
 | Storage | Wasabi (S3-compatible) | Other object stores |
+| Execution | systemd on Debian VM | Container runtime, Kubernetes, Agones |
 | Execution | systemd on Debian VM | Container runtime, Kubernetes, Agones |
 | Game | Minecraft Java / Paper | Terraria, Valheim, ARK |
 | Integration | Velocity | Other proxies, monitoring, notifications |
