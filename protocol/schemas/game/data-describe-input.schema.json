@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.17.0-draft:game:data-describe-input",
+  "$id": "urn:gameserver-controller:0.18.0-draft:game:data-describe-input",
   "title": "Game persistent data describe input",
   "description": "Request a release-bound description of persistent game data sets.",
   "type": "object",
@@ -11,7 +11,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.17.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.18.0-draft:game:game-instance-target"
     },
     "release_id": {
       "type": "string",

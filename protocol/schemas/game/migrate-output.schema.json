@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.17.0-draft:game:migrate-output",
+  "$id": "urn:gameserver-controller:0.18.0-draft:game:migrate-output",
   "title": "Game data migration output",
   "description": "Output binds a migration result to its exact verified source backup, distinct target instance, and target release. A confirmed migration creates a new data generation.",
   "type": "object",
@@ -32,7 +32,7 @@
       "maxLength": 200
     },
     "target": {
-      "$ref": "urn:gameserver-controller:0.17.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.18.0-draft:game:game-instance-target"
     },
     "target_release_id": {
       "type": "string",
@@ -106,7 +106,7 @@
       "pattern": "^[a-z][a-z0-9._-]*$"
     },
     "reconciliation_ref": {
-      "$ref": "urn:gameserver-controller:0.17.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.18.0-draft:common:external-resource-ref"
     }
   },
   "allOf": [

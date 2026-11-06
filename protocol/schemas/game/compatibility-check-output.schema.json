@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.17.0-draft:game:compatibility-check-output",
+  "$id": "urn:gameserver-controller:0.18.0-draft:game:compatibility-check-output",
   "title": "Game backup compatibility check output",
   "description": "Output is bound to the source backup and target release; only a complete compatible result is a successful compatibility determination.",
   "type": "object",

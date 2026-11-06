@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.stop.target-mismatch",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "hosting.instance.stop",
   "purpose": "A result for a different provider instance cannot complete a stop request.",
   "input": {

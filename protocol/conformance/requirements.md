@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.17.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.18.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -67,7 +67,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Adapter timeout/crash leaves outcome uncertain until reconciliation.
 - Adapter cannot grant itself permissions or bypass core policy.
 - Adapter logs and errors redact secrets.
-- Hosting instance inspection is read-only and bound to the exact requested instance; `unknown` is not treated as `active` or `destroyed`. Start, stop, and reboot results bind the exact provider instance; accepted does not establish completion, completed requires the action's exact postcondition, reboot does not establish game readiness, and unknown requires inspection before retry. Region, plan, and OS-offering catalog listings preserve opaque IDs, honor requested filters and page bounds, and never treat unknown availability as permission to create.
+- Hosting instance inspection is read-only and bound to the exact requested instance; `unknown` is not treated as `active` or `destroyed`. Start, stop, reboot, and destroy results bind the exact provider instance; accepted does not establish completion, completed requires the action's exact postcondition, reboot does not establish game readiness, and unknown requires inspection before retry. Destroy is blocked unless the core confirms authorization, stopped state, and a verified backup for the current data generation. Region, plan, and OS-offering catalog listings preserve opaque IDs, honor requested filters and page bounds, and never treat unknown availability as permission to create.
 - Game readiness output is bound to the exact requested instance and release; every requested required check has exactly one result, and `unknown` never permits `ready`.
 - Data-set descriptions are release-bound, use unique IDs and safe relative paths, and advertise supported consistency modes. Confirmed game saves require completion evidence; unknown save or backup preparation outcomes require reconciliation references.
 - Game health results bind to the exact release and instance, contain exactly one result per requested check, and do not promote unknown evidence to healthy. Game backup validation uses bounded streams for the exact manifest objects; `unknown` validation never verifies a backup.
@@ -193,6 +193,14 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [hosting-instance-reboot-accepted-not-complete.json](test-vectors/hosting-instance-reboot-accepted-not-complete.json)
 - [hosting-instance-reboot-unknown-requires-inspection.json](test-vectors/hosting-instance-reboot-unknown-requires-inspection.json)
 - [hosting-instance-reboot-target-mismatch.json](test-vectors/hosting-instance-reboot-target-mismatch.json)
+- [hosting-instance-destroy-authorization-required.json](test-vectors/hosting-instance-destroy-authorization-required.json)
+- [hosting-instance-destroy-verified-backup-required.json](test-vectors/hosting-instance-destroy-verified-backup-required.json)
+- [hosting-instance-destroy-current-generation-backup-required.json](test-vectors/hosting-instance-destroy-current-generation-backup-required.json)
+- [hosting-instance-destroy-stopped-required.json](test-vectors/hosting-instance-destroy-stopped-required.json)
+- [hosting-instance-destroy-completed-destroyed.json](test-vectors/hosting-instance-destroy-completed-destroyed.json)
+- [hosting-instance-destroy-accepted-not-destroyed.json](test-vectors/hosting-instance-destroy-accepted-not-destroyed.json)
+- [hosting-instance-destroy-unknown-requires-inspection.json](test-vectors/hosting-instance-destroy-unknown-requires-inspection.json)
+- [hosting-instance-destroy-target-mismatch.json](test-vectors/hosting-instance-destroy-target-mismatch.json)
 - [hosting-regions-list-filtered.json](test-vectors/hosting-regions-list-filtered.json)
 - [hosting-plans-list-resource-filter.json](test-vectors/hosting-plans-list-resource-filter.json)
 - [hosting-plans-list-minimum-filter-mismatch.json](test-vectors/hosting-plans-list-minimum-filter-mismatch.json)

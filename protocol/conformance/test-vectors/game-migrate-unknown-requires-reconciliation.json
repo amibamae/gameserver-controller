@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.migrate.unknown-requires-reconciliation",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "game.migrate",
   "purpose": "An ambiguous migration result is not treated as success and cannot be retried before reconciliation.",
   "input": {

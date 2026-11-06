@@ -1,6 +1,6 @@
 {
   "fixture_id": "storage.backup.partial-upload-not-verified",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "storage.object.put",
   "purpose": "A partially uploaded multi-object backup never becomes verified or eligible for destruction.",
   "input": {

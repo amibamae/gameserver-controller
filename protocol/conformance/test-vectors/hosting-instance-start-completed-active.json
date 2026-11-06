@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.start.completed-active",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "hosting.instance.start",
   "purpose": "A completed start confirms active state for the exact instance.",
   "input": {

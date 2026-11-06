@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.migrate.approval-required",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "game.migrate",
   "purpose": "A missing or invalid approval blocks dispatch before the adapter can mutate the target.",
   "input": {

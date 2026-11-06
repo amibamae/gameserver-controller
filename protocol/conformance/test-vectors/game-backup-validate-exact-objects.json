@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.backup.validate.exact-objects",
-  "protocol_version": "0.17.0-draft",
+  "protocol_version": "0.18.0-draft",
   "contract_area": "game.backup.validate",
   "purpose": "Game backup validation consumes one bounded stream for each exact manifest object and requires every requested check to pass.",
   "input": {
