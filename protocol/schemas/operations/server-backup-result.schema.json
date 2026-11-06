@@ -56,8 +56,30 @@
                 "ready",
                 "stopped"
               ]
+            },
+            "readiness_assertion": {
+              "$ref": "urn:gameserver-controller:0.1.0-draft:lifecycle:readiness-assertion"
             }
-          }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "final_lifecycle_state": {
+                    "const": "ready"
+                  }
+                },
+                "required": [
+                  "final_lifecycle_state"
+                ]
+              },
+              "then": {
+                "required": [
+                  "readiness_assertion"
+                ]
+              }
+            }
+          ]
         }
       }
     }
