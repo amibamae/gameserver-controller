@@ -1,0 +1,24 @@
+{
+  "server_id": "minecraft-test",
+  "environment_id": "test",
+  "hosting_adapter_id": "hosting.example",
+  "region_id": "region-test-1",
+  "plan_id": "plan-small",
+  "os": {
+    "provider_os_id": "provider-debian-13",
+    "distribution": "Debian",
+    "version": "13",
+    "architecture": "x86_64"
+  },
+  "bootstrap": {
+    "source_uri": "https://example.invalid/bootstrap.sh",
+    "revision": "git:0123456789abcdef",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "inputs": {"game_adapter": "game.minecraft-paper"}
+  },
+  "game": {"adapter_id": "game.minecraft-paper", "release_ref": "release:paper-example"},
+  "execution": {"adapter_id": "execution.systemd", "profile": "paper-standard"},
+  "restore_backup_id": "backup-test-001",
+  "network_profile": "private-game-backend",
+  "firewall_policy_ref": "firewall:test-backend"
+}
