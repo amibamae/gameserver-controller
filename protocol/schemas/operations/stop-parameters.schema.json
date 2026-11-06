@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:operations:stop-parameters",
+  "title": "Server stop parameters",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "drain": {"type": "boolean", "default": true},
+    "drain_timeout_ms": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+    "graceful_timeout_ms": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "force": {"type": "boolean", "default": false},
+    "approval_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "expected_instance_ref": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"}
+  }
+}
