@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.stop.accepted-not-stopped",
-  "protocol_version": "0.16.0-draft",
+  "protocol_version": "0.17.0-draft",
   "contract_area": "hosting.instance.stop",
   "purpose": "Provider acceptance with a returned operation reference does not confirm stopped state.",
   "input": {

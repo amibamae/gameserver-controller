@@ -1,0 +1,33 @@
+{
+  "fixture_id": "hosting.instance.reboot.unknown-requires-inspection",
+  "protocol_version": "0.17.0-draft",
+  "contract_area": "hosting.instance.reboot",
+  "purpose": "An unknown reboot result requires exact-instance inspection before retry.",
+  "input": {
+    "reboot_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    },
+    "reboot_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      },
+      "outcome": "outcome_unknown",
+      "state": "unknown",
+      "observed_at": "2026-11-06T11:46:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "completion_confirmed": false,
+    "unknown_requires_inspection": true
+  }
+}

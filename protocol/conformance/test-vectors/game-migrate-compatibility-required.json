@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.migrate.compatibility-required",
-  "protocol_version": "0.16.0-draft",
+  "protocol_version": "0.17.0-draft",
   "contract_area": "game.migrate",
   "purpose": "A migration call is not dispatched unless the exact compatibility check requires migration.",
   "input": {

@@ -1,6 +1,6 @@
 # Hosting Adapter Contract
 
-**Status:** Draft, version 0.16.0-draft.
+**Status:** Draft, version 0.17.0-draft.
 
 ## 1. Responsibility
 
@@ -52,7 +52,7 @@ A create request MUST NOT include raw API tokens, passwords, private keys, stora
 
 - Create: return a provider operation reference and instance reference when available; do not claim active until the instance postcondition is observed.
 - Inspect: return the exact target identity, normalized state, region/plan/OS facts when available, network observations, and observation timestamp. The result MUST bind the requested instance; `unknown` is not equivalent to `active` or `destroyed`.
-- Start and stop use exact-instance schemas. A completed result confirms `active` or `stopped`, respectively; an accepted result requires a provider operation reference and does not confirm completion. An unknown result requires inspection of the exact instance before retry. Reboot follows the same accepted/completed/unknown distinction.
+- Start, stop, and reboot use exact-instance schemas. A completed start or reboot confirms `active`; a completed stop confirms `stopped`. An accepted result requires a provider operation reference and does not confirm completion. An unknown result requires inspection of the exact instance before retry. A completed reboot does not establish game readiness. Before a normal reboot of an instance with persistent game data, the core MUST obtain a confirmed game save or clean stop. Bypassing that precondition requires separate explicit emergency approval and may lose unsaved changes. A result whose instance reference does not match the request is untrusted and requires exact-instance inspection before retry or dependent work.
 - Destroy: require a core-authorized operation context, exact instance reference, and destruction plan. The adapter MUST reject missing/mismatched target scope. The core re-checks backup and authorization immediately before dispatch.
 - Wait: bounded by request deadline; timeout means unknown unless the provider's state establishes otherwise.
 

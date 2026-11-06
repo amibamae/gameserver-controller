@@ -1,0 +1,39 @@
+{
+  "fixture_id": "hosting.instance.reboot.accepted-not-complete",
+  "protocol_version": "0.17.0-draft",
+  "contract_area": "hosting.instance.reboot",
+  "purpose": "Provider acceptance does not confirm the instance finished rebooting.",
+  "input": {
+    "reboot_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    },
+    "reboot_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      },
+      "outcome": "accepted",
+      "state": "stopped",
+      "observed_at": "2026-11-06T11:46:00Z",
+      "provider_operation_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "operation",
+        "external_id": "host-op-reboot-021"
+      }
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "completion_confirmed": false,
+    "unknown_requires_inspection": false
+  }
+}

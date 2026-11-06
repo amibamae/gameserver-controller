@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.plans.list.minimum-filter-mismatch",
-  "protocol_version": "0.16.0-draft",
+  "protocol_version": "0.17.0-draft",
   "contract_area": "hosting.plans.list",
   "purpose": "A provider result below the requested CPU floor is rejected as a filter mismatch.",
   "input": {

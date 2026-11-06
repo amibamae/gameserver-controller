@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.os_offerings.list.unknown-not-available",
-  "protocol_version": "0.16.0-draft",
+  "protocol_version": "0.17.0-draft",
   "contract_area": "hosting.os_offerings.list",
   "purpose": "An OS offering with unknown availability cannot be treated as eligible for create.",
   "input": {

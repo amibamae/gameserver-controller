@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.stop.unknown-requires-inspection",
-  "protocol_version": "0.16.0-draft",
+  "protocol_version": "0.17.0-draft",
   "contract_area": "hosting.instance.stop",
   "purpose": "An unknown stop result requires inspection before retry or dependent work.",
   "input": {
