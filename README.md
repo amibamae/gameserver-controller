@@ -29,7 +29,7 @@ The initial reference deployment is **Vultr + Wasabi + Minecraft Java Edition (P
 
 ## Protocol-first architecture
 
-The protocol specifications—not a particular programming language implementation—are intended to be the authoritative source for interoperability.
+The protocol specifications—not a particular programming language implementation—are intended to be the authoritative source for interoperability. The initial draft is execution-agnostic: ordinary VMs and systemd are the reference path; containers, Kubernetes, and Agones are optional integrations.
 
 The design separates two communication surfaces:
 
@@ -104,6 +104,12 @@ See [AI Use and Development Transparency](docs/AI_DISCLOSURE.md) for the full di
 - [Protocol overview and design principles](protocol/README.md)
 - [Common protocol types](protocol/common-types.md)
 - [Durable operation protocol](protocol/operations.md)
+- [Lifecycle protocol](protocol/lifecycle.md)
+- [Adapter contracts](protocol/adapters/README.md)
+- [RPC methods and transport](protocol/rpc/methods.md)
+- [Management API and OpenAPI definition](protocol/management-api/overview.md)
+- [Protocol security](protocol/security.md)
+- [Conformance and test vectors](protocol/conformance/requirements.md)
 
 ### Project policies
 
