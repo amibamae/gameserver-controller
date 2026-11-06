@@ -1,6 +1,6 @@
 # Game Server Controller
 
-A language-independent, extensible project for safely provisioning, operating, updating, staging, backing up, and rolling back disposable game servers across hosting and storage providers.
+An open, protocol-first project for safely provisioning and operating disposable game servers with customizable bootstrap scripts, provider adapters, durable lifecycle operations, backups, restores, staging, and rollback.
 
 > **Project status: protocol design.** The project is currently defining its language-independent protocol and architecture. The controller engine, management API, CLI, and production adapters are planned; they are not yet implemented. See the [development roadmap](docs/ROADMAP.md).
 
