@@ -1,0 +1,23 @@
+{
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-test-001"
+    }
+  },
+  "release_id": "paper-1.21.11-build-3",
+  "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+  "configuration_schema_checksum": {
+    "algorithm": "sha256",
+    "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "configuration": {
+    "server-port": 25566,
+    "motd": "Mae's staging server"
+  },
+  "secret_bindings": {}
+}

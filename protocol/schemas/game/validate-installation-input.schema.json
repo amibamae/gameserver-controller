@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.5.0-draft:game:validate-installation-input",
+  "title": "Game validate installation input",
+  "description": "Verify installed game files and release identity on one exact execution target.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "release_id"
+  ],
+  "properties": {
+    "target": {
+      "$ref": "urn:gameserver-controller:0.5.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  }
+}

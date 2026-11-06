@@ -1,0 +1,145 @@
+{
+  "fixture_id": "game.release.install.configure.fail-closed",
+  "protocol_version": "0.5.0-draft",
+  "contract_area": "game.release.install.configure",
+  "purpose": "Pinned artifacts are verified before install begins, and invalid configuration is rejected before application.",
+  "input": {
+    "release_describe_input": {
+      "release_id": "paper-1.21.11-build-3"
+    },
+    "release_describe_output": {
+      "game_adapter_id": "game.minecraft-paper",
+      "game_name": "Minecraft Java Edition",
+      "release_id": "paper-1.21.11-build-3",
+      "game_version": "1.21.11+build.3",
+      "targets": [
+        {
+          "os_family": "linux",
+          "architecture": "x86_64"
+        }
+      ],
+      "artifacts": [
+        {
+          "artifact_id": "paper-server-jar",
+          "artifact_uri": "https://artifacts.example.test/paper-1.21.11-build-3.jar",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      ],
+      "runtime_requirements": [
+        {
+          "runtime_id": "java",
+          "version_requirement": "21"
+        }
+      ],
+      "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+      "configuration_schema_checksum": {
+        "algorithm": "sha256",
+        "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "data_format": {
+        "format_id": "minecraft-java-world",
+        "version": "region-v1"
+      },
+      "required_execution_capabilities": [
+        "execution.unit.inspect",
+        "execution.unit.start",
+        "execution.unit.graceful_stop"
+      ]
+    },
+    "install_input": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3"
+    },
+    "install_output": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3",
+      "outcome": "rejected",
+      "artifact_verification": "mismatch",
+      "installation_started": false,
+      "verified_artifact_ids": [],
+      "observed_at": "2026-11-06T09:15:00Z",
+      "reason_code": "artifact_checksum_mismatch"
+    },
+    "configure_input": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3",
+      "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+      "configuration_schema_checksum": {
+        "algorithm": "sha256",
+        "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "configuration": {
+        "server-port": 0
+      },
+      "secret_bindings": {}
+    },
+    "configure_output": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3",
+      "outcome": "rejected",
+      "validation_result": "invalid",
+      "application_started": false,
+      "configuration_digest": {
+        "algorithm": "sha256",
+        "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "issues": [
+        {
+          "path": "/server-port",
+          "code": "out_of_range",
+          "message": "Port must be within the supported range."
+        }
+      ],
+      "observed_at": "2026-11-06T09:16:00Z"
+    }
+  },
+  "expected": {
+    "release_schema_valid": true,
+    "release_bound": true,
+    "release_artifacts_checksummed": true,
+    "install_schema_valid": true,
+    "installation_blocked_before_start": true,
+    "configure_schema_valid": true,
+    "invalid_configuration_not_applied": true
+  },
+  "side_effect_expected": "none"
+}

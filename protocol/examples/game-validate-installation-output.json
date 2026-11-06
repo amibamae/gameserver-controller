@@ -1,0 +1,30 @@
+{
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-test-001"
+    }
+  },
+  "release_id": "paper-1.21.11-build-3",
+  "validation_result": "valid",
+  "artifact_results": [
+    {
+      "artifact_id": "paper-server-jar",
+      "result": "verified",
+      "expected_checksum": {
+        "algorithm": "sha256",
+        "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "observed_checksum": {
+        "algorithm": "sha256",
+        "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "observed_game_version": "1.21.11+build.3",
+  "observed_at": "2026-11-06T09:17:00Z"
+}

@@ -1,6 +1,6 @@
 # Game Adapter Contract
 
-**Status:** Draft, version 0.4.0-draft.
+**Status:** Draft, version 0.5.0-draft.
 
 ## 1. Responsibility
 
@@ -25,13 +25,15 @@ A game adapter defines game-specific installation, configuration, runtime requir
 
 ## 3. Release description
 
-A release description MUST identify game adapter ID, game name, opaque game version, platform/architecture constraints, artifact references and checksums, runtime requirements, configuration schema, data-format metadata, and required execution capabilities.
+A release description MUST identify game adapter ID, game name, opaque game version, platform/architecture constraints, immutable artifact references and checksums, runtime requirements, configuration schema URI and checksum, data-format metadata, and required execution capabilities.
 
 Game versions are opaque to the core unless the game adapter declares comparison and compatibility rules. The core MUST NOT assume semantic versioning for game releases or worlds.
 
 ## 4. Installation and configuration
 
-Install/configure operations MUST be repeatable or must explicitly declare non-idempotent behavior. They MUST use immutable release/artifact references and verify checksums before execution. Configuration validation MUST be side-effect free. Secret values MUST be supplied only through authorized secret references.
+Installation MUST verify every declared artifact checksum before execution; a mismatch MUST prevent installation from starting. Repeating install for the same exact release MUST report an already-installed state or converge idempotently.
+
+Configuration validation MUST use the schema URI and checksum pinned by the release and MUST finish before application begins. The adapter MUST verify these values against the release and MUST NOT dereference an arbitrary schema URI supplied by the caller. Configuration objects MUST NOT contain secret values; secret bindings MUST use authorized secret references.
 
 ## 5. Readiness and health
 
@@ -63,4 +65,4 @@ The adapter defines whether a backup can be opened by a target release, whether 
 
 ## 8. Conformance cases
 
-Test artifact checksum mismatch, installation repeat, invalid configuration, game process running but not ready, unknown readiness, save failure, backup validation failure, incompatible world, and migration without approval.
+Test artifact checksum mismatch before installation starts, repeated install of the same release, invalid configuration before application, unknown installed-artifact validation blocking start, game process running but not ready, unknown readiness, save failure, backup validation failure, incompatible world, and migration without approval.

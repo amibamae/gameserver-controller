@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.5.0-draft:game:configure-input",
+  "title": "Game configure input",
+  "description": "Validate and apply non-secret configuration against the schema pinned by the exact release. Secret values are supplied only as references.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "release_id",
+    "configuration_schema_uri",
+    "configuration_schema_checksum",
+    "configuration",
+    "secret_bindings"
+  ],
+  "properties": {
+    "target": {
+      "$ref": "urn:gameserver-controller:0.5.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "configuration_schema_uri": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048
+    },
+    "configuration_schema_checksum": {
+      "$ref": "urn:gameserver-controller:0.5.0-draft:storage:storage-checksum"
+    },
+    "configuration": {
+      "type": "object"
+    },
+    "secret_bindings": {
+      "type": "object",
+      "maxProperties": 64,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "additionalProperties": {
+        "$ref": "urn:gameserver-controller:0.5.0-draft:common:secret-reference"
+      }
+    }
+  }
+}

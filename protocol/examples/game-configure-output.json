@@ -1,0 +1,22 @@
+{
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-test-001"
+    }
+  },
+  "release_id": "paper-1.21.11-build-3",
+  "outcome": "applied",
+  "validation_result": "valid",
+  "application_started": true,
+  "configuration_digest": {
+    "algorithm": "sha256",
+    "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "issues": [],
+  "observed_at": "2026-11-06T09:16:00Z"
+}
