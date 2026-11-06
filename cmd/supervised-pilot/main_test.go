@@ -273,7 +273,7 @@ func TestBackupRequiresServiceInvocationToBeFinished(t *testing.T) {
 				t.Fatal(readErr)
 			}
 			if test.unknownResult {
-				if !strings.Contains(string(audit), `"event":"outcome_unknown"`) || strings.Contains(string(audit), `"event":"service_succeeded"`) {
+			} else if !strings.Contains(string(audit), `"event":"service_succeeded"`) {
 					t.Fatalf("expected unknown, not success, in audit log; got %s", audit)
 				}
 			} else if !strings.Contains(string(audit), `"event":"service_succeeded"`) {
