@@ -3,6 +3,7 @@
   "backup_id": "backup-test-001",
   "server_id": "minecraft-test",
   "environment_id": "test",
+  "data_generation_id": "generation-test-001",
   "source_instance_ref": {
     "adapter_id": "hosting.example",
     "environment_id": "test",
