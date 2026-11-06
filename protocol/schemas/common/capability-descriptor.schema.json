@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor",
+  "title": "Adapter descriptor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["adapter_id", "category", "display_name", "implementation_version", "protocol_versions", "capabilities", "required_permissions"],
+  "properties": {
+    "adapter_id": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9.-]+$"},
+    "category": {"enum": ["hosting", "storage", "execution", "game", "integration"]},
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 200},
+    "implementation_version": {"type": "string", "minLength": 1, "maxLength": 100},
+    "protocol_versions": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 100}},
+    "contract_versions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 100}},
+    "configuration_schema_uri": {"type": "string", "format": "uri"},
+    "required_permissions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 160}},
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "version", "mutating", "input_schema_uri", "output_schema_uri"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 160},
+          "version": {"type": "string", "minLength": 1, "maxLength": 40},
+          "mutating": {"type": "boolean"},
+          "input_schema_uri": {"type": "string", "format": "uri"},
+          "output_schema_uri": {"type": "string", "format": "uri"},
+          "constraints": {"type": "object"},
+          "required_permissions": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+        }
+      }
+    },
+    "constraints": {"type": "object"},
+    "documentation_uri": {"type": "string", "format": "uri"}
+  }
+}
