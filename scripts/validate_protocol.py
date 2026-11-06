@@ -43,12 +43,28 @@ def reject_duplicate_members(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def check_safe_integer_values(value: Any, source: str, location: str = "$") -> None:
+    if isinstance(value, bool):
+        return
+    if isinstance(value, int):
+        if abs(value) > 9_007_199_254_740_991:
+            raise ValueError(f"{source}{location}: integer exceeds the interoperable JSON safe-integer range")
+    elif isinstance(value, dict):
+        for key, child in value.items():
+            check_safe_integer_values(child, source, f"{location}.{key}")
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            check_safe_integer_values(child, source, f"{location}[{index}]")
+
+
 def load_json(path: Path) -> Any:
-    return json.loads(
+    value = json.loads(
         path.read_text(encoding="utf-8"),
         object_pairs_hook=reject_duplicate_members,
         parse_constant=reject_constant,
     )
+    check_safe_integer_values(value, str(path))
+    return value
 
 
 def collect_refs(value: Any):
@@ -195,6 +211,20 @@ def main() -> int:
         except Exception as exc:
             fail(errors, f"{filename}: invalid JSON: {exc}")
             continue
+        if isinstance(document, dict) and isinstance(document.get("capabilities"), list):
+            for capability_index, capability in enumerate(document["capabilities"]):
+                if not isinstance(capability, dict):
+                    fail(errors, f"{filename}: capability {capability_index} must be an object")
+                    continue
+                for field in ("input_schema_uri", "output_schema_uri"):
+                    schema_uri = capability.get(field)
+                    if schema_uri not in schemas_by_id:
+                        fail(
+                            errors,
+                            f"{filename}: capability {capability_index} {field} "
+                            f"does not resolve in the local schema registry: {schema_uri!r}",
+                        )
+
         validation_errors = sorted(
             validators[schema_id].iter_errors(document),
             key=lambda error: (list(map(str, error.absolute_path)), error.message),

@@ -27,6 +27,26 @@
       "id": "urn:gameserver-controller:0.1.0-draft:common:secret-reference"
     },
     {
+      "path": "execution/systemd-unit-graceful-stop-input.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-graceful-stop-input"
+    },
+    {
+      "path": "execution/systemd-unit-inspect-input.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-inspect-input"
+    },
+    {
+      "path": "execution/systemd-unit-inspect-output.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-inspect-output"
+    },
+    {
+      "path": "execution/systemd-unit-lifecycle-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-lifecycle-result"
+    },
+    {
+      "path": "execution/systemd-unit-start-input.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-start-input"
+    },
+    {
       "path": "hosting/provision-request.schema.json",
       "id": "urn:gameserver-controller:0.1.0-draft:hosting:provision-request"
     },
