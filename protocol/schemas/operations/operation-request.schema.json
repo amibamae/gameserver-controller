@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:operations:operation-request",
+  "title": "Management operation request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["operation_type", "parameters"],
+  "properties": {
+    "operation_type": {
+      "enum": ["server.provision", "server.start", "server.stop", "server.backup", "server.restore", "server.replace", "server.destroy"]
+    },
+    "parameters": {"type": "object"},
+    "deadline": {"type": "string", "format": "date-time"},
+    "extensions": {
+      "type": "object",
+      "description": "Namespaced extension properties; extensions MUST NOT change the meaning of standard fields.",
+      "additionalProperties": {"type": "object"}
+    }
+  }
+}
