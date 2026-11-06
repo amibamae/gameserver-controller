@@ -132,17 +132,17 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		unknown := outcome == "outcome_unknown"
 		startSucceeded := strings.HasPrefix(fixtureID, "execution.unit.start.") && unitBound && outcome == "completed" && state == "running"
 		return map[string]any{
-			"schemas_valid":                        true,
-			"unit_bound":                           unitBound,
-			"outcome":                              outcome,
-			"state":                                state,
-			"external_operation_ref_present":       hasOperationRef,
-			"operation_ref_environment_matches":    operationEnvironmentMatches,
-			"readiness_established":                false,
-			"reconciliation_required":              unknown,
-			"retry_without_inspection":             false,
-			"successful_start_claim_accepted":      startSucceeded,
-			"termination_confirmed":                unitBound && outcome == "completed" && state == "stopped",
+			"schemas_valid":                     true,
+			"unit_bound":                        unitBound,
+			"outcome":                           outcome,
+			"state":                             state,
+			"external_operation_ref_present":    hasOperationRef,
+			"operation_ref_environment_matches": operationEnvironmentMatches,
+			"readiness_established":             false,
+			"reconciliation_required":           unknown,
+			"retry_without_inspection":          false,
+			"successful_start_claim_accepted":   startSucceeded,
+			"termination_confirmed":             unitBound && outcome == "completed" && state == "stopped",
 		}, nil
 	case "game.compatibility.check.compatible", "game.compatibility.check.migration-required", "game.compatibility.check.incompatible", "game.compatibility.check.unknown", "game.compatibility.check.incomplete", "game.compatibility.check.unknown-reported-compatible", "game.compatibility.check.target-mismatch":
 		compatibilityInput, compatibilityOutput := asObject(input["compatibility_input"]), asObject(input["compatibility_output"])
