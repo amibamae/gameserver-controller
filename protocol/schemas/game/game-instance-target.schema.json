@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.6.0-draft:game:game-instance-target",
+  "$id": "urn:gameserver-controller:0.7.0-draft:game:game-instance-target",
   "title": "Game instance target",
   "description": "Exact logical server, environment, and execution instance that a game capability may inspect or mutate.",
   "type": "object",
@@ -22,7 +22,7 @@
       "maxLength": 200
     },
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.6.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.7.0-draft:common:external-resource-ref"
     }
   }
 }

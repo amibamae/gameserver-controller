@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.7.0-draft:operations:server-start-result",
+  "title": "Durable server.start operation result",
+  "description": "Canonical operation result with typed data for server.start.",
+  "allOf": [
+    {
+      "$ref": "urn:gameserver-controller:0.7.0-draft:operations:operation-result"
+    },
+    {
+      "type": "object",
+      "required": [
+        "operation_type",
+        "operation_data"
+      ],
+      "properties": {
+        "operation_type": {
+          "const": "server.start"
+        },
+        "operation_data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "server_id",
+            "environment_id",
+            "instance_ref",
+            "lifecycle_state",
+            "readiness_assertion"
+          ],
+          "properties": {
+            "server_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "instance_ref": {
+              "$ref": "urn:gameserver-controller:0.7.0-draft:common:external-resource-ref"
+            },
+            "lifecycle_state": {
+              "const": "ready"
+            },
+            "readiness_assertion": {
+              "$ref": "urn:gameserver-controller:0.7.0-draft:lifecycle:readiness-assertion"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.6.0-draft:hosting:provision-request",
+  "$id": "urn:gameserver-controller:0.7.0-draft:hosting:provision-request",
   "title": "Provider-neutral provision request",
   "type": "object",
   "additionalProperties": false,
@@ -52,7 +52,7 @@
     "firewall_policy_ref": {"type": "string", "maxLength": 500},
     "secret_refs": {
       "type": "array",
-      "items": {"$ref": "urn:gameserver-controller:0.6.0-draft:common:secret-reference"}
+      "items": {"$ref": "urn:gameserver-controller:0.7.0-draft:common:secret-reference"}
     },
     "ssh_key_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 500}},
     "labels": {"type": "object", "additionalProperties": {"type": "string", "maxLength": 500}}

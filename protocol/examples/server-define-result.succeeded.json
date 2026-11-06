@@ -1,0 +1,18 @@
+{
+  "outcome_summary": "Logical server record created without infrastructure.",
+  "affected_resources": [],
+  "completed_steps": [],
+  "failed_steps": [],
+  "warnings": [],
+  "unresolved_conditions": [],
+  "audit_event_ids": [
+    "audit-operation-result-007"
+  ],
+  "partial": false,
+  "operation_type": "server.define",
+  "operation_data": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "lifecycle_state": "unprovisioned"
+  }
+}

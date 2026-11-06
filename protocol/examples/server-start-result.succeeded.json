@@ -1,0 +1,51 @@
+{
+  "outcome_summary": "Runtime started and readiness was confirmed.",
+  "affected_resources": [
+    {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-001"
+    },
+    {
+      "adapter_id": "execution.systemd",
+      "environment_id": "staging",
+      "resource_kind": "service",
+      "external_id": "paper-staging.service"
+    }
+  ],
+  "completed_steps": [],
+  "failed_steps": [],
+  "warnings": [],
+  "unresolved_conditions": [],
+  "audit_event_ids": [
+    "audit-operation-result-007"
+  ],
+  "partial": false,
+  "operation_type": "server.start",
+  "operation_data": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-001"
+    },
+    "lifecycle_state": "ready",
+    "readiness_assertion": {
+      "assertion_id": "readiness-paper-007",
+      "server_id": "minecraft-test",
+      "environment_id": "staging",
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-001"
+      },
+      "readiness_check_set_id": "paper-required-v1",
+      "observed_at": "2026-11-06T07:33:00Z",
+      "expires_at": "2026-11-06T07:34:00Z"
+    }
+  }
+}

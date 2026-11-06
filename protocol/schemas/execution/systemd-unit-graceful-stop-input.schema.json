@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-graceful-stop-input",
+  "$id": "urn:gameserver-controller:0.7.0-draft:execution:systemd-unit-graceful-stop-input",
   "title": "Systemd execution unit graceful stop input",
   "type": "object",
   "additionalProperties": false,
@@ -9,7 +9,7 @@
   ],
   "properties": {
     "unit_ref": {
-      "$ref": "urn:gameserver-controller:0.6.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.7.0-draft:common:external-resource-ref"
     },
     "grace_period_seconds": {
       "type": "integer",

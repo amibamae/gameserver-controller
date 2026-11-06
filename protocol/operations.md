@@ -1,6 +1,6 @@
 # Durable Operation Protocol
 
-**Status:** Draft, version 0.6.0-draft. This document defines language-independent operation semantics. JSON schemas and RPC/management bindings are published separately.
+**Status:** Draft, version 0.7.0-draft. This document defines language-independent operation semantics. JSON schemas and RPC/management bindings are published separately.
 
 The operation protocol is shared by the controller core, adapters, command-line tools, and future management clients. Implementations in different languages MUST preserve the behavior defined here.
 
@@ -229,7 +229,7 @@ The terminal operation record carries its final status and `completed_at` timest
 - Related audit event IDs.
 - A `partial` flag indicating whether only part of the requested outcome was achieved.
 
-Each result identifies its `operation_type`, which MUST match the enclosing operation. Successful provisioning, backup, restore, and destruction results MUST include `operation_data` validated against the corresponding registered result schema: [provision](schemas/operations/server-provision-result.schema.json), [backup](schemas/operations/server-backup-result.schema.json), [restore](schemas/operations/server-restore-result.schema.json), or [destroy](schemas/operations/server-destroy-result.schema.json). These schemas add operation-specific facts while preserving the canonical result envelope.
+Each result identifies its `operation_type`, which MUST match the enclosing operation. Successful definition, provisioning, start, stop, backup, restore, and destruction results MUST include `operation_data` validated against the corresponding registered result schema: [define](schemas/operations/server-define-result.schema.json), [provision](schemas/operations/server-provision-result.schema.json), [start](schemas/operations/server-start-result.schema.json), [stop](schemas/operations/server-stop-result.schema.json), [backup](schemas/operations/server-backup-result.schema.json), [restore](schemas/operations/server-restore-result.schema.json), or [destroy](schemas/operations/server-destroy-result.schema.json). These schemas add operation-specific facts while preserving the canonical result envelope.
 
 A failed operation MUST include a structured operation-level `error`. When known side effects or partial completion exist, the operation SHOULD also retain a result with `partial: true`. A successful operation MUST include a result and completion timestamp. A cancelled operation MUST include a completion timestamp and preserve any known external state.
 

@@ -1,0 +1,55 @@
+{
+  "outcome_summary": "Players were drained, game data was saved, and the runtime was confirmed stopped.",
+  "affected_resources": [
+    {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-001"
+    },
+    {
+      "adapter_id": "execution.systemd",
+      "environment_id": "staging",
+      "resource_kind": "service",
+      "external_id": "paper-staging.service"
+    }
+  ],
+  "completed_steps": [],
+  "failed_steps": [],
+  "warnings": [],
+  "unresolved_conditions": [],
+  "audit_event_ids": [
+    "audit-operation-result-007"
+  ],
+  "partial": false,
+  "operation_type": "server.stop",
+  "operation_data": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-001"
+    },
+    "lifecycle_state": "stopped",
+    "game_save": {
+      "outcome": "confirmed",
+      "observed_at": "2026-11-06T07:35:00Z"
+    },
+    "execution": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "service",
+        "external_id": "paper-staging.service"
+      },
+      "outcome": "stopped",
+      "observed_at": "2026-11-06T07:35:30Z"
+    },
+    "proxy_drain": {
+      "outcome": "drained",
+      "observed_at": "2026-11-06T07:34:30Z"
+    }
+  }
+}

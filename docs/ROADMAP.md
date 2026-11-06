@@ -36,12 +36,12 @@
 - [x] Select draft standards: JSON, JSON Schema 2020-12, JSON-RPC 2.0, OpenAPI 3.2.1, RFC 3339, and RFC 8785 where canonicalization is required.
 - [ ] Validate the selected standards, validators, generators, and transport binding across target languages.
 - [x] Publish an initial set of language-neutral schemas, examples, test vectors, and conformance requirements.
-- [x] Publish a canonical durable-operation result schema, typed provision/backup/restore/destroy results, and Velocity player-transfer request/result schemas.
+- [x] Publish a canonical durable-operation result schema, typed results for all seven standard operations, and Velocity player-transfer request/result schemas.
 - [x] Add CI validation and a behavioral conformance runner; extend the suite as protocol fixtures are added.
 - [x] Publish registered input/output schemas for the hosting instance-create capability.
 - [x] Publish input/output schemas and conformance examples for the initial storage object capabilities.
 - [ ] Specify a bounded data-transfer binding for process adapters; `jsonrpc-stdio-v1` does not yet support storage put/get.
-- [ ] Expand capability-specific input/output schemas across execution, game, and integration operations; complete hosting coverage and typed operation results.
+- [ ] Expand capability-specific input/output schemas across execution, game, and integration operations; complete hosting coverage.
 - [x] Publish initial draft compatibility rules for negotiation, schema identity, evolution, and in-flight operations.
 - [ ] Review the complete protocol and freeze compatibility rules.
 - [ ] Build independent implementations in at least two programming languages and pass the same conformance suite.
@@ -134,6 +134,6 @@ The first end-to-end target is Vultr + Wasabi + Paper + Velocity on Debian. Exis
 
 ## Current status and next work
 
-The project is in **Phase 1 — Language-independent protocol design**. The protocol principles, common types, and first durable operation protocol draft are published. The protocol remains 0.6.0-draft. Initial JSON, JSON Schema, JSON-RPC, OpenAPI, timestamp, and canonicalization choices, lifecycle model, five adapter contracts, security draft, management API, schemas, examples, and test vectors are published. They have not all been independently validated or reviewed, and no controller or production adapter implementation has been built.
+The project is in **Phase 1 — Language-independent protocol design**. The protocol principles, common types, and first durable operation protocol draft are published. The protocol remains 0.7.0-draft. Initial JSON, JSON Schema, JSON-RPC, OpenAPI, timestamp, and canonicalization choices, lifecycle model, five adapter contracts, security draft, management API, schemas, examples, and test vectors are published. They have not all been independently validated or reviewed, and no controller or production adapter implementation has been built.
 
-Initial lifecycle, five adapter, RPC, management API, security, schema, example, and conformance drafts have been published. CI validates the schema package and executes all twenty-two current conformance fixtures. The hosting instance-create capability now has registered input and output schemas, and typed result schemas cover provision, backup, restore, and destroy. Game readiness, release description, install, configuration, and installed-artifact validation have registered schemas and conformance coverage. Initial execution diagnostics/deletion and proxy backend lifecycle schemas are also registered; remaining game capabilities and typed operation results are still in progress. The storage capability schemas are published, while process-based bulk transfer still needs a binding. Next, expand remaining game and operation result contracts, add edge-case vectors, and build independent cross-language interoperability tests.
+Initial lifecycle, five adapter, RPC, management API, security, schema, example, and conformance drafts have been published. CI validates the schema package and executes all twenty-three current conformance fixtures. The hosting instance-create capability now has registered input and output schemas, and typed result schemas cover all seven standard operations. Game readiness, release description, install, configuration, and installed-artifact validation have registered schemas and conformance coverage. Initial execution diagnostics/deletion and proxy backend lifecycle schemas are also registered; remaining game capabilities are still in progress. The storage capability schemas are published, while process-based bulk transfer still needs a binding. Next, expand remaining game contracts, add edge-case vectors, and build independent cross-language interoperability tests.

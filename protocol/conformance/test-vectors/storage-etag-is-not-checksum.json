@@ -1,6 +1,6 @@
 {
   "fixture_id": "storage.object.etag-not-checksum",
-  "protocol_version": "0.6.0-draft",
+  "protocol_version": "0.7.0-draft",
   "contract_area": "storage.object.verify_checksum",
   "purpose": "An opaque provider ETag without a trusted checksum contract is not proof of content integrity.",
   "input": {

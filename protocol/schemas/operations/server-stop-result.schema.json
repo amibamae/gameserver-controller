@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.7.0-draft:operations:server-stop-result",
+  "title": "Durable server.stop operation result",
+  "description": "Canonical operation result with typed data for server.stop.",
+  "allOf": [
+    {
+      "$ref": "urn:gameserver-controller:0.7.0-draft:operations:operation-result"
+    },
+    {
+      "type": "object",
+      "required": [
+        "operation_type",
+        "operation_data"
+      ],
+      "properties": {
+        "operation_type": {
+          "const": "server.stop"
+        },
+        "operation_data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "server_id",
+            "environment_id",
+            "instance_ref",
+            "lifecycle_state",
+            "game_save",
+            "execution",
+            "proxy_drain"
+          ],
+          "properties": {
+            "server_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "instance_ref": {
+              "$ref": "urn:gameserver-controller:0.7.0-draft:common:external-resource-ref"
+            },
+            "lifecycle_state": {
+              "const": "stopped"
+            },
+            "game_save": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "outcome",
+                "observed_at"
+              ],
+              "properties": {
+                "outcome": {
+                  "const": "confirmed"
+                },
+                "observed_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
+            "execution": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "unit_ref",
+                "outcome",
+                "observed_at"
+              ],
+              "properties": {
+                "unit_ref": {
+                  "$ref": "urn:gameserver-controller:0.7.0-draft:common:external-resource-ref"
+                },
+                "outcome": {
+                  "const": "stopped"
+                },
+                "observed_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
+            "proxy_drain": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "outcome"
+              ],
+              "properties": {
+                "outcome": {
+                  "enum": [
+                    "drained",
+                    "not_requested",
+                    "not_configured",
+                    "unsupported"
+                  ]
+                },
+                "observed_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
