@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:common:protocol-error",
+  "title": "Protocol error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["code", "category", "message", "retryable"],
+  "properties": {
+    "code": {"type": "string", "minLength": 1, "maxLength": 160},
+    "category": {
+      "type": "string",
+      "enum": ["validation", "authorization", "unsupported_capability", "not_found", "conflict", "transient", "provider_failure", "integrity_failure", "compatibility_failure", "safety_blocked", "timeout", "cancelled", "internal"]
+    },
+    "message": {"type": "string", "maxLength": 2000},
+    "retryable": {"type": "boolean"},
+    "details": {"type": "object"},
+    "correlation_id": {"type": "string", "maxLength": 200},
+    "operation_id": {"type": ["string", "null"], "maxLength": 200},
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "action": {"type": "string", "maxLength": 160},
+        "operator_required": {"type": "boolean"}
+      }
+    }
+  }
+}
