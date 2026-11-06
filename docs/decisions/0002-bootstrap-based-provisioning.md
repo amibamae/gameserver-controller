@@ -6,11 +6,11 @@
 
 ## Context
 
-The project considered deploying new instances from project-built, preinstalled disk images or custom installation ISOs. That approach would introduce image build, upload, storage, versioning, promotion, and provider-specific lifecycle concerns.
+The project considered distributing preinstalled base-system artifacts or custom installation media. That approach would introduce a separate host-artifact build, upload, storage, versioning, promotion, and provider-specific lifecycle process.
 
 The initial reference deployment already uses a repeatable bootstrap process to prepare standard Debian instances. Persistent game data is kept separately in object storage and restored after instance provisioning.
 
-The project should publish reusable source code and let each operator customize and run it in their own infrastructure account. It should not require operators to use a machine image created or distributed by the project.
+The project should publish reusable source code and let each operator customize and run it in their own infrastructure account. It should not require operators to use a preinstalled base system created or distributed by the project.
 
 ## Decision
 
@@ -30,14 +30,14 @@ Bootstrap source, configuration inputs, and execution results should be recorded
 
 The public repository distributes source code, templates, protocol specifications, tests, and documentation. Each operator provisions standard provider OS instances and runs a customized copy or release of the bootstrap scripts in their own account.
 
-Project-maintained preinstalled machine images, snapshot-based default deployments, custom ISO creation, and image promotion are not part of the default architecture.
+Project-maintained preinstalled base systems, custom installation-media workflows, and provider-specific preinstallation/promotion pipelines are not part of the default architecture.
 
 ## Rationale
 
-- Avoids recurring storage costs and provider-specific snapshot/image management.
+- Avoids recurring storage costs and provider-specific preinstalled-system artifact management.
 - Avoids assuming that snapshot restoration is faster than ordinary instance provisioning.
 - Keeps provisioning behavior visible, reviewable, and customizable as source code.
-- Makes the deployment protocol independent of provider-specific custom-image features.
+- Makes the deployment protocol independent of provider-specific preinstalled-system features.
 - Preserves a clean boundary between replaceable compute and persistent world data.
 - Lets operators control their own OS selection, package choices, security policy, and bootstrap configuration.
 
@@ -49,8 +49,8 @@ Project-maintained preinstalled machine images, snapshot-based default deploymen
 - Bootstrap scripts must not contain secret values. Credentials are injected or resolved separately with least-privilege scope.
 - New bootstrap revisions should be tested against fresh instances created from supported standard OS offerings before being recommended for production.
 - Persistent worlds, backups, and release artifacts remain separate from the instance bootstrap.
-- Rollback to an earlier host-preparation baseline means reprovisioning with a previously approved bootstrap revision; it does not mean reverting a custom machine image.
+- Rollback to an earlier host-preparation baseline means reprovisioning with a previously approved bootstrap revision; it does not require reverting a preinstalled machine artifact.
 
 ## Reconsideration criteria
 
-Custom preinstalled images or ISO-based installation workflows may be considered as optional provider-specific extensions only if measured deployment tests demonstrate a meaningful operational benefit or a concrete operator requirement justifies them. They must not become a required project artifact or default deployment dependency without a separate reviewed decision.
+Preinstalled host artifacts or custom installation-media workflows may be considered as optional provider-specific extensions only if measured deployment tests demonstrate a meaningful operational benefit or a concrete operator requirement justifies them. They must not become a required project artifact or default deployment dependency without a separate reviewed decision.
