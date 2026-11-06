@@ -225,35 +225,33 @@ Implementations MUST:
 - Restrict resolution to the component and operation that require the secret.
 - Fail closed if resolution or authorization fails.
 
-## 10. Extensibility and unknown fields
-
-The final serialization rules must define unknown-field behavior precisely.
-
-At a minimum:
-- Unknown optional extension fields may be ignored only where the schema explicitly permits it.
-- Unknown required fields or required capability semantics MUST cause safe rejection.
-- An implementation MUST NOT silently ignore an unknown field if doing so changes the meaning or safety of a request.
-- Extensions MUST be namespaced and documented.
-- Extensions MUST NOT redefine common field semantics.
-
-## 11. Open decisions
-
-The following remain intentionally undecided:
-- Identifier generation algorithm and maximum lengths.
-- Exact timestamp and duration serialization schemas.
-- Exact protocol/schema version negotiation format.
-- Canonical serialization format.
-- Whether capability versions are independent or tied to contract versions.
-- Exact error code registry and extension policy.
-- Whether request context is a shared envelope or repeated in individual messages.
-
-These decisions should be resolved with examples and conformance test vectors before implementation language selection.
-
-
 ## 10. JSON and schema profile
 
 JSON is encoded as UTF-8 and follows RFC 8259. Duplicate object member names, invalid Unicode, NaN, and infinity MUST be rejected. Identifiers remain strings even when a provider uses numeric identifiers.
 
-JSON Schema Draft 2020-12 files are stored under [schemas](schemas/README.md). Schema `format` values such as `date-time` and `uri` MUST be actively validated by a conforming protocol implementation. A schema validator configured only for format annotations is insufficient unless the implementation performs equivalent checks.
+JSON Schema Draft 2020-12 files are stored under [schemas](schemas/README.md). Schema `format` values such as `date-time` and `uri` MUST be actively validated by a conforming protocol implementation. A validator configured only for format annotations is insufficient unless the implementation performs equivalent checks.
 
-Request/control objects are closed by default; unknown fields are rejected unless an explicit extension point is defined. Response objects MAY be extensible. Clients MUST ignore unknown optional response properties but MUST fail safely when an unknown state, capability semantic, or enum value affects a decision.
+Protocol integers MUST remain within the exact interoperable JSON integer range, ±9,007,199,254,740,991. Larger counters and byte quantities MUST be represented as decimal strings. Durations use non-negative integer milliseconds with the unit in the field name.
+
+Canonical request fingerprints MUST use RFC 8785 JCS when a deterministic JSON digest is required. Ordinary transmitted JSON need not be canonicalized.
+
+## 11. Extensibility and unknown fields
+
+Request/control objects are closed by default; unknown fields are rejected unless the schema defines an explicit `extensions` map. Extension names MUST be namespaced and MUST NOT change standard field meaning or security effect.
+
+Read-only response objects MAY gain optional fields in a compatible minor revision. Clients MUST ignore unknown optional response properties but MUST fail safely on unknown lifecycle states, operation statuses, capability semantics, or enum values that affect a decision.
+
+Schemas MUST state whether an object is closed or extensible. A minor revision MUST NOT change the meaning, type, or security effect of an existing field.
+
+## 12. Open decisions
+
+The following remain intentionally unresolved:
+- Identifier generation algorithm; identifiers remain opaque and must be collision-resistant within their declared scope.
+- Retention duration and conflict behavior for expired idempotency keys.
+- Final capability-version compatibility and deprecation policy.
+- Full stable error-code registry and extension governance.
+- Maximum lengths and retention rules for operation/event/audit histories.
+- Final remote adapter authentication profile.
+- Whether an optional remote adapter binding is needed beyond local in-process and stdio profiles.
+
+These decisions MUST be resolved or explicitly declared out of scope before stable 1.0. They MUST NOT be decided implicitly by an implementation language.
