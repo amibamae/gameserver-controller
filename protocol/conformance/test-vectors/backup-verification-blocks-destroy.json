@@ -19,5 +19,5 @@
     "provider_destroy_calls": 0,
     "logical_server_state": "failed"
   },
-  "notes": "A concrete implementation may keep the server in backing_up or move it to failed according to its operation policy, but it MUST NOT call provider destroy. The error and no-side-effect assertion are normative."
+  "notes": "The backup failure is definitive in this fixture, so the operation fails and the server enters failed. The provider destroy call MUST NOT occur."
 }
