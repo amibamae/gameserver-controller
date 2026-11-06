@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.7.0-draft:storage:object-head-output",
+  "$id": "urn:gameserver-controller:0.8.0-draft:storage:object-head-output",
   "title": "Storage object head output",
   "type": "object",
   "additionalProperties": false,
@@ -11,7 +11,7 @@
   ],
   "properties": {
     "object_ref": {
-      "$ref": "urn:gameserver-controller:0.7.0-draft:storage:storage-object-reference"
+      "$ref": "urn:gameserver-controller:0.8.0-draft:storage:storage-object-reference"
     },
     "object_state": {
       "enum": [
@@ -35,7 +35,7 @@
       "format": "date-time"
     },
     "provider_checksum": {
-      "$ref": "urn:gameserver-controller:0.7.0-draft:storage:storage-checksum"
+      "$ref": "urn:gameserver-controller:0.8.0-draft:storage:storage-checksum"
     },
     "observed_at": {
       "type": "string",

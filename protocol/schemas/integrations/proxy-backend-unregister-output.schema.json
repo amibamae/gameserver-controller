@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.7.0-draft:integrations:proxy-backend-unregister-output",
+  "$id": "urn:gameserver-controller:0.8.0-draft:integrations:proxy-backend-unregister-output",
   "title": "Proxy backend unregister output",
   "description": "Request acceptance is distinct from confirmation of the proxy's observed routing state.",
   "type": "object",
@@ -14,7 +14,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.7.0-draft:integrations:proxy-backend-target"
+      "$ref": "urn:gameserver-controller:0.8.0-draft:integrations:proxy-backend-target"
     },
     "request_outcome": {
       "enum": [

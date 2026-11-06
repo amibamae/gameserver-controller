@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.7.0-draft:storage:storage-transfer-reference",
+  "$id": "urn:gameserver-controller:0.8.0-draft:storage:storage-transfer-reference",
   "title": "Bounded storage data transfer reference",
   "type": "object",
   "additionalProperties": false,

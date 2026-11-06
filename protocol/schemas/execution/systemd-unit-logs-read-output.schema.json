@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.7.0-draft:execution:systemd-unit-logs-read-output",
+  "$id": "urn:gameserver-controller:0.8.0-draft:execution:systemd-unit-logs-read-output",
   "title": "Systemd execution unit logs read output",
   "description": "Redacted log lines whose UTF-8 bytes, including one newline separator between lines, do not exceed the requested max_bytes.",
   "type": "object",
@@ -14,7 +14,7 @@
   ],
   "properties": {
     "unit_ref": {
-      "$ref": "urn:gameserver-controller:0.7.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.8.0-draft:common:external-resource-ref"
     },
     "lines": {
       "type": "array",

@@ -1,0 +1,144 @@
+{
+  "fixture_id": "game.data.save.backup-prepare.reject-unsafe-datasets",
+  "protocol_version": "0.8.0-draft",
+  "contract_area": "game.backup",
+  "purpose": "Path traversal and duplicate data-set IDs are rejected before a game backup can use them.",
+  "input": {
+    "data_input": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-001"
+        }
+      },
+      "release_id": "paper-1.21.4-r1"
+    },
+    "data_output": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-001"
+        }
+      },
+      "release_id": "paper-1.21.4-r1",
+      "data_sets": [
+        {
+          "data_set_id": "world",
+          "relative_paths": [
+            "world"
+          ],
+          "required": true,
+          "supported_consistency_modes": [
+            "offline",
+            "game_native"
+          ],
+          "data_format": "paper-world-v1"
+        },
+        {
+          "data_set_id": "world",
+          "relative_paths": [
+            "../outside"
+          ],
+          "required": true,
+          "supported_consistency_modes": [
+            "offline"
+          ],
+          "data_format": "plugin-state-v1"
+        }
+      ],
+      "observed_at": "2026-11-06T08:00:00Z"
+    },
+    "save_input": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-001"
+        }
+      },
+      "release_id": "paper-1.21.4-r1",
+      "reason": "backup"
+    },
+    "save_output": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-001"
+        }
+      },
+      "release_id": "paper-1.21.4-r1",
+      "outcome": "confirmed",
+      "saved_at": "2026-11-06T08:01:00Z",
+      "observed_at": "2026-11-06T08:01:01Z"
+    },
+    "prepare_input": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-001"
+        }
+      },
+      "release_id": "paper-1.21.4-r1",
+      "backup_id": "backup-008",
+      "data_generation_id": "generation-008",
+      "data_set_ids": [
+        "world",
+        "plugin-data"
+      ],
+      "consistency_mode": "offline"
+    },
+    "prepare_output": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-001"
+        }
+      },
+      "release_id": "paper-1.21.4-r1",
+      "backup_id": "backup-008",
+      "data_generation_id": "generation-008",
+      "data_set_ids": [
+        "world",
+        "plugin-data"
+      ],
+      "consistency_mode": "offline",
+      "outcome": "prepared",
+      "preparation_id": "capture-008",
+      "consistency_evidence": "Runtime stopped after the game save; selected data sets are stable for capture.",
+      "observed_at": "2026-11-06T08:02:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "data_targets_bound": true,
+    "data_sets_unique_and_path_safe": false,
+    "save_confirmed": true,
+    "backup_preparation_bound": false,
+    "data_sets_support_consistency": false,
+    "preparation_confirmed": true
+  },
+  "side_effect_expected": "none"
+}

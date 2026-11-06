@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.8.0-draft:game:backup-prepare-input",
+  "title": "Game backup preparation input",
+  "description": "Prepare an exact, release-bound set of persistent data for a backup capture.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "release_id",
+    "backup_id",
+    "data_generation_id",
+    "data_set_ids",
+    "consistency_mode"
+  ],
+  "properties": {
+    "target": {
+      "$ref": "urn:gameserver-controller:0.8.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "backup_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "data_generation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "data_set_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      }
+    },
+    "consistency_mode": {
+      "enum": [
+        "offline",
+        "game_native"
+      ]
+    }
+  }
+}

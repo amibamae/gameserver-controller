@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.8.0-draft:game:data-describe-input",
+  "title": "Game persistent data describe input",
+  "description": "Request a release-bound description of persistent game data sets.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "release_id"
+  ],
+  "properties": {
+    "target": {
+      "$ref": "urn:gameserver-controller:0.8.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    }
+  }
+}

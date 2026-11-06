@@ -1,0 +1,24 @@
+{
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-001"
+    }
+  },
+  "release_id": "paper-1.21.4-r1",
+  "backup_id": "backup-008",
+  "data_generation_id": "generation-008",
+  "data_set_ids": [
+    "world",
+    "plugin-data"
+  ],
+  "consistency_mode": "offline",
+  "outcome": "prepared",
+  "preparation_id": "capture-008",
+  "consistency_evidence": "Runtime stopped after the game save; selected data sets are stable for capture.",
+  "observed_at": "2026-11-06T08:02:00Z"
+}

@@ -1,0 +1,39 @@
+{
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-001"
+    }
+  },
+  "release_id": "paper-1.21.4-r1",
+  "data_sets": [
+    {
+      "data_set_id": "world",
+      "relative_paths": [
+        "world"
+      ],
+      "required": true,
+      "supported_consistency_modes": [
+        "offline",
+        "game_native"
+      ],
+      "data_format": "paper-world-v1"
+    },
+    {
+      "data_set_id": "plugin-data",
+      "relative_paths": [
+        "plugins/data"
+      ],
+      "required": true,
+      "supported_consistency_modes": [
+        "offline"
+      ],
+      "data_format": "plugin-state-v1"
+    }
+  ],
+  "observed_at": "2026-11-06T08:00:00Z"
+}

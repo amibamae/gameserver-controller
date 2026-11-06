@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.8.0-draft:game:data-describe-output",
+  "title": "Game persistent data describe output",
+  "description": "Persistent paths are normalized relative paths under the adapter-declared data root; absolute host paths and traversal paths are forbidden.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "release_id",
+    "data_sets",
+    "observed_at"
+  ],
+  "properties": {
+    "target": {
+      "$ref": "urn:gameserver-controller:0.8.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "data_sets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data_set_id",
+          "relative_paths",
+          "required",
+          "supported_consistency_modes"
+        ],
+        "properties": {
+          "data_set_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "relative_paths": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 128,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "description": "Normalized path relative to the adapter-declared data root; MUST NOT be absolute or contain dot-segment traversal."
+            }
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "supported_consistency_modes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "offline",
+                "game_native"
+              ]
+            }
+          },
+          "data_format": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        }
+      }
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

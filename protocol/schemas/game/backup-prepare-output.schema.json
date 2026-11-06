@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.8.0-draft:game:backup-prepare-output",
+  "title": "Game backup preparation output",
+  "description": "A prepared result echoes the exact target, release, data generation, selected data sets, and consistency mode, with evidence for the declared consistency guarantee.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "release_id",
+    "backup_id",
+    "data_generation_id",
+    "data_set_ids",
+    "consistency_mode",
+    "outcome",
+    "observed_at"
+  ],
+  "properties": {
+    "target": {
+      "$ref": "urn:gameserver-controller:0.8.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "backup_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "data_generation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "data_set_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      }
+    },
+    "consistency_mode": {
+      "enum": [
+        "offline",
+        "game_native"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "prepared",
+        "rejected",
+        "outcome_unknown"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "preparation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "consistency_evidence": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "reason_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9._-]*$"
+    },
+    "reconciliation_ref": {
+      "$ref": "urn:gameserver-controller:0.8.0-draft:common:external-resource-ref"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "prepared"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "preparation_id",
+          "consistency_evidence"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "rejected"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "reason_code"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "outcome_unknown"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "reconciliation_ref"
+        ]
+      }
+    }
+  ]
+}
