@@ -64,6 +64,36 @@ paths:
                   next_cursor: { type: string }
         "401":
           $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: defineServer
+      summary: Create a logical server definition through a durable operation
+      description: |
+        The request MUST use operation_type server.define. The controller
+        persists a durable operation before creating the logical server record.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OperationRequest" }
+      responses:
+        "202":
+          description: Definition operation accepted and durably recorded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Operation" }
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /servers/{server_id}:
     parameters:
       - $ref: "#/components/parameters/ServerId"
@@ -206,7 +236,7 @@ components:
       properties:
         operation_type:
           type: string
-          enum: [server.provision, server.start, server.stop, server.backup, server.restore, server.replace, server.destroy]
+          enum: [server.define, server.provision, server.start, server.stop, server.backup, server.restore, server.destroy]
         parameters:
           type: object
           description: Operation-specific parameter object; it MUST validate against the schema for the selected operation type. Unknown fields are rejected unless that operation schema defines an extension point.
