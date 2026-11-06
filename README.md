@@ -104,6 +104,7 @@ See [AI Use and Development Transparency](docs/AI_DISCLOSURE.md) for the full di
 - [Protocol overview and design principles](protocol/README.md)
 - [Common protocol types](protocol/common-types.md)
 - [Durable operation protocol](protocol/operations.md)
+- [Standard operation catalog](protocol/operation-catalog.md)
 - [Lifecycle protocol](protocol/lifecycle.md)
 - [Adapter contracts](protocol/adapters/README.md)
 - [RPC methods and transport](protocol/rpc/methods.md)
