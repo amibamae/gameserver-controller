@@ -64,7 +64,7 @@ Restores the immutable backup identified by `backup_id`. Integrity, environment 
 
 ### 3.7 `server.destroy`
 
-Destroys only the exact `expected_instance_ref` attached to the logical server. It MUST verify or create a backup for the current data generation using `backup_profile` before transition to `destroying`. A `verified_backup_id` MAY be supplied as a candidate, but the controller MUST independently verify ownership, current data generation, integrity status, and policy freshness.
+Destroys only the exact `expected_instance_ref` attached to the logical server. It MUST verify or create a backup for the current known `data_generation_id` using `backup_profile` before transition to `destroying`. A `verified_backup_id` MAY be supplied as a candidate, but the controller MUST independently verify ownership, exact generation match, integrity status, and policy. A missing/unknown current generation blocks destruction until a new consistent backup is created.
 
 Production policy SHOULD require a separate approval bound to the exact destroy plan. The controller rechecks target identity, backup verification, environment, locks, and approval immediately before provider dispatch. Success means provider absence is confirmed; the logical server remains in `destroyed` state and retains backup references.
 
