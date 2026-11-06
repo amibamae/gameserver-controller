@@ -3,13 +3,33 @@
   "protocol_version": "0.1.0-draft",
   "contract": "operation.events",
   "events": [
-    {"event_id": "event-1", "operation_id": "operation-1", "sequence": 1, "event_type": "operation.accepted", "timestamp": "2026-11-05T22:45:00Z"},
-    {"event_id": "event-2", "operation_id": "operation-1", "sequence": 2, "event_type": "operation.step.started", "timestamp": "2026-11-05T22:45:01Z"},
-    {"event_id": "event-3", "operation_id": "operation-1", "sequence": 3, "event_type": "operation.progress.updated", "timestamp": "2026-11-05T22:45:02Z"}
+    {
+      "event_id": "event-1",
+      "operation_id": "operation-1",
+      "sequence": 1,
+      "event_type": "operation.accepted",
+      "timestamp": "2026-11-05T22:45:00Z"
+    },
+    {
+      "event_id": "event-2",
+      "operation_id": "operation-1",
+      "sequence": 2,
+      "event_type": "operation.step.started",
+      "timestamp": "2026-11-05T22:45:01Z"
+    },
+    {
+      "event_id": "event-3",
+      "operation_id": "operation-1",
+      "sequence": 3,
+      "event_type": "operation.progress.updated",
+      "timestamp": "2026-11-05T22:45:02Z"
+    }
   ],
   "expected": {
     "schema_valid": true,
-    "sequence_strictly_increasing": true,
+    "sequence_strictly_increasing": true
+  },
+  "notes": {
     "sequence_scope": "per-operation",
     "duplicate_delivery_must_be_tolerated": true,
     "gap_recovery": "retrieve-authoritative-operation-resource"
