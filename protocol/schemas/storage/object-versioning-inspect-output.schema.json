@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.18.0-draft:storage:object-versioning-inspect-output",
+  "$id": "urn:gameserver-controller:0.19.0-draft:storage:object-versioning-inspect-output",
   "title": "Storage object versioning inspection output",
   "type": "object",
   "additionalProperties": false,
@@ -11,7 +11,7 @@
   ],
   "properties": {
     "container_ref": {
-      "$ref": "urn:gameserver-controller:0.18.0-draft:storage:storage-container-reference"
+      "$ref": "urn:gameserver-controller:0.19.0-draft:storage:storage-container-reference"
     },
     "state": {
       "enum": [

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.18.0-draft:hosting:instance-reboot-input",
+  "$id": "urn:gameserver-controller:0.19.0-draft:hosting:instance-reboot-input",
   "title": "Hosting instance reboot input",
   "description": "Request a reboot for one exact provider instance.",
   "type": "object",
@@ -10,7 +10,7 @@
   ],
   "properties": {
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.18.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.19.0-draft:common:external-resource-ref"
     }
   }
 }

@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.destroy.target-mismatch",
-  "protocol_version": "0.18.0-draft",
+  "protocol_version": "0.19.0-draft",
   "contract_area": "hosting.instance.destroy",
   "purpose": "A destroy result for another instance cannot complete the request.",
   "input": {

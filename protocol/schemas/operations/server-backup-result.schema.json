@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.18.0-draft:operations:server-backup-result",
+  "$id": "urn:gameserver-controller:0.19.0-draft:operations:server-backup-result",
   "title": "Durable server.backup operation result",
   "description": "Canonical operation result with typed data for server.backup.",
   "allOf": [
     {
-      "$ref": "urn:gameserver-controller:0.18.0-draft:operations:operation-result"
+      "$ref": "urn:gameserver-controller:0.19.0-draft:operations:operation-result"
     },
     {
       "type": "object",
@@ -45,7 +45,7 @@
               "maxLength": 200
             },
             "manifest": {
-              "$ref": "urn:gameserver-controller:0.18.0-draft:storage:backup-manifest"
+              "$ref": "urn:gameserver-controller:0.19.0-draft:storage:backup-manifest"
             },
             "verified_at": {
               "type": "string",
@@ -58,7 +58,7 @@
               ]
             },
             "readiness_assertion": {
-              "$ref": "urn:gameserver-controller:0.18.0-draft:lifecycle:readiness-assertion"
+              "$ref": "urn:gameserver-controller:0.19.0-draft:lifecycle:readiness-assertion"
             }
           },
           "allOf": [

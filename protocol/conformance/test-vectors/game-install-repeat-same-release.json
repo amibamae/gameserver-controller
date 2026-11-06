@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.install.repeat-same-release-is-idempotent",
-  "protocol_version": "0.18.0-draft",
+  "protocol_version": "0.19.0-draft",
   "contract_area": "game.install",
   "purpose": "Repeating installation of an already installed exact release does not start a duplicate installation.",
   "input": {

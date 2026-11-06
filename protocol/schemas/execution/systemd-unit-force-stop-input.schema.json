@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.18.0-draft:execution:systemd-unit-force-stop-input",
+  "$id": "urn:gameserver-controller:0.19.0-draft:execution:systemd-unit-force-stop-input",
   "title": "Systemd execution unit force-stop input",
   "description": "Request an exceptional forced stop for an exact unit. The controller validates that approval is bound to this unit and reason before dispatch.",
   "type": "object",
@@ -12,7 +12,7 @@
   ],
   "properties": {
     "unit_ref": {
-      "$ref": "urn:gameserver-controller:0.18.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.19.0-draft:common:external-resource-ref"
     },
     "approval_id": {
       "type": "string",

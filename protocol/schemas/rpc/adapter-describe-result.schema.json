@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.18.0-draft:rpc:adapter-describe-result",
+  "$id": "urn:gameserver-controller:0.19.0-draft:rpc:adapter-describe-result",
   "title": "Adapter describe JSON-RPC result",
   "type": "object",
   "additionalProperties": false,
@@ -8,6 +8,6 @@
   "properties": {
     "jsonrpc": {"const": "2.0"},
     "id": {"type": "string", "minLength": 1, "maxLength": 200},
-    "result": {"$ref": "urn:gameserver-controller:0.18.0-draft:common:capability-descriptor"}
+    "result": {"$ref": "urn:gameserver-controller:0.19.0-draft:common:capability-descriptor"}
   }
 }

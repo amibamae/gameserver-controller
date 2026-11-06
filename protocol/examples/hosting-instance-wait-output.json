@@ -1,0 +1,17 @@
+{
+  "instance_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "staging",
+    "resource_kind": "instance",
+    "external_id": "instance-paper-021"
+  },
+  "provider_operation_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "staging",
+    "resource_kind": "operation",
+    "external_id": "host-op-start-021"
+  },
+  "operation_status": "succeeded",
+  "instance_state": "active",
+  "observed_at": "2026-11-06T12:00:00Z"
+}

@@ -1,0 +1,49 @@
+{
+  "fixture_id": "hosting.instance.wait.pending-remains-pending",
+  "protocol_version": "0.19.0-draft",
+  "contract_area": "hosting.instance.wait",
+  "purpose": "A provider operation still pending after the bounded wait remains pending and is not treated as failed.",
+  "input": {
+    "wait_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      },
+      "provider_operation_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "operation",
+        "external_id": "host-op-start-021"
+      },
+      "expected_state": "active",
+      "wait_timeout_seconds": 60
+    },
+    "wait_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      },
+      "provider_operation_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "operation",
+        "external_id": "host-op-start-021"
+      },
+      "operation_status": "pending",
+      "instance_state": "creating",
+      "observed_at": "2026-11-06T12:00:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "operation_reference_bound": true,
+    "wait_completed": false,
+    "poll_again": true,
+    "instance_postcondition_confirmed": false
+  }
+}
