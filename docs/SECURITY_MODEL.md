@@ -85,7 +85,7 @@ The controller must not modify existing firewall rules during Phase 1.
 
 - Pin or record the exact bootstrap source revision, configuration inputs, package versions, and downloaded software checksums.
 - Keep bootstrap scripts and game software releases separately versioned.
-- Provision from a provider-supported standard OS offering, then run reviewed bootstrap scripts; do not depend on project-maintained preinstalled machine images.
+- Provision from a provider-supported standard OS offering, then prepare the host using reviewed, versioned bootstrap scripts.
 - Treat bootstrap scripts as privileged executable code. Review changes, verify source integrity, minimize embedded assumptions, and validate changes on fresh isolated instances.
 - Keep previous approved bootstrap revisions and software-release references available for controlled rollback/reprovisioning.
 - Do not promote a candidate based only on process startup.
