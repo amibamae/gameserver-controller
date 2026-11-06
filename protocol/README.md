@@ -145,7 +145,7 @@ protocol/
     └── test-vectors/
 ```
 
-The tree reflects the initial draft package. Additional schemas, operation-specific examples, category tests, and authentication/authorization details remain part of review.
+The tree reflects the initial draft package. The schema inventory is indexed in [schemas/index.json](schemas/index.json). The operation catalog defines the initial standard mutating operation types; operation-specific coverage and cross-language conformance remain review work.
 
 ## Initial design sequence
 
