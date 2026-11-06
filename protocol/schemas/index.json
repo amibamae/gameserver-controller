@@ -2,42 +2,169 @@
   "protocol_version": "0.1.0-draft",
   "json_schema_dialect": "https://json-schema.org/draft/2020-12/schema",
   "schemas": [
-    {"path":"common/capability-descriptor.schema.json","id":"urn:gameserver-controller:0.1.0-draft:common:capability-descriptor"},
-    {"path":"common/external-resource-ref.schema.json","id":"urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"},
-    {"path":"common/identifier.schema.json","id":"urn:gameserver-controller:0.1.0-draft:common:identifier"},
-    {"path":"common/protocol-error.schema.json","id":"urn:gameserver-controller:0.1.0-draft:common:protocol-error"},
-    {"path":"common/request-context.schema.json","id":"urn:gameserver-controller:0.1.0-draft:common:request-context"},
-    {"path":"common/secret-reference.schema.json","id":"urn:gameserver-controller:0.1.0-draft:common:secret-reference"},
-    {"path":"execution/systemd-unit-graceful-stop-input.schema.json","id":"urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-graceful-stop-input"},
-    {"path":"execution/systemd-unit-inspect-input.schema.json","id":"urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-inspect-input"},
-    {"path":"execution/systemd-unit-inspect-output.schema.json","id":"urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-inspect-output"},
-    {"path":"execution/systemd-unit-lifecycle-result.schema.json","id":"urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-lifecycle-result"},
-    {"path":"execution/systemd-unit-start-input.schema.json","id":"urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-start-input"},
-    {"path":"hosting/instance-create-input.schema.json","id":"urn:gameserver-controller:0.1.0-draft:hosting:instance-create-input"},
-    {"path":"hosting/instance-create-output.schema.json","id":"urn:gameserver-controller:0.1.0-draft:hosting:instance-create-output"},
-    {"path":"hosting/provision-request.schema.json","id":"urn:gameserver-controller:0.1.0-draft:hosting:provision-request"},
-    {"path":"integrations/velocity-player-transfer-request.schema.json","id":"urn:gameserver-controller:0.1.0-draft:integrations:velocity-player-transfer-request"},
-    {"path":"integrations/velocity-player-transfer-result.schema.json","id":"urn:gameserver-controller:0.1.0-draft:integrations:velocity-player-transfer-result"},
-    {"path":"lifecycle/readiness-assertion.schema.json","id":"urn:gameserver-controller:0.1.0-draft:lifecycle:readiness-assertion"},
-    {"path":"lifecycle/server.schema.json","id":"urn:gameserver-controller:0.1.0-draft:lifecycle:server"},
-    {"path":"operations/backup-parameters.schema.json","id":"urn:gameserver-controller:0.1.0-draft:operations:backup-parameters"},
-    {"path":"operations/destroy-parameters.schema.json","id":"urn:gameserver-controller:0.1.0-draft:operations:destroy-parameters"},
-    {"path":"operations/operation-event.schema.json","id":"urn:gameserver-controller:0.1.0-draft:operations:operation-event"},
-    {"path":"operations/operation-request.schema.json","id":"urn:gameserver-controller:0.1.0-draft:operations:operation-request"},
-    {"path":"operations/operation-result.schema.json","id":"urn:gameserver-controller:0.1.0-draft:operations:operation-result"},
-    {"path":"operations/operation.schema.json","id":"urn:gameserver-controller:0.1.0-draft:operations:operation"},
-    {"path":"operations/restore-parameters.schema.json","id":"urn:gameserver-controller:0.1.0-draft:operations:restore-parameters"},
-    {"path":"operations/server-definition.schema.json","id":"urn:gameserver-controller:0.1.0-draft:operations:server-definition"},
-    {"path":"operations/start-parameters.schema.json","id":"urn:gameserver-controller:0.1.0-draft:operations:start-parameters"},
-    {"path":"operations/stop-parameters.schema.json","id":"urn:gameserver-controller:0.1.0-draft:operations:stop-parameters"},
-    {"path":"rpc/adapter-describe-result.schema.json","id":"urn:gameserver-controller:0.1.0-draft:rpc:adapter-describe-result"},
-    {"path":"rpc/adapter-health-result.schema.json","id":"urn:gameserver-controller:0.1.0-draft:rpc:adapter-health-result"},
-    {"path":"rpc/adapter-initialize-request.schema.json","id":"urn:gameserver-controller:0.1.0-draft:rpc:adapter-initialize-request"},
-    {"path":"rpc/adapter-initialize-result.schema.json","id":"urn:gameserver-controller:0.1.0-draft:rpc:adapter-initialize-result"},
-    {"path":"rpc/adapter-invoke-request.schema.json","id":"urn:gameserver-controller:0.1.0-draft:rpc:adapter-invoke-request"},
-    {"path":"rpc/adapter-invoke-result.schema.json","id":"urn:gameserver-controller:0.1.0-draft:rpc:adapter-invoke-result"},
-    {"path":"rpc/adapter-reconcile-request.schema.json","id":"urn:gameserver-controller:0.1.0-draft:rpc:adapter-reconcile-request"},
-    {"path":"rpc/adapter-reconcile-result.schema.json","id":"urn:gameserver-controller:0.1.0-draft:rpc:adapter-reconcile-result"},
-    {"path":"storage/backup-manifest.schema.json","id":"urn:gameserver-controller:0.1.0-draft:storage:backup-manifest"}
+    {
+      "path": "common/capability-descriptor.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor"
+    },
+    {
+      "path": "common/external-resource-ref.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+    },
+    {
+      "path": "common/identifier.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:common:identifier"
+    },
+    {
+      "path": "common/protocol-error.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:common:protocol-error"
+    },
+    {
+      "path": "common/request-context.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:common:request-context"
+    },
+    {
+      "path": "common/secret-reference.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:common:secret-reference"
+    },
+    {
+      "path": "execution/systemd-unit-graceful-stop-input.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-graceful-stop-input"
+    },
+    {
+      "path": "execution/systemd-unit-inspect-input.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-inspect-input"
+    },
+    {
+      "path": "execution/systemd-unit-inspect-output.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-inspect-output"
+    },
+    {
+      "path": "execution/systemd-unit-lifecycle-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-lifecycle-result"
+    },
+    {
+      "path": "execution/systemd-unit-start-input.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:execution:systemd-unit-start-input"
+    },
+    {
+      "path": "hosting/instance-create-input.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:hosting:instance-create-input"
+    },
+    {
+      "path": "hosting/instance-create-output.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:hosting:instance-create-output"
+    },
+    {
+      "path": "hosting/provision-request.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:hosting:provision-request"
+    },
+    {
+      "path": "integrations/velocity-player-transfer-request.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:integrations:velocity-player-transfer-request"
+    },
+    {
+      "path": "integrations/velocity-player-transfer-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:integrations:velocity-player-transfer-result"
+    },
+    {
+      "path": "lifecycle/readiness-assertion.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:lifecycle:readiness-assertion"
+    },
+    {
+      "path": "lifecycle/server.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:lifecycle:server"
+    },
+    {
+      "path": "operations/backup-parameters.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:backup-parameters"
+    },
+    {
+      "path": "operations/destroy-parameters.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:destroy-parameters"
+    },
+    {
+      "path": "operations/operation-event.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:operation-event"
+    },
+    {
+      "path": "operations/operation-request.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:operation-request"
+    },
+    {
+      "path": "operations/operation-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:operation-result"
+    },
+    {
+      "path": "operations/operation.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:operation"
+    },
+    {
+      "path": "operations/restore-parameters.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:restore-parameters"
+    },
+    {
+      "path": "operations/server-backup-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:server-backup-result"
+    },
+    {
+      "path": "operations/server-definition.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:server-definition"
+    },
+    {
+      "path": "operations/server-destroy-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:server-destroy-result"
+    },
+    {
+      "path": "operations/server-provision-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:server-provision-result"
+    },
+    {
+      "path": "operations/server-restore-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:server-restore-result"
+    },
+    {
+      "path": "operations/start-parameters.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:start-parameters"
+    },
+    {
+      "path": "operations/stop-parameters.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:operations:stop-parameters"
+    },
+    {
+      "path": "rpc/adapter-describe-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-describe-result"
+    },
+    {
+      "path": "rpc/adapter-health-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-health-result"
+    },
+    {
+      "path": "rpc/adapter-initialize-request.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-initialize-request"
+    },
+    {
+      "path": "rpc/adapter-initialize-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-initialize-result"
+    },
+    {
+      "path": "rpc/adapter-invoke-request.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-invoke-request"
+    },
+    {
+      "path": "rpc/adapter-invoke-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-invoke-result"
+    },
+    {
+      "path": "rpc/adapter-reconcile-request.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-reconcile-request"
+    },
+    {
+      "path": "rpc/adapter-reconcile-result.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-reconcile-result"
+    },
+    {
+      "path": "storage/backup-manifest.schema.json",
+      "id": "urn:gameserver-controller:0.1.0-draft:storage:backup-manifest"
+    }
   ]
 }
