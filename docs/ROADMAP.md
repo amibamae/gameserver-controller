@@ -36,7 +36,7 @@
 - [x] Select draft standards: JSON, JSON Schema 2020-12, JSON-RPC 2.0, OpenAPI 3.2.1, RFC 3339, and RFC 8785 where canonicalization is required.
 - [ ] Validate the selected standards, validators, generators, and transport binding across target languages.
 - [x] Publish an initial set of language-neutral schemas, examples, test vectors, and conformance requirements.
-- [x] Publish a canonical durable-operation result schema and initial Velocity player-transfer request/result schemas.
+- [x] Publish a canonical durable-operation result schema, typed provision/backup/restore/destroy results, and Velocity player-transfer request/result schemas.
 - [x] Add CI validation and an executable behavioral conformance runner for the initial ten fixtures.\n- [x] Publish registered input/output schemas for the hosting instance-create capability.\n- [ ] Expand capability-specific input/output schemas across storage, execution, game, and integration operations; complete hosting coverage and typed operation results.
 - [x] Publish initial draft compatibility rules for negotiation, schema identity, evolution, and in-flight operations.
 - [ ] Review the complete protocol and freeze compatibility rules.
@@ -132,4 +132,4 @@ The first end-to-end target is Vultr + Wasabi + Paper + Velocity on Debian. Exis
 
 The project is in **Phase 1 — Language-independent protocol design**. The protocol principles, common types, and first durable operation protocol draft are published. The protocol remains 0.1.0-draft. Initial JSON, JSON Schema, JSON-RPC, OpenAPI, timestamp, and canonicalization choices, lifecycle model, five adapter contracts, security draft, management API, schemas, examples, and test vectors are published. They have not all been independently validated or reviewed, and no controller or production adapter implementation has been built.
 
-Initial lifecycle, five adapter, RPC, management API, security, schema, example, and conformance drafts have been published. CI validates the schema package and executes the initial ten conformance fixtures. The hosting instance-create capability now has registered input and output schemas; operation-specific results and storage/game capability schemas remain work in progress. The next work is to expand those contracts, add edge-case vectors, and build independent cross-language interoperability tests.
+Initial lifecycle, five adapter, RPC, management API, security, schema, example, and conformance drafts have been published. CI validates the schema package and executes the initial ten conformance fixtures. The hosting instance-create capability now has registered input and output schemas, and typed result schemas cover provision, backup, restore, and destroy. Other operation results and storage/game capability schemas remain work in progress. The next work is to expand those contracts, add edge-case vectors, and build independent cross-language interoperability tests.
