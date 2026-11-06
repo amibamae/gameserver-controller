@@ -79,7 +79,7 @@ Bootstrap scripts and game software releases are independently versioned artifac
 
 ### Bootstrap lifecycle
 
-Instances begin with a standard operating-system offering supplied by the hosting provider. The controller then applies a selected bootstrap revision and user configuration. Bootstrap scripts are source-controlled, customizable, reviewed, and validated by provisioning fresh isolated instances. Record the exact source revision, integrity checksum, configuration inputs, and outcome for each provisioning operation. The default workflow does not build, publish, or depend on project-maintained operating-system images or snapshots.
+Instances begin with a standard operating-system offering supplied by the hosting provider. The controller then applies a selected bootstrap revision and user configuration. Bootstrap scripts are source-controlled, customizable, reviewed, and validated by provisioning fresh isolated instances. Record the exact source revision, integrity checksum, configuration inputs, and outcome for each provisioning operation. The default workflow depends only on provider-supported operating-system offerings and versioned bootstrap scripts.
 
 ### Game software releases
 
