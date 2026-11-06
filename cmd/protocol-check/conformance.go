@@ -127,7 +127,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		defineData := asObject(defineResult["operation_data"])
 		startData := asObject(startResult["operation_data"])
 		stopData := asObject(stopResult["operation_data"])
-		defineTarget, startTarget, stopTarget := asObject(defineOperation["target"]), asObject(startOperation["target"]), asObject(stopOperation["target"])
+		startTarget, stopTarget := asObject(startOperation["target"]), asObject(stopOperation["target"])
 		startAssertion := asObject(startData["readiness_assertion"])
 		startInstance := asObject(startTarget["instance_ref"])
 		assertedInstance := asObject(startAssertion["instance_ref"])
