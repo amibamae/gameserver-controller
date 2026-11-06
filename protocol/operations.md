@@ -1,0 +1,321 @@
+# Durable Operation Protocol
+
+**Status:** Draft. This document defines proposed language-independent operation semantics. It is not an implemented API, finalized message schema, or transport binding.
+
+The operation protocol is shared by the controller core, adapters, command-line tools, and future management clients. Implementations in different languages MUST preserve the behavior defined here.
+
+## 1. Purpose and scope
+
+Game Server Controller performs work that can outlast the request that started it. Provisioning, startup, shutdown, backup, restore, updates, and destruction may involve multiple external systems, long waits, partial completion, or loss of connectivity.
+
+The operation protocol defines how that work is accepted, recorded, observed, cancelled, retried, and recovered.
+
+It applies to:
+- Mutating lifecycle and administrative actions.
+- Long-running read-only actions when they need durable progress or recovery.
+- Multi-step workflows coordinated by the controller.
+- Adapter calls that participate in a durable controller operation.
+
+A short, read-only query MAY be handled as an ordinary request rather than a durable operation. A mutating action MUST be represented by a durable operation.
+
+## 2. Fundamental guarantees
+
+1. **Persist before side effect:** The controller MUST durably record an accepted operation before initiating any external side effect.
+2. **No untracked work:** An adapter MUST NOT initiate work on behalf of the controller without an associated operation and step context.
+3. **No exactly-once assumption:** The protocol does not promise exactly-once execution across process, network, or provider boundaries.
+4. **Reconcile ambiguity:** If an external call may have taken effect but its outcome is unknown, the operation MUST enter reconciliation. It MUST NOT blindly repeat the call.
+5. **Durable state:** A controller restart MUST NOT erase accepted operations or make unfinished work appear complete.
+6. **Safe cancellation:** A cancellation request is not proof that work stopped or side effects were reversed.
+7. **Explicit partial outcomes:** Failed or interrupted operations MUST preserve the record of completed steps and known external effects.
+8. **Core policy remains authoritative:** Adapters and clients cannot override authorization, approval, environment isolation, or destructive-operation safeguards.
+9. **Observable progress:** A client can retrieve the current operation state without depending on a live process connection.
+10. **Language and transport neutrality:** These semantics do not depend on a programming language, serialization format, or transport.
+
+## 3. Operation model
+
+An **operation** is a durable record of one accepted request to perform a defined action.
+
+An operation has:
+- A unique `operation_id`.
+- An operation type, such as `server.provision`, `server.backup`, or `server.destroy`.
+- A schema/protocol version identifying the contract used.
+- A target and scope, including `server_id` and `environment_id` when applicable.
+- The authenticated actor and authorization decision.
+- A request snapshot containing validated parameters and secret references only.
+- An optional idempotency key.
+- Creation, update, start, and completion timestamps as applicable.
+- Current operation status and current step.
+- A sequence of step records and relevant external references.
+- Deadline and retry policy information.
+- Progress information, if meaningful.
+- A result, warnings, or structured error.
+- Audit event references and recovery metadata.
+
+Operation request parameters MUST be retained in a way that lets the controller safely resume or reconcile the accepted request. Resolved secret values MUST NOT be stored in the request snapshot, operation result, or audit trail.
+
+The operation's accepted request is immutable. A changed target, changed parameter, or materially changed plan requires a new operation and, where applicable, a new approval.
+
+## 4. Operation acceptance
+
+Before accepting an operation, the controller MUST:
+1. Authenticate the caller and establish trusted actor identity.
+2. Validate the request and its target/environment scope.
+3. Check authorization, policy, required capabilities, and approval requirements.
+4. Validate that the request is not in conflict with an existing operation or resource state.
+5. Resolve or validate secret references only as necessary, without exposing secret values.
+6. Create the operation record and initial audit record in durable storage.
+7. Commit the record before scheduling or dispatching work that can cause side effects.
+
+If validation, authorization, or safety checks reject the request before acceptance, the controller returns a structured request error and MUST NOT start the operation. A security/audit record MAY still be written for the rejected attempt.
+
+Acceptance means the operation has been durably recorded. It does **not** mean the requested action has completed or that all provider-side effects have begun.
+
+If durable operation storage is unavailable, a mutating request MUST fail closed. The controller MUST NOT perform the action without a durable operation record.
+
+After acceptance, the caller receives the operation identifier and an initial status, or can recover that identifier using the same idempotency key if the acceptance response was lost.
+
+## 5. Operation status model
+
+The proposed operation statuses are:
+
+| Status | Meaning | Classification |
+|---|---|---|
+| `pending` | Accepted and durably recorded; execution has not started | Non-terminal |
+| `running` | A step is actively executing | Non-terminal |
+| `waiting` | Waiting for a provider, timer/backoff, external event, or other prerequisite | Non-terminal |
+| `cancellation_requested` | A cancellation request was accepted for evaluation; work may still be running | Non-terminal |
+| `reconciling` | An external outcome or interrupted step is being investigated before proceeding | Non-terminal |
+| `needs_operator` | Safe automation is paused until an authorized operator resolves or directs the situation | Suspended |
+| `succeeded` | The requested outcome and required postconditions were confirmed | Terminal |
+| `failed` | The operation definitively stopped without achieving its requested outcome | Terminal |
+| `cancelled` | The operation stopped under its cancellation rules and no further work will be performed by it | Terminal |
+
+Only `succeeded`, `failed`, and `cancelled` are terminal. `needs_operator` is suspended, not successful or failed; a documented, authorized operator action MAY resume it or explicitly end it. Implementations MUST NOT silently resume a suspended operation.
+
+An implementation MUST NOT report `succeeded` merely because an adapter accepted a request. It must verify the required postconditions for the operation type.
+
+An operation MUST NOT transition from a terminal state back to an active state. Further work requires a new operation linked to the prior operation when relevant.
+
+## 6. Steps and external effects
+
+A multi-step operation is represented as ordered, individually identifiable steps. A step record SHOULD include:
+- Stable step identifier and step type.
+- Intent/parameters with secret references only.
+- Step status and timestamps.
+- Attempt count and applicable deadline.
+- Adapter identity and capability used.
+- External operation/resource references.
+- Observed result, structured error, and recovery information.
+
+Before an external side effect, the controller MUST durably record the step intent and attempt context. After the call, it MUST durably record the observed outcome before proceeding to dependent steps.
+
+Proposed step statuses:
+
+| Step status | Meaning |
+|---|---|
+| `pending` | Step is planned but has not been dispatched |
+| `running` | Dispatch or execution is in progress |
+| `waiting` | Waiting for an asynchronous external result or prerequisite |
+| `outcome_unknown` | The external effect may have occurred; reconciliation is required |
+| `succeeded` | Step postcondition is confirmed |
+| `failed` | Step definitively failed |
+| `skipped` | Step was not required or was safely bypassed under the workflow definition |
+| `cancelled` | Step was stopped according to its cancellation semantics |
+
+An adapter's synchronous response may indicate that an external provider accepted a request and returned a provider operation reference. That is not necessarily completion. The controller records the reference and polls, waits for an event, or otherwise reconciles until the defined postcondition is observed.
+
+External resource identifiers MUST be recorded with their adapter and environment scope as defined in [common protocol types](common-types.md).
+
+## 7. Idempotency and duplicate requests
+
+Idempotency prevents a lost response or client retry from unintentionally starting the same operation more than once.
+
+For an operation type that supports idempotency:
+- The caller supplies an idempotency key that is unique within the authenticated caller's scope.
+- The controller binds the key to the operation type, target, environment, and canonical validated request parameters.
+- Repeating the same request with the same key MUST return or identify the original operation, including its current or final status.
+- Reusing the key with different parameters MUST be rejected as a conflict.
+- The key-to-operation association MUST be durable.
+- The retention period for keys MUST be long enough to cover the operation lifetime and the documented client retry window.
+
+An idempotency key does not by itself make an external provider call idempotent. Adapter capabilities and operation contracts MUST describe whether a provider action supports a provider idempotency token, safe lookup/reconciliation, or neither.
+
+The protocol MUST NOT claim exactly-once execution. If a call may have reached an external system and the response is lost, the controller records an unknown outcome and reconciles before retrying or issuing dependent actions.
+
+## 8. Timeouts, deadlines, and retries
+
+The protocol distinguishes:
+- **Request timeout:** how long a caller waits for an immediate response.
+- **Step timeout:** how long the controller waits for a specific local/adapter interaction.
+- **Operation deadline:** the absolute time by which the controller should stop initiating ordinary work and move to a defined expiry/recovery path.
+- **Provider deadline:** a provider-side expiry or timeout, if the provider supports one.
+
+A timeout describes the controller's wait, not necessarily the external action. An operation timeout MUST NOT be interpreted as proof that a provider-side action was cancelled, failed, or reversed.
+
+Retry rules:
+1. Retries MUST be bounded by an explicit policy and operation deadline.
+2. Backoff and provider retry guidance SHOULD be respected.
+3. An action MAY be retried automatically only when it is known to be safe to repeat, protected by a provider idempotency mechanism, or reconciled to prove the prior attempt did not take effect.
+4. A mutating call with an unknown outcome MUST be reconciled before retry.
+5. Validation, authorization, unsupported-capability, integrity, compatibility, and safety-blocked errors MUST NOT be automatically retried without a changed request or explicit policy.
+6. Exhausted retries MUST lead to a definitive failure only when the outcome is known; otherwise the operation enters `needs_operator` or remains in a documented reconciliation state.
+7. Every attempt and retry decision MUST be recorded.
+
+## 9. Cancellation
+
+Cancellation is a request to stop future work where safe; it is not a rollback.
+
+The controller MUST determine whether cancellation is safe for the current operation and step:
+- Before any side effect, the operation can generally be cancelled.
+- During a cancellable wait, the controller may stop polling or waiting while recording any provider-side action still in progress.
+- During a mutating external call, cancellation may be unavailable or ambiguous.
+- After an irreversible action or defined point of no return, cancellation may be rejected.
+- A partially completed workflow may require a separate, explicitly authorized compensating operation.
+
+When cancellation is requested, status becomes `cancellation_requested` while the controller evaluates and applies the operation-specific rules. It becomes `cancelled` only after the controller confirms that no further work will be performed by that operation and records any remaining external state. If the external outcome is uncertain, the operation enters `reconciling` or `needs_operator`, not `cancelled`.
+
+The protocol MUST define cancellation behavior and any point of no return for each operation type. Implementations MUST NOT promise that all operations are cancellable.
+
+## 10. Recovery and reconciliation
+
+On startup, the controller MUST inspect durable non-terminal operations and determine whether each can safely resume, must wait, requires reconciliation, or needs operator intervention.
+
+For each interrupted step:
+1. Read its durable intent and last recorded attempt.
+2. Determine whether dispatch occurred and whether an external operation reference exists.
+3. Query the adapter/provider or inspect the affected resource using read-only methods where possible.
+4. Compare observed state with the step's preconditions and postconditions.
+5. Record the reconciled result before taking further action.
+6. Resume only when the next action is safe and authorized; otherwise suspend for operator review.
+
+If dispatch status or external result is unknown, the step is `outcome_unknown` and the operation is `reconciling`. The controller MUST NOT infer success or failure from a missing response.
+
+If the adapter cannot determine the external outcome, the operation MUST move to `needs_operator`. It MUST retain resource locks or mark the affected resource as requiring recovery so that a second operation cannot race the unresolved work.
+
+Recovery MUST NOT:
+- Repeat a possibly completed destructive action blindly.
+- Treat an unverified backup as safe for destruction.
+- Route players to a backend that has not passed readiness checks.
+- Apply a compensating action without its own authorization and safety validation.
+- Discard partial results or external resource references.
+
+## 11. Progress and events
+
+Operation state is authoritative. Progress notifications and event delivery are supplementary; losing a notification MUST NOT lose the operation or its result.
+
+Progress SHOULD identify:
+- Current phase and step.
+- A stable machine-readable phase/step identifier.
+- Human-readable status text.
+- Optional completed/total units or percentage when meaningful.
+- Last-update timestamp.
+
+Percentage is optional. Implementations MUST NOT invent precision or imply a reliable completion estimate when the work cannot be measured. Clients MUST remain functional when only status and current step are available.
+
+Operation events SHOULD identify the operation, event type, sequence or cursor, timestamp, and relevant safe data. Consumers MUST tolerate duplicate delivery and use operation inspection to recover from gaps. Exact event transport, ordering scope, and retention are deferred to the transport and management API specifications.
+
+Progress, events, results, and errors MUST NOT expose secret values or unnecessary player data.
+
+## 12. Results, failures, and partial completion
+
+A terminal operation result SHOULD contain:
+- Final status.
+- Confirmed outcome summary.
+- Affected logical and external resource references.
+- Completed and failed steps.
+- Warnings and unresolved conditions.
+- Structured error when the operation did not succeed.
+- Completion timestamp and related audit references.
+
+For `failed` or `needs_operator` operations, the record MUST preserve known side effects and partial completion. For example, if provisioning created a VM but game preparation failed, the operation record must retain the VM reference and its observed state.
+
+The controller MUST NOT assume that failure automatically reverses earlier steps. Compensation or cleanup is a separate workflow unless the operation contract explicitly defines a safe, authorized compensation step. A compensation step is itself recorded and subject to authorization, idempotency, and recovery rules.
+
+A failed operation may therefore leave resources allocated or data preserved for safety. This is preferable to untracked or unsafe cleanup.
+
+## 13. Concurrency and resource coordination
+
+Mutating operations that affect the same logical server or shared data MUST be serialized according to a documented lock scope. The initial design uses an exclusive per-server lock for operations such as start, stop, backup, restore, upgrade, and destroy.
+
+- A lock records its owning operation ID and scope.
+- A second conflicting operation MUST be rejected or durably queued according to an explicit policy; it MUST NOT run concurrently by accident.
+- A lock MUST NOT be released merely because a process or connection disappeared.
+- A stale lock requires inspection and reconciliation of its owning operation.
+- Multi-resource operations MUST define a consistent lock acquisition order to avoid deadlock.
+- A suspended operation with unresolved external effects keeps the relevant resource blocked until safe release is confirmed.
+
+The operation protocol does not select a database or distributed lock implementation.
+
+## 14. Authorization, approvals, and audit
+
+The controller establishes the trusted actor identity and authorization context. A client or adapter MUST NOT be able to elevate its own privileges by supplying actor or permission fields.
+
+Authorization and approval checks occur before acceptance and again before sensitive steps when relevant. An approval MUST be bound to the exact action, target, environment, and material parameters it authorizes. A changed target or materially changed plan requires renewed approval.
+
+The audit trail SHOULD record:
+- Request accepted or rejected.
+- Actor, operation, target, environment, and authorization decision.
+- Approval references and the scope approved.
+- State transitions and step attempts.
+- Retry, cancellation, reconciliation, and recovery decisions.
+- Operator intervention and final outcome.
+
+Audit data MUST be protected from unauthorized modification and MUST redact secrets and unnecessary player data. Operation history is not a substitute for the security audit trail; the two may be linked.
+
+## 15. Illustrative operation state flow
+
+The following is conceptual, not a finalized schema:
+
+```text
+pending
+  └── running
+        ├── waiting ───────────────┐
+        ├── cancellation_requested│
+        ├── reconciling ──────────┘
+        ├── needs_operator
+        ├── succeeded
+        ├── failed
+        └── cancelled
+
+needs_operator
+  └── authorized resume/recovery decision
+        ├── pending or reconciling
+        └── failed/cancelled after explicit resolution
+```
+
+The exact legal transition table and operation-specific state flows must be defined before the protocol is stable.
+
+## 16. Illustrative example: uncertain destroy result
+
+A destroy operation is accepted and durably recorded. The controller records the intent to request provider destruction and dispatches the adapter call. The connection then drops before a response arrives.
+
+The controller:
+1. Marks the step `outcome_unknown` and operation `reconciling`.
+2. Does not issue another destroy request.
+3. Uses the hosting adapter to inspect the exact instance in the recorded environment.
+4. If absence is confirmed and the provider semantics establish successful destruction, records the step as succeeded and continues postcondition checks.
+5. If the instance still exists and the provider confirms no destroy request remains active, retries only if the adapter contract says that retry is safe.
+6. If the result remains ambiguous, moves the operation to `needs_operator` and keeps the logical server blocked from conflicting operations.
+
+This is the required pattern for any mutating external call whose result may be unknown, not only VM destruction.
+
+## 17. Open decisions
+
+The following remain intentionally unresolved:
+- Exact operation type registry and naming conventions.
+- Exact representation of operation and step records.
+- Whether status transitions are represented by a separate event log, snapshots, or both.
+- Idempotency-key format, maximum length, and retention duration.
+- Default timeout, retry, and backoff policy (these may vary by operation and adapter).
+- Exact progress/event delivery semantics and retention.
+- Lock lease and recovery policy details.
+- Whether operation acceptance is exposed synchronously, asynchronously, or through transport-specific patterns.
+
+These decisions require examples, conformance fixtures, and review. They MUST NOT be decided implicitly by an implementation language or a specific transport.
+
+## Related specifications
+
+- [Protocol principles and communication surfaces](README.md)
+- [Common protocol types](common-types.md)
+- [Core design and lifecycle model](../docs/CORE_DESIGN.md)
+- [Adapter contracts](../docs/ADAPTER_CONTRACTS.md)
