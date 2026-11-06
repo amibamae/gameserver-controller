@@ -215,7 +215,7 @@ An idempotency key is scoped to the authenticated caller, operation type, and ta
 
 ## 9. Secret references
 
-A secret reference identifies where an authorized component can resolve a secret without embedding the secret in protocol data.
+A secret reference identifies where an authorized component can resolve a secret without embedding the secret in protocol data. The JSON structure is defined by [secret-reference.schema.json](schemas/common/secret-reference.schema.json); it contains a URI-like opaque reference, purpose, optional permission scopes, and optional version reference.
 
 A secret reference is not itself proof of permission to read the secret. Resolution is governed by the controller's secret policy and least-privilege rules.
 
