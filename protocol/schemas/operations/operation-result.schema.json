@@ -7,6 +7,7 @@
   "additionalProperties": false,
   "required": [
     "outcome_summary",
+    "operation_type",
     "affected_resources",
     "completed_steps",
     "failed_steps",
@@ -64,6 +65,16 @@
     },
     "partial": {
       "type": "boolean"
+    },
+    "operation_type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "description": "Standard or namespaced operation whose terminal outcome this result records."
+    },
+    "operation_data": {
+      "type": "object",
+      "description": "Operation-specific terminal result. Standard operations publish a closed schema for this object."
     }
   },
   "$defs": {
