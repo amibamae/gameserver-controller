@@ -1,6 +1,6 @@
 # Protocol Specification
 
-**Status:** Draft design. The documents in this directory define proposed language-independent behavior; they do not yet constitute a stable wire protocol or implemented API.
+**Status:** Draft specification, version 0.1.0-draft. The repository now contains initial normative prose, JSON Schemas, RPC and management API bindings, examples, and conformance vectors. It is not a stable 1.0 release, and no implementation has yet demonstrated cross-language conformance.
 
 ## Purpose
 
@@ -33,7 +33,7 @@ The specification is divided into these areas:
 - **Identity and capabilities:** implementation identity, protocol compatibility, declared features, constraints, and required permissions.
 - **Operations:** durable operation identity, acceptance, steps, status, progress, idempotency, retries, cancellation, reconciliation, and recovery.
 - **Lifecycle:** server states, permitted transitions, preconditions, postconditions, and failure behavior.
-- **Adapter contracts:** hosting, storage, game runtime, and integration responsibilities.
+- **Adapter contracts:** hosting, storage, execution, game runtime, and integration responsibilities.
 - **Management API:** versioned client-facing operations, read models, authentication, authorization, and event access.
 - **Security and privacy:** trust boundaries, secret handling, consent, audit, and environment isolation.
 - **Conformance:** shared test vectors and behavioral requirements for independent implementations.
@@ -54,19 +54,33 @@ The management API is for operators and independently developed clients. It expo
 
 The API should be documented independently of any user interface. An initial CLI can use application services directly or consume a local API, as decided during implementation. A hosted web panel is explicitly out of scope for the initial project.
 
-## Candidate standards
+## Selected 0.1.0-draft standards
 
-The following are candidates, not finalized decisions:
+The initial draft adopts the following language-neutral standards and bindings. These choices are recorded in [ADR 0004](../docs/decisions/0004-protocol-encoding-and-bindings.md) and may be revised before 1.0 if interoperability testing demonstrates a material problem.
 
-| Standard | Possible role | Status |
+| Concern | Selection | Role |
 |---|---|---|
-| JSON | Interchange representation | Candidate |
-| JSON Schema | Data structure validation | Candidate |
-| OpenAPI | Management HTTP API description | Candidate |
-| JSON-RPC 2.0 | Adapter request/response envelope | Candidate |
-| Semantic Versioning | Protocol versioning | Candidate |
+| Interchange | [JSON / RFC 8259](https://www.rfc-editor.org/rfc/rfc8259) | Protocol objects and examples |
+| Structural schemas | [JSON Schema 2020-12](https://json-schema.org/draft/2020-12) | Machine-readable validation |
+| Timestamps | [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339) | Absolute instants |
+| Canonicalization | [RFC 8785 JCS](https://www.rfc-editor.org/rfc/rfc8785) | Deterministic fingerprints where required |
+| Adapter RPC | [JSON-RPC 2.0](https://www.jsonrpc.org/specification) | Adapter request/response semantics |
+| Initial optional adapter process binding | `jsonrpc-stdio-v1` | UTF-8 newline-delimited JSON over stdin/stdout |
+| Management API | [OpenAPI 3.2.1](https://spec.openapis.org/oas/v3.2.1) | HTTP/JSON client API |
 
-We should prefer established standards where they fit, but avoid adopting a standard merely because it is familiar. Each choice must be evaluated against interoperability, security, testability, streaming/progress needs, and implementation support.
+JSON Schema `format` is an annotation unless format assertion is enabled. Implementations MUST validate required protocol formats such as RFC 3339 timestamps and URIs through format-assertion support or equivalent explicit validation.
+
+Protocol integers MUST remain within the exact interoperable JSON integer range (absolute value no greater than 9,007,199,254,740,991). Larger counters, provider identifiers, and byte quantities MUST be represented as decimal strings.
+
+The in-process adapter contract is transport-independent. The stdio RPC profile is optional and does not make subprocess adapters mandatory. Remote adapter communication requires a separately reviewed binding.
+
+## Extensibility and unknown fields
+
+For this draft, request objects and security-sensitive command objects are closed: unknown fields are rejected unless the object defines an explicit `extensions` map. Extension names MUST be namespaced and MUST NOT change the meaning of standard fields.
+
+Read-only response objects MAY gain optional fields in a compatible minor revision. Clients MUST ignore unknown optional response fields and MUST fail safely on an unknown enum/state value that affects a decision. An implementation MUST NOT silently reinterpret an unknown lifecycle state or capability.
+
+Schemas MUST state whether an object is closed or extensible. A minor revision MUST NOT change the meaning, type, or security effect of an existing field.
 
 ## Conformance and compatibility
 
@@ -95,49 +109,66 @@ Compatibility policy must define handling of unknown fields, enum values, option
 - A controller MUST NOT perform a mutating external action without a durable operation record.
 - An unknown external outcome MUST be reconciled before retrying or starting dependent work.
 
-## Proposed specification layout
+## Specification layout
 
 ```text
 protocol/
 ├── README.md
+├── VERSION
 ├── common-types.md
 ├── operations.md
-├── VERSION
+├── lifecycle.md
+├── security.md
+├── adapters/
+│   ├── README.md
+│   ├── hosting.md
+│   ├── storage.md
+│   ├── execution.md
+│   ├── games.md
+│   └── integrations.md
 ├── schemas/
 │   ├── common/
 │   ├── operations/
+│   ├── lifecycle/
 │   ├── hosting/
-│   ├── storage/
-│   ├── games/
-│   └── integrations/
+│   └── storage/
+├── examples/
 ├── rpc/
 │   ├── methods.md
 │   ├── errors.md
 │   └── transport.md
-├── lifecycle/
-│   ├── states.md
-│   └── transitions.md
 ├── management-api/
 │   ├── overview.md
-│   ├── authentication.md
-│   └── authorization.md
+│   └── openapi.yaml
 └── conformance/
     ├── requirements.md
     └── test-vectors/
 ```
 
-This layout is provisional and may be adjusted as the contracts become concrete.
+The tree reflects the initial draft package. Additional schemas, operation-specific examples, category tests, and authentication/authorization details remain part of review.
 
 ## Initial design sequence
 
 1. Establish protocol principles and boundaries.
 2. Draft and review common identifiers, timestamps, versioning, errors, and capability descriptors.
 3. Draft and review durable operation semantics, including recovery and uncertainty handling.
-4. Define lifecycle states, transitions, preconditions, postconditions, and safety behavior.
-5. Define adapter contracts and evaluate their transport binding.
-6. Define the optional management API for external clients.
-7. Define security, authorization, consent, and audit requirements across both surfaces.
-8. Create language-neutral schemas, examples, test vectors, and conformance requirements.
-9. Evaluate implementation languages against the reviewed protocol.
+4. Draft and review lifecycle states, transitions, preconditions, postconditions, and safety behavior.
+5. Define hosting, storage, execution, game, and integration adapter contracts.
+6. Select and review the adapter RPC and optional process binding.
+7. Define the optional management API for independent clients.
+8. Define security, authorization, consent, audit, and environment isolation across both surfaces.
+9. Publish and validate language-neutral schemas, examples, and conformance vectors.
+10. Demonstrate interoperability using independent implementations in at least two programming languages before a stable 1.0 release.
 
-The protocol remains in draft until its semantics, schemas, compatibility rules, and conformance tests have been reviewed.
+The initial package is version 0.1.0-draft. It remains draft until semantics, schemas, compatibility rules, security requirements, and conformance tests are reviewed and at least two independent language implementations pass the published interoperability suite.
+
+## Core design decisions
+
+- [Lifecycle protocol](lifecycle.md)
+- [Adapter contracts](adapters/README.md)
+- [RPC methods and transport](rpc/methods.md)
+- [Management API](management-api/overview.md)
+- [Security requirements](security.md)
+- [Conformance requirements and test vectors](conformance/requirements.md)
+- [Execution-agnostic architecture decision](../docs/decisions/0003-execution-agnostic-runtime.md)
+- [Encoding and binding decision](../docs/decisions/0004-protocol-encoding-and-bindings.md)
