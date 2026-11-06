@@ -1,0 +1,15 @@
+{
+  "protocol_version": "0.1.0-draft",
+  "json_schema_dialect": "https://json-schema.org/draft/2020-12/schema",
+  "schemas": [
+    {"path": "common/identifier.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:common:identifier"},
+    {"path": "common/external-resource-ref.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"},
+    {"path": "common/request-context.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:common:request-context"},
+    {"path": "common/protocol-error.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:common:protocol-error"},
+    {"path": "common/capability-descriptor.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor"},
+    {"path": "operations/operation.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:operations:operation"},
+    {"path": "lifecycle/server.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:lifecycle:server"},
+    {"path": "hosting/provision-request.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:hosting:provision-request"},
+    {"path": "storage/backup-manifest.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:storage:backup-manifest"}
+  ]
+}
