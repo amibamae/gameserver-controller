@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:operations:operation",
+  "title": "Durable operation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["operation_id", "operation_type", "protocol_version", "target", "status", "created_at", "updated_at", "steps"],
+  "properties": {
+    "operation_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "operation_type": {"type": "string", "pattern": "^[a-z][a-z0-9.]+$"},
+    "protocol_version": {"type": "string", "minLength": 1, "maxLength": 100},
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server_id", "environment_id"],
+      "properties": {
+        "server_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "environment_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "instance_ref": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"}
+      }
+    },
+    "status": {"enum": ["pending", "running", "waiting", "cancellation_requested", "reconciling", "needs_operator", "succeeded", "failed", "cancelled"]},
+    "current_step_id": {"type": ["string", "null"], "maxLength": 200},
+    "actor_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 200},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "started_at": {"type": ["string", "null"], "format": "date-time"},
+    "completed_at": {"type": ["string", "null"], "format": "date-time"},
+    "deadline": {"type": ["string", "null"], "format": "date-time"},
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step_id", "step_type", "status"],
+        "properties": {
+          "step_id": {"type": "string", "minLength": 1, "maxLength": 200},
+          "step_type": {"type": "string", "minLength": 1, "maxLength": 160},
+          "status": {"enum": ["pending", "running", "waiting", "outcome_unknown", "succeeded", "failed", "skipped", "cancelled"]},
+          "attempt": {"type": "integer", "minimum": 0},
+          "adapter_id": {"type": "string", "maxLength": 160},
+          "external_operation_ref": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"},
+          "error": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:protocol-error"}
+        }
+      }
+    },
+    "progress": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "phase": {"type": "string", "maxLength": 160},
+        "message": {"type": "string", "maxLength": 1000},
+        "completed": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0},
+        "updated_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "result": {"type": ["object", "null"]},
+    "error": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:protocol-error"}
+  }
+}
