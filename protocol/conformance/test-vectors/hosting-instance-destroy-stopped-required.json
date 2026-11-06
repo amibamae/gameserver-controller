@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.destroy.stopped-required",
-  "protocol_version": "0.19.0-draft",
+  "protocol_version": "0.20.0-draft",
   "contract_area": "hosting.instance.destroy",
   "purpose": "A running instance is not destroyed until the core confirms it is stopped.",
   "input": {

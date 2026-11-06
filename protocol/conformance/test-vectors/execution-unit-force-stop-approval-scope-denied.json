@@ -1,6 +1,6 @@
 {
   "fixture_id": "execution.unit.force-stop.approval-scope-denied",
-  "protocol_version": "0.19.0-draft",
+  "protocol_version": "0.20.0-draft",
   "contract_area": "execution.unit.force_stop",
   "purpose": "A present approval that is not valid for this exact unit and reason blocks dispatch.",
   "input": {

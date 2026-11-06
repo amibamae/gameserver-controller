@@ -1,6 +1,6 @@
 # Storage Adapter Contract
 
-**Status:** Draft, version 0.19.0-draft.
+**Status:** Draft, version 0.20.0-draft.
 
 ## 1. Responsibility
 
@@ -42,7 +42,7 @@ Large object bytes MUST NOT be embedded in JSON-RPC messages. A [storage transfe
 
 For `storage.object.put`, the stream direction is `controller_to_adapter`; for `storage.object.get`, it is `adapter_to_controller`. The maximum byte limit MUST be at least the expected object size. Stream completion is separate from object integrity verification.
 
-The in-process adapter contract MAY map the transfer reference to a direct bounded stream. The optional `jsonrpc-stdio-v1` process profile does not define a byte-stream channel. A process adapter using that profile MUST NOT advertise `storage.object.put` or `storage.object.get` until a separately versioned transport binding maps transfer references to a bounded stream.
+The in-process adapter contract MAY map the transfer reference to a direct bounded stream. A process adapter MAY use `local-unix-stream-v1` with `jsonrpc-stdio-v1` after successful initialization negotiation and descriptor declaration. A process adapter MUST NOT advertise `storage.object.put` or `storage.object.get` without both. Transfer IDs are 256-bit one-use capabilities bound to one adapter session, operation, step, environment, direction, byte limit, and expiry. A stream is complete only at EOF with the exact expected byte count; interruption remains partial or unknown and never establishes backup verification.
 
 ## 5. Backup manifest
 

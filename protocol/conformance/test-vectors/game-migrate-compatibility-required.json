@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.migrate.compatibility-required",
-  "protocol_version": "0.19.0-draft",
+  "protocol_version": "0.20.0-draft",
   "contract_area": "game.migrate",
   "purpose": "A migration call is not dispatched unless the exact compatibility check requires migration.",
   "input": {
@@ -166,7 +166,7 @@
             "version_id": "object-v010"
           },
           "transfer_ref": {
-            "transfer_id": "transfer-backup-compat-010-world",
+            "transfer_id": "a4e7d1c9b3f80562e9a16bc4d7028f35c6a0e1b9f8437d25ac61f08e39b4726d",
             "direction": "controller_to_adapter",
             "maximum_bytes": 4096,
             "expires_at": "2026-11-06T09:00:00Z"

@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.inspect.unknown-not-active",
-  "protocol_version": "0.19.0-draft",
+  "protocol_version": "0.20.0-draft",
   "contract_area": "hosting.instance.inspect",
   "purpose": "Unknown provider state remains distinct from active or destroyed.",
   "input": {

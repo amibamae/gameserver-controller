@@ -1,6 +1,6 @@
 # Adapter Contracts
 
-**Status:** Draft protocol contracts, version 0.19.0-draft.
+**Status:** Draft protocol contracts, version 0.20.0-draft.
 
 Adapters connect the controller core to infrastructure and external systems. Adapter contracts are language-neutral. An adapter may be implemented in-process or as a separate process using the optional RPC binding.
 
@@ -41,7 +41,7 @@ The canonical descriptor is defined by [capability-descriptor.schema.json](../sc
 - Display name and implementation version.
 - Exact supported protocol versions and contract versions.
 - Configuration schema reference.
-- Capabilities, constraints, and resource kinds.
+- Capabilities, constraints, resource kinds, and supported stream transport profiles.
 - Required permission scopes.
 - Optional platform constraints and documentation URI.
 
