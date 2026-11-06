@@ -23,4 +23,4 @@ Passing schema validation does not prove authorization, a legal lifecycle transi
 
 ## Schema inventory
 
-See [index.json](index.json) for the machine-readable list of schema files and their IDs. The package is intentionally a draft and may gain or revise schemas before 1.0.
+See [index.json](index.json) for the machine-readable list of schema files and their IDs. The current draft includes common identifiers, resource references, request contexts, structured errors, secret references and capability descriptors; operation, lifecycle, hosting, storage and RPC schemas. The package is intentionally a draft and may gain or revise schemas before 1.0.
