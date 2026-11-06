@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:common:identifier",
+  "title": "Protocol identifier",
+  "description": "Opaque, non-empty identifier. Meaning and uniqueness scope are defined by the field using this schema.",
+  "type": "string",
+  "minLength": 1,
+  "maxLength": 200,
+  "pattern": "^[^\\u0000-\\u001F\\u007F]+$"
+}
