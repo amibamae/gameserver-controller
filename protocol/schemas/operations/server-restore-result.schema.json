@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:operations:server-restore-result",
+  "title": "Durable server.restore operation result",
+  "description": "Canonical operation result with typed data for server.restore.",
+  "allOf": [
+    {
+      "$ref": "urn:gameserver-controller:0.1.0-draft:operations:operation-result"
+    },
+    {
+      "type": "object",
+      "required": [
+        "operation_type",
+        "operation_data"
+      ],
+      "properties": {
+        "operation_type": {
+          "const": "server.restore"
+        },
+        "operation_data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "backup_id",
+            "target_instance_ref",
+            "data_generation_id",
+            "restore_verified",
+            "final_lifecycle_state"
+          ],
+          "properties": {
+            "backup_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "target_instance_ref": {
+              "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+            },
+            "data_generation_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "restore_verified": {
+              "const": true
+            },
+            "final_lifecycle_state": {
+              "enum": [
+                "stopped",
+                "ready"
+              ]
+            },
+            "readiness_assertion": {
+              "$ref": "urn:gameserver-controller:0.1.0-draft:lifecycle:readiness-assertion"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "final_lifecycle_state": {
+                    "const": "ready"
+                  }
+                },
+                "required": [
+                  "final_lifecycle_state"
+                ]
+              },
+              "then": {
+                "required": [
+                  "readiness_assertion"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
