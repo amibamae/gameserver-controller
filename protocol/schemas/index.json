@@ -6,6 +6,7 @@
     {"path": "common/external-resource-ref.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"},
     {"path": "common/request-context.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:common:request-context"},
     {"path": "common/protocol-error.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:common:protocol-error"},
+    {"path": "common/secret-reference.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:common:secret-reference"},
     {"path": "common/capability-descriptor.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor"},
     {"path": "operations/server-definition.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:operations:server-definition"},
     {"path": "operations/start-parameters.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:operations:start-parameters"},
