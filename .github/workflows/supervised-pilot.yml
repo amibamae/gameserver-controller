@@ -1,0 +1,30 @@
+name: Supervised pilot build
+
+on:
+  push:
+    paths:
+      - "cmd/supervised-pilot/**"
+      - ".github/workflows/supervised-pilot.yml"
+      - "go.mod"
+      - "go.sum"
+  pull_request:
+    paths:
+      - "cmd/supervised-pilot/**"
+      - ".github/workflows/supervised-pilot.yml"
+      - "go.mod"
+      - "go.sum"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build supervised pilot
+        run: go build -o /tmp/gsc-pilot ./cmd/supervised-pilot
+
