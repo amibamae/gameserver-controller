@@ -35,7 +35,7 @@ Object keys are opaque strings under the adapter's documented key rules. Impleme
 ## 4. Backup manifest
 
 A verified backup MUST have a manifest containing at least:
-- Backup ID and logical server ID.
+- Backup ID, logical server ID, and the exact `data_generation_id` captured.
 - Environment ID and source instance reference, if present.
 - Game adapter ID, game name/version, and data-format/world compatibility metadata available from the game adapter.
 - Included data paths or named data sets.
@@ -46,7 +46,7 @@ A verified backup MUST have a manifest containing at least:
 
 The manifest MUST NOT include secret values or unnecessary player telemetry.
 
-Checksums MUST identify their algorithm. The protocol MUST NOT assume ETag is a content checksum. A backup is verified only after required objects are present, lengths match, supported digests verify, and manifest ownership/compatibility checks pass.
+Checksums MUST identify their algorithm. The protocol MUST NOT assume ETag is a content checksum. A backup is verified only after required objects are present, lengths match, supported digests verify, and manifest ownership/compatibility checks pass. The core separately determines whether its data generation is current; integrity verification alone does not make a backup eligible for destruction.
 
 ## 5. Operations
 
