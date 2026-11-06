@@ -61,6 +61,7 @@ Codes MUST be stable, machine-readable, and namespaced. Examples:
 - `core.operation.idempotency_conflict`
 - `core.operation.outcome_unknown`
 - `core.safety.backup_not_verified`
+- `core.safety.backup_generation_mismatch`
 - `hosting.instance.not_found`
 - `storage.object.checksum_mismatch`
 - `execution.runtime.start_failed`
