@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.15.0-draft:hosting:regions-list-output",
+  "title": "Hosting region list output",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "regions",
+    "observed_at"
+  ],
+  "properties": {
+    "regions": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "region_id",
+          "availability"
+        ],
+        "properties": {
+          "region_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "location": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "country_code": {
+                "type": "string",
+                "pattern": "^[A-Z]{2}$"
+              },
+              "subdivision": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "city": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              }
+            }
+          },
+          "availability": {
+            "enum": [
+              "available",
+              "unavailable",
+              "unknown"
+            ]
+          }
+        }
+      }
+    },
+    "next_page_token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

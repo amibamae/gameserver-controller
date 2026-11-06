@@ -1,0 +1,37 @@
+{
+  "fixture_id": "hosting.os_offerings.list.unknown-not-available",
+  "protocol_version": "0.15.0-draft",
+  "contract_area": "hosting.os_offerings.list",
+  "purpose": "An OS offering with unknown availability cannot be treated as eligible for create.",
+  "input": {
+    "catalog_kind": "os_offerings",
+    "catalog_input": {
+      "region_id": "ewr",
+      "os_family": "linux",
+      "architecture": "x86_64",
+      "page_size": 20
+    },
+    "catalog_output": {
+      "os_offerings": [
+        {
+          "offering_id": "debian-12-x86_64",
+          "region_id": "ewr",
+          "os_family": "linux",
+          "name": "Debian",
+          "version": "12",
+          "architecture": "x86_64",
+          "availability": "unknown"
+        }
+      ],
+      "observed_at": "2026-11-06T11:22:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "request_filter_matches": true,
+    "items_unique": true,
+    "within_page_size": true,
+    "read_only": true,
+    "all_items_report_available": false
+  }
+}

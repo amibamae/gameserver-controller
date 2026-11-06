@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.14.0-draft:operations:backup-parameters",
+  "$id": "urn:gameserver-controller:0.15.0-draft:operations:backup-parameters",
   "title": "Server backup parameters",
   "type": "object",
   "additionalProperties": false,
@@ -8,7 +8,7 @@
   "properties": {
     "backup_profile": {"type": "string", "minLength": 1, "maxLength": 200},
     "resume_after_backup": {"type": "boolean", "default": true},
-    "expected_instance_ref": {"$ref": "urn:gameserver-controller:0.14.0-draft:common:external-resource-ref"},
+    "expected_instance_ref": {"$ref": "urn:gameserver-controller:0.15.0-draft:common:external-resource-ref"},
     "extensions": {"type": "object", "additionalProperties": {"type": "object"}}
   }
 }

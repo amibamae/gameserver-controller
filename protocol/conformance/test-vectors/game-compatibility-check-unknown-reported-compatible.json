@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.compatibility.check.unknown-reported-compatible",
-  "protocol_version": "0.14.0-draft",
+  "protocol_version": "0.15.0-draft",
   "contract_area": "game.compatibility.check",
   "purpose": "A reported compatible status cannot override an unknown required check.",
   "input": {

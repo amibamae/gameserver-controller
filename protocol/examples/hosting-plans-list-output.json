@@ -1,0 +1,14 @@
+{
+  "plans": [
+    {
+      "plan_id": "standard-4-8",
+      "region_id": "ewr",
+      "vcpu_count": 4,
+      "memory_mib": 8192,
+      "storage_gib": 160,
+      "availability": "available"
+    }
+  ],
+  "observed_at": "2026-11-06T11:21:00Z",
+  "next_page_token": "opaque-plan-page-03"
+}

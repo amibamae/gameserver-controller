@@ -1,6 +1,6 @@
 # Protocol Specification
 
-**Status:** Draft specification, version 0.14.0-draft. The repository now contains initial normative prose, JSON Schemas, RPC and management API bindings, examples, and conformance vectors. It is not a stable 1.0 release, and no implementation has yet demonstrated cross-language conformance.
+**Status:** Draft specification, version 0.15.0-draft. The repository now contains initial normative prose, JSON Schemas, RPC and management API bindings, examples, and conformance vectors. It is not a stable 1.0 release, and no implementation has yet demonstrated cross-language conformance.
 
 ## Purpose
 
@@ -55,7 +55,7 @@ The management API is for operators and independently developed clients. It expo
 
 The API should be documented independently of any user interface. An initial CLI can use application services directly or consume a local API, as decided during implementation. A hosted web panel is explicitly out of scope for the initial project.
 
-## Selected 0.14.0-draft standards
+## Selected 0.15.0-draft standards
 
 The initial draft adopts the following language-neutral standards and bindings. These choices are recorded in [ADR 0004](../docs/decisions/0004-protocol-encoding-and-bindings.md) and may be revised before 1.0 if interoperability testing demonstrates a material problem.
 
@@ -163,7 +163,7 @@ The tree reflects the initial draft package. The schema inventory is indexed in 
 9. Publish and validate language-neutral schemas, examples, and conformance vectors.
 10. Demonstrate interoperability using independent implementations in at least two programming languages before a stable 1.0 release.
 
-This draft snapshot is version 0.14.0-draft. It remains draft until semantics, schemas, compatibility rules, security requirements, and conformance tests are reviewed and at least two independent language implementations pass the published interoperability suite.
+This draft snapshot is version 0.15.0-draft. It remains draft until semantics, schemas, compatibility rules, security requirements, and conformance tests are reviewed and at least two independent language implementations pass the published interoperability suite.
 
 ## Core design decisions
 

@@ -1,0 +1,14 @@
+{
+  "os_offerings": [
+    {
+      "offering_id": "debian-12-x86_64",
+      "region_id": "ewr",
+      "os_family": "linux",
+      "name": "Debian",
+      "version": "12",
+      "architecture": "x86_64",
+      "availability": "unknown"
+    }
+  ],
+  "observed_at": "2026-11-06T11:22:00Z"
+}
