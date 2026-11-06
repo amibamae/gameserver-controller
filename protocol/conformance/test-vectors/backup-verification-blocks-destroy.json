@@ -3,7 +3,7 @@
   "protocol_version": "0.1.0-draft",
   "contract": "server.destroy",
   "initial_state": {
-    "lifecycle_state": "backing_up",
+    "lifecycle_state": "stopped",
     "backup": {"exists": true, "uploaded": true, "verified": false},
     "instance_ref": {
       "adapter_id": "hosting.example",
@@ -17,7 +17,7 @@
     "accepted": false,
     "error_code": "core.safety.backup_not_verified",
     "provider_destroy_calls": 0,
-    "logical_server_state": "failed"
+    "logical_server_state": "stopped"
   },
-  "notes": "The backup failure is definitive in this fixture, so the operation fails and the server enters failed. The provider destroy call MUST NOT occur."
+  "notes": "The server is stopped but the only uploaded backup is not verified. Destruction is rejected and the server remains stopped. The provider destroy call MUST NOT occur."
 }
