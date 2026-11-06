@@ -130,6 +130,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		operationEnvironmentMatches := !hasOperationRef ||
 			stringValue(asObject(operationRef), "environment_id") == stringValue(unitRef, "environment_id")
 		unknown := outcome == "outcome_unknown"
+		resultRequiresInspection := !unitBound || unknown
 		startSucceeded := strings.HasPrefix(fixtureID, "execution.unit.start.") && unitBound && outcome == "completed" && state == "running"
 		return map[string]any{
 			"schemas_valid":                     true,
@@ -139,7 +140,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"external_operation_ref_present":    hasOperationRef,
 			"operation_ref_environment_matches": operationEnvironmentMatches,
 			"readiness_established":             false,
-			"reconciliation_required":           unknown,
+			"reconciliation_required":           resultRequiresInspection,
+			"result_requires_inspection":       resultRequiresInspection,
 			"retry_without_inspection":          false,
 			"successful_start_claim_accepted":   startSucceeded,
 			"termination_confirmed":             unitBound && outcome == "completed" && state == "stopped",
