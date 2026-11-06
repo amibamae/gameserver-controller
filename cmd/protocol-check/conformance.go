@@ -170,12 +170,12 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		}
 		reportedMatches := stringValue(compatibilityOutput, "compatibility_status") == derived
 		return map[string]any{
-			"schemas_valid": true,
-			"target_bound": targetBound,
-			"check_set_complete": complete,
-			"derived_compatibility_status": derived,
+			"schemas_valid":                  true,
+			"target_bound":                   targetBound,
+			"check_set_complete":             complete,
+			"derived_compatibility_status":   derived,
 			"reported_compatibility_matches": reportedMatches,
-			"compatibility_result_accepted": targetBound && complete && reportedMatches && derived == "compatible",
+			"compatibility_result_accepted":  targetBound && complete && reportedMatches && derived == "compatible",
 		}, nil
 	case "game.health.check.unknown-not-healthy":
 		healthInput, healthOutput := asObject(input["health_input"]), asObject(input["health_output"])
