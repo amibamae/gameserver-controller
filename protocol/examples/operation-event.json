@@ -1,0 +1,15 @@
+{
+  "event_id": "event-0003",
+  "operation_id": "operation-provision-001",
+  "sequence": 3,
+  "event_type": "operation.progress.updated",
+  "timestamp": "2026-11-05T22:48:00Z",
+  "step_id": "prepare-host",
+  "status": "running",
+  "data": {
+    "phase": "bootstrap",
+    "message": "Host preparation is running.",
+    "completed": 2,
+    "total": 5
+  }
+}
