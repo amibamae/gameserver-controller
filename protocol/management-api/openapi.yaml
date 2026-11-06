@@ -229,21 +229,59 @@ components:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
   schemas:
-    OperationRequest:
+    DefineServerRequest:
       type: object
       additionalProperties: false
       required: [operation_type, parameters]
       properties:
-        operation_type:
-          type: string
-          enum: [server.define, server.provision, server.start, server.stop, server.backup, server.restore, server.destroy]
+        operation_type: { const: server.define }
         parameters:
-          type: object
-          description: Operation-specific parameter object; it MUST validate against the schema for the selected operation type. Unknown fields are rejected unless that operation schema defines an extension point.
-          additionalProperties: true
-        deadline:
-          type: string
-          format: date-time
+          $ref: "../schemas/operations/server-definition.schema.json"
+        deadline: { type: string, format: date-time }
+    ServerOperationRequest:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [operation_type, parameters]
+          properties:
+            operation_type: { const: server.provision }
+            parameters: { $ref: "../schemas/hosting/provision-request.schema.json" }
+            deadline: { type: string, format: date-time }
+        - type: object
+          additionalProperties: false
+          required: [operation_type, parameters]
+          properties:
+            operation_type: { const: server.start }
+            parameters: { $ref: "../schemas/operations/start-parameters.schema.json" }
+            deadline: { type: string, format: date-time }
+        - type: object
+          additionalProperties: false
+          required: [operation_type, parameters]
+          properties:
+            operation_type: { const: server.stop }
+            parameters: { $ref: "../schemas/operations/stop-parameters.schema.json" }
+            deadline: { type: string, format: date-time }
+        - type: object
+          additionalProperties: false
+          required: [operation_type, parameters]
+          properties:
+            operation_type: { const: server.backup }
+            parameters: { $ref: "../schemas/operations/backup-parameters.schema.json" }
+            deadline: { type: string, format: date-time }
+        - type: object
+          additionalProperties: false
+          required: [operation_type, parameters]
+          properties:
+            operation_type: { const: server.restore }
+            parameters: { $ref: "../schemas/operations/restore-parameters.schema.json" }
+            deadline: { type: string, format: date-time }
+        - type: object
+          additionalProperties: false
+          required: [operation_type, parameters]
+          properties:
+            operation_type: { const: server.destroy }
+            parameters: { $ref: "../schemas/operations/destroy-parameters.schema.json" }
+            deadline: { type: string, format: date-time }
     Operation:
       type: object
       additionalProperties: true
