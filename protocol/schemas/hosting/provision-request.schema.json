@@ -50,6 +50,10 @@
     "restore_backup_id": {"type": "string", "minLength": 1, "maxLength": 200},
     "network_profile": {"type": "string", "maxLength": 200},
     "firewall_policy_ref": {"type": "string", "maxLength": 500},
+    "secret_refs": {
+      "type": "array",
+      "items": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:secret-reference"}
+    },
     "ssh_key_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 500}},
     "labels": {"type": "object", "additionalProperties": {"type": "string", "maxLength": 500}}
   }
