@@ -262,28 +262,61 @@ The audit trail SHOULD record:
 
 Audit data MUST be protected from unauthorized modification and MUST redact secrets and unnecessary player data. Operation history is not a substitute for the security audit trail; the two may be linked.
 
-## 15. Illustrative operation state flow
+## 15. Legal operation status transitions
 
-The following is conceptual, not a finalized schema:
+The following transitions are permitted for the operation status values in this draft. Any unlisted transition MUST be rejected.
 
-```text
-pending
-  └── running
-        ├── waiting ───────────────┐
-        ├── cancellation_requested│
-        ├── reconciling ──────────┘
-        ├── needs_operator
-        ├── succeeded
-        ├── failed
-        └── cancelled
+| From | To | Rule |
+|---|---|---|
+| `pending` | `running` | Worker begins the accepted operation. |
+| `pending` | `cancellation_requested` | Cancellation accepted for evaluation before work begins. |
+| `pending` | `cancelled` | Safe cancellation confirmed before dispatch. |
+| `pending` | `failed` | Pre-execution failure is definitive and operation cannot run. |
+| `running` | `waiting` | Waiting on a provider, timer, or prerequisite. |
+| `running` | `cancellation_requested` | Cancellation request received. |
+| `running` | `reconciling` | Dispatched effect or interrupted step has uncertain outcome. |
+| `running` | `needs_operator` | Automation cannot safely proceed. |
+| `running` | `succeeded` | Requested outcome and postconditions confirmed. |
+| `running` | `failed` | Definitive failure; no unresolved external effect remains. |
+| `waiting` | `running` | Prerequisite satisfied and work resumes. |
+| `waiting` | `cancellation_requested` | Cancellation requested while waiting. |
+| `waiting` | `reconciling` | External outcome became uncertain. |
+| `waiting` | `needs_operator` | Automated resolution is unsafe or exhausted. |
+| `waiting` | `failed` | Definitive failure. |
+| `cancellation_requested` | `cancelled` | No further work will be performed and remaining external state is known. |
+| `cancellation_requested` | `reconciling` | Cancellation intersects an uncertain in-flight effect. |
+| `cancellation_requested` | `needs_operator` | Safe cancellation cannot be determined automatically. |
+| `cancellation_requested` | `succeeded` | The requested outcome completed before cancellation could take effect and postconditions are confirmed. |
+| `cancellation_requested` | `failed` | Work definitively failed and no unknown effect remains. |
+| `reconciling` | `running` | Prior effect is known and safe work can resume. |
+| `reconciling` | `waiting` | External work is confirmed pending. |
+| `reconciling` | `needs_operator` | Outcome cannot be safely determined. |
+| `reconciling` | `succeeded` | Reconciliation confirms the requested outcome and postconditions. |
+| `reconciling` | `failed` | Reconciliation confirms definitive failure. |
+| `reconciling` | `cancelled` | Reconciliation confirms safe cancellation and no further work. |
+| `needs_operator` | `reconciling` | Authorized operator directs further state reconciliation. |
+| `needs_operator` | `running` | Authorized operator resolves the blocker and explicitly resumes safe work. |
+| `needs_operator` | `failed` | Operator records a definitive failure resolution. |
+| `needs_operator` | `cancelled` | Operator confirms safe cancellation and no further work. |
 
-needs_operator
-  └── authorized resume/recovery decision
-        ├── pending or reconciling
-        └── failed/cancelled after explicit resolution
-```
+Only `succeeded`, `failed`, and `cancelled` are terminal. `needs_operator` is suspended, not terminal. Terminal states never transition again; additional work requires a new operation linked to the prior operation.
 
-The exact legal transition table and operation-specific state flows must be defined before the protocol is stable.
+An operation MUST NOT become `failed` while a mutating external effect remains unresolved. It MUST remain `reconciling` or move to `needs_operator`.
+
+## 16. Step status transitions
+
+Step statuses are `pending`, `running`, `waiting`, `outcome_unknown`, `succeeded`, `failed`, `skipped`, and `cancelled`.
+
+Permitted transitions:
+- `pending` -> `running`, `skipped`, or `cancelled`.
+- `running` -> `waiting`, `outcome_unknown`, `succeeded`, `failed`, or `cancelled`.
+- `waiting` -> `running`, `outcome_unknown`, `succeeded`, `failed`, or `cancelled`.
+- `outcome_unknown` -> `running`, `waiting`, `succeeded`, or `failed`, but only after reconciliation establishes the safe next state.
+- Terminal step statuses never transition again.
+
+A step marked `succeeded` MUST have its postcondition evidence persisted. An `outcome_unknown` step MUST NOT be blindly re-dispatched.
+
+
 
 ## 16. Illustrative example: uncertain destroy result
 
@@ -302,14 +335,14 @@ This is the required pattern for any mutating external call whose result may be 
 ## 17. Open decisions
 
 The following remain intentionally unresolved:
-- Exact operation type registry and naming conventions.
-- Exact representation of operation and step records.
+- Complete operation type registry and the full input/output schema for each operation.
+- Final representation and retention of operation and step records.
 - Whether status transitions are represented by a separate event log, snapshots, or both.
 - Idempotency-key format, maximum length, and retention duration.
 - Default timeout, retry, and backoff policy (these may vary by operation and adapter).
 - Exact progress/event delivery semantics and retention.
 - Lock lease and recovery policy details.
-- Whether operation acceptance is exposed synchronously, asynchronously, or through transport-specific patterns.
+- Whether operation acceptance is exposed synchronously, asynchronously, or through transport-specific patterns. The initial management HTTP binding is asynchronous.
 
 These decisions require examples, conformance fixtures, and review. They MUST NOT be decided implicitly by an implementation language or a specific transport.
 
