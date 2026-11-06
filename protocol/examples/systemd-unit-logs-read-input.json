@@ -1,0 +1,9 @@
+{
+  "unit_ref": {
+    "adapter_id": "execution.systemd",
+    "environment_id": "staging",
+    "resource_kind": "systemd-unit",
+    "external_id": "paper-server"
+  },
+  "max_bytes": 1024
+}

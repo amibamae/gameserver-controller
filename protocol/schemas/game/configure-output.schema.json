@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.5.0-draft:game:configure-output",
+  "$id": "urn:gameserver-controller:0.6.0-draft:game:configure-output",
   "title": "Game configure output",
   "description": "Configuration validation and application result. An unknown result remains subject to operation reconciliation.",
   "type": "object",
@@ -17,7 +17,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.5.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.6.0-draft:game:game-instance-target"
     },
     "release_id": {
       "type": "string",
@@ -43,7 +43,7 @@
       "type": "boolean"
     },
     "configuration_digest": {
-      "$ref": "urn:gameserver-controller:0.5.0-draft:storage:storage-checksum",
+      "$ref": "urn:gameserver-controller:0.6.0-draft:storage:storage-checksum",
       "description": "SHA-256 of the RFC 8785 canonical JSON configuration, including only secret references."
     },
     "issues": {

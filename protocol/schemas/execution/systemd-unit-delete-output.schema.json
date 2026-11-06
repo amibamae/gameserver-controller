@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-delete-output",
+  "title": "Systemd execution unit delete output",
+  "description": "Deletion result. Persistent world data, backups, and logical server records are preserved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "unit_ref",
+    "outcome",
+    "persistent_data_preserved",
+    "observed_at"
+  ],
+  "properties": {
+    "unit_ref": {
+      "$ref": "urn:gameserver-controller:0.6.0-draft:common:external-resource-ref"
+    },
+    "outcome": {
+      "enum": [
+        "deleted",
+        "already_absent",
+        "outcome_unknown"
+      ]
+    },
+    "persistent_data_preserved": {
+      "const": true
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

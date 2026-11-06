@@ -1,0 +1,15 @@
+{
+  "unit_ref": {
+    "adapter_id": "execution.systemd",
+    "environment_id": "staging",
+    "resource_kind": "systemd-unit",
+    "external_id": "paper-server"
+  },
+  "lines": [
+    "[INFO] Paper startup complete.",
+    "[INFO] token=[REDACTED]"
+  ],
+  "truncated": false,
+  "redaction_applied": true,
+  "observed_at": "2026-11-06T09:20:01Z"
+}

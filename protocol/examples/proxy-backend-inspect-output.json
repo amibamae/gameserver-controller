@@ -1,0 +1,17 @@
+{
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "backend_id": "paper-staging-01",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-test-001"
+    }
+  },
+  "registration_state": "registered",
+  "routability": "routable",
+  "active_session_count": 0,
+  "observed_at": "2026-11-06T09:20:04Z"
+}

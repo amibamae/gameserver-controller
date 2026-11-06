@@ -1,6 +1,6 @@
 # Management API Authorization
 
-**Status:** Draft, protocol version 0.5.0-draft.
+**Status:** Draft, protocol version 0.6.0-draft.
 
 ## 1. Authority
 

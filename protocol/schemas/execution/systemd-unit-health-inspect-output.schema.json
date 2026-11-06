@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-health-inspect-output",
+  "title": "Systemd execution unit health inspect output",
+  "description": "Observed service health. Unknown must remain distinct from healthy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "unit_ref",
+    "health",
+    "diagnostics_redacted",
+    "observed_at"
+  ],
+  "properties": {
+    "unit_ref": {
+      "$ref": "urn:gameserver-controller:0.6.0-draft:common:external-resource-ref"
+    },
+    "health": {
+      "enum": [
+        "healthy",
+        "unhealthy",
+        "unknown"
+      ]
+    },
+    "diagnostics_redacted": {
+      "const": true
+    },
+    "safe_diagnostics": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "maxLength": 1000
+      }
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

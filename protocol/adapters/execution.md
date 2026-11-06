@@ -1,6 +1,6 @@
 # Execution Adapter Contract
 
-**Status:** Draft, version 0.5.0-draft.
+**Status:** Draft, version 0.6.0-draft.
 
 ## 1. Purpose
 
@@ -58,7 +58,8 @@ Secrets MUST be resolved by an authorized controller/runner channel at point of 
 - Graceful stop asks the game runtime to save and exit using the game adapter's save semantics, then waits for process/unit termination.
 - Force stop is an exceptional capability. It requires explicit policy/authorization and must report that graceful save could not be confirmed.
 - Inspect reports current observed state, identity, version, timestamps, and safe diagnostics.
-- Delete removes only the execution-unit definition. It MUST NOT delete world data, backups, or the logical server record unless a separate contract explicitly authorizes that effect.
+- Delete removes only the execution-unit definition. It MUST NOT delete world data, backups, or the logical server record unless a separate contract explicitly authorizes that effect. Its result MUST explicitly confirm persistent data was preserved.
+- Logs are read with a caller-supplied byte bound and MUST be redacted before leaving the adapter. Health inspection reports `unknown` when it cannot confirm health; it MUST NOT infer healthy from an active process.
 
 A timeout while starting/stopping MUST be reconciled by inspection. It MUST NOT be interpreted as a known stopped/running result.
 

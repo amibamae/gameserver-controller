@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.6.0-draft:integrations:proxy-backend-inspect-input",
+  "title": "Proxy backend inspect input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target"
+  ],
+  "properties": {
+    "target": {
+      "$ref": "urn:gameserver-controller:0.6.0-draft:integrations:proxy-backend-target"
+    }
+  }
+}

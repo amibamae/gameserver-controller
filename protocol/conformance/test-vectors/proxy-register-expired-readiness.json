@@ -1,0 +1,62 @@
+{
+  "fixture_id": "integration.proxy.register.expired-readiness-rejected",
+  "protocol_version": "0.6.0-draft",
+  "contract_area": "integration.proxy.backend.register",
+  "purpose": "An expired readiness assertion cannot register or route a backend.",
+  "input": {
+    "register_input": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "backend_id": "paper-staging-01",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "readiness_assertion": {
+        "assertion_id": "readiness-paper-001",
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        },
+        "readiness_check_set_id": "paper-required-v1",
+        "observed_at": "2026-11-06T09:20:00Z",
+        "expires_at": "2026-11-06T09:19:59Z"
+      }
+    },
+    "register_output": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "backend_id": "paper-staging-01",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "request_outcome": "rejected",
+      "registration_state": "unregistered",
+      "routability": "not_routable",
+      "observed_at": "2026-11-06T09:20:08Z",
+      "reason_code": "readiness_assertion_expired"
+    },
+    "validation_time": "2026-11-06T09:20:00Z"
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "readiness_current": false,
+    "registration_rejected": true,
+    "routing_permitted": false
+  },
+  "side_effect_expected": "none"
+}
