@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.compatibility.check.incompatible",
-  "protocol_version": "0.11.0-draft",
+  "protocol_version": "0.12.0-draft",
   "contract_area": "game.compatibility.check",
   "purpose": "An incompatible required check prevents a compatible result.",
   "input": {

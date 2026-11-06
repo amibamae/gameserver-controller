@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.12.0-draft:hosting:instance-inspect-output",
+  "title": "Hosting instance inspect output",
+  "description": "Provider observation for the exact instance reference. Unknown state remains explicit and is not equivalent to active or destroyed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "instance_ref",
+    "state",
+    "observed_at"
+  ],
+  "properties": {
+    "instance_ref": {
+      "$ref": "urn:gameserver-controller:0.12.0-draft:common:external-resource-ref"
+    },
+    "state": {
+      "enum": [
+        "creating",
+        "active",
+        "stopped",
+        "destroying",
+        "destroyed",
+        "failed",
+        "unknown"
+      ]
+    },
+    "region_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "plan_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "os": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider_os_id",
+        "distribution",
+        "version",
+        "architecture"
+      ],
+      "properties": {
+        "provider_os_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "distribution": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "architecture": {
+          "enum": [
+            "x86_64",
+            "aarch64",
+            "arm64",
+            "other"
+          ]
+        }
+      }
+    },
+    "provider_operation_ref": {
+      "$ref": "urn:gameserver-controller:0.12.0-draft:common:external-resource-ref"
+    },
+    "safe_diagnostics": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "maxLength": 1000
+      }
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

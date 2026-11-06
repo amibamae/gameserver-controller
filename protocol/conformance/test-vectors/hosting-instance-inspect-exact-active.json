@@ -1,0 +1,42 @@
+{
+  "fixture_id": "hosting.instance.inspect.exact-active",
+  "protocol_version": "0.12.0-draft",
+  "contract_area": "hosting.instance.inspect",
+  "purpose": "Inspect returns the exact active provider instance.",
+  "input": {
+    "hosting_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-012"
+      }
+    },
+    "hosting_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-012"
+      },
+      "state": "active",
+      "region_id": "region-sfo",
+      "plan_id": "compute-small",
+      "os": {
+        "provider_os_id": "debian-12",
+        "distribution": "Debian",
+        "version": "12",
+        "architecture": "x86_64"
+      },
+      "observed_at": "2026-11-06T11:00:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "observed_state": "active",
+    "safe_to_treat_as_active": true,
+    "inspection_read_only": true
+  },
+  "side_effect_expected": "none"
+}

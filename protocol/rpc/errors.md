@@ -1,6 +1,6 @@
 # Protocol and RPC Errors
 
-**Status:** Draft, version 0.11.0-draft.
+**Status:** Draft, version 0.12.0-draft.
 
 ## 1. Error layers
 

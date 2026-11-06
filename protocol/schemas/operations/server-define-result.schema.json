@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.11.0-draft:operations:server-define-result",
+  "$id": "urn:gameserver-controller:0.12.0-draft:operations:server-define-result",
   "title": "Durable server.define operation result",
   "description": "Canonical operation result with typed data for server.define.",
   "allOf": [
     {
-      "$ref": "urn:gameserver-controller:0.11.0-draft:operations:operation-result"
+      "$ref": "urn:gameserver-controller:0.12.0-draft:operations:operation-result"
     },
     {
       "type": "object",

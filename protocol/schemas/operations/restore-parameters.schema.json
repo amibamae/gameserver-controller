@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.11.0-draft:operations:restore-parameters",
+  "$id": "urn:gameserver-controller:0.12.0-draft:operations:restore-parameters",
   "title": "Server restore parameters",
   "type": "object",
   "additionalProperties": false,
@@ -10,7 +10,7 @@
     "replace_existing_data": {"type": "boolean", "default": false},
     "approval_id": {"type": "string", "minLength": 1, "maxLength": 200},
     "start_after_restore": {"type": "boolean", "default": false},
-    "target_instance_ref": {"$ref": "urn:gameserver-controller:0.11.0-draft:common:external-resource-ref"}
+    "target_instance_ref": {"$ref": "urn:gameserver-controller:0.12.0-draft:common:external-resource-ref"}
   },
   "if": {"properties": {"replace_existing_data": {"const": true}}, "required": ["replace_existing_data"]},
   "then": {"required": ["approval_id"]}

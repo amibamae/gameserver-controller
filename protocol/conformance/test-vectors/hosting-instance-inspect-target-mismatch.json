@@ -1,0 +1,41 @@
+{
+  "fixture_id": "hosting.instance.inspect.target-mismatch",
+  "protocol_version": "0.12.0-draft",
+  "contract_area": "hosting.instance.inspect",
+  "purpose": "A provider observation for a different resource is not accepted.",
+  "input": {
+    "hosting_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-012"
+      }
+    },
+    "hosting_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-other"
+      },
+      "state": "active",
+      "region_id": "region-sfo",
+      "plan_id": "compute-small",
+      "os": {
+        "provider_os_id": "debian-12",
+        "distribution": "Debian",
+        "version": "12",
+        "architecture": "x86_64"
+      },
+      "observed_at": "2026-11-06T11:00:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": false,
+    "safe_to_treat_as_active": false,
+    "inspection_read_only": true
+  },
+  "side_effect_expected": "none"
+}

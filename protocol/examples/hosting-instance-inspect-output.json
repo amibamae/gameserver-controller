@@ -1,0 +1,18 @@
+{
+  "instance_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "staging",
+    "resource_kind": "instance",
+    "external_id": "instance-012"
+  },
+  "state": "active",
+  "region_id": "region-sfo",
+  "plan_id": "compute-small",
+  "os": {
+    "provider_os_id": "debian-12",
+    "distribution": "Debian",
+    "version": "12",
+    "architecture": "x86_64"
+  },
+  "observed_at": "2026-11-06T11:00:00Z"
+}

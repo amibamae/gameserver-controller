@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.11.0-draft:integrations:velocity-player-transfer-request",
+  "$id": "urn:gameserver-controller:0.12.0-draft:integrations:velocity-player-transfer-request",
   "title": "Velocity player transfer request",
   "description": "Transfer a specific, controller-selected cohort of proxy sessions to one confirmed-ready backend instance.",
   "type": "object",
@@ -42,10 +42,10 @@
       "maxLength": 200
     },
     "expected_instance_ref": {
-      "$ref": "urn:gameserver-controller:0.11.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.12.0-draft:common:external-resource-ref"
     },
     "readiness_assertion": {
-      "$ref": "urn:gameserver-controller:0.11.0-draft:lifecycle:readiness-assertion"
+      "$ref": "urn:gameserver-controller:0.12.0-draft:lifecycle:readiness-assertion"
     },
     "player_session_ids": {
       "type": "array",
