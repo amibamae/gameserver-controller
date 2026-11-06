@@ -1,0 +1,13 @@
+{
+  "fixture_id": "security.staging.production-write-scope-denied",
+  "protocol_version": "0.21.0-draft",
+  "contract": "storage.object.put",
+  "actor_environment": "staging",
+  "target_environment": "production",
+  "credential_scope": ["storage.backup.write:production"],
+  "expected": {
+    "accepted": false,
+    "error_category": "authorization",
+    "side_effect_permitted": false
+  }
+}

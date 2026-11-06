@@ -1,0 +1,16 @@
+{
+  "fixture_id": "storage.production.backup-delete-authorized",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "storage.object.delete",
+  "purpose": "A production actor with the exact production delete scope may delete a production backup.",
+  "actor_environment": "production",
+  "target_environment": "production",
+  "credential_scope": ["storage.backup.delete:production"],
+  "expected": {
+    "accepted": true,
+    "error_category": null,
+    "side_effect_permitted": true,
+    "adapter_delete_calls": 1
+  },
+  "side_effect_expectation": "expected"
+}
