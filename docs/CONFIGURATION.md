@@ -84,6 +84,8 @@ Bucket and environment values above are placeholders. The example contains secre
 
 ## Secret reference contract
 
+The protocol representation of a secret reference is defined in [secret-reference.schema.json](../protocol/schemas/common/secret-reference.schema.json). Configuration syntax may differ by implementation, but the secret-reference meaning and least-privilege requirements are shared.
+
 Possible resolvers:
 - Environment variables for local development.
 - Root-readable or service-account-readable files with restrictive permissions.
