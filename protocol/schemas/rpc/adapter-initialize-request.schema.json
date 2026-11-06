@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-initialize-request",
+  "title": "Adapter initialize JSON-RPC request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["jsonrpc", "id", "method", "params"],
+  "properties": {
+    "jsonrpc": {"const": "2.0"},
+    "id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "method": {"const": "adapter.initialize"},
+    "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_versions", "controller"],
+      "properties": {
+        "protocol_versions": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 100}},
+        "controller": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["implementation_id", "implementation_version"],
+          "properties": {
+            "implementation_id": {"type": "string", "minLength": 1, "maxLength": 160},
+            "implementation_version": {"type": "string", "minLength": 1, "maxLength": 100}
+          }
+        }
+      }
+    }
+  }
+}
