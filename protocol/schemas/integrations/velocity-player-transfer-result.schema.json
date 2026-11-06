@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.3.0-draft:integrations:velocity-player-transfer-result",
+  "$id": "urn:gameserver-controller:0.4.0-draft:integrations:velocity-player-transfer-result",
   "title": "Velocity player transfer result",
   "description": "Per-session outcomes for a requested player transfer cohort.",
   "type": "object",
@@ -31,7 +31,7 @@
       "maxLength": 200
     },
     "target_instance_ref": {
-      "$ref": "urn:gameserver-controller:0.3.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.4.0-draft:common:external-resource-ref"
     },
     "requested_count": {
       "type": "integer",
@@ -104,7 +104,7 @@
             ]
           },
           "error": {
-            "$ref": "urn:gameserver-controller:0.3.0-draft:common:protocol-error"
+            "$ref": "urn:gameserver-controller:0.4.0-draft:common:protocol-error"
           }
         }
       }

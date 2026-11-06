@@ -1,0 +1,39 @@
+{
+  "server_id": "minecraft-test",
+  "environment_id": "staging",
+  "instance_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "staging",
+    "resource_kind": "instance",
+    "external_id": "instance-paper-test-001"
+  },
+  "game_release_id": "paper-1.21.11-build-3",
+  "observed_at": "2026-11-06T09:00:00Z",
+  "check_results": [
+    {
+      "check_id": "paper.startup-complete",
+      "check_version": "1",
+      "result": "pass",
+      "observed_at": "2026-11-06T08:59:58Z",
+      "evidence": [
+        "Paper startup completion marker observed."
+      ]
+    },
+    {
+      "check_id": "paper.world-loaded",
+      "check_version": "1",
+      "result": "pass",
+      "observed_at": "2026-11-06T08:59:59Z",
+      "evidence": [
+        "Primary world loaded."
+      ]
+    },
+    {
+      "check_id": "paper.players-joinable",
+      "check_version": "1",
+      "result": "unknown",
+      "observed_at": "2026-11-06T09:00:00Z",
+      "reason_code": "proxy_route_check_unavailable"
+    }
+  ]
+}

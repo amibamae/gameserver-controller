@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.3.0-draft:operations:operation-request",
+  "$id": "urn:gameserver-controller:0.4.0-draft:operations:operation-request",
   "title": "Standard management operation request",
   "description": "Generic reference schema. The management API uses the more specific oneOf schema in its OpenAPI document.",
   "type": "object",
@@ -14,12 +14,12 @@
     "deadline": {"type": "string", "format": "date-time"}
   },
   "oneOf": [
-    {"properties": {"operation_type": {"const": "server.define"}, "parameters": {"$ref": "urn:gameserver-controller:0.3.0-draft:operations:server-definition"}}},
-    {"properties": {"operation_type": {"const": "server.provision"}, "parameters": {"$ref": "urn:gameserver-controller:0.3.0-draft:hosting:provision-request"}}},
-    {"properties": {"operation_type": {"const": "server.start"}, "parameters": {"$ref": "urn:gameserver-controller:0.3.0-draft:operations:start-parameters"}}},
-    {"properties": {"operation_type": {"const": "server.stop"}, "parameters": {"$ref": "urn:gameserver-controller:0.3.0-draft:operations:stop-parameters"}}},
-    {"properties": {"operation_type": {"const": "server.backup"}, "parameters": {"$ref": "urn:gameserver-controller:0.3.0-draft:operations:backup-parameters"}}},
-    {"properties": {"operation_type": {"const": "server.restore"}, "parameters": {"$ref": "urn:gameserver-controller:0.3.0-draft:operations:restore-parameters"}}},
-    {"properties": {"operation_type": {"const": "server.destroy"}, "parameters": {"$ref": "urn:gameserver-controller:0.3.0-draft:operations:destroy-parameters"}}}
+    {"properties": {"operation_type": {"const": "server.define"}, "parameters": {"$ref": "urn:gameserver-controller:0.4.0-draft:operations:server-definition"}}},
+    {"properties": {"operation_type": {"const": "server.provision"}, "parameters": {"$ref": "urn:gameserver-controller:0.4.0-draft:hosting:provision-request"}}},
+    {"properties": {"operation_type": {"const": "server.start"}, "parameters": {"$ref": "urn:gameserver-controller:0.4.0-draft:operations:start-parameters"}}},
+    {"properties": {"operation_type": {"const": "server.stop"}, "parameters": {"$ref": "urn:gameserver-controller:0.4.0-draft:operations:stop-parameters"}}},
+    {"properties": {"operation_type": {"const": "server.backup"}, "parameters": {"$ref": "urn:gameserver-controller:0.4.0-draft:operations:backup-parameters"}}},
+    {"properties": {"operation_type": {"const": "server.restore"}, "parameters": {"$ref": "urn:gameserver-controller:0.4.0-draft:operations:restore-parameters"}}},
+    {"properties": {"operation_type": {"const": "server.destroy"}, "parameters": {"$ref": "urn:gameserver-controller:0.4.0-draft:operations:destroy-parameters"}}}
   ]
 }

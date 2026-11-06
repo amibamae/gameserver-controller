@@ -1,0 +1,40 @@
+{
+  "adapter_id": "game.minecraft-paper",
+  "category": "game",
+  "display_name": "Minecraft Paper game adapter",
+  "implementation_version": "0.1.0",
+  "protocol_versions": [
+    "0.4.0-draft"
+  ],
+  "contract_versions": [
+    "game.v1-draft"
+  ],
+  "required_permissions": [
+    "runtime.inspect"
+  ],
+  "capabilities": [
+    {
+      "name": "game.readiness.check",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.4.0-draft:game:readiness-check-input",
+      "output_schema_uri": "urn:gameserver-controller:0.4.0-draft:game:readiness-check-output",
+      "required_permissions": [
+        "runtime.inspect"
+      ],
+      "constraints": {
+        "required_check_ids": [
+          "paper.startup-complete",
+          "paper.world-loaded",
+          "paper.players-joinable"
+        ],
+        "max_checks_per_request": 64,
+        "unknown_check_result_blocks_readiness": true
+      }
+    }
+  ],
+  "constraints": {
+    "game": "Minecraft Java Edition",
+    "server_software": "Paper"
+  }
+}

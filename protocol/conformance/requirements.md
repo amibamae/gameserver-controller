@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.3.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.4.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -65,6 +65,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Adapter timeout/crash leaves outcome uncertain until reconciliation.
 - Adapter cannot grant itself permissions or bypass core policy.
 - Adapter logs and errors redact secrets.
+- Game readiness output is bound to the exact requested instance and release; every requested required check has exactly one result, and `unknown` never permits `ready`.
 
 ### Proxy routing and player transfer
 - Backend registration requires a current readiness assertion bound to the exact server, environment, and instance.
@@ -124,6 +125,7 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [backup-stale-generation-blocks-destroy.json](test-vectors/backup-stale-generation-blocks-destroy.json)
 - [operation-event-sequence.json](test-vectors/operation-event-sequence.json)
 - [readiness-required-before-transfer.json](test-vectors/readiness-required-before-transfer.json)
+- [game-readiness-unknown-blocks-ready.json](test-vectors/game-readiness-unknown-blocks-ready.json)
 - [velocity-transfer-partial-results.json](test-vectors/velocity-transfer-partial-results.json)
 - [storage-partial-upload-not-verified.json](test-vectors/storage-partial-upload-not-verified.json)
 - [storage-checksum-mismatch-blocks-restore.json](test-vectors/storage-checksum-mismatch-blocks-restore.json)

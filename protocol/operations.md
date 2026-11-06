@@ -1,6 +1,6 @@
 # Durable Operation Protocol
 
-**Status:** Draft, version 0.3.0-draft. This document defines language-independent operation semantics. JSON schemas and RPC/management bindings are published separately.
+**Status:** Draft, version 0.4.0-draft. This document defines language-independent operation semantics. JSON schemas and RPC/management bindings are published separately.
 
 The operation protocol is shared by the controller core, adapters, command-line tools, and future management clients. Implementations in different languages MUST preserve the behavior defined here.
 
