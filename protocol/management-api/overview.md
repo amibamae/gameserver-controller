@@ -25,7 +25,7 @@ Mutating operations are asynchronous: validate the request; authenticate and aut
 - `POST /v1/servers/{server_id}/operations`: request a typed operation (provision, start, stop, backup, restore, replace, destroy).
 - `GET /v1/operations/{operation_id}`: inspect durable operation status and result.
 - `POST /v1/operations/{operation_id}/cancel`: request cancellation under operation-specific rules.
-- `GET /v1/operations/{operation_id}/events`: optional Server-Sent Events stream where supported.
+- `GET /v1/operations/{operation_id}/events?after_sequence={n}`: optional Server-Sent Events stream where supported. Events use the canonical operation event schema; polling the operation resource remains authoritative.
 
 Implementations MUST enforce per-resource authorization and environment scoping on every endpoint. List endpoints MUST NOT reveal the existence of unauthorized resources.
 
