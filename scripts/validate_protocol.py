@@ -273,6 +273,29 @@ def main() -> int:
             actual = api_schemas.get(name, {}) if isinstance(api_schemas, dict) else {}
             if not isinstance(actual, dict) or actual.get("$ref") != expected_ref:
                 fail(errors, f"OpenAPI component {name} must reference the canonical schema {expected_ref}")
+
+        for reference in collect_refs(openapi_doc):
+            if reference.startswith("#"):
+                continue
+            relative_reference = reference.split("#", 1)[0]
+            if not relative_reference:
+                continue
+            target = (openapi_path.parent / relative_reference).resolve()
+            try:
+                target.relative_to(ROOT.resolve())
+            except ValueError:
+                fail(errors, f"OpenAPI reference escapes the repository: {reference}")
+                continue
+            if not target.is_file():
+                fail(errors, f"OpenAPI reference target does not exist: {reference}")
+                continue
+            try:
+                schema_relative = target.relative_to(SCHEMA_ROOT.resolve()).as_posix()
+            except ValueError:
+                fail(errors, f"OpenAPI external reference must point to the local schema package: {reference}")
+                continue
+            if schema_relative not in indexed_paths:
+                fail(errors, f"OpenAPI reference target is not registered in schemas/index.json: {reference}")
     except Exception as exc:
         fail(errors, f"cannot parse OpenAPI document: {exc}")
 
