@@ -20,6 +20,8 @@ func installFakeSSH(t *testing.T, failPreflight, failStart bool, sameInvocation 
 	t.Setenv("FAIL_START", map[bool]string{true: "1", false: "0"}[failStart])
 	same := len(sameInvocation) > 0 && sameInvocation[0]
 	t.Setenv("SAME_INVOCATION", map[bool]string{true: "1", false: "0"}[same])
+	t.Setenv("POST_ACTIVE_STATE", "")
+	t.Setenv("POST_SUB_STATE", "")
 	t.Setenv("SHOW_COUNT_FILE", logPath+".show-count")
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -34,10 +36,16 @@ func installFakeSSH(t *testing.T, failPreflight, failStart bool, sameInvocation 
 		"    printf '%s' \"$show_count\" > \"$SHOW_COUNT_FILE\"",
 		"    invocation_id=00000000000000000000000000000001",
 		"    if [ \"$show_count\" -gt 1 ] && [ \"$SAME_INVOCATION\" != \"1\" ]; then invocation_id=00000000000000000000000000000002; fi",
+		"    active_state=inactive",
+		"    sub_state=dead",
+		"    if [ \"$show_count\" -gt 1 ]; then",
+		"      if [ -n \"$POST_ACTIVE_STATE\" ]; then active_state=$POST_ACTIVE_STATE; fi",
+		"      if [ -n \"$POST_SUB_STATE\" ]; then sub_state=$POST_SUB_STATE; fi",
+		"    fi",
 		"    if [ \"$FAIL_PREFLIGHT\" = \"1\" ]; then",
 		"      printf 'ActiveState=failed\\nSubState=failed\\nResult=failed\\nExecMainStatus=1\\nInvocationID=%s\\n' \"$invocation_id\"",
 		"    else",
-		"      printf 'ActiveState=inactive\\nSubState=dead\\nResult=success\\nExecMainStatus=0\\nInvocationID=%s\\n' \"$invocation_id\"",
+		"      printf 'ActiveState=%s\\nSubState=%s\\nResult=success\\nExecMainStatus=0\\nInvocationID=%s\\n' \"$active_state\" \"$sub_state\" \"$invocation_id\"",
 		"    fi",
 		"    ;;",
 		"  *\"systemctl start --wait minecraft-backup.service\"*)",
@@ -220,5 +228,57 @@ func TestStatusReportsSystemdInvocationID(t *testing.T) {
 	}
 	if strings.Count(string(commands), "systemctl show") != 3 {
 		t.Fatalf("expected status to inspect three units; SSH log: %s", commands)
+	}
+}
+
+
+func TestBackupRequiresServiceInvocationToBeFinished(t *testing.T) {
+	tests := []struct {
+		name          string
+		active        string
+		sub           string
+		unknownResult bool
+	}{
+		{name: "running service", active: "active", sub: "running", unknownResult: true},
+		{name: "completed oneshot", active: "inactive", sub: "dead"},
+		{name: "completed oneshot retained active", active: "active", sub: "exited"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			logPath, home := installFakeSSH(t, false, false)
+			t.Setenv("POST_ACTIVE_STATE", test.active)
+			t.Setenv("POST_SUB_STATE", test.sub)
+
+			output, err := runBackup(t, "backup", "--host", "server.example", "--execute", "--confirm-host", "server.example")
+			if test.unknownResult {
+				if err == nil || !strings.Contains(err.Error(), "outcome unknown") {
+					t.Fatalf("expected running service to be unknown, got %v; output=%s", err, output)
+				}
+			} else if err != nil || !strings.Contains(output, "completed successfully") {
+				t.Fatalf("expected completed service success, got %v; output=%s", err, output)
+			}
+
+			commands, readErr := os.ReadFile(logPath)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if strings.Count(string(commands), "systemctl start --wait minecraft-backup.service") != 1 {
+				t.Fatalf("backup invocation was repeated; SSH log: %s", commands)
+			}
+
+			auditPath := filepath.Join(home, ".local", "state", "gsc-pilot", "operations.jsonl")
+			audit, readErr := os.ReadFile(auditPath)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if test.unknownResult {
+				if !strings.Contains(string(audit), `"event":"outcome_unknown"`) || strings.Contains(string(audit), `"event":"service_succeeded"`) {
+					t.Fatalf("expected unknown, not success, in audit log; got %s", audit)
+				}
+			} else if !strings.Contains(string(audit), `"event":"service_succeeded"`) {
+				t.Fatalf("expected service success in audit log, got %s", audit)
+			}
+		})
 	}
 }
