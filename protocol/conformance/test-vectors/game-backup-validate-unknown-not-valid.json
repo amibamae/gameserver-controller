@@ -1,5 +1,5 @@
 {
-  "fixture_id": "game.backup.validate.exact-objects",
+  "fixture_id": "game.backup.validate.unknown-not-valid",
   "protocol_version": "0.9.0-draft",
   "contract_area": "game.backup.validate",
   "purpose": "Unknown content validation is not accepted as a valid backup.",

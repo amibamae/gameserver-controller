@@ -173,7 +173,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"reported_health_matches": stringValue(healthOutput, "health") == health,
 			"unknown_not_healthy":     !incompleteEvidence || stringValue(healthOutput, "health") != "healthy",
 		}, nil
-	case "game.backup.validate.exact-objects":
+	case "game.backup.validate.exact-objects", "game.backup.validate.unknown-not-valid":
 		backupInput, backupOutput := asObject(input["backup_input"]), asObject(input["backup_output"])
 		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:backup-validate-input", backupInput); err != nil {
 			return nil, fmt.Errorf("backup validation input does not match schema: %w", err)
