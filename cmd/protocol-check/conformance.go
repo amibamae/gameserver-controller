@@ -205,7 +205,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return map[string]any{
 			"schema_valid": true, "target_bound": bound,
 			"validation_result": stringValue(validateOutput, "validation_result"),
-			"start_permitted": !unknown && stringValue(validateOutput, "validation_result") == "valid",
+			"start_permitted":   !unknown && stringValue(validateOutput, "validation_result") == "valid",
 		}, nil
 	case "game.readiness.unknown-required-check-blocks-ready":
 		if err := pkg.validateSchema("urn:gameserver-controller:0.5.0-draft:game:readiness-check-input", input); err != nil {
