@@ -19,12 +19,12 @@ Core must not import provider SDKs or game-specific libraries directly.
 
 ## Domain concepts
 
-- **Environment:** isolation boundary such as production, staging, or image-build.
+- **Environment:** isolation boundary such as production, staging, or a provider-backed test environment.
 - **Logical server:** deployment identity independent of a VM.
 - **Instance:** concrete provider resource hosting a server.
 - **Backup:** timestamped data snapshot with integrity metadata.
 - **Release:** immutable software/configuration artifacts and manifest.
-- **Image:** provider-specific infrastructure image.
+- **Bootstrap revision:** versioned source-code and configuration reference used to prepare an instance created from a provider-supported standard OS offering.
 - **Operation:** durable record of a requested action, as defined in the [durable operation protocol](../protocol/operations.md).
 - **Capability:** operation or feature declared by an adapter.
 - **Approval:** explicit authorization for a gated action.
