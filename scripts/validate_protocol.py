@@ -232,6 +232,16 @@ def main() -> int:
         openapi_version = openapi_doc.get("openapi") if isinstance(openapi_doc, dict) else None
         if openapi_version != "3.2.1":
             fail(errors, f"OpenAPI document must declare 3.2.1, found {openapi_version!r}")
+        components = openapi_doc.get("components", {})
+        api_schemas = components.get("schemas", {}) if isinstance(components, dict) else {}
+        expected_refs = {
+            "Operation": "../schemas/operations/operation.schema.json",
+            "Server": "../schemas/lifecycle/server.schema.json",
+        }
+        for name, expected_ref in expected_refs.items():
+            actual = api_schemas.get(name, {}) if isinstance(api_schemas, dict) else {}
+            if not isinstance(actual, dict) or actual.get("$ref") != expected_ref:
+                fail(errors, f"OpenAPI component {name} must reference the canonical schema {expected_ref}")
     except Exception as exc:
         fail(errors, f"cannot parse OpenAPI document: {exc}")
 

@@ -95,7 +95,29 @@
     },
     "request_snapshot": {
       "type": "object",
-      "description": "Immutable validated request snapshot. Secret values MUST be removed; secret references may be retained."
+      "additionalProperties": false,
+      "required": [
+        "operation_type",
+        "parameters"
+      ],
+      "description": "Immutable validated request snapshot. Parameters MUST conform to the operation-specific request schema and MUST NOT contain resolved secret values.",
+      "properties": {
+        "operation_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Validated operation parameters with secret values removed."
+        },
+        "secret_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:gameserver-controller:0.1.0-draft:common:secret-reference"
+          }
+        }
+      }
     },
     "created_at": {
       "type": "string",
