@@ -21,6 +21,12 @@
     {"path": "hosting/provision-request.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:hosting:provision-request"},
     {"path": "rpc/adapter-invoke-request.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-invoke-request"},
     {"path": "rpc/adapter-invoke-result.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-invoke-result"},
+    {"path": "rpc/adapter-initialize-request.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-initialize-request"},
+    {"path": "rpc/adapter-initialize-result.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-initialize-result"},
+    {"path": "rpc/adapter-describe-result.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-describe-result"},
+    {"path": "rpc/adapter-health-result.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-health-result"},
+    {"path": "rpc/adapter-reconcile-request.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-reconcile-request"},
+    {"path": "rpc/adapter-reconcile-result.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-reconcile-result"},
     {"path": "storage/backup-manifest.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:storage:backup-manifest"}
   ]
 }
