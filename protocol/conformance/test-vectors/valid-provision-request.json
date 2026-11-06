@@ -1,0 +1,39 @@
+{
+  "fixture_id": "hosting.provision.valid.standard-os",
+  "protocol_version": "0.1.0-draft",
+  "contract": "hosting.instance.create",
+  "purpose": "A provider-neutral request selects an explicit standard OS and pinned bootstrap.",
+  "input": {
+    "server_id": "minecraft-test",
+    "environment_id": "test",
+    "hosting_adapter_id": "hosting.example",
+    "region_id": "region-test-1",
+    "plan_id": "plan-small",
+    "os": {
+      "provider_os_id": "provider-debian-13",
+      "distribution": "Debian",
+      "version": "13",
+      "architecture": "x86_64"
+    },
+    "bootstrap": {
+      "source_uri": "https://example.invalid/bootstrap.sh",
+      "revision": "git:0123456789abcdef",
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "inputs": {"minecraft_version": "26.3"}
+    },
+    "game": {
+      "adapter_id": "game.minecraft-paper",
+      "release_ref": "release:paper-test"
+    },
+    "execution": {
+      "adapter_id": "execution.systemd",
+      "profile": "paper-standard"
+    },
+    "restore_backup_id": "backup-test-001"
+  },
+  "expected": {
+    "schema_valid": true,
+    "side_effect_permitted": false,
+    "note": "Fixture validates shape only. A real controller must still authenticate, authorize, check capabilities, and durably accept an operation before side effects."
+  }
+}
