@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -13,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,6 +26,7 @@ const (
 )
 
 var safeSSHHost = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.@:-]*$`)
+var safeOperationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
@@ -38,8 +41,8 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 
 	action := args[0]
-	if action != "status" && action != "backup" {
-		return fmt.Errorf("unknown action %q; expected status or backup", action)
+	if action != "status" && action != "backup" && action != "history" {
+		return fmt.Errorf("unknown action %q; expected status, backup, or history", action)
 	}
 
 	flags := flag.NewFlagSet("gsc-pilot "+action, flag.ContinueOnError)
@@ -57,11 +60,21 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
 	}
-	if !safeSSHHost.MatchString(*host) {
-		return errors.New("--host is required and must be a simple SSH alias or user@host")
+	remoteFlagProvided := false
+	flags.Visit(func(value *flag.Flag) {
+		switch value.Name {
+		case "host", "execute", "confirm-host", "timeout":
+			remoteFlagProvided = true
+		}
+	})
+	if action == "history" {
+		if remoteFlagProvided {
+			return errors.New("history is local and read-only; remove server-related flags")
+		}
+		return showHistory(stdout)
 	}
-	if strings.HasPrefix(*host, "-") {
-		return errors.New("--host must not start with a dash")
+	if !safeSSHHost.MatchString(*host) || strings.HasPrefix(*host, "-") {
+		return errors.New("--host is required and must be a simple SSH alias or user@host")
 	}
 
 	switch action {
@@ -84,6 +97,7 @@ func usage(w io.Writer) error {
 	fmt.Fprintln(w, "Supervised Minecraft server pilot")
 	fmt.Fprintln(w, "  gsc-pilot status --host <ssh-alias>")
 	fmt.Fprintln(w, "  gsc-pilot backup --host <ssh-alias> [--execute --confirm-host <same-alias>]")
+	fmt.Fprintln(w, "  gsc-pilot history")
 	return errors.New("an action is required")
 }
 
@@ -240,6 +254,70 @@ func appendAuditRecord(path, operationID, event, host, detail string) error {
 		return err
 	}
 	return file.Close()
+}
+
+func showHistory(stdout io.Writer) error {
+	auditPath, err := defaultAuditPath()
+	if err != nil {
+		return fmt.Errorf("resolve audit log path: %w", err)
+	}
+	file, err := os.Open(auditPath)
+	if errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintln(stdout, "No backup operations have been recorded.")
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("open audit log %s: %w", auditPath, err)
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	lineNumber := 0
+	wroteHeader := false
+	for scanner.Scan() {
+		lineNumber++
+		var record auditRecord
+		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
+			return fmt.Errorf("decode audit log %s line %d: %w", auditPath, lineNumber, err)
+		}
+		recordedAt, err := time.Parse(time.RFC3339Nano, record.RecordedAt)
+		if err != nil {
+			return fmt.Errorf("invalid timestamp in audit log %s line %d", auditPath, lineNumber)
+		}
+		if !safeOperationID.MatchString(record.OperationID) ||
+			record.Action != "backup" || record.Service != backupUnit ||
+			!safeSSHHost.MatchString(record.Target) || !validAuditEvent(record.Event) {
+			return fmt.Errorf("invalid audit record in %s line %d", auditPath, lineNumber)
+		}
+		if !wroteHeader {
+			fmt.Fprintln(stdout, "RECORDED_AT\tOPERATION_ID\tEVENT\tTARGET\tSERVICE\tDETAIL")
+			wroteHeader = true
+		}
+		detail := "-"
+		if record.Detail != "" {
+			detail = strconv.Quote(record.Detail)
+		}
+		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			recordedAt.UTC().Format(time.RFC3339Nano), record.OperationID,
+			record.Event, record.Target, record.Service, detail)
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("read audit log %s: %w", auditPath, err)
+	}
+	if !wroteHeader {
+		fmt.Fprintln(stdout, "No backup operations have been recorded.")
+	}
+	return nil
+}
+
+func validAuditEvent(event string) bool {
+	switch event {
+	case "rejected", "started", "outcome_unknown", "failed", "succeeded":
+		return true
+	default:
+		return false
+	}
 }
 
 type unitState struct {
