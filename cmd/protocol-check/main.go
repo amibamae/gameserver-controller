@@ -66,14 +66,14 @@ var exampleSchemaIDs = map[string]string{
 	"storage-object-versioning-inspect-output.json": "urn:gameserver-controller:0.5.0-draft:storage:object-versioning-inspect-output",
 	"storage-object-retention-inspect-input.json":   "urn:gameserver-controller:0.5.0-draft:storage:object-retention-inspect-input",
 	"storage-object-retention-inspect-output.json":  "urn:gameserver-controller:0.5.0-draft:storage:object-retention-inspect-output",
-	"game-release-describe-input.json":              "urn:gameserver-controller:0.5.0-draft:game:g",
-	"game-release-describe-output.json":             "urn:gameserver-controller:0.5.0-draft:game:g",
-	"game-install-input.json":                       "urn:gameserver-controller:0.5.0-draft:game:g",
-	"game-install-output.json":                      "urn:gameserver-controller:0.5.0-draft:game:g",
-	"game-configure-input.json":                     "urn:gameserver-controller:0.5.0-draft:game:g",
-	"game-configure-output.json":                    "urn:gameserver-controller:0.5.0-draft:game:g",
-	"game-validate-installation-input.json":         "urn:gameserver-controller:0.5.0-draft:game:g",
-	"game-validate-installation-output.json":        "urn:gameserver-controller:0.5.0-draft:game:g",
+	"game-release-describe-input.json":              "urn:gameserver-controller:0.5.0-draft:game:release-describe-input",
+	"game-release-describe-output.json":             "urn:gameserver-controller:0.5.0-draft:game:release-describe-output",
+	"game-install-input.json":                       "urn:gameserver-controller:0.5.0-draft:game:install-input",
+	"game-install-output.json":                      "urn:gameserver-controller:0.5.0-draft:game:install-output",
+	"game-configure-input.json":                     "urn:gameserver-controller:0.5.0-draft:game:configure-input",
+	"game-configure-output.json":                    "urn:gameserver-controller:0.5.0-draft:game:configure-output",
+	"game-validate-installation-input.json":         "urn:gameserver-controller:0.5.0-draft:game:validate-installation-input",
+	"game-validate-installation-output.json":        "urn:gameserver-controller:0.5.0-draft:game:validate-installation-output",
 }
 
 type schemaEntry struct {
