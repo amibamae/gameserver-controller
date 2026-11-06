@@ -1,7 +1,7 @@
 {
   "operation_id": "operation-provision-001",
   "operation_type": "server.provision",
-  "protocol_version": "0.1.0-draft",
+  "protocol_version": "0.2.0-draft",
   "target": {
     "server_id": "minecraft-test",
     "environment_id": "test"
@@ -26,5 +26,13 @@
       "attempt": 0,
       "adapter_id": "hosting.example"
     }
-  ]
+  ],
+  "request_snapshot": {
+    "operation_type": "server.provision",
+    "parameters": {
+      "server_id": "minecraft-test",
+      "environment_id": "test",
+      "restore_backup_id": "backup-test-001"
+    }
+  }
 }

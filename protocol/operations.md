@@ -1,6 +1,6 @@
 # Durable Operation Protocol
 
-**Status:** Draft, version 0.1.0-draft. This document defines language-independent operation semantics. JSON schemas and RPC/management bindings are published separately.
+**Status:** Draft, version 0.2.0-draft. This document defines language-independent operation semantics. JSON schemas and RPC/management bindings are published separately.
 
 The operation protocol is shared by the controller core, adapters, command-line tools, and future management clients. Implementations in different languages MUST preserve the behavior defined here.
 
@@ -221,14 +221,19 @@ Progress, events, results, and errors MUST NOT expose secret values or unnecessa
 
 ## 12. Results, failures, and partial completion
 
-A terminal operation result SHOULD contain:
-- Final status.
-- Confirmed outcome summary.
-- Affected logical and external resource references.
-- Completed and failed steps.
+The terminal operation record carries its final status and `completed_at` timestamp. Its optional `result` property uses the canonical [operation-result.schema.json](schemas/operations/operation-result.schema.json), which contains:
+- A confirmed outcome summary.
+- Affected external resource references.
+- Completed and failed step summaries.
 - Warnings and unresolved conditions.
-- Structured error when the operation did not succeed.
-- Completion timestamp and related audit references.
+- Related audit event IDs.
+- A `partial` flag indicating whether only part of the requested outcome was achieved.
+
+Each result identifies its `operation_type`, which MUST match the enclosing operation. Successful provisioning, backup, restore, and destruction results MUST include `operation_data` validated against the corresponding registered result schema: [provision](schemas/operations/server-provision-result.schema.json), [backup](schemas/operations/server-backup-result.schema.json), [restore](schemas/operations/server-restore-result.schema.json), or [destroy](schemas/operations/server-destroy-result.schema.json). These schemas add operation-specific facts while preserving the canonical result envelope.
+
+A failed operation MUST include a structured operation-level `error`. When known side effects or partial completion exist, the operation SHOULD also retain a result with `partial: true`. A successful operation MUST include a result and completion timestamp. A cancelled operation MUST include a completion timestamp and preserve any known external state.
+
+The canonical [operation.schema.json](schemas/operations/operation.schema.json) requires the trusted `actor_id` and immutable `request_snapshot`. The snapshot MUST contain validated request parameters and secret references only; resolved secret values MUST NOT be stored. A request fingerprint MAY be stored to support deterministic duplicate-request checks. When an implementation runs from an untagged draft, it SHOULD preserve the exact source/specification revision in protected operation metadata; a released implementation SHOULD populate `schema_package_revision` with the immutable package/tag identity.
 
 For `failed` or `needs_operator` operations, the record MUST preserve known side effects and partial completion. For example, if provisioning created a VM but game preparation failed, the operation record must retain the VM reference and its observed state.
 

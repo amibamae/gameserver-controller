@@ -1,6 +1,6 @@
 # Protocol Specification
 
-**Status:** Draft specification, version 0.1.0-draft. The repository now contains initial normative prose, JSON Schemas, RPC and management API bindings, examples, and conformance vectors. It is not a stable 1.0 release, and no implementation has yet demonstrated cross-language conformance.
+**Status:** Draft specification, version 0.2.0-draft. The repository now contains initial normative prose, JSON Schemas, RPC and management API bindings, examples, and conformance vectors. It is not a stable 1.0 release, and no implementation has yet demonstrated cross-language conformance.
 
 ## Purpose
 
@@ -18,7 +18,7 @@ The protocol specifications—not a particular language implementation—are the
 6. **Core authority:** Clients and adapters MUST NOT bypass core authorization, lifecycle policy, environment isolation, approval gates, audit, or consent enforcement.
 7. **Explicit capabilities:** Implementations MUST declare supported capabilities. Unsupported operations MUST fail explicitly rather than being silently approximated.
 8. **Safe failure:** Ambiguous results, timeouts, interrupted operations, and partial failures MUST be represented explicitly. A timeout MUST NOT be treated as proof that a destructive action did or did not happen.
-9. **Versioned evolution:** Protocol and schema changes MUST have documented compatibility rules. Breaking changes require a new major protocol version.
+9. **Versioned evolution:** Protocol and schema changes MUST have documented compatibility rules. Before 1.0, each published draft snapshot gets a new minor protocol version; after 1.0, breaking changes require a new major version.
 10. **Secret minimization:** Protocol messages MUST use secret references or protected credential channels, never ordinary serialized secret values. Secrets MUST be excluded from logs and diagnostic output.
 11. **Privacy by default:** Protocols MUST distinguish necessary operational data from optional telemetry. Optional telemetry is disabled by default; identifiable player telemetry requires separate informed consent from the server owner and each affected player.
 12. **Transport independence:** Message semantics and schemas SHOULD remain independent of the transport wherever practical. A transport binding may define framing, authentication, connection lifecycle, and delivery behavior without redefining operation meaning.
@@ -36,6 +36,7 @@ The specification is divided into these areas:
 - **Adapter contracts:** hosting, storage, execution, game runtime, and integration responsibilities.
 - **Management API:** versioned client-facing operations, read models, authentication, authorization, and event access.
 - **Security and privacy:** trust boundaries, secret handling, consent, audit, and environment isolation.
+- **Compatibility:** protocol negotiation, schema package identity, version evolution, deprecation, and safe operation recovery.
 - **Conformance:** shared test vectors and behavioral requirements for independent implementations.
 
 ## Separate communication surfaces
@@ -54,7 +55,7 @@ The management API is for operators and independently developed clients. It expo
 
 The API should be documented independently of any user interface. An initial CLI can use application services directly or consume a local API, as decided during implementation. A hosted web panel is explicitly out of scope for the initial project.
 
-## Selected 0.1.0-draft standards
+## Selected 0.2.0-draft standards
 
 The initial draft adopts the following language-neutral standards and bindings. These choices are recorded in [ADR 0004](../docs/decisions/0004-protocol-encoding-and-bindings.md) and may be revised before 1.0 if interoperability testing demonstrates a material problem.
 
@@ -96,7 +97,7 @@ A conforming implementation must:
 - Pass language-neutral conformance tests and shared test vectors.
 - Enforce the same safety and privacy requirements as the core specification.
 
-Compatibility policy must define handling of unknown fields, enum values, optional capabilities, deprecated fields, and major/minor/patch changes before the protocol is declared stable.
+The initial negotiation and evolution policy is defined in [Protocol and Schema Compatibility](COMPATIBILITY.md). It remains a draft and must be reviewed before protocol 1.0.
 
 ## Design constraints
 
@@ -131,6 +132,8 @@ protocol/
 │   ├── operations/
 │   ├── lifecycle/
 │   ├── hosting/
+│   ├── execution/
+│   ├── integrations/
 │   └── storage/
 ├── examples/
 ├── rpc/
@@ -160,7 +163,7 @@ The tree reflects the initial draft package. The schema inventory is indexed in 
 9. Publish and validate language-neutral schemas, examples, and conformance vectors.
 10. Demonstrate interoperability using independent implementations in at least two programming languages before a stable 1.0 release.
 
-The initial package is version 0.1.0-draft. It remains draft until semantics, schemas, compatibility rules, security requirements, and conformance tests are reviewed and at least two independent language implementations pass the published interoperability suite.
+This draft snapshot is version 0.2.0-draft. It remains draft until semantics, schemas, compatibility rules, security requirements, and conformance tests are reviewed and at least two independent language implementations pass the published interoperability suite.
 
 ## Core design decisions
 
@@ -172,6 +175,7 @@ The initial package is version 0.1.0-draft. It remains draft until semantics, sc
 - [Management API authorization](management-api/authorization.md)
 - [Standard operation catalog](operation-catalog.md)
 - [Security requirements](security.md)
+- [Compatibility and schema versioning](COMPATIBILITY.md)
 - [Conformance requirements and test vectors](conformance/requirements.md)
 - [Execution-agnostic architecture decision](../docs/decisions/0003-execution-agnostic-runtime.md)
 - [Encoding and binding decision](../docs/decisions/0004-protocol-encoding-and-bindings.md)

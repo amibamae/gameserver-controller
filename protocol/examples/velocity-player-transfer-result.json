@@ -1,0 +1,34 @@
+{
+  "waiting_cohort_id": "cohort-001",
+  "source_backend_id": "lobby",
+  "destination_backend_id": "vanilla-test",
+  "target_instance_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "test",
+    "resource_kind": "instance",
+    "external_id": "instance-test-001"
+  },
+  "requested_count": 3,
+  "outcome_counts": {
+    "transferred": 1,
+    "already_at_destination": 0,
+    "disconnected": 1,
+    "rejected": 0,
+    "failed": 0,
+    "outcome_unknown": 1
+  },
+  "results": [
+    {
+      "proxy_session_id": "proxy-session-001",
+      "outcome": "transferred"
+    },
+    {
+      "proxy_session_id": "proxy-session-002",
+      "outcome": "disconnected"
+    },
+    {
+      "proxy_session_id": "proxy-session-003",
+      "outcome": "outcome_unknown"
+    }
+  ]
+}

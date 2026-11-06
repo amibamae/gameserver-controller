@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.2.0-draft:operations:server-destroy-result",
+  "title": "Durable server.destroy operation result",
+  "description": "Canonical operation result with typed data for server.destroy.",
+  "allOf": [
+    {
+      "$ref": "urn:gameserver-controller:0.2.0-draft:operations:operation-result"
+    },
+    {
+      "type": "object",
+      "required": [
+        "operation_type",
+        "operation_data"
+      ],
+      "properties": {
+        "operation_type": {
+          "const": "server.destroy"
+        },
+        "operation_data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "instance_ref",
+            "verified_backup_id",
+            "data_generation_id",
+            "provider_absence_confirmed",
+            "final_lifecycle_state"
+          ],
+          "properties": {
+            "instance_ref": {
+              "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
+            },
+            "verified_backup_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "data_generation_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "provider_absence_confirmed": {
+              "const": true
+            },
+            "final_lifecycle_state": {
+              "const": "destroyed"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

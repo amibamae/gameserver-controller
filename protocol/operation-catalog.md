@@ -1,6 +1,6 @@
 # Standard Operation Catalog
 
-**Status:** Draft, protocol version 0.1.0-draft.
+**Status:** Draft, protocol version 0.2.0-draft.
 
 This catalog defines the initial standard management operations. An implementation MUST use the operation names and semantics here when it advertises them. Vendor/game-specific operations may be namespaced extensions and MUST NOT redefine a standard operation.
 
@@ -30,7 +30,7 @@ A request's `parameters` object MUST validate against the schema named in the ta
 | `server.restore` | `restore-parameters.schema.json` | Restore one explicit verified backup to a prepared target. |
 | `server.destroy` | `destroy-parameters.schema.json` | Ensure a verified backup, then destroy the exact recorded instance. |
 
-`server.replace` is intentionally not a standard 0.1.0-draft operation. Safe replacement may require simultaneous old/new instance references and cutover semantics beyond the single-current-instance model. It will be specified only after a multi-instance transition model is reviewed.
+`server.replace` is intentionally not a standard 0.2.0-draft operation. Safe replacement may require simultaneous old/new instance references and cutover semantics beyond the single-current-instance model. It will be specified only after a multi-instance transition model is reviewed.
 
 ## 3. Operation semantics
 
@@ -81,6 +81,19 @@ An operation MUST NOT become `succeeded` until its listed postconditions are con
 | `server.backup` | Manifest and all required objects pass integrity/ownership checks; final state matches resume policy. |
 | `server.restore` | Selected backup is restored and game validation passes; final state is `stopped` or `ready` according to request. |
 | `server.destroy` | Exact provider instance absence confirmed; verified backup remains associated with the logical server; state `destroyed`. |
+
+## Result schemas
+
+Successful operation results use the canonical envelope from [operation-result.schema.json](schemas/operations/operation-result.schema.json). The current typed payload schemas are:
+
+| Operation | Result schema |
+|---|---|
+| `server.provision` | [server-provision-result.schema.json](schemas/operations/server-provision-result.schema.json) |
+| `server.backup` | [server-backup-result.schema.json](schemas/operations/server-backup-result.schema.json) |
+| `server.restore` | [server-restore-result.schema.json](schemas/operations/server-restore-result.schema.json) |
+| `server.destroy` | [server-destroy-result.schema.json](schemas/operations/server-destroy-result.schema.json) |
+
+The other standard operations retain the canonical summary until their typed result contracts are specified.
 
 ## 5. Input schemas
 

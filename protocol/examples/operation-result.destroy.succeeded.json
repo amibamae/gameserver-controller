@@ -1,0 +1,25 @@
+{
+  "outcome_summary": "Exact instance absence was confirmed after a verified backup.",
+  "affected_resources": [],
+  "completed_steps": [],
+  "failed_steps": [],
+  "warnings": [],
+  "unresolved_conditions": [],
+  "audit_event_ids": [
+    "audit-example-001"
+  ],
+  "partial": false,
+  "operation_type": "server.destroy",
+  "operation_data": {
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "test",
+      "resource_kind": "instance",
+      "external_id": "instance-test-001"
+    },
+    "verified_backup_id": "backup-test-002",
+    "data_generation_id": "generation-test-002",
+    "provider_absence_confirmed": true,
+    "final_lifecycle_state": "destroyed"
+  }
+}

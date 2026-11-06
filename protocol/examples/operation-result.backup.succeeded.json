@@ -1,0 +1,52 @@
+{
+  "outcome_summary": "Backup captured and verified for the current data generation.",
+  "affected_resources": [],
+  "completed_steps": [],
+  "failed_steps": [],
+  "warnings": [],
+  "unresolved_conditions": [],
+  "audit_event_ids": [
+    "audit-example-001"
+  ],
+  "partial": false,
+  "operation_type": "server.backup",
+  "operation_data": {
+    "backup_id": "backup-test-002",
+    "environment_id": "test",
+    "data_generation_id": "generation-test-002",
+    "manifest": {
+      "manifest_version": "1",
+      "backup_id": "backup-test-002",
+      "server_id": "minecraft-test",
+      "environment_id": "test",
+      "data_generation_id": "generation-test-002",
+      "source_instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "test",
+        "resource_kind": "instance",
+        "external_id": "instance-test-001"
+      },
+      "created_at": "2026-11-06T07:10:00Z",
+      "source_operation_id": "operation-backup-001",
+      "game": {
+        "adapter_id": "game.minecraft-paper",
+        "name": "Minecraft Java Edition",
+        "version": "paper-test"
+      },
+      "consistency": {
+        "mode": "offline",
+        "evidence": "Runtime stopped and data flushed before capture."
+      },
+      "objects": [
+        {
+          "key": "backups/minecraft-test/world.tar.zst",
+          "size_bytes": 1024,
+          "checksum_algorithm": "sha256",
+          "checksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ]
+    },
+    "verified_at": "2026-11-06T07:12:00Z",
+    "final_lifecycle_state": "stopped"
+  }
+}

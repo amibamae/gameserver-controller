@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.2.0-draft:hosting:instance-create-input",
+  "title": "Hosting instance create input",
+  "description": "Adapter-level request to create one infrastructure instance. Game installation, backup restore, and bootstrap execution are separate capabilities.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["server_id", "environment_id", "region_id", "plan_id", "os"],
+  "properties": {
+    "server_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "environment_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "region_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "plan_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "os": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider_os_id", "distribution", "version", "architecture"],
+      "properties": {
+        "provider_os_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "distribution": {"type": "string", "minLength": 1, "maxLength": 100},
+        "version": {"type": "string", "minLength": 1, "maxLength": 100},
+        "architecture": {"enum": ["x86_64", "aarch64", "arm64", "other"]}
+      }
+    },
+    "hostname": {"type": "string", "minLength": 1, "maxLength": 253},
+    "network_profile": {"type": "string", "maxLength": 200},
+    "firewall_policy_ref": {"type": "string", "maxLength": 500},
+    "ssh_key_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 500}
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "maxLength": 500}
+    }
+  }
+}

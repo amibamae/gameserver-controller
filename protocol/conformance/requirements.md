@@ -1,6 +1,6 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.1.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.2.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
 
 ## 1. Purpose
 
@@ -66,6 +66,16 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Adapter cannot grant itself permissions or bypass core policy.
 - Adapter logs and errors redact secrets.
 
+### Proxy routing and player transfer
+- Backend registration requires a current readiness assertion bound to the exact server, environment, and instance.
+- An expired or mismatched readiness assertion causes rejection before any transfer side effect.
+- A transfer request names one source, one destination, one waiting cohort, and an explicit session list.
+- A session that has left the cohort or source backend is not transferred.
+- Every requested session receives exactly one outcome; aggregate counts equal the per-session results.
+- A partial transfer remains visible as a partial result rather than being reported as full success.
+- An `outcome_unknown` session is inspected at the proxy before a retry is attempted.
+- Transfer messages and logs do not require or expose player UUIDs, account names, IP addresses, or chat.
+
 ### Storage and security
 - A checksum-valid backup from an older data generation does not authorize destruction of the current instance.
 - A forced stop request without an approval reference is rejected by schema/policy.
@@ -106,6 +116,8 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [staging-production-write-denied.json](test-vectors/staging-production-write-denied.json)
 - [backup-stale-generation-blocks-destroy.json](test-vectors/backup-stale-generation-blocks-destroy.json)
 - [operation-event-sequence.json](test-vectors/operation-event-sequence.json)
+- [readiness-required-before-transfer.json](test-vectors/readiness-required-before-transfer.json)
+- [velocity-transfer-partial-results.json](test-vectors/velocity-transfer-partial-results.json)
 
 ## 7. Certification status
 

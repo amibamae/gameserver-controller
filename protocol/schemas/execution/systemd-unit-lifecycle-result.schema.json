@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.2.0-draft:execution:systemd-unit-lifecycle-result",
+  "title": "Systemd execution unit lifecycle result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "unit_ref",
+    "outcome",
+    "state",
+    "observed_at"
+  ],
+  "properties": {
+    "unit_ref": {
+      "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
+    },
+    "outcome": {
+      "enum": [
+        "completed",
+        "accepted",
+        "outcome_unknown"
+      ]
+    },
+    "state": {
+      "enum": [
+        "starting",
+        "running",
+        "stopping",
+        "stopped",
+        "failed",
+        "unknown"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "external_operation_ref": {
+      "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "completed"
+          }
+        },
+        "required": [
+          "outcome",
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "enum": [
+              "running",
+              "stopped"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

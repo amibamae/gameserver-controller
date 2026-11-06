@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.provision.valid.standard-os",
-  "protocol_version": "0.1.0-draft",
+  "protocol_version": "0.2.0-draft",
   "contract": "hosting.instance.create",
   "purpose": "A provider-neutral request selects an explicit standard OS and pinned bootstrap.",
   "input": {
@@ -19,7 +19,9 @@
       "source_uri": "https://example.invalid/bootstrap.sh",
       "revision": "git:0123456789abcdef",
       "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "inputs": {"minecraft_version": "26.3"}
+      "inputs": {
+        "minecraft_version": "26.3"
+      }
     },
     "game": {
       "adapter_id": "game.minecraft-paper",
@@ -33,7 +35,7 @@
   },
   "expected": {
     "schema_valid": true,
-    "side_effect_permitted": false,
-    "note": "Fixture validates shape only. A real controller must still authenticate, authorize, check capabilities, and durably accept an operation before side effects."
-  }
+    "side_effect_permitted": false
+  },
+  "notes": "A real controller must still authenticate, authorize, check capabilities, and durably accept an operation before side effects."
 }

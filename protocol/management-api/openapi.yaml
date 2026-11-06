@@ -1,7 +1,7 @@
 openapi: 3.2.1
 info:
   title: Game Server Controller Management API
-  version: 0.1.0-draft
+  version: 0.2.0-draft
   description: |
     Draft, language-independent HTTP/JSON management API. Mutating lifecycle
     requests are asynchronous and return a durable operation resource only
@@ -316,32 +316,9 @@ components:
             parameters: { $ref: "../schemas/operations/destroy-parameters.schema.json" }
             deadline: { type: string, format: date-time }
     Operation:
-      type: object
-      additionalProperties: true
-      required: [operation_id, operation_type, status, created_at, updated_at]
-      properties:
-        operation_id: { type: string }
-        operation_type: { type: string }
-        status:
-          type: string
-          enum: [pending, running, waiting, cancellation_requested, reconciling, needs_operator, succeeded, failed, cancelled]
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
-        current_step_id: { type: string }
-        result: { type: object }
-        error: { type: object }
+      $ref: "../schemas/operations/operation.schema.json"
     Server:
-      type: object
-      additionalProperties: true
-      required: [server_id, environment_id, lifecycle_state]
-      properties:
-        server_id: { type: string }
-        environment_id: { type: string }
-        lifecycle_state:
-          type: string
-          enum: [unprovisioned, provisioning, preparing, restoring, starting, validating, ready, degraded, draining, stopping, backing_up, stopped, destroying, destroyed, failed]
-        instance_ref: { type: object }
-        runtime_observation: { type: object }
+      $ref: "../schemas/lifecycle/server.schema.json"
     Problem:
       type: object
       description: RFC 9457 Problem Details with protocol-specific extensions.

@@ -1,0 +1,33 @@
+{
+  "fixture_id": "readiness-required-before-transfer",
+  "protocol_version": "0.2.0-draft",
+  "contract_area": "integration.velocity.players.transfer",
+  "purpose": "An expired readiness assertion must prevent any proxy transfer side effect.",
+  "input": {
+    "readiness_assertion": {
+      "assertion_id": "expired-001",
+      "server_id": "minecraft-test",
+      "environment_id": "test",
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "test",
+        "resource_kind": "instance",
+        "external_id": "instance-test-001"
+      },
+      "readiness_check_set_id": "paper-ready-v1",
+      "observed_at": "2026-11-05T22:40:00Z",
+      "expires_at": "2026-11-05T22:41:00Z"
+    },
+    "validation_time": "2026-11-05T22:42:00Z",
+    "player_session_ids": [
+      "proxy-session-001"
+    ]
+  },
+  "expected": {
+    "outcome": "rejected",
+    "error_code": "readiness_assertion_expired",
+    "proxy_transfer_calls": 0
+  },
+  "side_effect_expectation": "none",
+  "notes": "The controller rejects the request before invoking the integration adapter."
+}

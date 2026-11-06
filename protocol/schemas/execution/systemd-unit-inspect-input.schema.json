@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.2.0-draft:execution:systemd-unit-inspect-input",
+  "title": "Systemd execution unit inspect input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "unit_ref"
+  ],
+  "properties": {
+    "unit_ref": {
+      "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
+    }
+  }
+}

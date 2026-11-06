@@ -1,47 +1,214 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.1.0-draft:operations:operation",
+  "$id": "urn:gameserver-controller:0.2.0-draft:operations:operation",
   "title": "Durable operation",
   "type": "object",
   "additionalProperties": false,
-  "required": ["operation_id", "operation_type", "protocol_version", "target", "status", "created_at", "updated_at", "steps"],
+  "required": [
+    "operation_id",
+    "operation_type",
+    "protocol_version",
+    "target",
+    "status",
+    "actor_id",
+    "request_snapshot",
+    "created_at",
+    "updated_at",
+    "steps"
+  ],
   "properties": {
-    "operation_id": {"type": "string", "minLength": 1, "maxLength": 200},
-    "operation_type": {"type": "string", "pattern": "^[a-z][a-z0-9.]+$"},
-    "protocol_version": {"type": "string", "minLength": 1, "maxLength": 100},
+    "operation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "operation_type": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9.]+$"
+    },
+    "protocol_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
     "target": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["server_id", "environment_id"],
+      "required": [
+        "server_id",
+        "environment_id"
+      ],
       "properties": {
-        "server_id": {"type": "string", "minLength": 1, "maxLength": 200},
-        "environment_id": {"type": "string", "minLength": 1, "maxLength": 200},
-        "instance_ref": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"}
+        "server_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "environment_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "instance_ref": {
+          "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
+        }
       }
     },
-    "status": {"enum": ["pending", "running", "waiting", "cancellation_requested", "reconciling", "needs_operator", "succeeded", "failed", "cancelled"]},
-    "current_step_id": {"type": ["string", "null"], "maxLength": 200},
-    "actor_id": {"type": "string", "minLength": 1, "maxLength": 200},
-    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 200},
-    "created_at": {"type": "string", "format": "date-time"},
-    "updated_at": {"type": "string", "format": "date-time"},
-    "started_at": {"type": ["string", "null"], "format": "date-time"},
-    "completed_at": {"type": ["string", "null"], "format": "date-time"},
-    "deadline": {"type": ["string", "null"], "format": "date-time"},
+    "status": {
+      "enum": [
+        "pending",
+        "running",
+        "waiting",
+        "cancellation_requested",
+        "reconciling",
+        "needs_operator",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "current_step_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 200
+    },
+    "actor_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "correlation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "request_fingerprint": {
+      "type": "string",
+      "pattern": "^sha256:[a-fA-F0-9]{64}$"
+    },
+    "request_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation_type",
+        "parameters"
+      ],
+      "description": "Immutable validated request snapshot. Parameters MUST conform to the operation-specific request schema and MUST NOT contain resolved secret values.",
+      "properties": {
+        "operation_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Validated operation parameters with secret values removed."
+        },
+        "secret_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:gameserver-controller:0.2.0-draft:common:secret-reference"
+          }
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "started_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "deadline": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
     "steps": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["step_id", "step_type", "status"],
+        "required": [
+          "step_id",
+          "step_type",
+          "status"
+        ],
         "properties": {
-          "step_id": {"type": "string", "minLength": 1, "maxLength": 200},
-          "step_type": {"type": "string", "minLength": 1, "maxLength": 160},
-          "status": {"enum": ["pending", "running", "waiting", "outcome_unknown", "succeeded", "failed", "skipped", "cancelled"]},
-          "attempt": {"type": "integer", "minimum": 0},
-          "adapter_id": {"type": "string", "maxLength": 160},
-          "external_operation_ref": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"},
-          "error": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:protocol-error"}
+          "step_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "step_type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "waiting",
+              "outcome_unknown",
+              "succeeded",
+              "failed",
+              "skipped",
+              "cancelled"
+            ]
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "adapter_id": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "external_operation_ref": {
+            "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
+          },
+          "error": {
+            "$ref": "urn:gameserver-controller:0.2.0-draft:common:protocol-error"
+          }
         }
       }
     },
@@ -49,14 +216,214 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "phase": {"type": "string", "maxLength": 160},
-        "message": {"type": "string", "maxLength": 1000},
-        "completed": {"type": "integer", "minimum": 0},
-        "total": {"type": "integer", "minimum": 0},
-        "updated_at": {"type": "string", "format": "date-time"}
+        "phase": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "completed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
-    "result": {"type": ["object", "null"]},
-    "error": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:protocol-error"}
-  }
+    "result": {
+      "oneOf": [
+        {
+          "$ref": "urn:gameserver-controller:0.2.0-draft:operations:operation-result"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "error": {
+      "$ref": "urn:gameserver-controller:0.2.0-draft:common:protocol-error"
+    },
+    "schema_package_revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Optional immutable identifier for the exact schema/specification package used to accept this operation, such as a release tag or content digest."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "completed_at",
+          "result"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "result": {
+            "$ref": "urn:gameserver-controller:0.2.0-draft:operations:operation-result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "completed_at",
+          "error"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "cancelled"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "completed_at"
+        ],
+        "properties": {
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.provision"
+          },
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation_type",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "urn:gameserver-controller:0.2.0-draft:operations:server-provision-result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          },
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation_type",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "urn:gameserver-controller:0.2.0-draft:operations:server-backup-result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.restore"
+          },
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation_type",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "urn:gameserver-controller:0.2.0-draft:operations:server-restore-result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.destroy"
+          },
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation_type",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "$ref": "urn:gameserver-controller:0.2.0-draft:operations:server-destroy-result"
+          }
+        }
+      }
+    }
+  ]
 }

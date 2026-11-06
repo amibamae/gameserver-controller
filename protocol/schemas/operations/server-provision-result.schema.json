@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.2.0-draft:operations:server-provision-result",
+  "title": "Durable server.provision operation result",
+  "description": "Canonical operation result with typed data for server.provision.",
+  "allOf": [
+    {
+      "$ref": "urn:gameserver-controller:0.2.0-draft:operations:operation-result"
+    },
+    {
+      "type": "object",
+      "required": [
+        "operation_type",
+        "operation_data"
+      ],
+      "properties": {
+        "operation_type": {
+          "const": "server.provision"
+        },
+        "operation_data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "server_id",
+            "environment_id",
+            "instance_ref",
+            "bootstrap",
+            "game",
+            "execution",
+            "data_generation_id",
+            "lifecycle_state",
+            "readiness_assertion"
+          ],
+          "properties": {
+            "server_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "environment_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "instance_ref": {
+              "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
+            },
+            "bootstrap": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "revision",
+                "digest"
+              ],
+              "properties": {
+                "revision": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 200
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-fA-F0-9]{64}$"
+                }
+              }
+            },
+            "game": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "adapter_id",
+                "release_ref"
+              ],
+              "properties": {
+                "adapter_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                "release_ref": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 500
+                }
+              }
+            },
+            "execution": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "adapter_id",
+                "unit_ref"
+              ],
+              "properties": {
+                "adapter_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                "unit_ref": {
+                  "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
+                }
+              }
+            },
+            "restored_backup_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "data_generation_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "lifecycle_state": {
+              "const": "ready"
+            },
+            "readiness_assertion": {
+              "$ref": "urn:gameserver-controller:0.2.0-draft:lifecycle:readiness-assertion"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

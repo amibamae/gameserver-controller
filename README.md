@@ -53,15 +53,17 @@ The protocol is still a draft. The initial specifications cover protocol princip
 
 The [durable operation protocol](protocol/operations.md) describes how long-running work is accepted, tracked, retried, cancelled, and recovered. It emphasizes durable operation records, idempotency, progress, partial outcomes, and reconciliation when an external provider's result is uncertain.
 
-The following decisions have **not** been finalized:
+The draft protocol standards and bindings have been selected and recorded in [ADR 0004](docs/decisions/0004-protocol-encoding-and-bindings.md): JSON, JSON Schema 2020-12, JSON-RPC 2.0, the optional `jsonrpc-stdio-v1` adapter process binding, OpenAPI 3.2.1, RFC 3339 timestamps, and RFC 8785 canonicalization where required.
 
-- Implementation programming language.
-- Serialization format and schema standard.
-- Adapter communication transport.
-- Management API transport and endpoint definitions.
-- Protocol version negotiation and compatibility details.
+The following remain open:
 
-Candidate standards are being evaluated rather than treated as settled decisions. The next protocol work is to review and refine the common types and operation semantics, then define lifecycle states and transitions, adapter contracts, and conformance requirements.
+- Implementation programming language and runtime.
+- Management API authentication profile and final endpoint/resource semantics.
+- Final adapter capability input/output schemas and capability version policies.
+- Compatibility negotiation and migration rules beyond the initial draft policy.
+- Validation and interoperability evidence across independent language implementations.
+
+The [protocol compatibility rules](protocol/COMPATIBILITY.md) define fail-closed negotiation, schema package versioning, compatibility boundaries, and recovery of in-flight operations across upgrades. The selected standards remain draft choices and may be revised before 1.0 if interoperability testing demonstrates a material problem.
 
 ## Planned capabilities
 
@@ -102,6 +104,7 @@ See [AI Use and Development Transparency](docs/AI_DISCLOSURE.md) for the full di
 ### Protocol specifications
 
 - [Protocol overview and design principles](protocol/README.md)
+- [Protocol and schema compatibility rules](protocol/COMPATIBILITY.md)
 - [Common protocol types](protocol/common-types.md)
 - [Durable operation protocol](protocol/operations.md)
 - [Standard operation catalog](protocol/operation-catalog.md)
