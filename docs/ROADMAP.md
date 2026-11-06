@@ -19,7 +19,7 @@
 - [x] Establish separate adapter-protocol and management-API communication surfaces.
 - [x] Establish that the controller must be usable without a web panel; future web, desktop, and mobile clients may be developed independently.
 - [x] Draft common protocol concepts: identifiers, external resource references, timestamps, versions, adapter identity, capabilities, structured errors, request context, and secret references.
-- [x] Draft the durable operation protocol covering acceptance, operation and step states, idempotency, timeouts, retries, cancellation, reconciliation, recovery, progress, and partial outcomes.
+- [x] Publish the first durable operation protocol draft covering acceptance, operation and step states, idempotency, timeouts, retries, cancellation, reconciliation, recovery, progress, and partial outcomes.
 - [ ] Review and agree on common types and resolve remaining open decisions.
 - [ ] Review and agree on operation semantics, legal status transitions, and cancellation/recovery rules.
 - [ ] Define lifecycle states, allowed transitions, preconditions, postconditions, and failure semantics.
