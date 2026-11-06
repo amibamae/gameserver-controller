@@ -16,7 +16,7 @@ Every operation is scoped to an authenticated actor, logical server (except init
 - Required approvals and policy.
 - Exact operation-specific parameters and schema version.
 
-A request's `parameters` object MUST validate against the schema named in the table below. An implementation MUST NOT accept arbitrary unvalidated fields. Unknown fields are rejected except where the selected schema explicitly defines `extensions`.
+A request's `parameters` object MUST validate against the schema named in the table below. For `POST /v1/servers/{server_id}/operations`, the path `server_id` MUST equal any `server_id` in the parameters object. The target environment MUST be resolved and checked before acceptance. An implementation MUST NOT accept arbitrary unvalidated fields. Unknown fields are rejected except where the selected schema explicitly defines `extensions`.
 
 ## 2. Standard operations
 
