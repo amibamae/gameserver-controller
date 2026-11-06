@@ -8,6 +8,20 @@
       "proxy-session-001",
       "proxy-session-002",
       "proxy-session-003"
+    ],
+    "session_outcomes": [
+      {
+        "session_id": "proxy-session-001",
+        "outcome": "transferred"
+      },
+      {
+        "session_id": "proxy-session-002",
+        "outcome": "disconnected"
+      },
+      {
+        "session_id": "proxy-session-003",
+        "outcome": "outcome_unknown"
+      }
     ]
   },
   "expected": {
