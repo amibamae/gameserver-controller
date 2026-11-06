@@ -32,6 +32,8 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 ## 4. Mandatory test groups
 
 ### Schema and message validation
+- The local schema registry resolves every declared `$ref` without arbitrary network retrieval.
+- Every advertised adapter capability has registered input/output schemas.
 - Valid examples pass the correct JSON Schema 2020-12 validator.
 - Invalid types, missing required fields, invalid timestamps, and unknown critical fields fail.
 - Duplicate JSON object member names are rejected.
@@ -47,6 +49,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Failed backup verification blocks destruction.
 
 ### Operations
+- Event sequence numbers increase monotonically per operation; consumers detect gaps and recover by reading the operation resource.
 - Operation record commits before side effect.
 - Same idempotency key and same request maps to the same operation.
 - Same key and changed request is conflict.
@@ -101,6 +104,7 @@ Test results, implementation versions, protocol version, schema registry digest,
 - [unknown-provider-outcome.json](test-vectors/unknown-provider-outcome.json)
 - [staging-production-write-denied.json](test-vectors/staging-production-write-denied.json)
 - [backup-stale-generation-blocks-destroy.json](test-vectors/backup-stale-generation-blocks-destroy.json)
+- [operation-event-sequence.json](test-vectors/operation-event-sequence.json)
 
 ## 7. Certification status
 
