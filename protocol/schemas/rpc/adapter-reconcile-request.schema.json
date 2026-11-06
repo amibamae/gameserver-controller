@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-reconcile-request",
+  "title": "Adapter reconcile JSON-RPC request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["jsonrpc", "id", "method", "params"],
+  "properties": {
+    "jsonrpc": {"const": "2.0"},
+    "id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "method": {"const": "adapter.reconcile"},
+    "params": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "operation_id", "step_id", "capability", "request_fingerprint"],
+      "properties": {
+        "protocol_version": {"type": "string", "minLength": 1, "maxLength": 100},
+        "operation_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "step_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "capability": {"type": "string", "minLength": 1, "maxLength": 160},
+        "request_fingerprint": {"type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$"},
+        "external_operation_ref": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"},
+        "external_resource_refs": {
+          "type": "array",
+          "items": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"}
+        }
+      }
+    }
+  }
+}
