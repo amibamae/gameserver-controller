@@ -36,10 +36,10 @@ A descriptor is descriptive, not permission. The core grants permissions indepen
 
 ## Adapter descriptor
 
-The canonical descriptor is defined by [capability-descriptor.schema.json](../schemas/common/capability-descriptor.schema.json). Its conceptual fields are:
+The canonical descriptor is defined by [capability-descriptor.schema.json](../schemas/common/capability-descriptor.schema.json). Each advertised capability MUST publish input and output JSON Schemas, include their schema references in the descriptor, and pass the capability's conformance tests. Schemas MUST be bundled with the adapter or registered in the controller's trusted local schema registry; implementations MUST NOT fetch arbitrary schemas over the network at invocation time. Its conceptual fields are:
 - Adapter ID and category.
 - Display name and implementation version.
-- Protocol and contract version ranges.
+- Exact supported protocol versions and contract versions.
 - Configuration schema reference.
 - Capabilities, constraints, and resource kinds.
 - Required permission scopes.
