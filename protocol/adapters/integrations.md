@@ -1,6 +1,6 @@
 # Integration Adapter Contract
 
-**Status:** Draft, version 0.1.0-draft.
+**Status:** Draft, version 0.2.0-draft.
 
 ## 1. Responsibility
 
@@ -47,7 +47,7 @@ Before invoking the capability, the core MUST confirm that:
 
 The adapter MUST reject stale or mismatched readiness assertions and MUST NOT transfer a session to a different instance than the asserted target. The readiness assertion is evidence supplied by the controller; the adapter does not independently change lifecycle state or grant readiness.
 
-The result MUST contain one explicit outcome for every requested proxy session. Outcomes are `transferred`, `already_at_destination`, `disconnected`, `rejected`, `failed`, or `outcome_unknown`. Aggregate counts MUST match the per-session results. A partial batch result is valid and MUST NOT be collapsed into one success/failure boolean.
+The result MUST contain one explicit outcome for every requested proxy session. Outcomes are `transferred`, `already_at_destination`, `disconnected`, `rejected`, `failed`, or `outcome_unknown`. The result array MAY be in any order; consumers MUST match outcomes by `proxy_session_id`. The adapter and controller MUST validate that session IDs are unique and exactly match the request, `requested_count` equals the request size, and aggregate counts equal the per-session outcomes. These cross-field invariants require behavioral validation in addition to JSON Schema validation. A partial batch result is valid and MUST NOT be collapsed into one success/failure boolean.
 
 An `outcome_unknown` result means the transfer may have occurred. The controller MUST inspect the proxy's current backend for that session before retrying; it MUST NOT blindly repeat the transfer. The adapter SHOULD use native Velocity mechanisms (for example, the `/send` command) internally where appropriate, but those mechanisms are implementation details, not protocol semantics.
 

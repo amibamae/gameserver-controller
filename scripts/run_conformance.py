@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL = ROOT / "protocol"
 VECTORS = PROTOCOL / "conformance" / "test-vectors"
 INDEX = PROTOCOL / "schemas" / "index.json"
-PROVISION_SCHEMA_ID = "urn:gameserver-controller:0.1.0-draft:hosting:provision-request"
+PROVISION_SCHEMA_ID = "urn:gameserver-controller:0.2.0-draft:hosting:provision-request"
+OPERATION_EVENT_SCHEMA_ID = "urn:gameserver-controller:0.2.0-draft:operations:operation-event"
 
 LEGAL_TRANSITIONS = {
     ("unprovisioned", "provisioning"),
@@ -131,9 +132,12 @@ def evaluate(fixture: dict[str, Any]) -> dict[str, Any]:
     if fixture_id == "velocity-transfer-partial-results":
         sessions = fixture["input"]["player_session_ids"]
         results = fixture["input"].get("session_outcomes", [])
+        require(len(sessions) == len(set(sessions)), "requested session IDs must be unique")
         require(len(results) == len(sessions), "one session outcome is required for every requested session")
-        require([item.get("session_id") for item in results] == sessions,
-                "session outcomes must preserve the requested session list and order")
+        result_session_ids = [item.get("proxy_session_id") for item in results]
+        require(len(result_session_ids) == len(set(result_session_ids)), "session outcomes must not contain duplicate IDs")
+        require(set(result_session_ids) == set(sessions),
+                "session outcomes must contain exactly the requested sessions")
         counts = {outcome: 0 for outcome in OUTCOMES}
         for item in results:
             require(item.get("outcome") in counts, f"unknown transfer outcome: {item.get('outcome')!r}")
@@ -158,10 +162,11 @@ def evaluate(fixture: dict[str, Any]) -> dict[str, Any]:
     if fixture_id == "operations.events.monotonic-sequence":
         events = fixture["events"]
         require(bool(events), "event sequence must not be empty")
+        schema_valid = all(validate_registered_schema(OPERATION_EVENT_SCHEMA_ID, event) for event in events)
         operation_ids = {event["operation_id"] for event in events}
         sequences = [event["sequence"] for event in events]
         return {
-            "schema_valid": all(isinstance(value, int) and not isinstance(value, bool) and value > 0 for value in sequences),
+            "schema_valid": schema_valid,
             "sequence_strictly_increasing": len(operation_ids) == 1 and all(
                 left < right for left, right in zip(sequences, sequences[1:])
             ),

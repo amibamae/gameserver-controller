@@ -1,6 +1,6 @@
 {
   "fixture_id": "safety.destroy.blocked-stale-data-generation",
-  "protocol_version": "0.1.0-draft",
+  "protocol_version": "0.2.0-draft",
   "contract": "server.destroy",
   "initial_state": {
     "lifecycle_state": "stopped",

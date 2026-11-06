@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.1.0-draft:storage:backup-manifest",
+  "$id": "urn:gameserver-controller:0.2.0-draft:storage:backup-manifest",
   "title": "Backup manifest",
   "type": "object",
   "additionalProperties": false,
@@ -11,7 +11,7 @@
     "server_id": {"type": "string", "minLength": 1, "maxLength": 200},
     "environment_id": {"type": "string", "minLength": 1, "maxLength": 200},
     "data_generation_id": {"type": "string", "minLength": 1, "maxLength": 200},
-    "source_instance_ref": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"},
+    "source_instance_ref": {"$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"},
     "created_at": {"type": "string", "format": "date-time"},
     "source_operation_id": {"type": "string", "minLength": 1, "maxLength": 200},
     "game": {

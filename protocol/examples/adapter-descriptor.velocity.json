@@ -4,7 +4,7 @@
   "display_name": "Velocity proxy integration",
   "implementation_version": "0.1.0",
   "protocol_versions": [
-    "0.1.0-draft"
+    "0.2.0-draft"
   ],
   "contract_versions": [
     "integration.proxy.v1-draft"
@@ -17,8 +17,8 @@
       "name": "integration.velocity.players.transfer",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.1.0-draft:integrations:velocity-player-transfer-request",
-      "output_schema_uri": "urn:gameserver-controller:0.1.0-draft:integrations:velocity-player-transfer-result",
+      "input_schema_uri": "urn:gameserver-controller:0.2.0-draft:integrations:velocity-player-transfer-request",
+      "output_schema_uri": "urn:gameserver-controller:0.2.0-draft:integrations:velocity-player-transfer-result",
       "required_permissions": [
         "proxy.backend.manage"
       ],

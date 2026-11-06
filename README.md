@@ -53,7 +53,7 @@ The protocol is still a draft. The initial specifications cover protocol princip
 
 The [durable operation protocol](protocol/operations.md) describes how long-running work is accepted, tracked, retried, cancelled, and recovered. It emphasizes durable operation records, idempotency, progress, partial outcomes, and reconciliation when an external provider's result is uncertain.
 
-The initial 0.1.0-draft standards and bindings have been selected and recorded in [ADR 0004](docs/decisions/0004-protocol-encoding-and-bindings.md): JSON, JSON Schema 2020-12, JSON-RPC 2.0, the optional `jsonrpc-stdio-v1` adapter process binding, OpenAPI 3.2.1, RFC 3339 timestamps, and RFC 8785 canonicalization where required.
+The draft protocol standards and bindings have been selected and recorded in [ADR 0004](docs/decisions/0004-protocol-encoding-and-bindings.md): JSON, JSON Schema 2020-12, JSON-RPC 2.0, the optional `jsonrpc-stdio-v1` adapter process binding, OpenAPI 3.2.1, RFC 3339 timestamps, and RFC 8785 canonicalization where required.
 
 The following remain open:
 

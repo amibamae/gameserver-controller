@@ -1,6 +1,6 @@
 # Execution Adapter Contract
 
-**Status:** Draft, version 0.1.0-draft.
+**Status:** Draft, version 0.2.0-draft.
 
 ## 1. Purpose
 

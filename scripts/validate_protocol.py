@@ -17,21 +17,21 @@ SCHEMA_ROOT = ROOT / "protocol" / "schemas"
 INDEX_PATH = SCHEMA_ROOT / "index.json"
 
 EXAMPLE_SCHEMA_IDS = {
-    "adapter-descriptor.hosting.json": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor",
-    "adapter-descriptor.systemd.json": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor",
-    "adapter-descriptor.velocity.json": "urn:gameserver-controller:0.1.0-draft:common:capability-descriptor",
-    "adapter-invoke-request.json": "urn:gameserver-controller:0.1.0-draft:rpc:adapter-invoke-request",
-    "backup-manifest.json": "urn:gameserver-controller:0.1.0-draft:storage:backup-manifest",
-    "operation-accepted.json": "urn:gameserver-controller:0.1.0-draft:operations:operation",
-    "operation-succeeded.json": "urn:gameserver-controller:0.1.0-draft:operations:operation",
-    "operation-result.succeeded.json": "urn:gameserver-controller:0.1.0-draft:operations:server-provision-result",
-    "operation-result.backup.succeeded.json": "urn:gameserver-controller:0.1.0-draft:operations:server-backup-result",
-    "operation-result.restore.succeeded.json": "urn:gameserver-controller:0.1.0-draft:operations:server-restore-result",
-    "operation-result.destroy.succeeded.json": "urn:gameserver-controller:0.1.0-draft:operations:server-destroy-result",
-    "operation-event.json": "urn:gameserver-controller:0.1.0-draft:operations:operation-event",
-    "provision-request.json": "urn:gameserver-controller:0.1.0-draft:hosting:provision-request",
-    "velocity-player-transfer-request.json": "urn:gameserver-controller:0.1.0-draft:integrations:velocity-player-transfer-request",
-    "velocity-player-transfer-result.json": "urn:gameserver-controller:0.1.0-draft:integrations:velocity-player-transfer-result",
+    "adapter-descriptor.hosting.json": "urn:gameserver-controller:0.2.0-draft:common:capability-descriptor",
+    "adapter-descriptor.systemd.json": "urn:gameserver-controller:0.2.0-draft:common:capability-descriptor",
+    "adapter-descriptor.velocity.json": "urn:gameserver-controller:0.2.0-draft:common:capability-descriptor",
+    "adapter-invoke-request.json": "urn:gameserver-controller:0.2.0-draft:rpc:adapter-invoke-request",
+    "backup-manifest.json": "urn:gameserver-controller:0.2.0-draft:storage:backup-manifest",
+    "operation-accepted.json": "urn:gameserver-controller:0.2.0-draft:operations:operation",
+    "operation-succeeded.json": "urn:gameserver-controller:0.2.0-draft:operations:operation",
+    "operation-result.succeeded.json": "urn:gameserver-controller:0.2.0-draft:operations:server-provision-result",
+    "operation-result.backup.succeeded.json": "urn:gameserver-controller:0.2.0-draft:operations:server-backup-result",
+    "operation-result.restore.succeeded.json": "urn:gameserver-controller:0.2.0-draft:operations:server-restore-result",
+    "operation-result.destroy.succeeded.json": "urn:gameserver-controller:0.2.0-draft:operations:server-destroy-result",
+    "operation-event.json": "urn:gameserver-controller:0.2.0-draft:operations:operation-event",
+    "provision-request.json": "urn:gameserver-controller:0.2.0-draft:hosting:provision-request",
+    "velocity-player-transfer-request.json": "urn:gameserver-controller:0.2.0-draft:integrations:velocity-player-transfer-request",
+    "velocity-player-transfer-result.json": "urn:gameserver-controller:0.2.0-draft:integrations:velocity-player-transfer-result",
 }
 
 

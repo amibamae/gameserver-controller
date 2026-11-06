@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.1.0-draft:operations:operation-result",
+  "$id": "urn:gameserver-controller:0.2.0-draft:operations:operation-result",
   "title": "Durable operation result",
   "description": "Canonical summary of the confirmed outcome and any partial effects of a terminal operation.",
   "type": "object",
@@ -25,7 +25,7 @@
     "affected_resources": {
       "type": "array",
       "items": {
-        "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+        "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
       }
     },
     "completed_steps": {
@@ -103,7 +103,7 @@
         "external_refs": {
           "type": "array",
           "items": {
-            "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+            "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
           }
         }
       }
@@ -128,12 +128,12 @@
           "maxLength": 160
         },
         "error": {
-          "$ref": "urn:gameserver-controller:0.1.0-draft:common:protocol-error"
+          "$ref": "urn:gameserver-controller:0.2.0-draft:common:protocol-error"
         },
         "external_refs": {
           "type": "array",
           "items": {
-            "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+            "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
           }
         }
       }
@@ -157,7 +157,7 @@
           "maxLength": 2000
         },
         "resource_ref": {
-          "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+          "$ref": "urn:gameserver-controller:0.2.0-draft:common:external-resource-ref"
         }
       }
     }
