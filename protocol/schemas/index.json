@@ -13,6 +13,7 @@
     {"path": "operations/backup-parameters.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:operations:backup-parameters"},
     {"path": "operations/restore-parameters.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:operations:restore-parameters"},
     {"path": "operations/destroy-parameters.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:operations:destroy-parameters"},
+    {"path": "operations/operation-event.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:operations:operation-event"},
     {"path": "operations/operation-request.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:operations:operation-request"},
     {"path": "operations/operation.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:operations:operation"},
     {"path": "lifecycle/server.schema.json", "id": "urn:gameserver-controller:0.1.0-draft:lifecycle:server"},
