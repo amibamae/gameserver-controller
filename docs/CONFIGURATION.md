@@ -93,7 +93,7 @@ Requirements:
 - Reject literal secret values where a reference is required.
 - Never print resolved secrets.
 - Resolve secrets at point of use and keep their lifetime short.
-- Never bake credentials into images, release archives, source control, command-line arguments, or ordinary logs.
+- Never embed credentials in bootstrap scripts, cloud-init/user-data, release archives, source control, command-line arguments, or ordinary logs.
 - Support credential rotation without source changes.
 - Separate credentials by provider, environment, and permission scope.
 - A resolver failure blocks the dependent operation; never fall back to empty/default/broader credentials.
@@ -106,7 +106,7 @@ Every resource and operation belongs to exactly one environment. Cross-environme
 
 **Staging:** reads only the production backup objects explicitly needed for a test, using read-only credentials; writes to staging-owned storage; cannot delete or overwrite production objects; cannot sync its world back to production.
 
-**Image build:** has no live world data and no production storage write credentials; produces candidate images and validation metadata.
+**Bootstrap execution:** prepares an instance created from a provider-supported standard OS offering. Bootstrap source and user-data contain no credential values or live world data. Credentials are supplied separately through scoped secret references only to the operation steps that require them.
 
 ## Validation rules
 
