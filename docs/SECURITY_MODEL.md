@@ -8,7 +8,7 @@
 - Provider API tokens, storage credentials, SSH keys, and proxy secrets.
 - Player identifiers and personal data.
 - Server availability and integrity.
-- Approved infrastructure images and software releases.
+- Approved bootstrap revisions, provider OS selections, and software releases.
 - Controller state, operation history, approvals, and audit records.
 - Production network boundaries and backend access restrictions.
 
@@ -21,7 +21,7 @@
 5. Controller to game runtime: process control, files, RCON/console, health checks.
 6. Controller to proxy: player routing and backend registration.
 7. Production to staging: copied world data and restricted read-only access.
-8. Build pipeline to image registry: candidate image creation and promotion.
+8. Public source repository to bootstrap execution: reviewed code, release provenance, and privileged script execution.
 9. Optional telemetry destination: separately consented data leaving deployment.
 
 Adapters, plugins, downloaded artifacts, provider responses, and game files are not trusted merely because the controller uses them.
@@ -51,7 +51,7 @@ Separate credentials by purpose and environment:
 - Staging runtime: write access only to staging-owned objects.
 - Controller: only provider/storage actions required by enabled features.
 - Release reader: read-only access to approved release artifacts.
-- Image builder: image-build permissions without production world-data access.
+- Bootstrap execution: only the OS-level privileges needed to prepare its own instance; no provider-wide API credentials or production storage credentials by default.
 
 Avoid shared administrator keys. Do not give a disposable game VM broad control over the hosting account or unrelated storage buckets. Prefer scoped and short-lived credentials where supported.
 
@@ -81,14 +81,13 @@ For the initial Minecraft deployment:
 
 The controller must not modify existing firewall rules during Phase 1.
 
-## Software and image supply chain
+## Bootstrap and software supply chain
 
-- Pin or record exact artifact versions and checksums.
-- Store manifests alongside immutable artifacts.
-- Separate OS images from game software releases.
-- Build candidate images from documented recipes; do not mutate approved images in place.
-- Validate candidate images in fresh, isolated instances.
-- Keep previous approved image/release references for rollback.
+- Pin or record the exact bootstrap source revision, configuration inputs, package versions, and downloaded software checksums.
+- Keep bootstrap scripts and game software releases separately versioned.
+- Provision from a provider-supported standard OS offering, then run reviewed bootstrap scripts; do not depend on project-maintained preinstalled machine images.
+- Treat bootstrap scripts as privileged executable code. Review changes, verify source integrity, minimize embedded assumptions, and validate changes on fresh isolated instances.
+- Keep previous approved bootstrap revisions and software-release references available for controlled rollback/reprovisioning.
 - Do not promote a candidate based only on process startup.
 - Review third-party adapters/plugins as executable code with trust boundaries.
 
