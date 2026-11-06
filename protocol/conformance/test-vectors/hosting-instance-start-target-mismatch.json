@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.start.target-mismatch",
-  "protocol_version": "0.16.0-draft",
+  "protocol_version": "0.17.0-draft",
   "contract_area": "hosting.instance.start",
   "purpose": "A result for a different provider instance cannot complete a start request.",
   "input": {

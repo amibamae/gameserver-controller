@@ -1,6 +1,6 @@
 {
   "fixture_id": "integration.proxy.register.expired-readiness-rejected",
-  "protocol_version": "0.16.0-draft",
+  "protocol_version": "0.17.0-draft",
   "contract_area": "integration.proxy.backend.register",
   "purpose": "An expired readiness assertion cannot register or route a backend.",
   "input": {

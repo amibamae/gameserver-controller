@@ -1,0 +1,34 @@
+{
+  "fixture_id": "hosting.instance.reboot.target-mismatch",
+  "protocol_version": "0.17.0-draft",
+  "contract_area": "hosting.instance.reboot",
+  "purpose": "A result for another instance cannot complete the reboot request.",
+  "input": {
+    "reboot_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    },
+    "reboot_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "different-instance"
+      },
+      "outcome": "completed",
+      "state": "active",
+      "observed_at": "2026-11-06T11:46:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": false,
+    "completion_confirmed": false,
+    "unknown_requires_inspection": false,
+    "result_requires_inspection": true
+  }
+}

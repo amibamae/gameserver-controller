@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.17.0-draft:hosting:instance-reboot-output",
+  "title": "Hosting instance reboot output",
+  "description": "A completed reboot confirms the exact provider instance is active; this does not establish game readiness.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "instance_ref",
+    "outcome",
+    "state",
+    "observed_at"
+  ],
+  "properties": {
+    "instance_ref": {
+      "$ref": "urn:gameserver-controller:0.17.0-draft:common:external-resource-ref"
+    },
+    "outcome": {
+      "enum": [
+        "completed",
+        "accepted",
+        "outcome_unknown"
+      ]
+    },
+    "state": {
+      "enum": [
+        "active",
+        "stopped",
+        "unknown"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provider_operation_ref": {
+      "$ref": "urn:gameserver-controller:0.17.0-draft:common:external-resource-ref"
+    },
+    "safe_diagnostics": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "maxLength": 1000
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "completed"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "const": "active"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "accepted"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "enum": [
+              "active",
+              "stopped"
+            ]
+          }
+        },
+        "required": [
+          "provider_operation_ref"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "outcome_unknown"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "const": "unknown"
+          }
+        }
+      }
+    }
+  ]
+}

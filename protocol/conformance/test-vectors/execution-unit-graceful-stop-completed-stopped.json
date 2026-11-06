@@ -1,6 +1,6 @@
 {
   "fixture_id": "execution.unit.graceful-stop.completed-stopped",
-  "protocol_version": "0.16.0-draft",
+  "protocol_version": "0.17.0-draft",
   "contract_area": "execution.unit.graceful_stop",
   "purpose": "Completed graceful stop confirms the exact unit is stopped.",
   "input": {

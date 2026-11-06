@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.migrate.complete-checks-required",
-  "protocol_version": "0.16.0-draft",
+  "protocol_version": "0.17.0-draft",
   "contract_area": "game.migrate",
   "purpose": "An adapter cannot report migration success without one passing result for every requested check.",
   "input": {

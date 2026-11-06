@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.16.0-draft:hosting:instance-start-output",
+  "$id": "urn:gameserver-controller:0.17.0-draft:hosting:instance-start-output",
   "title": "Hosting instance start output",
   "description": "A completed start confirms the resulting provider state for the exact instance. Accepted and unknown outcomes are distinct from completion.",
   "type": "object",
@@ -13,7 +13,7 @@
   ],
   "properties": {
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.16.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.17.0-draft:common:external-resource-ref"
     },
     "outcome": {
       "enum": [
@@ -34,7 +34,7 @@
       "format": "date-time"
     },
     "provider_operation_ref": {
-      "$ref": "urn:gameserver-controller:0.16.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.17.0-draft:common:external-resource-ref"
     },
     "safe_diagnostics": {
       "type": "array",

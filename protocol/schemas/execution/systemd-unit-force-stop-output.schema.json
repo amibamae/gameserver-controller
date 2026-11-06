@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.16.0-draft:execution:systemd-unit-force-stop-output",
+  "$id": "urn:gameserver-controller:0.17.0-draft:execution:systemd-unit-force-stop-output",
   "title": "Systemd execution unit force-stop output",
   "description": "A completed force stop confirms the exact unit is stopped; accepted and unknown outcomes carry a reference for inspection and reconciliation.",
   "allOf": [
     {
-      "$ref": "urn:gameserver-controller:0.16.0-draft:execution:systemd-unit-lifecycle-result"
+      "$ref": "urn:gameserver-controller:0.17.0-draft:execution:systemd-unit-lifecycle-result"
     },
     {
       "properties": {
