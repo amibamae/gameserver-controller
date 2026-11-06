@@ -1,0 +1,12 @@
+{
+  "fixture_id": "lifecycle.reject.unlisted-transition",
+  "protocol_version": "0.1.0-draft",
+  "contract": "lifecycle.transition",
+  "initial_state": "unprovisioned",
+  "requested_transition": {"to": "ready", "operation_type": "server.provision"},
+  "expected": {
+    "accepted": false,
+    "error_code": "core.lifecycle.invalid_transition",
+    "side_effect_permitted": false
+  }
+}
