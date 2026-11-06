@@ -209,7 +209,7 @@ components:
           enum: [server.provision, server.start, server.stop, server.backup, server.restore, server.replace, server.destroy]
         parameters:
           type: object
-          description: Operation-specific parameter object defined by the operation contract.
+          description: Operation-specific parameter object; it MUST validate against the schema for the selected operation type. Unknown fields are rejected unless that operation schema defines an extension point.
           additionalProperties: true
         deadline:
           type: string
