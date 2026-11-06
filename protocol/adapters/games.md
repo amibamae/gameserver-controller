@@ -1,6 +1,6 @@
 # Game Adapter Contract
 
-**Status:** Draft, version 0.9.0-draft.
+**Status:** Draft, version 0.10.0-draft.
 
 ## 1. Responsibility
 
@@ -20,6 +20,7 @@ A game adapter defines game-specific installation, configuration, runtime requir
 | `game.data.describe` | Describe persistent paths/data sets |
 | `game.backup.prepare` | Quiesce or prepare data for consistent capture |
 | `game.backup.validate` | Validate backup content/manifest |
+| `game.compatibility.check` | Check one backup manifest against one exact target release |
 | `game.compatibility.check` | Check source/target version compatibility |
 | `game.migrate` | Perform an explicitly supported migration |
 
@@ -61,8 +62,12 @@ The controller coordinates save/quiesce, storage transfer, verification, manifes
 
 ## 7. Compatibility and migration
 
-The adapter defines whether a backup can be opened by a target release, whether migration is needed, and whether migration is reversible. Major-version migration MUST require an explicit approval gate and a verified pre-migration backup. The core MUST NOT infer compatibility from version-string ordering.
+`game.compatibility.check` is read-only. It compares one exact backup manifest with one immutable target release description. Its output MUST bind the backup, data generation, source game version, and target release. Every requested check MUST have exactly one result. The adapter MUST NOT infer compatibility from version-string ordering.
+
+Aggregate status is `incompatible` when any required check is incompatible; otherwise `unknown` when evidence is unknown or incomplete; otherwise `migration_required` when any check requires migration; otherwise `compatible`. Unknown or incomplete results do not establish compatibility.
+
+A compatibility result does not verify backup integrity or authorize restore. The core MUST separately require a verified backup and authorization. A `migration_required` result does not permit restore; a separate migration workflow and a verified pre-migration backup are required. Migration execution, approval representation, and rollback semantics remain to be specified.
 
 ## 8. Conformance cases
 
-Test artifact checksum mismatch before installation starts, repeated install of the same release, invalid configuration before application, unknown installed-artifact validation blocking start, game process running but not ready, unknown readiness, save failure, backup validation failure, incompatible world, and migration without approval.
+Test artifact checksum mismatch before installation starts, repeated install of the same release, invalid configuration before application, unknown installed-artifact validation blocking start, game process running but not ready, unknown readiness, save failure, backup validation failure, exact-target compatibility, migration required, incompatible data, unknown or incomplete compatibility, a false compatible claim, and a mismatched target release.

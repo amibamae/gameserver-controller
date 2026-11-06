@@ -1,13 +1,13 @@
 {
   "fixture_id": "operations.typed-define-start-stop-results",
-  "protocol_version": "0.9.0-draft",
+  "protocol_version": "0.10.0-draft",
   "contract_area": "operations.result",
   "purpose": "Typed successful results identify the logical server, prove readiness for start, and record save/termination postconditions for stop.",
   "input": {
     "define_operation": {
       "operation_id": "operation-define-007",
       "operation_type": "server.define",
-      "protocol_version": "0.9.0-draft",
+      "protocol_version": "0.10.0-draft",
       "target": {
         "server_id": "minecraft-test",
         "environment_id": "staging"
@@ -66,7 +66,7 @@
     "start_operation": {
       "operation_id": "operation-start-007",
       "operation_type": "server.start",
-      "protocol_version": "0.9.0-draft",
+      "protocol_version": "0.10.0-draft",
       "target": {
         "server_id": "minecraft-test",
         "environment_id": "staging",
@@ -163,7 +163,7 @@
     "stop_operation": {
       "operation_id": "operation-stop-007",
       "operation_type": "server.stop",
-      "protocol_version": "0.9.0-draft",
+      "protocol_version": "0.10.0-draft",
       "target": {
         "server_id": "minecraft-test",
         "environment_id": "staging",

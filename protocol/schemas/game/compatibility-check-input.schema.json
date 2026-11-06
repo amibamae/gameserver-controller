@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.10.0-draft:game:compatibility-check-input",
+  "title": "Game backup compatibility check input",
+  "description": "Compare one exact backup manifest with one immutable target release. This operation is read-only and does not verify backup integrity or authorize restoration.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_manifest",
+    "target_release",
+    "required_check_ids"
+  ],
+  "properties": {
+    "source_manifest": {
+      "$ref": "urn:gameserver-controller:0.10.0-draft:storage:backup-manifest"
+    },
+    "target_release": {
+      "$ref": "urn:gameserver-controller:0.10.0-draft:game:release-describe-output"
+    },
+    "required_check_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160,
+        "pattern": "^[a-z][a-z0-9._-]*$"
+      }
+    }
+  }
+}
