@@ -30,6 +30,8 @@ An adapter MAY declare any subset of these capabilities:
 
 Capabilities MUST declare constraints, permission scopes, idempotency behavior, and whether the operation can be reconciled after a lost response.
 
+The adapter-level `hosting.instance.create` contract uses [instance-create-input.schema.json](../schemas/hosting/instance-create-input.schema.json) and [instance-create-output.schema.json](../schemas/hosting/instance-create-output.schema.json). The broader [provision request](../schemas/hosting/provision-request.schema.json) remains the controller's orchestration input and is not passed wholesale to the hosting adapter.
+
 ## 3. Create specification
 
 A create request SHOULD include:
