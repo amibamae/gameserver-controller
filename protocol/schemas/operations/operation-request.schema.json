@@ -7,9 +7,9 @@
   "required": ["operation_type", "parameters"],
   "properties": {
     "operation_type": {
-      "enum": ["server.provision", "server.start", "server.stop", "server.backup", "server.restore", "server.replace", "server.destroy"]
+      "enum": ["server.define", "server.provision", "server.start", "server.stop", "server.backup", "server.restore", "server.destroy"]
     },
-    "parameters": {"type": "object"},
+    "parameters": {"type": "object", "description": "Validate against the operation-specific schema in protocol/operation-catalog.md."},
     "deadline": {"type": "string", "format": "date-time"},
     "extensions": {
       "type": "object",
