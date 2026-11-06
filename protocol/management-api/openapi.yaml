@@ -170,6 +170,39 @@ paths:
           $ref: "#/components/responses/NotFound"
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /operations/{operation_id}/events:
+    parameters:
+      - name: operation_id
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 200 }
+    get:
+      operationId: streamOperationEvents
+      summary: Stream operation events when Server-Sent Events are supported
+      description: |
+        Optional endpoint. Event data is a JSON serialization of the canonical
+        operation-event schema. Sequence numbers are monotonic per operation.
+        Clients must tolerate duplicate events and detect gaps. The operation
+        resource remains authoritative and polling is the fallback.
+      parameters:
+        - in: query
+          name: after_sequence
+          required: false
+          schema: { type: integer, minimum: 0, maximum: 9007199254740991, default: 0 }
+      responses:
+        "200":
+          description: Server-Sent Events stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Each data field contains one JSON operation-event object.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "501":
+          description: Event streaming is not supported; clients must poll the operation resource.
   /operations/{operation_id}/cancel:
     parameters:
       - name: operation_id
