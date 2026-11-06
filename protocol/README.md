@@ -132,6 +132,7 @@ protocol/
 │   ├── operations/
 │   ├── lifecycle/
 │   ├── hosting/
+│   ├── execution/
 │   ├── integrations/
 │   └── storage/
 ├── examples/
