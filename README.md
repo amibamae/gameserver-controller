@@ -16,6 +16,7 @@ The initial reference deployment is **Vultr + Wasabi + Minecraft Java Edition (P
 - **Language independence:** The protocol is authoritative. Independent implementations and adapters should be able to interoperate across programming languages.
 - **Provider independence:** Provider-specific behavior belongs in hosting adapters.
 - **Game independence:** Game-specific installation, lifecycle, health checks, versioning, save semantics, and migration rules belong in game adapters.
+- **Bootstrap-first provisioning:** Create instances from provider-supported standard operating-system offerings, then prepare them with customizable, versioned bootstrap scripts. The project does not require users to consume a project-maintained machine image.
 - **Storage independence:** Backup and artifact operations use documented storage contracts and explicitly declared capabilities.
 - **Fail safely:** Never destroy an instance containing data that has not been safely backed up and verified.
 - **Core authority:** The controller core owns lifecycle policy, authorization, environment isolation, approvals, audit, and safety checks. Clients and adapters cannot bypass them.
@@ -71,7 +72,7 @@ The longer-term project aims to support:
 - Verified backup and restore workflows.
 - Staging deployments based on copies of selected production backups.
 - Software release management and rollback.
-- Infrastructure image building, validation, promotion, and rollback.
+- Repeatable instance provisioning from standard provider OS offerings using customizable, versioned bootstrap scripts.
 - Proxy and player-routing integrations.
 - Durable, auditable operations and recovery.
 - Policy controls, least-privilege permissions, and optional consent-based telemetry.
@@ -118,7 +119,7 @@ The design is governed by these operational safeguards:
 
 1. A server containing unsaved data must not be destroyed until a backup is complete and verified.
 2. Staging receives a copy of a selected production backup and has no permission to write to or delete production backup locations.
-3. Credentials must never be stored in source control, baked into images, or printed in logs.
+3. Credentials must never be stored in source control, bootstrap scripts, user-data, release artifacts, or logs.
 4. Update promotion is gated by validation; process startup alone is insufficient.
 5. Major game-version upgrades and world migrations require explicit approval and a recoverable pre-migration backup.
 6. Rollback must respect world compatibility; old software must not be launched against an incompatible migrated world.
