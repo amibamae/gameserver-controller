@@ -1,0 +1,29 @@
+{
+  "fixture_id": "safety.destroy.blocked-stale-data-generation",
+  "protocol_version": "0.1.0-draft",
+  "contract": "server.destroy",
+  "initial_state": {
+    "lifecycle_state": "stopped",
+    "data_generation_id": "generation-current-002",
+    "data_generation_status": "known",
+    "backup": {
+      "exists": true,
+      "uploaded": true,
+      "verified": true,
+      "data_generation_id": "generation-current-001"
+    },
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "production",
+      "resource_kind": "instance",
+      "external_id": "instance-production-example"
+    }
+  },
+  "requested_action": "destroy",
+  "expected": {
+    "accepted": false,
+    "error_code": "core.safety.backup_generation_mismatch",
+    "provider_destroy_calls": 0,
+    "logical_server_state": "stopped"
+  }
+}
