@@ -109,6 +109,8 @@ See [AI Use and Development Transparency](docs/AI_DISCLOSURE.md) for the full di
 - [Adapter contracts](protocol/adapters/README.md)
 - [RPC methods and transport](protocol/rpc/methods.md)
 - [Management API and OpenAPI definition](protocol/management-api/overview.md)
+- [Management API authentication](protocol/management-api/authentication.md)
+- [Management API authorization](protocol/management-api/authorization.md)
 - [Protocol security](protocol/security.md)
 - [Conformance and test vectors](protocol/conformance/requirements.md)
 
