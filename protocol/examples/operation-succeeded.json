@@ -74,6 +74,51 @@
     "audit_event_ids": [
       "audit-event-002"
     ],
-    "partial": false
+    "partial": false,
+    "operation_type": "server.provision",
+    "operation_data": {
+      "server_id": "minecraft-test",
+      "environment_id": "test",
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "test",
+        "resource_kind": "instance",
+        "external_id": "instance-test-001"
+      },
+      "bootstrap": {
+        "revision": "git:0123456789abcdef",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "game": {
+        "adapter_id": "game.minecraft-paper",
+        "release_ref": "release:paper-test"
+      },
+      "execution": {
+        "adapter_id": "execution.systemd",
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "test",
+          "resource_kind": "service",
+          "external_id": "minecraft-vanilla.service"
+        }
+      },
+      "restored_backup_id": "backup-test-001",
+      "data_generation_id": "generation-test-001",
+      "lifecycle_state": "ready",
+      "readiness_assertion": {
+        "assertion_id": "readiness-test-001",
+        "server_id": "minecraft-test",
+        "environment_id": "test",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "test",
+          "resource_kind": "instance",
+          "external_id": "instance-test-001"
+        },
+        "readiness_check_set_id": "paper-ready-v1",
+        "observed_at": "2026-11-06T07:00:00Z",
+        "expires_at": "2026-11-06T07:01:00Z"
+      }
+    }
   }
 }
