@@ -1,0 +1,23 @@
+{
+  "fixture_id": "safety.destroy.blocked-unverified-backup",
+  "protocol_version": "0.1.0-draft",
+  "contract": "server.destroy",
+  "initial_state": {
+    "lifecycle_state": "backing_up",
+    "backup": {"exists": true, "uploaded": true, "verified": false},
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "production",
+      "resource_kind": "instance",
+      "external_id": "instance-production-example"
+    }
+  },
+  "requested_action": "destroy",
+  "expected": {
+    "accepted": false,
+    "error_code": "core.safety.backup_not_verified",
+    "provider_destroy_calls": 0,
+    "logical_server_state": "failed"
+  },
+  "notes": "A concrete implementation may keep the server in backing_up or move it to failed according to its operation policy, but it MUST NOT call provider destroy. The error and no-side-effect assertion are normative."
+}
