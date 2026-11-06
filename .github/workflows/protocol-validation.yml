@@ -5,12 +5,14 @@ on:
     paths:
       - "protocol/**"
       - "scripts/validate_protocol.py"
+      - "scripts/run_conformance.py"
       - "requirements-dev.txt"
       - ".github/workflows/protocol-validation.yml"
   pull_request:
     paths:
       - "protocol/**"
       - "scripts/validate_protocol.py"
+      - "scripts/run_conformance.py"
       - "requirements-dev.txt"
       - ".github/workflows/protocol-validation.yml"
   workflow_dispatch:
@@ -35,3 +37,5 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Validate schemas, references, examples, and OpenAPI metadata
         run: python scripts/validate_protocol.py
+      - name: Execute behavioral conformance vectors
+        run: python scripts/run_conformance.py
