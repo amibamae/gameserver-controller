@@ -1,6 +1,6 @@
 # Game Adapter Contract
 
-**Status:** Draft, version 0.3.0-draft.
+**Status:** Draft, version 0.4.0-draft.
 
 ## 1. Responsibility
 

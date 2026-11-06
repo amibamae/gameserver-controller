@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.3.0-draft:storage:object-put-input",
+  "$id": "urn:gameserver-controller:0.4.0-draft:storage:object-put-input",
   "title": "Storage object put input",
   "type": "object",
   "additionalProperties": false,
@@ -12,12 +12,12 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-object-target"
+      "$ref": "urn:gameserver-controller:0.4.0-draft:storage:storage-object-target"
     },
     "source_transfer": {
       "allOf": [
         {
-          "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-transfer-reference"
+          "$ref": "urn:gameserver-controller:0.4.0-draft:storage:storage-transfer-reference"
         },
         {
           "type": "object",
@@ -38,7 +38,7 @@
       "maximum": 9007199254740991
     },
     "expected_checksum": {
-      "$ref": "urn:gameserver-controller:0.3.0-draft:storage:storage-checksum"
+      "$ref": "urn:gameserver-controller:0.4.0-draft:storage:storage-checksum"
     }
   }
 }

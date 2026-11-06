@@ -1,7 +1,7 @@
 openapi: 3.2.1
 info:
   title: Game Server Controller Management API
-  version: 0.3.0-draft
+  version: 0.4.0-draft
   description: |
     Draft, language-independent HTTP/JSON management API. Mutating lifecycle
     requests are asynchronous and return a durable operation resource only

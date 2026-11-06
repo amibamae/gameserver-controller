@@ -1,6 +1,6 @@
 {
   "fixture_id": "operations.reconcile.unknown-create-outcome",
-  "protocol_version": "0.3.0-draft",
+  "protocol_version": "0.4.0-draft",
   "contract": "hosting.instance.create",
   "initial": {
     "operation_status": "running",
