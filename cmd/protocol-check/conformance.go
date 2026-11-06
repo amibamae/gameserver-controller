@@ -141,7 +141,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"operation_ref_environment_matches": operationEnvironmentMatches,
 			"readiness_established":             false,
 			"reconciliation_required":           resultRequiresInspection,
-			"result_requires_inspection":       resultRequiresInspection,
+			"result_requires_inspection":  resultRequiresInspection,
 			"retry_without_inspection":          false,
 			"successful_start_claim_accepted":   startSucceeded,
 			"termination_confirmed":             unitBound && outcome == "completed" && state == "stopped",
