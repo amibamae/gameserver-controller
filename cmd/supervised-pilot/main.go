@@ -283,4 +283,3 @@ func remote(ctx context.Context, host, command string) (string, error) {
 	output, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(output)), err
 }
-
