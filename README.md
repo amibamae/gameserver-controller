@@ -16,7 +16,7 @@ The initial reference deployment is **Vultr + Wasabi + Minecraft Java Edition (P
 - **Language independence:** The protocol is authoritative. Independent implementations and adapters should be able to interoperate across programming languages.
 - **Provider independence:** Provider-specific behavior belongs in hosting adapters.
 - **Game independence:** Game-specific installation, lifecycle, health checks, versioning, save semantics, and migration rules belong in game adapters.
-- **Bootstrap-first provisioning:** Create instances from provider-supported standard operating-system offerings, then prepare them with customizable, versioned bootstrap scripts. The project does not require users to consume a project-maintained machine image.
+- **Bootstrap-first provisioning:** Create instances from provider-supported standard operating-system offerings, then prepare them with customizable, versioned bootstrap scripts. The project distributes source code and bootstrap scripts, not preinstalled server environments.
 - **Storage independence:** Backup and artifact operations use documented storage contracts and explicitly declared capabilities.
 - **Fail safely:** Never destroy an instance containing data that has not been safely backed up and verified.
 - **Core authority:** The controller core owns lifecycle policy, authorization, environment isolation, approvals, audit, and safety checks. Clients and adapters cannot bypass them.
