@@ -50,6 +50,7 @@
 - Implement the controller core and application services against the protocol.
 - Implement a local CLI for inspection, configuration validation, plan/preview, and operation monitoring.
 - Implement Vultr hosting adapter.
+- Implement provider-standard OS selection and versioned bootstrap execution for new instances.
 - Implement Wasabi (S3-compatible) storage adapter.
 - Implement Minecraft Paper game adapter.
 - Add dry-run behavior, explicit target confirmation, approvals, durable operation tracking, and audit.
@@ -72,15 +73,14 @@
 - Store Paper/plugin/config artifacts separately from world backups.
 - Add compatibility metadata and checksums.
 - Implement release listing, status, rollback preview, and rollback execution.
-- Implement infrastructure image references and rollback.
+- Record and validate the exact bootstrap revision and configuration used by each instance; support returning to a previously approved bootstrap revision.
 - Enforce retention without deleting active rollback dependencies.
 - Test rollback using copied worlds and isolated instances.
 
 ## Phase 6 — Staging and automated updates
 
 - Add update discovery and candidate release creation.
-- Build candidate infrastructure images without modifying approved images.
-- Validate candidate images using fresh isolated instances.
+- Validate candidate bootstrap revisions by provisioning fresh isolated instances from standard provider OS offerings.
 - Create staging deployments from timestamped copies of production backups.
 - Enforce staging read-only access to production backups.
 - Automatically validate routine compatible updates.
