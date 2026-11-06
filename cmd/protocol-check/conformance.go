@@ -113,12 +113,12 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			value map[string]any
 			name  string
 		}{
-			"urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-logs-read-input":  {logsInput, "logs input"},
-			"urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-logs-read-output": {logsOutput, "logs output"},
-			"urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-health-inspect-input": {healthInput, "health input"},
+			"urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-logs-read-input":       {logsInput, "logs input"},
+			"urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-logs-read-output":      {logsOutput, "logs output"},
+			"urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-health-inspect-input":  {healthInput, "health input"},
 			"urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-health-inspect-output": {healthOutput, "health output"},
-			"urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-delete-input": {deleteInput, "delete input"},
-			"urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-delete-output": {deleteOutput, "delete output"},
+			"urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-delete-input":          {deleteInput, "delete input"},
+			"urn:gameserver-controller:0.6.0-draft:execution:systemd-unit-delete-output":         {deleteOutput, "delete output"},
 		} {
 			if err := pkg.validateSchema(schemaID, message.value); err != nil {
 				return nil, fmt.Errorf("%s does not match schema: %w", message.name, err)
@@ -146,7 +146,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"schemas_valid": true, "unit_targets_bound": logsBound && healthBound && deleteBound,
 			"logs_within_bound": totalBytes <= maxBytes, "logs_redacted": boolValue(logsOutput, "redaction_applied"),
 			"unknown_health_not_healthy": stringValue(healthOutput, "health") == "unknown",
-			"persistent_data_preserved": boolValue(deleteOutput, "persistent_data_preserved"),
+			"persistent_data_preserved":  boolValue(deleteOutput, "persistent_data_preserved"),
 		}, nil
 	case "integration.proxy.register.expired-readiness-rejected":
 		registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
@@ -166,9 +166,13 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			stringValue(assertion, "environment_id") == stringValue(assertedInstance, "environment_id") &&
 			reflect.DeepEqual(requestTarget["instance_ref"], assertion["instance_ref"])
 		current, err := parseTime(stringValue(input, "validation_time"))
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		expires, err := parseTime(stringValue(assertion, "expires_at"))
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		readinessCurrent := bound && current.Before(expires)
 		rejected := stringValue(registerOutput, "request_outcome") == "rejected" &&
 			stringValue(registerOutput, "registration_state") == "unregistered" &&
@@ -195,9 +199,13 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			stringValue(assertion, "environment_id") == stringValue(assertedInstance, "environment_id") &&
 			reflect.DeepEqual(requestTarget["instance_ref"], assertion["instance_ref"])
 		current, err := parseTime(stringValue(input, "validation_time"))
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		expires, err := parseTime(stringValue(assertion, "expires_at"))
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		readinessCurrent := bound && current.Before(expires)
 		confirmed := stringValue(registerOutput, "request_outcome") == "confirmed"
 		routingPermitted := readinessCurrent && confirmed &&
@@ -214,9 +222,9 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			value map[string]any
 			name  string
 		}{
-			"urn:gameserver-controller:0.6.0-draft:integrations:proxy-backend-drain-input": {drainInput, "drain input"},
-			"urn:gameserver-controller:0.6.0-draft:integrations:proxy-backend-drain-output": {drainOutput, "drain output"},
-			"urn:gameserver-controller:0.6.0-draft:integrations:proxy-backend-unregister-input": {unregisterInput, "unregister input"},
+			"urn:gameserver-controller:0.6.0-draft:integrations:proxy-backend-drain-input":       {drainInput, "drain input"},
+			"urn:gameserver-controller:0.6.0-draft:integrations:proxy-backend-drain-output":      {drainOutput, "drain output"},
+			"urn:gameserver-controller:0.6.0-draft:integrations:proxy-backend-unregister-input":  {unregisterInput, "unregister input"},
 			"urn:gameserver-controller:0.6.0-draft:integrations:proxy-backend-unregister-output": {unregisterOutput, "unregister output"},
 		} {
 			if err := pkg.validateSchema(schemaID, message.value); err != nil {
