@@ -105,7 +105,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			category = "authorization"
 		}
 		return map[string]any{"accepted": allowed, "side_effect_permitted": allowed, "error_category": category}, nil
-	case "game.data.save.backup-prepare.binding":
+	case "game.data.save.backup-prepare.binding", "game.data.save.backup-prepare.reject-unsafe-datasets":
 		dataInput, dataOutput := asObject(input["data_input"]), asObject(input["data_output"])
 		saveInput, saveOutput := asObject(input["save_input"]), asObject(input["save_output"])
 		prepareInput, prepareOutput := asObject(input["prepare_input"]), asObject(input["prepare_output"])
