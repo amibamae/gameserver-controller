@@ -64,6 +64,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Adapter logs and errors redact secrets.
 
 ### Storage and security
+- A checksum-valid backup from an older data generation does not authorize destruction of the current instance.
 - Incomplete upload cannot be marked verified.
 - Checksum/length mismatch blocks restore and destruction.
 - Staging cannot write/delete production objects.
@@ -89,7 +90,7 @@ Before a stable 1.0 release, at least two independently built implementations in
 
 At least one implementation MUST be developed without importing code generated from the other implementation. Generated bindings MAY be used after the language-neutral schemas are authoritative.
 
-Test results, implementation versions, protocol version, and fixture suite digest MUST be published. A self-reported checklist alone is not evidence of interoperability.
+Test results, implementation versions, protocol version, schema registry digest, and fixture suite digest MUST be published. A self-reported checklist alone is not evidence of interoperability.
 
 ## 6. Test vector index
 
@@ -99,6 +100,7 @@ Test results, implementation versions, protocol version, and fixture suite diges
 - [idempotency-key-conflict.json](test-vectors/idempotency-key-conflict.json)
 - [unknown-provider-outcome.json](test-vectors/unknown-provider-outcome.json)
 - [staging-production-write-denied.json](test-vectors/staging-production-write-denied.json)
+- [backup-stale-generation-blocks-destroy.json](test-vectors/backup-stale-generation-blocks-destroy.json)
 
 ## 7. Certification status
 
