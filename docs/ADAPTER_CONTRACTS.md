@@ -4,6 +4,8 @@
 
 ## Contract principles
 
+The detailed, language-neutral contracts are published under [protocol/adapters](../protocol/adapters/README.md). The five categories are hosting, storage, execution, game, and integration.
+
 - Core defines contracts; adapters implement them.
 - Adapters declare identity, version, configuration schema, capabilities, constraints, and required permissions.
 - Optional capabilities are discoverable before execution.
@@ -108,6 +110,7 @@ Core tests use fake adapters. Real adapter tests run only against isolated test 
 |---|---|---|
 | Hosting | Vultr | OVH, other providers |
 | Storage | Wasabi (S3-compatible) | Other object stores |
+| Execution | systemd on Debian VM | Container runtime, Kubernetes, Agones |
 | Game | Minecraft Java / Paper | Terraria, Valheim, ARK |
 | Integration | Velocity | Other proxies, monitoring, notifications |
 
