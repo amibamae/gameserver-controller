@@ -1,0 +1,49 @@
+{
+  "fixture_id": "hosting.instance.wait.operation-reference-mismatch",
+  "protocol_version": "0.19.0-draft",
+  "contract_area": "hosting.instance.wait",
+  "purpose": "A wait result for a different provider operation cannot confirm this request.",
+  "input": {
+    "wait_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      },
+      "provider_operation_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "operation",
+        "external_id": "host-op-start-021"
+      },
+      "expected_state": "active",
+      "wait_timeout_seconds": 60
+    },
+    "wait_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      },
+      "provider_operation_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "operation",
+        "external_id": "different-operation"
+      },
+      "operation_status": "succeeded",
+      "instance_state": "active",
+      "observed_at": "2026-11-06T12:00:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "operation_reference_bound": false,
+    "wait_completed": false,
+    "instance_postcondition_confirmed": false,
+    "result_requires_inspection": true
+  }
+}

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.18.0-draft:hosting:instance-create-input",
+  "$id": "urn:gameserver-controller:0.19.0-draft:hosting:instance-create-input",
   "title": "Hosting instance create input",
   "description": "Adapter-level request to create one infrastructure instance. Game installation, backup restore, and bootstrap execution are separate capabilities.",
   "type": "object",

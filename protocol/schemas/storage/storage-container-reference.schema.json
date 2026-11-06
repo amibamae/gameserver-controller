@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.18.0-draft:storage:storage-container-reference",
+  "$id": "urn:gameserver-controller:0.19.0-draft:storage:storage-container-reference",
   "title": "Storage container reference",
   "type": "object",
   "additionalProperties": false,

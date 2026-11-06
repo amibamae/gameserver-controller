@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.destroy.verified-backup-required",
-  "protocol_version": "0.18.0-draft",
+  "protocol_version": "0.19.0-draft",
   "contract_area": "hosting.instance.destroy",
   "purpose": "An unverified backup prevents provider destruction.",
   "input": {

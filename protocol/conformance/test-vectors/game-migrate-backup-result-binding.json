@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.migrate.backup-result-binding",
-  "protocol_version": "0.18.0-draft",
+  "protocol_version": "0.19.0-draft",
   "contract_area": "game.migrate",
   "purpose": "A verified backup result whose generation differs from its embedded manifest cannot authorize migration.",
   "input": {

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.19.0-draft:hosting:instance-wait-output",
+  "title": "Hosting instance wait output",
+  "description": "Provider operation status and any observed instance state. A succeeded provider operation is not a confirmed instance postcondition unless the exact expected state is observed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "instance_ref",
+    "provider_operation_ref",
+    "operation_status",
+    "observed_at"
+  ],
+  "properties": {
+    "instance_ref": {
+      "$ref": "urn:gameserver-controller:0.19.0-draft:common:external-resource-ref"
+    },
+    "provider_operation_ref": {
+      "$ref": "urn:gameserver-controller:0.19.0-draft:common:external-resource-ref"
+    },
+    "operation_status": {
+      "enum": [
+        "pending",
+        "succeeded",
+        "failed",
+        "unknown"
+      ]
+    },
+    "instance_state": {
+      "enum": [
+        "creating",
+        "active",
+        "stopped",
+        "destroying",
+        "destroyed",
+        "failed",
+        "unknown"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "safe_diagnostics": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "maxLength": 1000
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation_status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation_status"
+        ]
+      },
+      "then": {
+        "required": [
+          "instance_state"
+        ]
+      }
+    }
+  ]
+}

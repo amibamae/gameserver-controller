@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.health.check.unknown-not-healthy",
-  "protocol_version": "0.18.0-draft",
+  "protocol_version": "0.19.0-draft",
   "contract_area": "game.health",
   "purpose": "Health checks bind to the exact release and instance; unknown check results cannot be reported healthy.",
   "input": {

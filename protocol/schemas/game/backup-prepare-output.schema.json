@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.18.0-draft:game:backup-prepare-output",
+  "$id": "urn:gameserver-controller:0.19.0-draft:game:backup-prepare-output",
   "title": "Game backup preparation output",
   "description": "A prepared result echoes the exact target, release, data generation, selected data sets, and consistency mode, with evidence for the declared consistency guarantee.",
   "type": "object",
@@ -17,7 +17,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.18.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.19.0-draft:game:game-instance-target"
     },
     "release_id": {
       "type": "string",
@@ -79,7 +79,7 @@
       "pattern": "^[a-z][a-z0-9._-]*$"
     },
     "reconciliation_ref": {
-      "$ref": "urn:gameserver-controller:0.18.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.19.0-draft:common:external-resource-ref"
     }
   },
   "allOf": [
