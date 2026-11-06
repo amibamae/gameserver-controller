@@ -1,6 +1,6 @@
 # Protocol Specification
 
-**Status:** Initial design principles. This document establishes direction; it does not define a finalized wire protocol or implemented API.
+**Status:** Draft design. The documents in this directory define proposed language-independent behavior; they do not yet constitute a stable wire protocol or implemented API.
 
 ## Purpose
 
@@ -31,7 +31,7 @@ The specification is divided into these areas:
 
 - **Common types:** identifiers, timestamps, version identifiers, resource references, structured errors, and pagination.
 - **Identity and capabilities:** implementation identity, protocol compatibility, declared features, constraints, and required permissions.
-- **Operations:** durable operation identity, status, progress, cancellation rules, idempotency, deadlines, and recovery.
+- **Operations:** durable operation identity, acceptance, steps, status, progress, idempotency, retries, cancellation, reconciliation, and recovery.
 - **Lifecycle:** server states, permitted transitions, preconditions, postconditions, and failure behavior.
 - **Adapter contracts:** hosting, storage, game runtime, and integration responsibilities.
 - **Management API:** versioned client-facing operations, read models, authentication, authorization, and event access.
@@ -77,7 +77,7 @@ A conforming implementation must:
 - Reject malformed or unsupported required fields safely.
 - Preserve opaque identifiers without interpreting provider-specific formats.
 - Return documented structured errors.
-- Respect deadlines, cancellation semantics, and idempotency rules.
+- Respect deadlines, cancellation semantics, idempotency rules, and operation recovery behavior.
 - Avoid side effects for validation and inspection operations unless explicitly specified.
 - Pass language-neutral conformance tests and shared test vectors.
 - Enforce the same safety and privacy requirements as the core specification.
@@ -92,12 +92,16 @@ Compatibility policy must define handling of unknown fields, enum values, option
 - No adapter may independently decide that an unverified backup is safe for destruction.
 - No client may directly invoke provider destructive operations outside core authorization and operation tracking.
 - No protocol operation may silently weaken production/staging isolation or consent requirements.
+- A controller MUST NOT perform a mutating external action without a durable operation record.
+- An unknown external outcome MUST be reconciled before retrying or starting dependent work.
 
 ## Proposed specification layout
 
 ```text
 protocol/
 ├── README.md
+├── common-types.md
+├── operations.md
 ├── VERSION
 ├── schemas/
 │   ├── common/
@@ -126,13 +130,14 @@ This layout is provisional and may be adjusted as the contracts become concrete.
 
 ## Initial design sequence
 
-1. Agree on protocol principles and boundaries.
-2. Define common identifiers, timestamps, versioning, errors, and capability descriptors.
-3. Define durable operation messages and lifecycle semantics.
-4. Define adapter contracts and their transport binding.
-5. Define the optional management API for external clients.
-6. Define security, authorization, consent, and audit requirements across both surfaces.
-7. Create schemas, examples, test vectors, and conformance requirements.
-8. Evaluate implementation languages against the completed specification.
+1. Establish protocol principles and boundaries.
+2. Draft and review common identifiers, timestamps, versioning, errors, and capability descriptors.
+3. Draft and review durable operation semantics, including recovery and uncertainty handling.
+4. Define lifecycle states, transitions, preconditions, postconditions, and safety behavior.
+5. Define adapter contracts and evaluate their transport binding.
+6. Define the optional management API for external clients.
+7. Define security, authorization, consent, and audit requirements across both surfaces.
+8. Create language-neutral schemas, examples, test vectors, and conformance requirements.
+9. Evaluate implementation languages against the reviewed protocol.
 
 The protocol remains in draft until its semantics, schemas, compatibility rules, and conformance tests have been reviewed.
