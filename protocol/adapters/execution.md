@@ -65,6 +65,8 @@ Systemd start and graceful-stop capabilities use operation-specific result schem
 
 A timeout while starting/stopping MUST be reconciled by inspection. It MUST NOT be interpreted as a known stopped/running result.
 
+Any unit result whose unit reference does not exactly match the request is untrusted. The controller MUST inspect the requested exact unit before retrying or doing dependent work.
+
 ## 6. Relationship to the game adapter
 
 The execution adapter knows how to run and stop a unit. The game adapter knows what software to install, how to configure it, how to save/quiesce it consistently, what data is persistent, how to check game-level readiness, and what versions are compatible.
