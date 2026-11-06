@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:common:request-context",
+  "title": "Protocol request context",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id", "correlation_id", "environment_id", "deadline"],
+  "properties": {
+    "request_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "correlation_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "operation_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "step_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "server_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "environment_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "deadline": {"type": "string", "format": "date-time"},
+    "idempotency_key": {"type": "string", "minLength": 1, "maxLength": 200}
+  }
+}
