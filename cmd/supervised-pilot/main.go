@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -109,40 +113,133 @@ func backup(host string, execute bool, confirmation string, timeout time.Duratio
 		return errors.New("backup not started: --confirm-host must exactly match --host")
 	}
 
+	operationID, err := newOperationID()
+	if err != nil {
+		return fmt.Errorf("create operation ID: %w", err)
+	}
+	auditPath, err := defaultAuditPath()
+	if err != nil {
+		return fmt.Errorf("resolve audit log path: %w", err)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	before, err := readUnitState(ctx, host, backupUnit)
 	if err != nil {
-		return fmt.Errorf("preflight %s on %s: %w", backupUnit, host, err)
+		return rejected(host, operationID, auditPath, "preflight_failed", fmt.Errorf("preflight %s on %s: %w", backupUnit, host, err))
+	}
+	if before.active == "failed" || before.result == "failed" {
+		return rejected(host, operationID, auditPath, "unit_failed", fmt.Errorf("refusing to retry failed unit %s; inspect its journal and clear the failure manually", backupUnit))
 	}
 	if before.active != "inactive" {
-		return fmt.Errorf("refusing to start %s while its state is %q; inspect the unit manually first", backupUnit, before.active)
+		return rejected(host, operationID, auditPath, "unit_not_inactive", fmt.Errorf("refusing to start %s while its state is %q; inspect the unit manually first", backupUnit, before.active))
 	}
-	if before.result == "failed" {
-		return fmt.Errorf("refusing to retry failed unit %s; inspect its journal and clear the failure manually", backupUnit)
+	if err := appendAuditRecord(auditPath, operationID, "started", host, ""); err != nil {
+		return fmt.Errorf("backup not started (operation %s): could not persist the audit record at %s: %w", operationID, auditPath, err)
 	}
 
 	fmt.Fprintf(stdout, "Starting %s on %s (timeout %s).\n", backupUnit, host, timeout)
+	fmt.Fprintf(stdout, "Operation ID: %s\nAudit log: %s\n", operationID, auditPath)
 	fmt.Fprintln(stdout, "No stop, restore, or destroy command will be sent.")
 	if output, err := remote(ctx, host, "sudo -n systemctl start --wait "+backupUnit); err != nil {
 		if output != "" {
 			fmt.Fprintln(stderr, output)
 		}
-		return fmt.Errorf("start %s: %w", backupUnit, err)
+		detail := "systemctl start returned an error; remote outcome may be unknown"
+		if auditErr := appendAuditRecord(auditPath, operationID, "outcome_unknown", host, detail); auditErr != nil {
+			return fmt.Errorf("backup outcome unknown (%v); audit update also failed: %w", err, auditErr)
+		}
+		return fmt.Errorf("backup outcome unknown; inspect %s on %s: %w", backupUnit, host, err)
 	}
 
 	after, err := readUnitState(ctx, host, backupUnit)
 	if err != nil {
-		return fmt.Errorf("verify %s on %s: %w", backupUnit, host, err)
+		detail := "start returned successfully, but post-run status could not be read"
+		if auditErr := appendAuditRecord(auditPath, operationID, "outcome_unknown", host, detail); auditErr != nil {
+			return fmt.Errorf("%s on %s: %v; audit update also failed: %w", backupUnit, host, err, auditErr)
+		}
+		return fmt.Errorf("backup outcome unknown; verify %s on %s: %w", backupUnit, host, err)
 	}
 	if after.result != "success" || after.exitCode != "0" {
-		return fmt.Errorf("%s did not report success (result=%q, exit=%q, active=%q)", backupUnit, after.result, after.exitCode, after.active)
+		detail := fmt.Sprintf("systemd result=%q exit=%q active=%q", after.result, after.exitCode, after.active)
+		if auditErr := appendAuditRecord(auditPath, operationID, "failed", host, detail); auditErr != nil {
+			return fmt.Errorf("%s did not report success (%s); audit update failed: %w", backupUnit, detail, auditErr)
+		}
+		return fmt.Errorf("%s did not report success (%s)", backupUnit, detail)
 	}
-	fmt.Fprintf(stdout, "Backup service completed successfully on %s.\n", host)
+	if err := appendAuditRecord(auditPath, operationID, "succeeded", host, "systemd reported result=success and exit status 0"); err != nil {
+		return fmt.Errorf("%s reported success, but the result could not be recorded in %s: %w", backupUnit, auditPath, err)
+	}
+	fmt.Fprintf(stdout, "Backup service completed successfully on %s (operation %s).\n", host, operationID)
 	fmt.Fprintf(stdout, "%s: active=%s sub=%s result=%s exit=%s\n",
 		backupUnit, after.active, after.sub, after.result, after.exitCode)
 	return nil
+}
+
+func rejected(host, operationID, auditPath, reason string, cause error) error {
+	if err := appendAuditRecord(auditPath, operationID, "rejected", host, reason); err != nil {
+		return fmt.Errorf("operation %s rejected: %w; could not record rejection in %s: %v", operationID, cause, auditPath, err)
+	}
+	return fmt.Errorf("operation %s rejected (audit log: %s): %w", operationID, auditPath, cause)
+}
+
+type auditRecord struct {
+	OperationID string `json:"operation_id"`
+	RecordedAt  string `json:"recorded_at"`
+	Event       string `json:"event"`
+	Action      string `json:"action"`
+	Target      string `json:"target"`
+	Service     string `json:"service"`
+	Detail      string `json:"detail,omitempty"`
+}
+
+func newOperationID() (string, error) {
+	value := make([]byte, 16)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(value), nil
+}
+
+func defaultAuditPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "state", "gsc-pilot", "operations.jsonl"), nil
+}
+
+func appendAuditRecord(path, operationID, event, host, detail string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return err
+	}
+	record := auditRecord{
+		OperationID: operationID,
+		RecordedAt:  time.Now().UTC().Format(time.RFC3339Nano),
+		Event:       event,
+		Action:      "backup",
+		Target:      host,
+		Service:     backupUnit,
+		Detail:      detail,
+	}
+	if err := json.NewEncoder(file).Encode(record); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return err
+	}
+	return file.Close()
 }
 
 type unitState struct {

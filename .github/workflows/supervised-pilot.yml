@@ -25,6 +25,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Check Go formatting
+        run: |
+          unformatted="$(gofmt -l cmd/supervised-pilot)"
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            gofmt -d cmd/supervised-pilot
+            exit 1
+          fi
       - name: Build supervised pilot
         run: go build -o /tmp/gsc-pilot ./cmd/supervised-pilot
 
