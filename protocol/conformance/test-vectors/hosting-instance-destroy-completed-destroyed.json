@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.destroy.completed-destroyed",
-  "protocol_version": "0.20.0-draft",
+  "protocol_version": "0.21.0-draft",
   "contract_area": "hosting.instance.destroy",
   "purpose": "A completed response confirms the exact instance is destroyed.",
   "input": {

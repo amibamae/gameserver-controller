@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:game:validate-installation-output",
+  "$id": "urn:gameserver-controller:0.21.0-draft:game:validate-installation-output",
   "title": "Game validate installation output",
   "description": "Per-artifact installation observations. Unknown or incomplete validation does not authorize start or readiness.",
   "type": "object",
@@ -14,7 +14,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target"
     },
     "release_id": {
       "type": "string",
@@ -54,12 +54,50 @@
             ]
           },
           "expected_checksum": {
-            "$ref": "urn:gameserver-controller:0.20.0-draft:storage:storage-checksum"
+            "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum"
           },
           "observed_checksum": {
-            "$ref": "urn:gameserver-controller:0.20.0-draft:storage:storage-checksum"
+            "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum"
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "result": {
+                  "const": "verified"
+                }
+              },
+              "required": [
+                "result"
+              ]
+            },
+            "then": {
+              "required": [
+                "expected_checksum",
+                "observed_checksum"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "result": {
+                  "const": "mismatch"
+                }
+              },
+              "required": [
+                "result"
+              ]
+            },
+            "then": {
+              "required": [
+                "expected_checksum",
+                "observed_checksum"
+              ]
+            }
+          }
+        ]
       }
     },
     "observed_game_version": {
@@ -71,5 +109,35 @@
       "type": "string",
       "format": "date-time"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "validation_result": {
+            "const": "valid"
+          }
+        },
+        "required": [
+          "validation_result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "artifact_results": {
+            "items": {
+              "properties": {
+                "result": {
+                  "const": "verified"
+                }
+              },
+              "required": [
+                "result"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
 }

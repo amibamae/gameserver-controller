@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.reboot.accepted-not-complete",
-  "protocol_version": "0.20.0-draft",
+  "protocol_version": "0.21.0-draft",
   "contract_area": "hosting.instance.reboot",
   "purpose": "Provider acceptance does not confirm the instance finished rebooting.",
   "input": {

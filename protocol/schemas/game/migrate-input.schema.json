@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:game:migrate-input",
+  "$id": "urn:gameserver-controller:0.21.0-draft:game:migrate-input",
   "title": "Game data migration input",
   "description": "Apply an approved, compatibility-required data migration from a verified backup to a distinct target instance and exact immutable release.",
   "type": "object",
@@ -22,16 +22,16 @@
       "description": "Controller-validated approval reference bound to this exact backup, target, release, and check set."
     },
     "source_backup": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:operations:server-backup-result"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:operations:server-backup-result"
     },
     "compatibility_result": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:game:compatibility-check-output"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:game:compatibility-check-output"
     },
     "target": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target"
     },
     "target_release": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:game:release-describe-output"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:game:release-describe-output"
     },
     "object_streams": {
       "type": "array",
@@ -47,12 +47,12 @@
         ],
         "properties": {
           "object_ref": {
-            "$ref": "urn:gameserver-controller:0.20.0-draft:storage:storage-object-reference"
+            "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-object-reference"
           },
           "transfer_ref": {
             "allOf": [
               {
-                "$ref": "urn:gameserver-controller:0.20.0-draft:storage:storage-transfer-reference"
+                "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-transfer-reference"
               },
               {
                 "properties": {

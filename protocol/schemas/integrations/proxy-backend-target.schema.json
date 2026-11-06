@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:integrations:proxy-backend-target",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-target",
   "title": "Proxy backend target",
   "description": "Backend name bound to one logical server, environment, and exact hosting instance.",
   "type": "object",
@@ -28,7 +28,7 @@
       "maxLength": 200
     },
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
     }
   }
 }

@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.migrate.approved-copy-success",
-  "protocol_version": "0.20.0-draft",
+  "protocol_version": "0.21.0-draft",
   "contract_area": "game.migrate",
   "purpose": "A verified migration runs only after exact approval and writes a new generation on a distinct target.",
   "input": {

@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.wait.succeeded-postcondition-confirmed",
-  "protocol_version": "0.20.0-draft",
+  "protocol_version": "0.21.0-draft",
   "contract_area": "hosting.instance.wait",
   "purpose": "A succeeded provider operation confirms the request only when the exact expected state is observed.",
   "input": {

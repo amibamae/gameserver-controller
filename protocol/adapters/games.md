@@ -1,6 +1,6 @@
 # Game Adapter Contract
 
-**Status:** Draft, version 0.20.0-draft.
+**Status:** Draft, version 0.21.0-draft.
 
 ## 1. Responsibility
 
@@ -35,11 +35,13 @@ Game versions are opaque to the core unless the game adapter declares comparison
 
 Installation MUST verify every declared artifact checksum before execution; a mismatch MUST prevent installation from starting. Repeating install for the same exact release MUST report an already-installed state or converge idempotently.
 
-Configuration validation MUST use the schema URI and checksum pinned by the release and MUST finish before application begins. The adapter MUST verify these values against the release and MUST NOT dereference an arbitrary schema URI supplied by the caller. Configuration objects MUST NOT contain secret values; secret bindings MUST use authorized secret references.
+Successful install results MUST identify exactly the pinned release artifact IDs and confirm each checksum. Configuration validation MUST use the schema URI and checksum pinned by the release and MUST finish before application begins. The adapter MUST verify these values against the release and MUST NOT dereference an arbitrary schema URI supplied by the caller. Configuration objects MUST NOT contain secret values; secret bindings MUST use authorized secret references.
 
 ## 5. Readiness and health
 
 The game adapter defines mandatory readiness checks and optional health checks. A process running or a port listening is insufficient when game-specific readiness can be checked.
+
+`game.validate_installation` reports `valid` only when its output binds the exact target and release and contains exactly one `verified` result with matching expected/observed checksums for every pinned artifact; missing, duplicate, unavailable, mismatched, or unknown results cannot permit start.
 
 A readiness result MUST identify:
 - Check ID and check version.
@@ -71,4 +73,4 @@ A compatibility result does not verify backup integrity or authorize restore. Th
 
 ## 8. Conformance cases
 
-Test artifact checksum mismatch before installation starts, repeated install of the same release, invalid configuration before application, unknown installed-artifact validation blocking start, game process running but not ready, unknown readiness, save failure, backup validation failure, exact-target compatibility, migration required, incompatible data, unknown or incomplete compatibility, a false compatible claim, a mismatched target release, migration approval and backup gates, source preservation, exact migration target binding, complete migration checks, and unknown-result reconciliation.
+Test artifact checksum mismatch before installation starts, completed install with the exact artifact set, incomplete install results requiring reconciliation, repeated install of the same release, complete and incomplete installed-artifact validation, contradictory `valid` claims, invalid configuration before application, unknown installed-artifact validation blocking start, game process running but not ready, unknown readiness, save failure, backup validation failure, exact-target compatibility, migration required, incompatible data, unknown or incomplete compatibility, a false compatible claim, a mismatched target release, migration approval and backup gates, source preservation, exact migration target binding, complete migration checks, and unknown-result reconciliation.

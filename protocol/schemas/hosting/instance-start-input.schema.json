@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:hosting:instance-start-input",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-start-input",
   "title": "Hosting instance start input",
   "description": "Request the start action for one exact provider instance.",
   "type": "object",
@@ -10,7 +10,7 @@
   ],
   "properties": {
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
     }
   }
 }

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:hosting:instance-inspect-output",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-inspect-output",
   "title": "Hosting instance inspect output",
   "description": "Provider observation for the exact instance reference. Unknown state remains explicit and is not equivalent to active or destroyed.",
   "type": "object",
@@ -12,7 +12,7 @@
   ],
   "properties": {
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
     },
     "state": {
       "enum": [
@@ -71,7 +71,7 @@
       }
     },
     "provider_operation_ref": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
     },
     "safe_diagnostics": {
       "type": "array",

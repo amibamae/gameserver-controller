@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:hosting:instance-inspect-input",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-inspect-input",
   "title": "Hosting instance inspect input",
   "description": "Inspect one exact provider instance reference without changing provider state.",
   "type": "object",
@@ -10,7 +10,7 @@
   ],
   "properties": {
     "instance_ref": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
     }
   }
 }

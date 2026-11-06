@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.release.install.configure.fail-closed",
-  "protocol_version": "0.20.0-draft",
+  "protocol_version": "0.21.0-draft",
   "contract_area": "game.release.install.configure",
   "purpose": "Pinned artifacts are verified before install begins, and invalid configuration is rejected before application.",
   "input": {

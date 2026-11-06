@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.migrate.target-stopped",
-  "protocol_version": "0.20.0-draft",
+  "protocol_version": "0.21.0-draft",
   "contract_area": "game.migrate",
   "purpose": "The controller does not dispatch a data migration until the distinct target instance is confirmed stopped.",
   "input": {

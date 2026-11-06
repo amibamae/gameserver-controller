@@ -1,0 +1,66 @@
+{
+  "fixture_id": "game.validate-installation.valid-claim-with-unverified-artifact",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "game.validate_installation",
+  "purpose": "A valid aggregate claim containing an unknown artifact result is rejected by the schema.",
+  "input": {
+    "required_artifact_ids": [
+      "paper-server-jar",
+      "paper-plugin"
+    ],
+    "validate_request": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3"
+    },
+    "validate_output": {
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-test-001"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3",
+      "validation_result": "valid",
+      "artifact_results": [
+        {
+          "artifact_id": "paper-server-jar",
+          "result": "verified",
+          "expected_checksum": {
+            "algorithm": "sha256",
+            "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "observed_checksum": {
+            "algorithm": "sha256",
+            "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        },
+        {
+          "artifact_id": "paper-plugin",
+          "result": "unknown"
+        }
+      ],
+      "observed_game_version": "1.21.11+build.3",
+      "observed_at": "2026-11-06T10:10:00Z"
+    }
+  },
+  "expected": {
+    "schema_valid": false,
+    "target_bound": true,
+    "artifact_set_complete": true,
+    "aggregate_consistent": false,
+    "start_permitted": false
+  }
+}

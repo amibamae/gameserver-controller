@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.20.0-draft:game:install-output",
+  "$id": "urn:gameserver-controller:0.21.0-draft:game:install-output",
   "title": "Game install output",
-  "description": "Confirmed installation outcome and artifact verification state for the requested release.",
+  "description": "Confirmed installation outcome for the exact release; successful outcomes list every verified release artifact.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -16,7 +16,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:game:game-instance-target"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target"
     },
     "release_id": {
       "type": "string",
@@ -52,7 +52,7 @@
       }
     },
     "installation_ref": {
-      "$ref": "urn:gameserver-controller:0.20.0-draft:common:external-resource-ref"
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
     },
     "observed_at": {
       "type": "string",
@@ -128,6 +128,44 @@
           },
           "installation_started": {
             "const": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "installed"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "verified_artifact_ids": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "already_installed"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "verified_artifact_ids": {
+            "minItems": 1
           }
         }
       }
