@@ -1,0 +1,18 @@
+{
+  "fixture_id": "operations.reconcile.unknown-create-outcome",
+  "protocol_version": "0.1.0-draft",
+  "contract": "hosting.instance.create",
+  "initial": {
+    "operation_status": "running",
+    "step_status": "running",
+    "dispatch_recorded": true,
+    "provider_response_received": false
+  },
+  "expected": {
+    "operation_status": "reconciling",
+    "step_status": "outcome_unknown",
+    "retry_create_immediately": false,
+    "inspect_exact_target_or_search_by_idempotency_reference": true,
+    "if_unresolvable": "needs_operator"
+  }
+}
