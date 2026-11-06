@@ -11,5 +11,12 @@
     "force": {"type": "boolean", "default": false},
     "approval_id": {"type": "string", "minLength": 1, "maxLength": 200},
     "expected_instance_ref": {"$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"}
+  },
+  "if": {
+    "properties": {"force": {"const": true}},
+    "required": ["force"]
+  },
+  "then": {
+    "required": ["approval_id"]
   }
 }
