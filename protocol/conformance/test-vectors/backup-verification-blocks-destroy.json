@@ -4,7 +4,9 @@
   "contract": "server.destroy",
   "initial_state": {
     "lifecycle_state": "stopped",
-    "backup": {"exists": true, "uploaded": true, "verified": false},
+    "data_generation_id": "generation-current-002",
+    "data_generation_status": "known",
+    "backup": {"exists": true, "uploaded": true, "verified": false, "data_generation_id": "generation-current-001"},
     "instance_ref": {
       "adapter_id": "hosting.example",
       "environment_id": "production",
