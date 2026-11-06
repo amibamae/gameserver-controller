@@ -1,6 +1,6 @@
 # Lifecycle Protocol
 
-**Status:** Draft specification, version 0.12.0-draft. This document defines proposed lifecycle semantics; it is not yet a stable protocol release or implemented state machine.
+**Status:** Draft specification, version 0.13.0-draft. This document defines proposed lifecycle semantics; it is not yet a stable protocol release or implemented state machine.
 
 ## 1. Purpose
 

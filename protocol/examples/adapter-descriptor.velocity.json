@@ -4,7 +4,7 @@
   "display_name": "Velocity proxy integration",
   "implementation_version": "0.1.0",
   "protocol_versions": [
-    "0.12.0-draft"
+    "0.13.0-draft"
   ],
   "contract_versions": [
     "integration.proxy.v1-draft"
@@ -17,8 +17,8 @@
       "name": "integration.proxy.backend.drain",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.12.0-draft:integrations:proxy-backend-drain-input",
-      "output_schema_uri": "urn:gameserver-controller:0.12.0-draft:integrations:proxy-backend-drain-output",
+      "input_schema_uri": "urn:gameserver-controller:0.13.0-draft:integrations:proxy-backend-drain-input",
+      "output_schema_uri": "urn:gameserver-controller:0.13.0-draft:integrations:proxy-backend-drain-output",
       "required_permissions": [
         "proxy.backend.manage"
       ]
@@ -27,8 +27,8 @@
       "name": "integration.proxy.backend.inspect",
       "version": "1",
       "mutating": false,
-      "input_schema_uri": "urn:gameserver-controller:0.12.0-draft:integrations:proxy-backend-inspect-input",
-      "output_schema_uri": "urn:gameserver-controller:0.12.0-draft:integrations:proxy-backend-inspect-output",
+      "input_schema_uri": "urn:gameserver-controller:0.13.0-draft:integrations:proxy-backend-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.13.0-draft:integrations:proxy-backend-inspect-output",
       "required_permissions": [
         "proxy.backend.manage"
       ]
@@ -37,8 +37,8 @@
       "name": "integration.proxy.backend.register",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.12.0-draft:integrations:proxy-backend-register-input",
-      "output_schema_uri": "urn:gameserver-controller:0.12.0-draft:integrations:proxy-backend-register-output",
+      "input_schema_uri": "urn:gameserver-controller:0.13.0-draft:integrations:proxy-backend-register-input",
+      "output_schema_uri": "urn:gameserver-controller:0.13.0-draft:integrations:proxy-backend-register-output",
       "required_permissions": [
         "proxy.backend.manage"
       ]
@@ -47,8 +47,8 @@
       "name": "integration.proxy.backend.unregister",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.12.0-draft:integrations:proxy-backend-unregister-input",
-      "output_schema_uri": "urn:gameserver-controller:0.12.0-draft:integrations:proxy-backend-unregister-output",
+      "input_schema_uri": "urn:gameserver-controller:0.13.0-draft:integrations:proxy-backend-unregister-input",
+      "output_schema_uri": "urn:gameserver-controller:0.13.0-draft:integrations:proxy-backend-unregister-output",
       "required_permissions": [
         "proxy.backend.manage"
       ]
@@ -57,8 +57,8 @@
       "name": "integration.velocity.players.transfer",
       "version": "1",
       "mutating": true,
-      "input_schema_uri": "urn:gameserver-controller:0.12.0-draft:integrations:velocity-player-transfer-request",
-      "output_schema_uri": "urn:gameserver-controller:0.12.0-draft:integrations:velocity-player-transfer-result",
+      "input_schema_uri": "urn:gameserver-controller:0.13.0-draft:integrations:velocity-player-transfer-request",
+      "output_schema_uri": "urn:gameserver-controller:0.13.0-draft:integrations:velocity-player-transfer-result",
       "required_permissions": [
         "proxy.backend.manage"
       ],

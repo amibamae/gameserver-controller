@@ -1,6 +1,6 @@
 {
   "fixture_id": "game.compatibility.check.target-mismatch",
-  "protocol_version": "0.12.0-draft",
+  "protocol_version": "0.13.0-draft",
   "contract_area": "game.compatibility.check",
   "purpose": "A result bound to a different target release is rejected.",
   "input": {

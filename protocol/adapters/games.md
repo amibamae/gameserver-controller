@@ -1,6 +1,6 @@
 # Game Adapter Contract
 
-**Status:** Draft, version 0.12.0-draft.
+**Status:** Draft, version 0.13.0-draft.
 
 ## 1. Responsibility
 
@@ -21,8 +21,9 @@ A game adapter defines game-specific installation, configuration, runtime requir
 | `game.backup.prepare` | Quiesce or prepare data for consistent capture |
 | `game.backup.validate` | Validate backup content/manifest |
 | `game.compatibility.check` | Check one backup manifest against one exact target release |
-| `game.compatibility.check` | Check source/target version compatibility |
 | `game.migrate` | Perform an explicitly supported migration |
+
+An adapter advertises `game.migrate` only when it satisfies the requirements in §7.
 
 ## 3. Release description
 
@@ -66,8 +67,8 @@ The controller coordinates save/quiesce, storage transfer, verification, manifes
 
 Aggregate status is `incompatible` when any required check is incompatible; otherwise `unknown` when evidence is unknown or incomplete; otherwise `migration_required` when any check requires migration; otherwise `compatible`. Unknown or incomplete results do not establish compatibility.
 
-A compatibility result does not verify backup integrity or authorize restore. The core MUST separately require a verified backup and authorization. A `migration_required` result does not permit restore; a separate migration workflow and a verified pre-migration backup are required. Migration execution, approval representation, and rollback semantics remain to be specified.
+A compatibility result does not verify backup integrity or authorize restore. The core MUST separately require a verified backup and authorization. A `migration_required` result does not permit restore; a separate migration workflow and a verified pre-migration backup are required. Migration is a separate mutating capability. The controller MUST require a successful durable backup result whose objects and data generation are verified, a compatibility result of `migration_required` bound to that backup and exact release, and an approval bound to the backup, target instance, release, and required migration checks before dispatch. The adapter receives bounded streams for the exact manifest objects. The target MUST be a distinct, stopped instance; the adapter MUST preserve the source instance and backup and write the migrated data as a new generation. A `migrated` result requires one passing result for every requested check. An `outcome_unknown` result requires reconciliation before retry; the controller MUST retain partial target state and MUST NOT perform automatic rollback. Any recovery or cleanup is a separately authorized operation.
 
 ## 8. Conformance cases
 
-Test artifact checksum mismatch before installation starts, repeated install of the same release, invalid configuration before application, unknown installed-artifact validation blocking start, game process running but not ready, unknown readiness, save failure, backup validation failure, exact-target compatibility, migration required, incompatible data, unknown or incomplete compatibility, a false compatible claim, and a mismatched target release.
+Test artifact checksum mismatch before installation starts, repeated install of the same release, invalid configuration before application, unknown installed-artifact validation blocking start, game process running but not ready, unknown readiness, save failure, backup validation failure, exact-target compatibility, migration required, incompatible data, unknown or incomplete compatibility, a false compatible claim, a mismatched target release, migration approval and backup gates, source preservation, exact migration target binding, complete migration checks, and unknown-result reconciliation.

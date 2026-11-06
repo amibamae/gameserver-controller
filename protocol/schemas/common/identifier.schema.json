@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.12.0-draft:common:identifier",
+  "$id": "urn:gameserver-controller:0.13.0-draft:common:identifier",
   "title": "Protocol identifier",
   "description": "Opaque, non-empty identifier. Meaning and uniqueness scope are defined by the field using this schema.",
   "type": "string",

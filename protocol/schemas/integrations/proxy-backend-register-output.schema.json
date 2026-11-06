@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.12.0-draft:integrations:proxy-backend-register-output",
+  "$id": "urn:gameserver-controller:0.13.0-draft:integrations:proxy-backend-register-output",
   "title": "Proxy backend register output",
   "description": "Separate request acceptance from observed backend registration and routability.",
   "type": "object",
@@ -14,7 +14,7 @@
   ],
   "properties": {
     "target": {
-      "$ref": "urn:gameserver-controller:0.12.0-draft:integrations:proxy-backend-target"
+      "$ref": "urn:gameserver-controller:0.13.0-draft:integrations:proxy-backend-target"
     },
     "request_outcome": {
       "enum": [

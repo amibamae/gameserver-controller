@@ -1,6 +1,6 @@
 {
   "fixture_id": "hosting.instance.inspect.target-mismatch",
-  "protocol_version": "0.12.0-draft",
+  "protocol_version": "0.13.0-draft",
   "contract_area": "hosting.instance.inspect",
   "purpose": "A provider observation for a different resource is not accepted.",
   "input": {
