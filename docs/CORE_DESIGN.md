@@ -34,15 +34,27 @@ External resource IDs are opaque and scoped to adapter and environment.
 
 ## Lifecycle states
 
-Proposed server states: `unprovisioned`, `provisioning`, `preparing`, `starting`, `validating`, `ready`, `draining`, `stopping`, `backing_up`, `stopped`, `destroying`, `destroyed`, `degraded`, and `failed`.
+The public logical-server state machine is specified in the [lifecycle protocol](../protocol/lifecycle.md). Its draft states are:
 
-These server lifecycle states are separate from operation statuses. An operation can be `running` while a server is `starting`, for example. The controller validates server-state transitions and records the operation responsible for each mutating transition.
+`unprovisioned`, `provisioning`, `preparing`, `restoring`, `starting`, `validating`, `ready`, `degraded`, `draining`, `stopping`, `backing_up`, `stopped`, `destroying`, `destroyed`, and `failed`.
 
-Normal startup is provision → prepare → start → validate → ready. Routing is allowed only in `ready`. Shutdown drains players before stopping. Destruction is allowed only after a verified backup and all authorization/target checks pass. A failed backup blocks destruction and leaves the instance allocated. A failed health check blocks readiness.
+Keep four concepts distinct:
+- Logical server identity persists across replacement instances.
+- Infrastructure instance is a provider resource and may be absent/replaced.
+- Execution unit is the process/service/container/workload being run.
+- Operation is a durable request with its own status and recovery record.
 
-The final legal transition table, including restart, degraded recovery, and replacement-instance behavior, remains to be specified in the protocol lifecycle document.
+A process being alive is not readiness. A backend is eligible for routing only when the logical server is `ready`, the readiness evidence is current, and the proxy integration confirms registration. The controller MUST NOT route transitional, degraded, or failed backends.
+
+## Execution model
+
+The initial reference is an ordinary provider VM prepared by a versioned bootstrap script, with the game managed through systemd. No container runtime, Kubernetes, or Agones dependency is required. The execution adapter contract allows optional alternative implementations without changing lifecycle or data-safety policy.
+
+See [adapter protocol specifications](../protocol/adapters/README.md) for hosting, storage, execution, game, and integration boundaries.
 
 ## Durable operation model
+
+
 
 The [durable operation protocol](../protocol/operations.md) is the detailed draft contract for acceptance, status, steps, idempotency, timeouts, retries, cancellation, progress, partial outcomes, reconciliation, and recovery.
 
