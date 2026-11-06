@@ -1,6 +1,6 @@
 # Game Adapter Contract
 
-**Status:** Draft, version 0.8.0-draft.
+**Status:** Draft, version 0.9.0-draft.
 
 ## 1. Responsibility
 
@@ -46,7 +46,7 @@ A readiness result MUST identify:
 - Safe evidence and structured reason.
 - Game version and release reference inspected.
 
-Unknown readiness MUST NOT be treated as pass. Failed required checks prevent transition to `ready`.
+Unknown readiness MUST NOT be treated as pass. Failed required checks prevent transition to `ready`. The `game.health.check` capability uses the same exact-target binding, returns one result per requested check, and reports `unknown` when evidence is incomplete; its diagnostics MUST be redacted. See [health check input](../schemas/game/health-check-input.schema.json) and [health check output](../schemas/game/health-check-output.schema.json).
 
 ## 6. Persistent data and backup consistency
 
@@ -57,7 +57,7 @@ Supported consistency modes MUST be explicit, for example:
 - `game_native`: game provides a documented consistent snapshot/save mechanism while running.
 - A future named mode with a documented consistency guarantee.
 
-The controller coordinates save/quiesce, storage transfer, verification, manifest creation, and retention policy. The game adapter validates game-specific structure and version metadata. Copying files alone is not proof of a valid backup.
+The controller coordinates save/quiesce, storage transfer, verification, manifest creation, and retention policy. The game adapter validates game-specific structure and version metadata. Copying files alone is not proof of a valid backup. The `game.backup.validate` capability receives the manifest and one bounded, operation-scoped stream for each exact object reference. It reports `valid` only when all requested game-specific validation checks pass; `unknown` is not valid. See [backup validation input](../schemas/game/backup-validate-input.schema.json) and [backup validation output](../schemas/game/backup-validate-output.schema.json).
 
 ## 7. Compatibility and migration
 

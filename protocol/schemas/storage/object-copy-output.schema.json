@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.8.0-draft:storage:object-copy-output",
+  "$id": "urn:gameserver-controller:0.9.0-draft:storage:object-copy-output",
   "title": "Storage object copy output",
   "type": "object",
   "additionalProperties": false,
@@ -11,7 +11,7 @@
   ],
   "properties": {
     "destination": {
-      "$ref": "urn:gameserver-controller:0.8.0-draft:storage:storage-object-target"
+      "$ref": "urn:gameserver-controller:0.9.0-draft:storage:storage-object-target"
     },
     "copy_state": {
       "enum": [
@@ -21,7 +21,7 @@
       ]
     },
     "object_ref": {
-      "$ref": "urn:gameserver-controller:0.8.0-draft:storage:storage-object-reference"
+      "$ref": "urn:gameserver-controller:0.9.0-draft:storage:storage-object-reference"
     },
     "bytes_copied": {
       "type": "integer",

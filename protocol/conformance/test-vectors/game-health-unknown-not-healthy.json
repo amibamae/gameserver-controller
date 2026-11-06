@@ -1,0 +1,63 @@
+{
+  "fixture_id": "game.health.check.unknown-not-healthy",
+  "protocol_version": "0.9.0-draft",
+  "contract_area": "game.health",
+  "purpose": "Health checks bind to the exact release and instance; unknown check results cannot be reported healthy.",
+  "input": {
+    "health_input": {
+      "server_id": "minecraft-test",
+      "environment_id": "staging",
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-001"
+      },
+      "game_release_id": "paper-1.21.4-r1",
+      "required_check_ids": [
+        "tick_health",
+        "world_access"
+      ]
+    },
+    "health_output": {
+      "server_id": "minecraft-test",
+      "environment_id": "staging",
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-001"
+      },
+      "game_release_id": "paper-1.21.4-r1",
+      "health": "unknown",
+      "diagnostics_redacted": true,
+      "observed_at": "2026-11-06T08:33:00Z",
+      "safe_diagnostics": [
+        "world access could not be confirmed."
+      ],
+      "check_results": [
+        {
+          "check_id": "tick_health",
+          "check_version": "1",
+          "result": "pass",
+          "observed_at": "2026-11-06T08:32:30Z"
+        },
+        {
+          "check_id": "world_access",
+          "check_version": "1",
+          "result": "unknown",
+          "observed_at": "2026-11-06T08:32:40Z"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "check_set_complete": true,
+    "derived_health": "unknown",
+    "unknown_not_healthy": true,
+    "reported_health_matches": true
+  },
+  "side_effect_expected": "none"
+}

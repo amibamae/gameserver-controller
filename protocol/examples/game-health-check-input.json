@@ -1,0 +1,15 @@
+{
+  "server_id": "minecraft-test",
+  "environment_id": "staging",
+  "instance_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "staging",
+    "resource_kind": "instance",
+    "external_id": "instance-paper-001"
+  },
+  "game_release_id": "paper-1.21.4-r1",
+  "required_check_ids": [
+    "tick_health",
+    "world_access"
+  ]
+}

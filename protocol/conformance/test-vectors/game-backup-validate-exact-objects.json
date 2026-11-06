@@ -1,0 +1,104 @@
+{
+  "fixture_id": "game.backup.validate.exact-objects",
+  "protocol_version": "0.9.0-draft",
+  "contract_area": "game.backup.validate",
+  "purpose": "Game backup validation consumes one bounded stream for each exact manifest object and requires every requested check to pass.",
+  "input": {
+    "backup_input": {
+      "backup_id": "backup-009",
+      "environment_id": "staging",
+      "manifest": {
+        "manifest_version": "1",
+        "backup_id": "backup-009",
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "data_generation_id": "generation-009",
+        "source_instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-001"
+        },
+        "created_at": "2026-11-06T08:30:00Z",
+        "source_operation_id": "operation-backup-009",
+        "game": {
+          "adapter_id": "game.minecraft-paper",
+          "name": "Minecraft Java Edition",
+          "version": "paper-1.21.4-r1",
+          "world_format": "paper-world-v1"
+        },
+        "consistency": {
+          "mode": "offline",
+          "evidence": "Runtime stopped after a confirmed game save."
+        },
+        "objects": [
+          {
+            "size_bytes": 8192,
+            "checksum_algorithm": "sha256",
+            "checksum": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "object_ref": {
+              "adapter_id": "storage.s3-compatible",
+              "storage_profile_id": "staging-backups",
+              "environment_id": "staging",
+              "container": "game-backups",
+              "key": "minecraft-test/backup-009/world.tar.zst",
+              "version_id": "object-v009"
+            }
+          }
+        ]
+      },
+      "object_streams": [
+        {
+          "object_ref": {
+            "adapter_id": "storage.s3-compatible",
+            "storage_profile_id": "staging-backups",
+            "environment_id": "staging",
+            "container": "game-backups",
+            "key": "minecraft-test/backup-009/world.tar.zst",
+            "version_id": "object-v009"
+          },
+          "transfer_ref": {
+            "transfer_id": "transfer-009",
+            "direction": "controller_to_adapter",
+            "maximum_bytes": 8192,
+            "expires_at": "2026-11-06T08:35:00Z"
+          }
+        }
+      ],
+      "required_check_ids": [
+        "manifest_structure",
+        "world_loadable"
+      ]
+    },
+    "backup_output": {
+      "backup_id": "backup-009",
+      "environment_id": "staging",
+      "data_generation_id": "generation-009",
+      "validation_result": "valid",
+      "observed_at": "2026-11-06T08:32:00Z",
+      "check_results": [
+        {
+          "check_id": "manifest_structure",
+          "check_version": "1",
+          "result": "pass",
+          "observed_at": "2026-11-06T08:31:00Z"
+        },
+        {
+          "check_id": "world_loadable",
+          "check_version": "1",
+          "result": "pass",
+          "observed_at": "2026-11-06T08:31:30Z"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "manifest_binding_valid": true,
+    "object_streams_match_manifest": true,
+    "check_set_complete": true,
+    "derived_validation_result": "valid",
+    "backup_valid": true
+  },
+  "side_effect_expected": "none"
+}

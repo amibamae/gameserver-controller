@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:gameserver-controller:0.8.0-draft:operations:server-stop-result",
+  "$id": "urn:gameserver-controller:0.9.0-draft:operations:server-stop-result",
   "title": "Durable server.stop operation result",
   "description": "Canonical operation result with typed data for server.stop.",
   "allOf": [
     {
-      "$ref": "urn:gameserver-controller:0.8.0-draft:operations:operation-result"
+      "$ref": "urn:gameserver-controller:0.9.0-draft:operations:operation-result"
     },
     {
       "type": "object",
@@ -41,7 +41,7 @@
               "maxLength": 200
             },
             "instance_ref": {
-              "$ref": "urn:gameserver-controller:0.8.0-draft:common:external-resource-ref"
+              "$ref": "urn:gameserver-controller:0.9.0-draft:common:external-resource-ref"
             },
             "lifecycle_state": {
               "const": "stopped"
@@ -73,7 +73,7 @@
               ],
               "properties": {
                 "unit_ref": {
-                  "$ref": "urn:gameserver-controller:0.8.0-draft:common:external-resource-ref"
+                  "$ref": "urn:gameserver-controller:0.9.0-draft:common:external-resource-ref"
                 },
                 "outcome": {
                   "const": "stopped"

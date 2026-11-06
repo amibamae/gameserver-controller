@@ -105,6 +105,176 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			category = "authorization"
 		}
 		return map[string]any{"accepted": allowed, "side_effect_permitted": allowed, "error_category": category}, nil
+	case "game.health.check.unknown-not-healthy":
+		healthInput, healthOutput := asObject(input["health_input"]), asObject(input["health_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:health-check-input", healthInput); err != nil {
+			return nil, fmt.Errorf("health input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:health-check-output", healthOutput); err != nil {
+			return nil, fmt.Errorf("health output does not match schema: %w", err)
+		}
+		healthInstance := asObject(healthInput["instance_ref"])
+		bound := healthInput["server_id"] == healthOutput["server_id"] &&
+			healthInput["environment_id"] == healthOutput["environment_id"] &&
+			stringValue(healthInstance, "environment_id") == stringValue(healthInput, "environment_id") &&
+			healthInput["game_release_id"] == healthOutput["game_release_id"] &&
+			reflect.DeepEqual(healthInput["instance_ref"], healthOutput["instance_ref"])
+		required := arrayValue(healthInput, "required_check_ids")
+		results := arrayValue(healthOutput, "check_results")
+		requested := make(map[string]bool, len(required))
+		for _, rawID := range required {
+			requested[rawID.(string)] = true
+		}
+		observed := make(map[string]string, len(results))
+		complete := len(results) == len(requested)
+		for _, rawResult := range results {
+			item := asObject(rawResult)
+			id := stringValue(item, "check_id")
+			if !requested[id] {
+				complete = false
+			}
+			if _, exists := observed[id]; exists {
+				complete = false
+			}
+			observed[id] = stringValue(item, "result")
+		}
+		health := "healthy"
+		hasFailure, hasUnknown, hasWarning := false, false, false
+		for id := range requested {
+			result, ok := observed[id]
+			if !ok {
+				complete = false
+			}
+			switch result {
+			case "pass":
+			case "warn":
+				hasWarning = true
+			case "fail":
+				hasFailure = true
+			case "unknown":
+				hasUnknown = true
+			default:
+				complete = false
+			}
+		}
+		incompleteEvidence := hasUnknown || !complete
+		if hasFailure {
+			health = "unhealthy"
+		} else if incompleteEvidence {
+			health = "unknown"
+		} else if hasWarning {
+			health = "degraded"
+		}
+		return map[string]any{
+			"schemas_valid":           true,
+			"target_bound":            bound,
+			"check_set_complete":      complete,
+			"derived_health":          health,
+			"reported_health_matches": stringValue(healthOutput, "health") == health,
+			"unknown_not_healthy":     !incompleteEvidence || stringValue(healthOutput, "health") != "healthy",
+		}, nil
+	case "game.backup.validate.exact-objects":
+		backupInput, backupOutput := asObject(input["backup_input"]), asObject(input["backup_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:backup-validate-input", backupInput); err != nil {
+			return nil, fmt.Errorf("backup validation input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:backup-validate-output", backupOutput); err != nil {
+			return nil, fmt.Errorf("backup validation output does not match schema: %w", err)
+		}
+		manifest := asObject(backupInput["manifest"])
+		manifestBinding := stringValue(backupInput, "backup_id") == stringValue(manifest, "backup_id") &&
+			stringValue(backupInput, "environment_id") == stringValue(manifest, "environment_id") &&
+			stringValue(backupOutput, "backup_id") == stringValue(manifest, "backup_id") &&
+			stringValue(backupOutput, "environment_id") == stringValue(manifest, "environment_id") &&
+			stringValue(backupOutput, "data_generation_id") == stringValue(manifest, "data_generation_id")
+		manifestRefs := make([]any, 0, len(arrayValue(manifest, "objects")))
+		for _, rawObject := range arrayValue(manifest, "objects") {
+			manifestRefs = append(manifestRefs, asObject(rawObject)["object_ref"])
+		}
+		streamRefs := make([]any, 0, len(arrayValue(backupInput, "object_streams")))
+		for _, rawStream := range arrayValue(backupInput, "object_streams") {
+			streamRefs = append(streamRefs, asObject(rawStream)["object_ref"])
+		}
+		streamsBound := sameObjectRefSet(manifestRefs, streamRefs)
+		for _, rawStream := range arrayValue(backupInput, "object_streams") {
+			stream := asObject(rawStream)
+			if stringValue(asObject(stream["object_ref"]), "environment_id") != stringValue(backupInput, "environment_id") {
+				streamsBound = false
+			}
+			matched := false
+			for _, rawObject := range arrayValue(manifest, "objects") {
+				object := asObject(rawObject)
+				if !reflect.DeepEqual(object["object_ref"], stream["object_ref"]) {
+					continue
+				}
+				matched = true
+				expectedSize, err := integerValue(object["size_bytes"])
+				if err != nil {
+					return nil, err
+				}
+				maximumBytes, err := integerValue(asObject(stream["transfer_ref"])["maximum_bytes"])
+				if err != nil {
+					return nil, err
+				}
+				if maximumBytes < expectedSize {
+					streamsBound = false
+				}
+				break
+			}
+			if !matched {
+				streamsBound = false
+			}
+		}
+		required := arrayValue(backupInput, "required_check_ids")
+		results := arrayValue(backupOutput, "check_results")
+		requested := make(map[string]bool, len(required))
+		for _, rawID := range required {
+			requested[rawID.(string)] = true
+		}
+		observed := make(map[string]string, len(results))
+		complete := len(results) == len(requested)
+		for _, rawResult := range results {
+			item := asObject(rawResult)
+			id := stringValue(item, "check_id")
+			if !requested[id] {
+				complete = false
+			}
+			if _, exists := observed[id]; exists {
+				complete = false
+			}
+			observed[id] = stringValue(item, "result")
+		}
+		derived := "valid"
+		hasFailure, hasUnknown := false, false
+		for id := range requested {
+			result, ok := observed[id]
+			if !ok {
+				complete = false
+			}
+			switch result {
+			case "pass":
+			case "fail":
+				hasFailure = true
+			case "unknown":
+				hasUnknown = true
+			default:
+				complete = false
+			}
+		}
+		if hasFailure {
+			derived = "invalid"
+		} else if hasUnknown || !complete {
+			derived = "unknown"
+		}
+		return map[string]any{
+			"schemas_valid":                 true,
+			"manifest_binding_valid":        manifestBinding,
+			"object_streams_match_manifest": streamsBound,
+			"check_set_complete":            complete,
+			"derived_validation_result":     derived,
+			"backup_valid": manifestBinding && streamsBound && complete && derived == "valid" &&
+				stringValue(backupOutput, "validation_result") == "valid",
+		}, nil
 	case "game.data.save.backup-prepare.binding", "game.data.save.backup-prepare.reject-unsafe-datasets":
 		dataInput, dataOutput := asObject(input["data_input"]), asObject(input["data_output"])
 		saveInput, saveOutput := asObject(input["save_input"]), asObject(input["save_output"])
@@ -113,12 +283,12 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			value map[string]any
 			name  string
 		}{
-			"urn:gameserver-controller:0.8.0-draft:game:data-describe-input":   {dataInput, "data describe input"},
-			"urn:gameserver-controller:0.8.0-draft:game:data-describe-output":  {dataOutput, "data describe output"},
-			"urn:gameserver-controller:0.8.0-draft:game:save-request-input":    {saveInput, "save request input"},
-			"urn:gameserver-controller:0.8.0-draft:game:save-request-output":   {saveOutput, "save request output"},
-			"urn:gameserver-controller:0.8.0-draft:game:backup-prepare-input":  {prepareInput, "backup prepare input"},
-			"urn:gameserver-controller:0.8.0-draft:game:backup-prepare-output": {prepareOutput, "backup prepare output"},
+			"urn:gameserver-controller:0.9.0-draft:game:data-describe-input":   {dataInput, "data describe input"},
+			"urn:gameserver-controller:0.9.0-draft:game:data-describe-output":  {dataOutput, "data describe output"},
+			"urn:gameserver-controller:0.9.0-draft:game:save-request-input":    {saveInput, "save request input"},
+			"urn:gameserver-controller:0.9.0-draft:game:save-request-output":   {saveOutput, "save request output"},
+			"urn:gameserver-controller:0.9.0-draft:game:backup-prepare-input":  {prepareInput, "backup prepare input"},
+			"urn:gameserver-controller:0.9.0-draft:game:backup-prepare-output": {prepareOutput, "backup prepare output"},
 		} {
 			if err := pkg.validateSchema(schemaID, message.value); err != nil {
 				return nil, fmt.Errorf("%s does not match schema: %w", message.name, err)
@@ -185,10 +355,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		}, nil
 	case "game.save.unknown-requires-reconciliation":
 		saveInput, saveOutput := asObject(input["save_input"]), asObject(input["save_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:save-request-input", saveInput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:save-request-input", saveInput); err != nil {
 			return nil, fmt.Errorf("save input does not match schema: %w", err)
 		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:save-request-output", saveOutput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:save-request-output", saveOutput); err != nil {
 			return nil, fmt.Errorf("save output does not match schema: %w", err)
 		}
 		unknown := stringValue(saveOutput, "outcome") == "outcome_unknown"
@@ -212,7 +382,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			{"server.start", startOperation},
 			{"server.stop", stopOperation},
 		} {
-			if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:operations:operation", operation.value); err != nil {
+			if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:operations:operation", operation.value); err != nil {
 				return nil, fmt.Errorf("%s operation does not match schema: %w", operation.name, err)
 			}
 		}
@@ -272,12 +442,12 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			value map[string]any
 			name  string
 		}{
-			"urn:gameserver-controller:0.8.0-draft:execution:systemd-unit-logs-read-input":       {logsInput, "logs input"},
-			"urn:gameserver-controller:0.8.0-draft:execution:systemd-unit-logs-read-output":      {logsOutput, "logs output"},
-			"urn:gameserver-controller:0.8.0-draft:execution:systemd-unit-health-inspect-input":  {healthInput, "health input"},
-			"urn:gameserver-controller:0.8.0-draft:execution:systemd-unit-health-inspect-output": {healthOutput, "health output"},
-			"urn:gameserver-controller:0.8.0-draft:execution:systemd-unit-delete-input":          {deleteInput, "delete input"},
-			"urn:gameserver-controller:0.8.0-draft:execution:systemd-unit-delete-output":         {deleteOutput, "delete output"},
+			"urn:gameserver-controller:0.9.0-draft:execution:systemd-unit-logs-read-input":       {logsInput, "logs input"},
+			"urn:gameserver-controller:0.9.0-draft:execution:systemd-unit-logs-read-output":      {logsOutput, "logs output"},
+			"urn:gameserver-controller:0.9.0-draft:execution:systemd-unit-health-inspect-input":  {healthInput, "health input"},
+			"urn:gameserver-controller:0.9.0-draft:execution:systemd-unit-health-inspect-output": {healthOutput, "health output"},
+			"urn:gameserver-controller:0.9.0-draft:execution:systemd-unit-delete-input":          {deleteInput, "delete input"},
+			"urn:gameserver-controller:0.9.0-draft:execution:systemd-unit-delete-output":         {deleteOutput, "delete output"},
 		} {
 			if err := pkg.validateSchema(schemaID, message.value); err != nil {
 				return nil, fmt.Errorf("%s does not match schema: %w", message.name, err)
@@ -309,10 +479,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		}, nil
 	case "integration.proxy.register.expired-readiness-rejected":
 		registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
 			return nil, fmt.Errorf("register input does not match schema: %w", err)
 		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
 			return nil, fmt.Errorf("register output does not match schema: %w", err)
 		}
 		requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
@@ -342,10 +512,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		}, nil
 	case "integration.proxy.register.accepted-is-not-routable":
 		registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
 			return nil, fmt.Errorf("register input does not match schema: %w", err)
 		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
 			return nil, fmt.Errorf("register output does not match schema: %w", err)
 		}
 		requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
@@ -381,10 +551,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			value map[string]any
 			name  string
 		}{
-			"urn:gameserver-controller:0.8.0-draft:integrations:proxy-backend-drain-input":       {drainInput, "drain input"},
-			"urn:gameserver-controller:0.8.0-draft:integrations:proxy-backend-drain-output":      {drainOutput, "drain output"},
-			"urn:gameserver-controller:0.8.0-draft:integrations:proxy-backend-unregister-input":  {unregisterInput, "unregister input"},
-			"urn:gameserver-controller:0.8.0-draft:integrations:proxy-backend-unregister-output": {unregisterOutput, "unregister output"},
+			"urn:gameserver-controller:0.9.0-draft:integrations:proxy-backend-drain-input":       {drainInput, "drain input"},
+			"urn:gameserver-controller:0.9.0-draft:integrations:proxy-backend-drain-output":      {drainOutput, "drain output"},
+			"urn:gameserver-controller:0.9.0-draft:integrations:proxy-backend-unregister-input":  {unregisterInput, "unregister input"},
+			"urn:gameserver-controller:0.9.0-draft:integrations:proxy-backend-unregister-output": {unregisterOutput, "unregister output"},
 		} {
 			if err := pkg.validateSchema(schemaID, message.value); err != nil {
 				return nil, fmt.Errorf("%s does not match schema: %w", message.name, err)
@@ -403,10 +573,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 	case "game.release.install.configure.fail-closed":
 		releaseInput := asObject(input["release_describe_input"])
 		releaseOutput := asObject(input["release_describe_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:release-describe-input", releaseInput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:release-describe-input", releaseInput); err != nil {
 			return nil, fmt.Errorf("release input does not match schema: %w", err)
 		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:release-describe-output", releaseOutput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:release-describe-output", releaseOutput); err != nil {
 			return nil, fmt.Errorf("release output does not match schema: %w", err)
 		}
 		releaseBound := stringValue(releaseInput, "release_id") == stringValue(releaseOutput, "release_id")
@@ -429,10 +599,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		}
 		installInput := asObject(input["install_input"])
 		installOutput := asObject(input["install_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:install-input", installInput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:install-input", installInput); err != nil {
 			return nil, fmt.Errorf("install input does not match schema: %w", err)
 		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:install-output", installOutput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:install-output", installOutput); err != nil {
 			return nil, fmt.Errorf("install output does not match schema: %w", err)
 		}
 		installBound := reflect.DeepEqual(installInput["target"], installOutput["target"]) &&
@@ -444,10 +614,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			stringValue(installOutput, "outcome") == "rejected" && !boolValue(installOutput, "installation_started")
 		configureInput := asObject(input["configure_input"])
 		configureOutput := asObject(input["configure_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:configure-input", configureInput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:configure-input", configureInput); err != nil {
 			return nil, fmt.Errorf("configure input does not match schema: %w", err)
 		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:configure-output", configureOutput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:configure-output", configureOutput); err != nil {
 			return nil, fmt.Errorf("configure output does not match schema: %w", err)
 		}
 		configureBound := reflect.DeepEqual(configureInput["target"], configureOutput["target"]) &&
@@ -467,10 +637,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 	case "game.install.repeat-same-release-is-idempotent":
 		installInput := asObject(input["install_request"])
 		installOutput := asObject(input["install_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:install-input", installInput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:install-input", installInput); err != nil {
 			return nil, fmt.Errorf("install input does not match schema: %w", err)
 		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:install-output", installOutput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:install-output", installOutput); err != nil {
 			return nil, fmt.Errorf("install output does not match schema: %w", err)
 		}
 		bound := reflect.DeepEqual(installInput["target"], installOutput["target"]) &&
@@ -488,10 +658,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 	case "game.validate-installation.unknown-blocks-start":
 		validateInput := asObject(input["validate_request"])
 		validateOutput := asObject(input["validate_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:validate-installation-input", validateInput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:validate-installation-input", validateInput); err != nil {
 			return nil, fmt.Errorf("validation input does not match schema: %w", err)
 		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:validate-installation-output", validateOutput); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:validate-installation-output", validateOutput); err != nil {
 			return nil, fmt.Errorf("validation output does not match schema: %w", err)
 		}
 		bound := reflect.DeepEqual(validateInput["target"], validateOutput["target"]) &&
@@ -503,11 +673,11 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"start_permitted":   !unknown && stringValue(validateOutput, "validation_result") == "valid",
 		}, nil
 	case "game.readiness.unknown-required-check-blocks-ready":
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:readiness-check-input", input); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:readiness-check-input", input); err != nil {
 			return nil, fmt.Errorf("readiness input does not match schema: %w", err)
 		}
 		output := asObject(fixture["output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.8.0-draft:game:readiness-check-output", output); err != nil {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.9.0-draft:game:readiness-check-output", output); err != nil {
 			return nil, fmt.Errorf("readiness output does not match schema: %w", err)
 		}
 		bound := input["server_id"] == output["server_id"] &&
@@ -736,6 +906,36 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 	default:
 		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
 	}
+}
+
+func sameObjectRefSet(left, right []any) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	leftSet, rightSet := make(map[string]bool, len(left)), make(map[string]bool, len(right))
+	for _, value := range left {
+		encoded, err := json.Marshal(value)
+		if err != nil || leftSet[string(encoded)] {
+			return false
+		}
+		leftSet[string(encoded)] = true
+	}
+	for _, value := range right {
+		encoded, err := json.Marshal(value)
+		if err != nil || rightSet[string(encoded)] {
+			return false
+		}
+		rightSet[string(encoded)] = true
+	}
+	if len(leftSet) != len(rightSet) {
+		return false
+	}
+	for key := range leftSet {
+		if !rightSet[key] {
+			return false
+		}
+	}
+	return true
 }
 
 func sameStringSet(left, right []any) bool {
