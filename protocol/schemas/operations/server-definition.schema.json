@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:operations:server-definition",
+  "title": "Logical server definition parameters",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["server_id", "environment_id", "display_name", "hosting_profile", "storage_profile", "game", "execution"],
+  "properties": {
+    "server_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "environment_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 200},
+    "hosting_profile": {"type": "string", "minLength": 1, "maxLength": 200},
+    "storage_profile": {"type": "string", "minLength": 1, "maxLength": 200},
+    "game": {
+      "type": "object", "additionalProperties": false,
+      "required": ["adapter_id", "release_channel"],
+      "properties": {
+        "adapter_id": {"type": "string", "minLength": 1, "maxLength": 160},
+        "release_channel": {"type": "string", "minLength": 1, "maxLength": 100}
+      }
+    },
+    "execution": {
+      "type": "object", "additionalProperties": false,
+      "required": ["adapter_id", "profile"],
+      "properties": {
+        "adapter_id": {"type": "string", "minLength": 1, "maxLength": 160},
+        "profile": {"type": "string", "minLength": 1, "maxLength": 200}
+      }
+    },
+    "network_profile": {"type": "string", "maxLength": 200},
+    "labels": {"type": "object", "additionalProperties": {"type": "string", "maxLength": 500}}
+  }
+}
