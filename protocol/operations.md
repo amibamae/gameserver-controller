@@ -221,14 +221,17 @@ Progress, events, results, and errors MUST NOT expose secret values or unnecessa
 
 ## 12. Results, failures, and partial completion
 
-A terminal operation result SHOULD contain:
-- Final status.
-- Confirmed outcome summary.
-- Affected logical and external resource references.
-- Completed and failed steps.
+The terminal operation record carries its final status and `completed_at` timestamp. Its optional `result` property uses the canonical [operation-result.schema.json](schemas/operations/operation-result.schema.json), which contains:
+- A confirmed outcome summary.
+- Affected external resource references.
+- Completed and failed step summaries.
 - Warnings and unresolved conditions.
-- Structured error when the operation did not succeed.
-- Completion timestamp and related audit references.
+- Related audit event IDs.
+- A `partial` flag indicating whether only part of the requested outcome was achieved.
+
+A failed operation MUST include a structured operation-level `error`. When known side effects or partial completion exist, the operation SHOULD also retain a result with `partial: true`. A successful operation MUST include a result and completion timestamp. A cancelled operation MUST include a completion timestamp and preserve any known external state.
+
+The canonical [operation.schema.json](schemas/operations/operation.schema.json) requires the trusted `actor_id` and immutable `request_snapshot`. The snapshot MUST contain validated request parameters and secret references only; resolved secret values MUST NOT be stored. A request fingerprint MAY be stored to support deterministic duplicate-request checks.
 
 For `failed` or `needs_operator` operations, the record MUST preserve known side effects and partial completion. For example, if provisioning created a VM but game preparation failed, the operation record must retain the VM reference and its observed state.
 

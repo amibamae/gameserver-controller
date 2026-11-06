@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:operations:operation-result",
+  "title": "Durable operation result",
+  "description": "Canonical summary of the confirmed outcome and any partial effects of a terminal operation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "outcome_summary",
+    "affected_resources",
+    "completed_steps",
+    "failed_steps",
+    "warnings",
+    "unresolved_conditions",
+    "audit_event_ids",
+    "partial"
+  ],
+  "properties": {
+    "outcome_summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "affected_resources": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+      }
+    },
+    "completed_steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step-summary"
+      }
+    },
+    "failed_steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/failed-step"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      }
+    },
+    "unresolved_conditions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unresolved-condition"
+      }
+    },
+    "audit_event_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      }
+    },
+    "partial": {
+      "type": "boolean"
+    }
+  },
+  "$defs": {
+    "step-summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step_id",
+        "step_type"
+      ],
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "step_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 2000
+        },
+        "external_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+          }
+        }
+      }
+    },
+    "failed-step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "step_id",
+        "step_type",
+        "error"
+      ],
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "step_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "error": {
+          "$ref": "urn:gameserver-controller:0.1.0-draft:common:protocol-error"
+        },
+        "external_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+          }
+        }
+      }
+    },
+    "unresolved-condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "condition_id",
+        "description"
+      ],
+      "properties": {
+        "condition_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "resource_ref": {
+          "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+        }
+      }
+    }
+  }
+}

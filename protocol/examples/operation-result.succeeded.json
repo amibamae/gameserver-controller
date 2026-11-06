@@ -1,0 +1,38 @@
+{
+  "outcome_summary": "The test backend was provisioned and passed its readiness checks.",
+  "affected_resources": [
+    {
+      "adapter_id": "hosting.example",
+      "environment_id": "test",
+      "resource_kind": "instance",
+      "external_id": "instance-test-001"
+    }
+  ],
+  "completed_steps": [
+    {
+      "step_id": "create-instance",
+      "step_type": "hosting.instance.create",
+      "summary": "Provider confirmed the instance exists.",
+      "external_refs": [
+        {
+          "adapter_id": "hosting.example",
+          "environment_id": "test",
+          "resource_kind": "instance",
+          "external_id": "instance-test-001"
+        }
+      ]
+    },
+    {
+      "step_id": "validate-ready",
+      "step_type": "server.readiness.validate",
+      "summary": "All required readiness checks passed."
+    }
+  ],
+  "failed_steps": [],
+  "warnings": [],
+  "unresolved_conditions": [],
+  "audit_event_ids": [
+    "audit-event-001"
+  ],
+  "partial": false
+}

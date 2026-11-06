@@ -1,0 +1,27 @@
+{
+  "fixture_id": "velocity-transfer-partial-results",
+  "protocol_version": "0.1.0-draft",
+  "contract_area": "integration.velocity.players.transfer",
+  "purpose": "A batch transfer records one explicit result per selected proxy session and reconciles unknown outcomes before retry.",
+  "input": {
+    "player_session_ids": [
+      "proxy-session-001",
+      "proxy-session-002",
+      "proxy-session-003"
+    ]
+  },
+  "expected": {
+    "requested_count": 3,
+    "outcome_counts": {
+      "transferred": 1,
+      "already_at_destination": 0,
+      "disconnected": 1,
+      "rejected": 0,
+      "failed": 0,
+      "outcome_unknown": 1
+    },
+    "retry_unknown_without_reconciliation": false
+  },
+  "side_effect_expectation": "simulated",
+  "notes": "The outcome_unknown session is inspected through the proxy before any retry; no player UUID or account data is required."
+}

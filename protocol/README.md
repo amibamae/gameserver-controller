@@ -36,6 +36,7 @@ The specification is divided into these areas:
 - **Adapter contracts:** hosting, storage, execution, game runtime, and integration responsibilities.
 - **Management API:** versioned client-facing operations, read models, authentication, authorization, and event access.
 - **Security and privacy:** trust boundaries, secret handling, consent, audit, and environment isolation.
+- **Compatibility:** protocol negotiation, schema package identity, version evolution, deprecation, and safe operation recovery.
 - **Conformance:** shared test vectors and behavioral requirements for independent implementations.
 
 ## Separate communication surfaces
@@ -96,7 +97,7 @@ A conforming implementation must:
 - Pass language-neutral conformance tests and shared test vectors.
 - Enforce the same safety and privacy requirements as the core specification.
 
-Compatibility policy must define handling of unknown fields, enum values, optional capabilities, deprecated fields, and major/minor/patch changes before the protocol is declared stable.
+The initial negotiation and evolution policy is defined in [Protocol and Schema Compatibility](COMPATIBILITY.md). It remains a draft and must be reviewed before protocol 1.0.
 
 ## Design constraints
 
@@ -131,6 +132,7 @@ protocol/
 │   ├── operations/
 │   ├── lifecycle/
 │   ├── hosting/
+│   ├── integrations/
 │   └── storage/
 ├── examples/
 ├── rpc/
@@ -172,6 +174,7 @@ The initial package is version 0.1.0-draft. It remains draft until semantics, sc
 - [Management API authorization](management-api/authorization.md)
 - [Standard operation catalog](operation-catalog.md)
 - [Security requirements](security.md)
+- [Compatibility and schema versioning](COMPATIBILITY.md)
 - [Conformance requirements and test vectors](conformance/requirements.md)
 - [Execution-agnostic architecture decision](../docs/decisions/0003-execution-agnostic-runtime.md)
 - [Encoding and binding decision](../docs/decisions/0004-protocol-encoding-and-bindings.md)

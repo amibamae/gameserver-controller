@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:integrations:velocity-player-transfer-result",
+  "title": "Velocity player transfer result",
+  "description": "Per-session outcomes for a requested player transfer cohort.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "waiting_cohort_id",
+    "source_backend_id",
+    "destination_backend_id",
+    "target_instance_ref",
+    "requested_count",
+    "outcome_counts",
+    "results"
+  ],
+  "properties": {
+    "waiting_cohort_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "source_backend_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "destination_backend_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "target_instance_ref": {
+      "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+    },
+    "requested_count": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "outcome_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transferred",
+        "already_at_destination",
+        "disconnected",
+        "rejected",
+        "failed",
+        "outcome_unknown"
+      ],
+      "properties": {
+        "transferred": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "already_at_destination": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "disconnected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "outcome_unknown": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "proxy_session_id",
+          "outcome"
+        ],
+        "properties": {
+          "proxy_session_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "outcome": {
+            "enum": [
+              "transferred",
+              "already_at_destination",
+              "disconnected",
+              "rejected",
+              "failed",
+              "outcome_unknown"
+            ]
+          },
+          "error": {
+            "$ref": "urn:gameserver-controller:0.1.0-draft:common:protocol-error"
+          }
+        }
+      }
+    }
+  }
+}

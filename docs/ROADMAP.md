@@ -36,7 +36,9 @@
 - [x] Select draft standards: JSON, JSON Schema 2020-12, JSON-RPC 2.0, OpenAPI 3.2.1, RFC 3339, and RFC 8785 where canonicalization is required.
 - [ ] Validate the selected standards, validators, generators, and transport binding across target languages.
 - [x] Publish an initial set of language-neutral schemas, examples, test vectors, and conformance requirements.
-- [ ] Complete operation output/result schemas and capability-specific input/output schemas; validate all schema references and fixture expectations.
+- [x] Publish a canonical durable-operation result schema and initial Velocity player-transfer request/result schemas.
+- [ ] Expand capability-specific input/output schemas across hosting, storage, execution, game, and integration operations; validate all schema references and fixture expectations.
+- [x] Publish initial draft compatibility rules for negotiation, schema identity, evolution, and in-flight operations.
 - [ ] Review the complete protocol and freeze compatibility rules.
 - [ ] Build independent implementations in at least two programming languages and pass the same conformance suite.
 - [ ] Publish stable protocol v1.0 only after independent interoperability evidence.
@@ -130,4 +132,4 @@ The first end-to-end target is Vultr + Wasabi + Paper + Velocity on Debian. Exis
 
 The project is in **Phase 1 — Language-independent protocol design**. The protocol principles, common types, and first durable operation protocol draft are published. The protocol remains 0.1.0-draft. Initial JSON, JSON Schema, JSON-RPC, OpenAPI, timestamp, and canonicalization choices, lifecycle model, five adapter contracts, security draft, management API, schemas, examples, and test vectors are published. They have not all been independently validated or reviewed, and no controller or production adapter implementation has been built.
 
-Initial lifecycle, five adapter, RPC, management API, security, schema, example, and conformance drafts have been published. The next work is review and schema/vector validation, then complete operation-specific contracts and independent cross-language interoperability tests.
+Initial lifecycle, five adapter, RPC, management API, security, schema, example, and conformance drafts have been published. The initial operation-result and Velocity transfer contracts now have schemas and examples, and a local validator plus CI workflow has been added. The next work is to review those contracts, extend capability-specific schemas, validate the remaining edge cases, and build independent cross-language interoperability tests.
