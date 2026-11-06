@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:hosting:instance-create-output",
+  "title": "Hosting instance create output",
+  "description": "Observed provider result for one create request. Adapter RPC outcome separately distinguishes completion, acceptance, and uncertainty.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["instance_ref", "state", "observed_at"],
+  "properties": {
+    "instance_ref": {
+      "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+    },
+    "state": {
+      "enum": ["creating", "active", "stopped", "unknown"]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "provider_operation_ref": {
+      "$ref": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref"
+    },
+    "safe_diagnostics": {
+      "type": "array",
+      "items": {"type": "string", "maxLength": 1000}
+    }
+  }
+}
