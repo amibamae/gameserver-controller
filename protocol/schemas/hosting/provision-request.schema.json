@@ -28,7 +28,7 @@
         "source_uri": {"type": "string", "format": "uri"},
         "revision": {"type": "string", "minLength": 1, "maxLength": 200},
         "digest": {"type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$"},
-        "inputs": {"type": "object"}
+        "inputs": {"type": "object", "description": "Non-secret bootstrap configuration only. Credential material MUST be supplied through top-level secret_refs and a protected resolution channel."}
       }
     },
     "game": {
