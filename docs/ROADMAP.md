@@ -19,7 +19,8 @@
 - [x] Establish separate adapter-protocol and management-API communication surfaces.
 - [x] Establish that the controller must be usable without a web panel; future web, desktop, and mobile clients may be developed independently.
 - [x] Draft common protocol concepts: identifiers, external resource references, timestamps, versions, adapter identity, capabilities, structured errors, request context, and secret references.
-- [x] Publish the first durable operation protocol draft covering acceptance, operation and step states, idempotency, timeouts, retries, cancellation, reconciliation, recovery, progress, and partial outcomes.
+- [x] Publish the durable operation protocol draft covering acceptance, legal operation/step status transitions, idempotency, timeouts, retries, cancellation, reconciliation, recovery, progress, and partial outcomes.
+- [x] Publish the initial standard operation catalog and parameter schemas for logical-server definition, provision, start, stop, backup, restore, and destroy.
 - [ ] Review and agree on common types and resolve remaining open decisions.
 - [ ] Review and agree on operation semantics, legal status transitions, and cancellation/recovery rules.
 - [x] Publish initial lifecycle states, allowed transitions, preconditions, postconditions, and failure semantics in draft form.
@@ -35,7 +36,7 @@
 - [x] Select draft standards: JSON, JSON Schema 2020-12, JSON-RPC 2.0, OpenAPI 3.2.1, RFC 3339, and RFC 8785 where canonicalization is required.
 - [ ] Validate the selected standards, validators, generators, and transport binding across target languages.
 - [x] Publish an initial set of language-neutral schemas, examples, test vectors, and conformance requirements.
-- [ ] Expand coverage to every operation and capability; validate all schemas and fixture expectations.
+- [ ] Complete operation output/result schemas and capability-specific input/output schemas; validate all schema references and fixture expectations.
 - [ ] Review the complete protocol and freeze compatibility rules.
 - [ ] Build independent implementations in at least two programming languages and pass the same conformance suite.
 - [ ] Publish stable protocol v1.0 only after independent interoperability evidence.
