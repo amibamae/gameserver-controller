@@ -49,6 +49,8 @@ Core owns orchestration policy and state transitions, not vendor-specific API ca
 
 ## Adapter boundaries
 
+The protocol is execution-agnostic. A conventional VM and system service manager are first-class; Docker, Kubernetes, and Agones are optional integrations, not prerequisites. See [ADR 0003](decisions/0003-execution-agnostic-runtime.md).
+
 ### Hosting-provider adapter
 
 A hosting adapter translates platform operations into provider-specific API calls. Potential capabilities include instance create/inspect/start/stop/reboot/destroy, region and plan discovery, standard operating-system selection, bootstrap delivery/execution where supported, networking/firewall management, SSH key assignment, and asynchronous operation status.
@@ -62,6 +64,12 @@ A storage adapter provides upload/download, object metadata and checksums, listi
 ### Game-server adapter
 
 A game adapter describes installation, runtime requirements, configuration, startup/shutdown, readiness/health, data directories, backup consistency, version compatibility, and migration behavior. Initial target: Minecraft Java Edition with Paper.
+
+### Execution adapter
+
+The execution adapter manages the process/workload unit on an already provisioned execution environment. The initial reference is `execution.systemd` on a conventional Linux VM. Optional implementations may support containers, Kubernetes, or Agones, but none is mandatory. The execution adapter does not own provider VM lifecycle or game-specific save/compatibility semantics.
+
+The execution adapter is separate from the game adapter: the execution adapter starts/stops a unit; the game adapter defines installation, configuration, readiness, persistent data, save/backup consistency, and version compatibility.
 
 ### Integrations
 
@@ -94,6 +102,8 @@ Software rollback and bootstrap rollback are distinct operations. A replacement 
 Promotion of a bootstrap revision or software release does not itself authorize a world migration. Major Minecraft upgrades and world migrations require explicit operator approval.
 
 ## Lifecycle safety invariants
+
+Lifecycle state is separate from provider instance state, execution-unit state, and durable operation status. See the [lifecycle protocol](../protocol/lifecycle.md) for the normative draft state machine and transitions.
 
 1. Never destroy an instance with required unsaved data until backup upload and verification succeed.
 2. Failed backup or verification blocks destructive cleanup.
