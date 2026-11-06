@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.1.0-draft:common:external-resource-ref",
+  "title": "External resource reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["adapter_id", "environment_id", "resource_kind", "external_id"],
+  "properties": {
+    "adapter_id": {"type": "string", "minLength": 1, "maxLength": 160},
+    "environment_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "resource_kind": {"type": "string", "minLength": 1, "maxLength": 80},
+    "external_id": {"type": "string", "minLength": 1, "maxLength": 1024}
+  }
+}
