@@ -184,6 +184,13 @@ func backup(host string, execute bool, confirmation string, timeout time.Duratio
 		}
 		return fmt.Errorf("backup outcome unknown; %s; inspect %s on %s before retrying", detail, backupUnit, host)
 	}
+	if !systemdInvocationFinished(after) {
+		detail := fmt.Sprintf("systemd start job returned before the unit reached a completed state: invocation_id=%q active=%q sub=%q", after.invocationID, after.active, after.sub)
+		if auditErr := appendAuditRecord(auditPath, operationID, "outcome_unknown", host, detail); auditErr != nil {
+			return fmt.Errorf("backup outcome unknown (%s); audit update also failed: %w", detail, auditErr)
+		}
+		return fmt.Errorf("backup outcome unknown; %s; inspect %s on %s before retrying", detail, backupUnit, host)
+	}
 	if after.result != "success" || after.exitCode != "0" {
 		detail := fmt.Sprintf("systemd invocation_id=%q result=%q exit=%q active=%q", after.invocationID, after.result, after.exitCode, after.active)
 		if auditErr := appendAuditRecord(auditPath, operationID, "failed", host, detail); auditErr != nil {
@@ -365,6 +372,19 @@ func readUnitState(ctx context.Context, host, unit string) (unitState, error) {
 		exitCode:     values["ExecMainStatus"],
 		invocationID: values["InvocationID"],
 	}, nil
+}
+
+func systemdInvocationFinished(state unitState) bool {
+	switch state.active {
+	case "inactive":
+		return state.sub == "dead"
+	case "active":
+		return state.sub == "exited"
+	case "failed":
+		return state.sub == "failed"
+	default:
+		return false
+	}
 }
 
 func remote(ctx context.Context, host, command string) (string, error) {
