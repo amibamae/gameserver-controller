@@ -189,7 +189,7 @@ A readiness policy may include:
 
 Proxy registration is a separate integration action. A backend MUST NOT receive new players unless it is `ready`, the registration is confirmed, and current routing policy permits it. `degraded`, `failed`, and transitional states are not eligible for new routing. Draining removes eligibility before shutdown.
 
-## 7. Instance and runtime observations
+## 8. Instance and runtime observations
 
 The controller SHOULD retain observed provider instance state separately from logical lifecycle state. Suggested normalized instance observations are `unknown`, `creating`, `active`, `stopping`, `stopped`, `destroying`, `absent`, and `error`.
 
@@ -197,19 +197,19 @@ The execution adapter SHOULD report `unknown`, `absent`, `installed`, `stopped`,
 
 An observation may be stale. Implementations MUST distinguish last-known state from currently confirmed state and MUST NOT use stale observations to authorize destructive actions.
 
-## 8. Operation relationship
+## 9. Operation relationship
 
 Every mutating transition MUST be caused by one durable operation. The operation status model in [operations.md](operations.md) remains separate: an operation may be `running` while the server is `provisioning`, `backing_up`, or `destroying`.
 
 A server state change and its operation/audit evidence MUST be committed consistently, or the implementation MUST document and test a recovery mechanism that prevents untracked transitions.
 
-## 9. Concurrency and locks
+## 10. Concurrency and locks
 
 Operations that can affect the same server, runtime, instance, or data MUST use the lock scopes defined by the operation protocol. At minimum, provision, start, stop, backup, restore, update, replacement, and destroy MUST NOT race against one another for the same logical server.
 
 A controller restart or lost process MUST NOT release a lock while the associated operation has unknown external effects. Recovery MUST reconcile before allowing a conflicting operation.
 
-## 10. Conformance requirements
+## 11. Conformance requirements
 
 A lifecycle-conforming implementation MUST:
 - Implement every public state and legal transition in this document.
@@ -222,7 +222,7 @@ A lifecycle-conforming implementation MUST:
 - Reconcile ambiguous provider/runtime outcomes before retry.
 - Pass the lifecycle test vectors in [conformance](conformance/requirements.md).
 
-## 11. Open review items
+## 12. Open review items
 
 This draft intentionally leaves the following for maintainer review before stabilization:
 - Whether forced stop requires a distinct public state or remains an operation detail.
