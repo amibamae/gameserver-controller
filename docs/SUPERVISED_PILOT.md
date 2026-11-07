@@ -52,7 +52,7 @@ The [machine-readable capacity policy](../pilot/capacity-policy.json) allows at 
 
 A future create flow must reserve its slot atomically before calling the provider. The reservation consumes capacity. Every instance continues to consume capacity until the provider confirms it is absent or destroyed. A create or destroy with an unresolved outcome continues to consume its slot; an unknown create cannot free capacity until provider state confirms absence or destruction. Reject unsupported environments, duplicate or occupied slot requests, and any create that would exceed the total limit.
 
-The repository includes reference cases for available slots, conflicts, unresolved outcomes, the total limit, and confirmed release. The case checker validates those examples against the policy; it is not called by the pilot CLI or any provisioning path.
+The repository includes reference cases for available slots, conflicts, unresolved outcomes, the total limit, and confirmed release. From the repository root, run `go run ./cmd/pilot-capacity-check` to validate them against the policy. This Go checker is a declarative reference check; it is not called by the pilot CLI or any provisioning path.
 
 **This policy is declarative only.** The current `cmd/supervised-pilot` CLI supports backup, status, and local history; it has no VM-create path. The policy is not enforced by that CLI and does not constrain actual provisioning yet.
 
