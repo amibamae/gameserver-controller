@@ -1,3 +1,4 @@
+/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 # Contributing
 
 I welcome bug reports, design criticism, documentation fixes, tests, features, and adapters for games, hosting providers, and storage providers. You do not need to be an expert, and you do not need to use AI.
@@ -43,6 +44,26 @@ Do not add backdoors, hidden behavior, credential exfiltration, undocumented net
 Add relevant unit, integration, and security tests. If a test uses infrastructure, isolate it. Never point a test at production systems or production data.
 
 Explain why a dependency is needed. Review its maintenance, security, license, and whether the project can avoid it. Do not add uncontrolled downloads or unpinned executable artifacts.
+
+The Go checks do not require AI or provider credentials. Run the same core checks
+locally before opening a pull request:
+
+```sh
+go mod verify
+gofmt -l $(git ls-files '*.go')
+go test -count=1 ./...
+go test -race -count=1 ./...
+go vet ./...
+go build ./...
+go run ./cmd/protocol-check
+go run ./cmd/config-check validate configs/controller.example.yaml
+go run ./cmd/pilot-capacity-check
+```
+
+Review any files printed by `gofmt -l`; the command reports formatting problems
+but does not change files. CI runs these checks on pull requests. Protocol and
+pilot-specific workflows also run when their schemas, fixtures, policy, or
+commands change.
 
 ## Privacy and telemetry
 
