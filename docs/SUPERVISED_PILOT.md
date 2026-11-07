@@ -27,6 +27,25 @@ If the post-run invocation ID is missing or malformed, a nonempty prior ID is ma
 
 The pilot does not stop Paper, restore a world, destroy a server, or install or modify the backup service.
 
+## Operator handoff checklist
+
+No live-server validation is claimed by the repository's automated checks or by this checklist. It describes an operator-supervised handoff; it does not report that a live backup has been run. The two-VM capacity policy below remains declarative and is not enforced by the pilot CLI.
+
+Before an executed backup:
+
+1. Confirm the SSH alias resolves to the intended server and review its host key.
+2. Confirm the SSH account has non-interactive sudo access for the pilot's read-only `systemctl show` calls and `systemctl start --wait minecraft-backup.service`.
+3. Run `gsc-pilot status --host <ssh-alias>` and review the game, backup, and timer unit states.
+4. Run `gsc-pilot backup --host <ssh-alias>` without `--execute`. Review the target and service in the dry-run output; dry-run does not connect to the server.
+5. Execute only after those checks, using the exact same alias for both flags:
+
+   ```sh
+   gsc-pilot backup --host <ssh-alias> --execute --confirm-host <ssh-alias>
+   ```
+
+6. Review the command result and run `gsc-pilot history` under the same local account. If the result is `outcome_unknown`, do not retry; inspect the service state and logs through the existing server process before deciding what to do.
+7. After systemd reports success, separately confirm that the expected backup artifacts exist and that the existing backup process verifies their storage and integrity. The pilot's `service_succeeded` event confirms only the systemd invocation result.
+
 ## Declarative VM capacity policy
 
 The [machine-readable capacity policy](../pilot/capacity-policy.json) allows at most two VM instances total: one in `production`, plus one shared slot occupied by either `staging` or `testing`. `staging` and `testing` cannot occupy the shared slot at the same time.
