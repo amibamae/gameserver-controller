@@ -43,10 +43,17 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 ### Lifecycle
 - Every documented transition is accepted when preconditions pass.
 - Every undocumented transition is rejected.
-- Destroyed logical server can be reprovisioned without changing server ID.
+- Destroyed logical server can be reprovisioned without changing server ID or reusing the old concrete instance reference; a replacement starts a new data generation.
 - Instance replacement changes instance reference.
+- `ready` requires one fresh, exact-target result for every check in the game's declared versioned readiness set; missing, duplicate, extra, unknown, failed, stale, or mismatched results block readiness.
 - Non-ready/degraded/draining runtime is not routable.
 - Failed backup verification blocks destruction.
+
+### Protocol compatibility
+- Negotiation selects exactly one mutually supported protocol version; no common version fails with `core.compatibility.unsupported_version` and a validation/authorization error cannot trigger a lower-version retry.
+- Unknown optional top-level fields on read-only Server and Operation resources are ignored, while unknown request fields and unknown nested resource fields are rejected.
+- Unknown lifecycle or operation status values fail safely with `core.compatibility.unknown_state`; they never authorize a side effect.
+- An in-flight operation preserves its accepted protocol and exact adapter capability versions across restart/upgrade, reconciles uncertain steps, and never replays completed effects; unavailable versions without a tested migration require operator intervention.
 
 ### Operations
 - Event sequence numbers increase monotonically per operation; consumers ignore identical duplicate deliveries without reapplying them or regressing their cursor, detect gaps, and recover by reading the operation resource.
@@ -132,6 +139,11 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 
 - [valid-provision-request.json](test-vectors/valid-provision-request.json)
 - [invalid-lifecycle-transition.json](test-vectors/invalid-lifecycle-transition.json)
+- [lifecycle-replacement-identity.json](test-vectors/lifecycle-replacement-identity.json)
+- [lifecycle-required-readiness-set.json](test-vectors/lifecycle-required-readiness-set.json)
+- [protocol-version-negotiation-no-downgrade.json](test-vectors/protocol-version-negotiation-no-downgrade.json)
+- [compatibility-response-evolution.json](test-vectors/compatibility-response-evolution.json)
+- [operation-upgrade-recovery.json](test-vectors/operation-upgrade-recovery.json)
 - [backup-verification-blocks-destroy.json](test-vectors/backup-verification-blocks-destroy.json)
 - [idempotency-key-conflict.json](test-vectors/idempotency-key-conflict.json)
 - [idempotency-key-replay-same-request.json](test-vectors/idempotency-key-replay-same-request.json)
