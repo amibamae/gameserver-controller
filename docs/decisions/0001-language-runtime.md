@@ -6,7 +6,7 @@
 
 ## Decision
 
-Use Go for the initial controller, command-line tools, and protocol validation tooling. The repository's Go module currently targets Go 1.21.
+Use Go for the initial controller, command-line tools, and protocol validation tooling. The Go module targets Go 1.23 because the initial durable operation store uses bbolt v1.4.3.
 
 Keep protocol meaning defined by the published contracts, schemas, and conformance fixtures. Community members may contribute adapters, clients, or implementations in other languages. A second-language implementation is not required for project releases.
 
