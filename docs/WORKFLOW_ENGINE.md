@@ -83,15 +83,17 @@ controllers or remote workers need a different transactional locking design.
 
 ## Limits
 
-This package does not provide the standard
-`server.provision`, `server.backup`,
-`server.restore`, or `server.destroy` workflow definitions, or expose a
-controller API/worker. Cancellation handling, process or remote
-adapter transports, runtime configuration, credential-accessor integration,
-and provider adapters remain separate work. A bounded systemd credential
-accessor exists in `internal/credential`, but the workflow engine does not call
-it. Tests use only scripted fake adapters and a local temporary bbolt database;
-they do not contact a provider or server.
+This package includes a generic durable `server.destroy` workflow with fake-
+adapter tests. The workflow requires trusted profile, verified-backup, and
+authorization resolvers, but has no production hosting adapter or `gsc-pilot`
+CLI command wired to it. The standard `server.provision`, `server.backup`, and
+`server.restore` workflow definitions and a controller API/worker remain future
+work. Cancellation handling, process or remote adapter transports, runtime
+configuration, credential-accessor integration, and provider adapters remain
+separate work. A bounded systemd credential accessor exists in
+`internal/credential`, but the workflow engine does not call it. Tests use only
+scripted fake adapters and a local temporary bbolt database; they do not contact
+a provider or server.
 
 The workflow package can build a short-lived readiness assertion from a
 persisted, successful `game.readiness.check` step and a trusted, versioned

@@ -1,4 +1,4 @@
-// Package pilotvultr wires the one-VM pilot policy to Vultr create and
+// Package pilotvultr wires the two-slot pilot policy to Vultr create and
 // reconciliation calls. It does not contain credentials or make calls until
 // a caller invokes Provision.
 package pilotvultr

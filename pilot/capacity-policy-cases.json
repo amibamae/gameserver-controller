@@ -23,20 +23,40 @@
       "expected": {"allowed": true, "reason": "slot_available"}
     },
     {
-      "id": "unmanaged-live-production-does-not-use-managed-slot",
+      "id": "production-and-shared-nonproduction-slots-allow-two-managed-vms",
       "request_action": "create",
       "request_environment": "staging",
       "existing_instances": [
-        {"environment": "production", "provider_state": "running", "managed": false}
+        {"environment": "production", "provider_state": "running", "managed": true}
       ],
       "expected": {"allowed": true, "reason": "slot_available"}
     },
     {
-      "id": "duplicate-managed-production-denied",
+      "id": "unmanaged-live-production-does-not-use-managed-slot",
+      "request_action": "create",
+      "request_environment": "production",
+      "existing_instances": [
+        {"environment": "production", "provider_state": "running", "managed": false},
+        {"environment": "staging", "provider_state": "running", "managed": true}
+      ],
+      "expected": {"allowed": true, "reason": "slot_available"}
+    },
+    {
+      "id": "occupied-production-group-slot-denied",
       "request_action": "adopt",
       "request_environment": "production",
       "existing_instances": [
         {"environment": "production", "provider_state": "running", "managed": true}
+      ],
+      "expected": {"allowed": false, "reason": "capacity_reached"}
+    },
+    {
+      "id": "third-managed-vm-is-blocked-after-both-groups-are-full",
+      "request_action": "create",
+      "request_environment": "testing",
+      "existing_instances": [
+        {"environment": "production", "provider_state": "running", "managed": true},
+        {"environment": "staging", "provider_state": "running", "managed": true}
       ],
       "expected": {"allowed": false, "reason": "capacity_reached"}
     },
