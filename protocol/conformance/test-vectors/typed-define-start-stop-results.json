@@ -262,7 +262,8 @@
     "server_identity_consistent": true,
     "define_has_no_infrastructure": true,
     "start_readiness_bound_and_current": true,
-    "stop_postconditions_confirmed": true
+    "stop_postconditions_confirmed": true,
+    "define_result_bound": true
   },
   "side_effect_expected": "none"
 }
