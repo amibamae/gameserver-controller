@@ -485,6 +485,9 @@ func (pkg *protocolPackage) validateOpenAPI() error {
 	if document["openapi"] != "3.2.1" {
 		return fmt.Errorf("OpenAPI document must declare 3.2.1, found %v", document["openapi"])
 	}
+	if err := validateOpenAPIStructure(document); err != nil {
+		return fmt.Errorf("OpenAPI document does not match the OAS 3.2 schema: %w", err)
+	}
 	components := asObject(document["components"])
 	apiSchemas := asObject(components["schemas"])
 	expectedRefs := map[string]string{
