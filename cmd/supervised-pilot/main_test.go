@@ -20,6 +20,8 @@ func installFakeSSH(t *testing.T, failPreflight, failStart bool, sameInvocation 
 	t.Setenv("FAIL_START", map[bool]string{true: "1", false: "0"}[failStart])
 	same := len(sameInvocation) > 0 && sameInvocation[0]
 	t.Setenv("SAME_INVOCATION", map[bool]string{true: "1", false: "0"}[same])
+		t.Setenv("PRE_INVOCATION_ID", "00000000000000000000000000000001")
+		t.Setenv("POST_INVOCATION_ID", "00000000000000000000000000000002")
 	t.Setenv("POST_ACTIVE_STATE", "")
 	t.Setenv("POST_SUB_STATE", "")
 	t.Setenv("POST_RESULT", "")
@@ -36,8 +38,9 @@ func installFakeSSH(t *testing.T, failPreflight, failStart bool, sameInvocation 
 		"    if [ -f \"$SHOW_COUNT_FILE\" ]; then show_count=$(cat \"$SHOW_COUNT_FILE\"); fi",
 		"    show_count=$((show_count + 1))",
 		"    printf '%s' \"$show_count\" > \"$SHOW_COUNT_FILE\"",
-		"    invocation_id=00000000000000000000000000000001",
-		"    if [ \"$show_count\" -gt 1 ] && [ \"$SAME_INVOCATION\" != \"1\" ]; then invocation_id=00000000000000000000000000000002; fi",
+		"    invocation_id=$PRE_INVOCATION_ID",
+		"    if [ \"$show_count\" -gt 1 ]; then invocation_id=$POST_INVOCATION_ID; fi",
+		"    if [ \"$show_count\" -gt 1 ] && [ \"$SAME_INVOCATION\" = \"1\" ]; then invocation_id=$PRE_INVOCATION_ID; fi",
 		"    active_state=inactive",
 		"    sub_state=dead",
 		"    result=success",
@@ -211,6 +214,61 @@ func TestBackupUnknownWhenSystemdInvocationDoesNotChange(t *testing.T) {
 	}
 	if !strings.Contains(string(audit), "\"event\":\"outcome_unknown\"") || strings.Contains(string(audit), "\"event\":\"succeeded\"") {
 		t.Fatalf("expected unknown, never success, in audit log; got %s", audit)
+	}
+}
+
+func TestBackupValidatesPriorAndNewInvocationIDs(t *testing.T) {
+	validID := "00000000000000000000000000000002"
+	tests := []struct {
+		name    string
+		before  string
+		after   string
+		unknown bool
+	}{
+		{name: "missing prior ID with new valid ID", before: "", after: validID},
+		{name: "malformed prior ID", before: "bad-prior-id", after: validID, unknown: true},
+		{name: "missing new ID", before: "00000000000000000000000000000001", after: "", unknown: true},
+		{name: "malformed new ID", before: "00000000000000000000000000000001", after: "bad-new-id", unknown: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			logPath, home := installFakeSSH(t, false, false)
+			t.Setenv("PRE_INVOCATION_ID", test.before)
+			t.Setenv("POST_INVOCATION_ID", test.after)
+
+			output, err := runBackup(t, "backup", "--host", "server.example", "--execute", "--confirm-host", "server.example")
+			if test.unknown {
+				if err == nil || !strings.Contains(err.Error(), "outcome unknown") {
+					t.Fatalf("expected unknown outcome for invalid invocation IDs, got %v; output=%s", err, output)
+				}
+			} else if err != nil || !strings.Contains(output, "completed successfully") {
+				t.Fatalf("expected a new valid invocation to succeed with no prior ID, got %v; output=%s", err, output)
+			}
+
+			commands, readErr := os.ReadFile(logPath)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if strings.Count(string(commands), "systemctl start --wait minecraft-backup.service") != 1 {
+				t.Fatalf("invocation ID issue caused a retry; SSH log: %s", commands)
+			}
+
+			auditPath := filepath.Join(home, ".local", "state", "gsc-pilot", "operations.jsonl")
+			audit, readErr := os.ReadFile(auditPath)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			auditText := string(audit)
+			if test.unknown {
+				if !strings.Contains(auditText, "\"event\":\"outcome_unknown\"") ||
+					strings.Contains(auditText, "\"event\":\"service_succeeded\"") {
+					t.Fatalf("expected unknown, never success, in audit log; got %s", audit)
+				}
+			} else if !strings.Contains(auditText, "\"event\":\"service_succeeded\"") {
+				t.Fatalf("expected service success in audit log, got %s", audit)
+			}
+		})
 	}
 }
 
