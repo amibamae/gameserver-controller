@@ -48,7 +48,7 @@ The API MUST expose approval status/reference without exposing approval secrets 
 
 ## 5. Resource visibility
 
-List and inspect endpoints MUST apply authorization filters before returning resources. An implementation SHOULD avoid confirming the existence of an inaccessible resource. Pagination cursors MUST be bound to the authenticated actor and filter scope so they cannot be reused to enumerate another principal's resources.
+List and inspect endpoints MUST apply authorization filters before returning resources. An implementation SHOULD avoid confirming the existence of an inaccessible resource. Pagination cursors MUST be bound to the authenticated actor and canonical filter scope so they cannot be reused to enumerate another principal's resources. Reuse under a different actor or filter scope MUST be rejected with the generic `core.validation.invalid_request` error and MUST return no resource items or metadata; the error MUST NOT disclose which scope check failed.
 
 ## 6. Conformance
 
