@@ -90,6 +90,46 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"storage_get_advertised":               hasGet,
 			"storage_stream_capabilities_accepted": storageStreamCapabilitiesAccepted,
 		}, nil
+	case "management.pagination.cursor-scope":
+		cursor := asObject(input["cursor"])
+		cursorActor := stringValue(cursor, "actor_id")
+		cursorFilters, filtersValid := cursor["filter_scope"].(map[string]any)
+		attempts := arrayValue(input, "attempts")
+		if cursorActor == "" || !filtersValid || len(attempts) == 0 {
+			return nil, fmt.Errorf("cursor scope fixture must include an actor, filter scope, and attempts")
+		}
+		outcomes := make([]any, 0, len(attempts))
+		for index, rawAttempt := range attempts {
+			attempt := asObject(rawAttempt)
+			attemptID := stringValue(attempt, "attempt_id")
+			actorID := stringValue(attempt, "actor_id")
+			filters, attemptFiltersValid := attempt["filter_scope"].(map[string]any)
+			if attemptID == "" || actorID == "" || !attemptFiltersValid {
+				return nil, fmt.Errorf("cursor attempt %d must include an attempt ID, actor, and filter scope", index)
+			}
+			sameScope := actorID == cursorActor && reflect.DeepEqual(filters, cursorFilters)
+			if !sameScope {
+				outcomes = append(outcomes, map[string]any{
+					"attempt_id":                    attemptID,
+					"accepted":                      false,
+					"error_code":                    "core.validation.invalid_request",
+					"items":                         []any{},
+					"cursor_advanced":               false,
+					"resource_metadata_returned":     false,
+				})
+				continue
+			}
+			items := arrayValue(attempt, "page_items")
+			outcomes = append(outcomes, map[string]any{
+				"attempt_id":                attemptID,
+				"accepted":                  true,
+				"error_code":                nil,
+				"items":                     items,
+				"cursor_advanced":           true,
+				"resource_metadata_returned": len(items) > 0,
+			})
+		}
+		return map[string]any{"binding_enforced": true, "attempts": outcomes}, nil
 	case "operations.cancellation.before-dispatch", "operations.cancellation.unknown-after-dispatch":
 		initial := asObject(fixture["initial"])
 		cancellationRequested := boolValue(fixture, "cancellation_requested")
