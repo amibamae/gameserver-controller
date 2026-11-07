@@ -2,8 +2,9 @@
 
 `internal/workflow` advances an accepted operation through its persisted steps
 and the versioned in-process adapter registry. It is a reusable Phase 2
-component; the CLI does not expose it yet, and standard server lifecycle
-definitions are still to be wired.
+component; the CLI does not expose it yet. The metadata-only `server.define`
+workflow is implemented, while the other standard lifecycle definitions are
+still to be wired.
 
 ## Dispatch and recovery
 
@@ -38,10 +39,18 @@ controllers or remote workers need a different transactional locking design.
 
 This package does not create operation plans, provide the standard
 `server.provision`, `server.start`, `server.stop`, `server.backup`,
-`server.restore`, `server.destroy`, or `server.define` workflow definitions,
-or expose a controller API/worker. Cancellation handling, process or remote
+`server.restore`, or `server.destroy` workflow definitions, or expose a
+controller API/worker. Cancellation handling, process or remote
 adapter transports, runtime configuration, credential-accessor integration,
 and provider adapters remain separate work. A bounded systemd credential
 accessor exists in `internal/credential`, but the workflow engine does not call
 it. Tests use only scripted fake adapters and a local temporary bbolt database;
 they do not contact a provider or server.
+
+The store now creates a durable logical-server record in the same bbolt
+transaction that accepts `server.define`. That record starts as
+`unprovisioned`, keeps the selected profile references and original validated
+definition, and is keyed by environment and server ID. Definition requests
+cannot contain adapter steps, secret references, or an external instance
+reference. This is a persistence primitive; standard lifecycle transitions
+and typed operation results are not yet wired to update the server record.

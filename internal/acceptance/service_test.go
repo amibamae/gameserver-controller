@@ -145,6 +145,76 @@ func TestAcceptReplaysCanonicalSameRequestAndBindsActor(t *testing.T) {
 	}
 }
 
+func TestDefineAtomicallyCreatesDurableLogicalServer(t *testing.T) {
+	operationStore, _ := openStore(t)
+	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	definition := store.OperationRecord{
+		OperationType:   "server.define",
+		ProtocolVersion: "0.21.0-draft",
+		Target:          store.OperationTarget{ServerID: "server-new", EnvironmentID: "staging"},
+		RequestSnapshot: store.RequestSnapshot{
+			OperationType: "server.define",
+			Parameters:    json.RawMessage(`{"server_id":"server-new","environment_id":"staging","display_name":"Test Server","hosting_profile":"vultr-small","storage_profile":"wasabi-worlds","game":{"adapter_id":"game.paper","release_channel":"stable"},"execution":{"adapter_id":"execution.systemd","profile":"paper-default"}}`),
+		},
+	}
+	accepted, replayed, err := service.Accept(context.Background(), "trusted-actor", "define-key", definition)
+	if err != nil || replayed {
+		t.Fatalf("accept definition: replayed=%t err=%v", replayed, err)
+	}
+	server, err := operationStore.GetLogicalServer("staging", "server-new")
+	if err != nil {
+		t.Fatalf("read created logical server: %v", err)
+	}
+	if server.Revision != 1 || server.Record.LifecycleState != protocolstate.ServerUnprovisioned || server.Record.DataGenerationStatus != "unknown" || server.Record.LastOperationID != accepted.Record.OperationID {
+		t.Fatalf("initial server record is incomplete: %#v", server)
+	}
+	if server.Record.HostingProfile != "vultr-small" || server.Record.StorageProfile != "wasabi-worlds" || server.Record.GameAdapterID != "game.paper" || server.Record.ExecutionAdapterID != "execution.systemd" {
+		t.Fatalf("server definition was not persisted: %#v", server.Record)
+	}
+
+	_, replayed, err = service.Accept(context.Background(), "trusted-actor", "define-key", definition)
+	if err != nil || !replayed {
+		t.Fatalf("idempotent definition replay: replayed=%t err=%v", replayed, err)
+	}
+	servers, err := operationStore.ListLogicalServers()
+	if err != nil || len(servers) != 1 {
+		t.Fatalf("definition replay created duplicate servers: servers=%#v err=%v", servers, err)
+	}
+	_, replayed, err = service.Accept(context.Background(), "trusted-actor", "another-define-key", definition)
+	if !errors.Is(err, store.ErrLogicalServerAlreadyExists) || replayed {
+		t.Fatalf("second definition for the same server: replayed=%t err=%v", replayed, err)
+	}
+	operations, err := operationStore.ListRecoverableOperations()
+	if err != nil || len(operations) != 1 {
+		t.Fatalf("rejected duplicate definition left an operation: operations=%#v err=%v", operations, err)
+	}
+}
+
+func TestDefineRejectsCallerWorkflowStepsWithoutPartialCreate(t *testing.T) {
+	operationStore, _ := openStore(t)
+	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	definition := store.OperationRecord{
+		OperationType:   "server.define",
+		ProtocolVersion: "0.21.0-draft",
+		Target:          store.OperationTarget{ServerID: "server-new", EnvironmentID: "staging"},
+		RequestSnapshot: store.RequestSnapshot{
+			OperationType: "server.define",
+			Parameters:    json.RawMessage(`{"server_id":"server-new","environment_id":"staging","display_name":"Test Server","hosting_profile":"vultr-small","storage_profile":"wasabi-worlds","game":{"adapter_id":"game.paper","release_channel":"stable"},"execution":{"adapter_id":"execution.systemd","profile":"paper-default"}}`),
+		},
+		Steps: []store.OperationStep{{StepID: "untrusted", StepType: "hosting.instance.create", Status: protocolstate.StepPending}},
+	}
+	if _, _, err := service.Accept(context.Background(), "trusted-actor", "define-key", definition); !errors.Is(err, store.ErrInvalidRecord) {
+		t.Fatalf("define with caller-supplied steps: got %v, want ErrInvalidRecord", err)
+	}
+	if _, err := operationStore.GetLogicalServer("staging", "server-new"); !errors.Is(err, store.ErrLogicalServerNotFound) {
+		t.Fatalf("rejected definition created a logical server: got %v", err)
+	}
+	operations, err := operationStore.ListRecoverableOperations()
+	if err != nil || len(operations) != 0 {
+		t.Fatalf("rejected definition created an operation: operations=%#v err=%v", operations, err)
+	}
+}
+
 func TestIdempotencyConflictAndResourceConflict(t *testing.T) {
 	operationStore, _ := openStore(t)
 	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
