@@ -230,15 +230,15 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		dispatchAllowed := routineRebootAllowed || emergencyApprovalBound
 		emergencyBypassUsed := dataSafetyGateRequired && !saveEvidenceBound && !cleanStopEvidenceBound && emergencyApprovalBound
 		return map[string]any{
-			"core_preconditions_valid":       true,
-			"data_safety_gate_required":      dataSafetyGateRequired,
-			"save_evidence_bound":            saveEvidenceBound,
-			"clean_stop_evidence_bound":      cleanStopEvidenceBound,
-			"routine_reboot_allowed":         routineRebootAllowed,
-			"emergency_approval_bound":       emergencyApprovalBound,
+			"core_preconditions_valid":         true,
+			"data_safety_gate_required":        dataSafetyGateRequired,
+			"save_evidence_bound":              saveEvidenceBound,
+			"clean_stop_evidence_bound":        cleanStopEvidenceBound,
+			"routine_reboot_allowed":           routineRebootAllowed,
+			"emergency_approval_bound":         emergencyApprovalBound,
 			"provider_reboot_dispatch_allowed": dispatchAllowed,
-			"emergency_bypass_used":          emergencyBypassUsed,
-			"game_readiness_established":     false,
+			"emergency_bypass_used":            emergencyBypassUsed,
+			"game_readiness_established":       false,
 		}, nil
 	case "hosting.instance.reboot.completed-active", "hosting.instance.reboot.accepted-not-complete", "hosting.instance.reboot.unknown-requires-inspection", "hosting.instance.reboot.target-mismatch":
 		rebootInput, rebootOutput := asObject(input["reboot_input"]), asObject(input["reboot_output"])
