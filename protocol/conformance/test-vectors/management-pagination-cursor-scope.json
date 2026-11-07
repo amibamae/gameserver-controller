@@ -1,0 +1,90 @@
+{
+  "fixture_id": "management.pagination.cursor-scope",
+  "protocol_version": "0.21.0-draft",
+  "contract": "management_api.pagination",
+  "input": {
+    "cursor": {
+      "actor_id": "actor-staging",
+      "filter_scope": {
+        "environment_id": "staging"
+      },
+      "position": "after-server-1"
+    },
+    "attempts": [
+      {
+        "attempt_id": "different-actor",
+        "actor_id": "actor-production",
+        "filter_scope": {
+          "environment_id": "staging"
+        },
+        "page_items": [
+          {
+            "server_id": "production-server-2"
+          }
+        ]
+      },
+      {
+        "attempt_id": "different-filter",
+        "actor_id": "actor-staging",
+        "filter_scope": {
+          "environment_id": "production"
+        },
+        "page_items": [
+          {
+            "server_id": "production-server-2"
+          }
+        ]
+      },
+      {
+        "attempt_id": "same-scope",
+        "actor_id": "actor-staging",
+        "filter_scope": {
+          "environment_id": "staging"
+        },
+        "page_items": [
+          {
+            "server_id": "staging-server-2"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "binding_enforced": true,
+    "attempts": [
+      {
+        "attempt_id": "different-actor",
+        "accepted": false,
+        "error_code": "core.validation.invalid_request",
+        "items": [],
+        "cursor_advanced": false,
+        "resource_metadata_returned": false
+      },
+      {
+        "attempt_id": "different-filter",
+        "accepted": false,
+        "error_code": "core.validation.invalid_request",
+        "items": [],
+        "cursor_advanced": false,
+        "resource_metadata_returned": false
+      },
+      {
+        "attempt_id": "same-scope",
+        "accepted": true,
+        "error_code": null,
+        "items": [
+          {
+            "server_id": "staging-server-2"
+          }
+        ],
+        "cursor_advanced": true,
+        "resource_metadata_returned": true
+      }
+    ]
+  },
+  "notes": {
+    "cursor_scope": "authenticated actor plus canonical environment filter",
+    "mismatch_behavior": "generic-invalid-request-no-items-or-resource-metadata",
+    "page_size": "not-part-of-this-filter-scope-fixture"
+  }
+}
