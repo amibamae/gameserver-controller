@@ -1456,7 +1456,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"reconciliation_reference_present":       unknown && hasReference && targetBound,
 			"retry_permitted_without_reconciliation": !unknown || !hasReference,
 		}, nil
-	case "operations.typed-provision-backup-restore-destroy-results", "operations.typed-provision-backup-restore-destroy-target-mismatch":
+	case "operations.typed-provision-backup-restore-destroy-results", "operations.typed-provision-backup-restore-destroy-target-mismatch", "operations.typed-provision-backup-restore-readiness-binding", "operations.typed-provision-backup-restore-readiness-freshness":
 		provisionOperation := asObject(input["provision_operation"])
 		backupOperation := asObject(input["backup_operation"])
 		restoreOperation := asObject(input["restore_operation"])
@@ -1508,6 +1508,16 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		backupInstance := asObject(backupTarget["instance_ref"])
 		manifestInstance := asObject(backupManifest["source_instance_ref"])
 		backupExpectedInstance := asObject(backupParameters["expected_instance_ref"])
+		backupReadinessBound, err := readinessAssertionBindsAtCompletion(
+			asObject(backupData["readiness_assertion"]),
+			stringValue(backupOperation, "completed_at"),
+			stringValue(backupTarget, "server_id"),
+			stringValue(backupTarget, "environment_id"),
+			backupTarget["instance_ref"],
+		)
+		if err != nil {
+			return nil, fmt.Errorf("backup readiness assertion: %w", err)
+		}
 		backupResultBound := stringValue(backupTarget, "server_id") == stringValue(backupManifest, "server_id") &&
 			stringValue(backupTarget, "environment_id") == stringValue(backupData, "environment_id") &&
 			stringValue(backupData, "environment_id") == stringValue(backupManifest, "environment_id") &&
@@ -1515,7 +1525,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			stringValue(backupData, "data_generation_id") == stringValue(backupManifest, "data_generation_id") &&
 			stringValue(backupInstance, "environment_id") == stringValue(backupTarget, "environment_id") &&
 			reflect.DeepEqual(backupTarget["instance_ref"], backupManifest["source_instance_ref"]) &&
-			(backupParameters["expected_instance_ref"] == nil || reflect.DeepEqual(backupExpectedInstance, manifestInstance))
+			(backupParameters["expected_instance_ref"] == nil || reflect.DeepEqual(backupExpectedInstance, manifestInstance)) &&
+			backupReadinessBound
 
 		restoreTarget := asObject(restoreOperation["target"])
 		restoreParameters := asObject(asObject(restoreOperation["request_snapshot"])["parameters"])
@@ -1523,10 +1534,21 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		restoreInstance := asObject(restoreTarget["instance_ref"])
 		restoreResultInstance := asObject(restoreData["target_instance_ref"])
 		restoreRequestedInstance := asObject(restoreParameters["target_instance_ref"])
+		restoreReadinessBound, err := readinessAssertionBindsAtCompletion(
+			asObject(restoreData["readiness_assertion"]),
+			stringValue(restoreOperation, "completed_at"),
+			stringValue(restoreTarget, "server_id"),
+			stringValue(restoreTarget, "environment_id"),
+			restoreTarget["instance_ref"],
+		)
+		if err != nil {
+			return nil, fmt.Errorf("restore readiness assertion: %w", err)
+		}
 		restoreResultBound := stringValue(restoreTarget, "environment_id") == stringValue(restoreInstance, "environment_id") &&
 			stringValue(restoreParameters, "backup_id") == stringValue(restoreData, "backup_id") &&
 			reflect.DeepEqual(restoreTarget["instance_ref"], restoreData["target_instance_ref"]) &&
-			(restoreParameters["target_instance_ref"] == nil || reflect.DeepEqual(restoreRequestedInstance, restoreResultInstance))
+			(restoreParameters["target_instance_ref"] == nil || reflect.DeepEqual(restoreRequestedInstance, restoreResultInstance)) &&
+			restoreReadinessBound
 
 		destroyTarget := asObject(destroyOperation["target"])
 		destroyParameters := asObject(asObject(destroyOperation["request_snapshot"])["parameters"])
@@ -1552,7 +1574,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"destroy_result_bound":   destroyResultBound,
 			"all_results_bound":      allResultsBound,
 		}, nil
-	case "operations.typed-define-start-stop-results", "operations.typed-define-start-stop-target-mismatch":
+	case "operations.typed-define-start-stop-results", "operations.typed-define-start-stop-target-mismatch", "operations.typed-define-start-stop-future-readiness", "operations.typed-define-start-stop-no-drain", "operations.typed-define-start-stop-no-proxy-drain":
 		defineOperation := asObject(input["define_operation"])
 		startOperation := asObject(input["start_operation"])
 		stopOperation := asObject(input["stop_operation"])
@@ -1579,13 +1601,15 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		startAssertion := asObject(startData["readiness_assertion"])
 		startInstance := asObject(startTarget["instance_ref"])
 		assertedInstance := asObject(startAssertion["instance_ref"])
-		startCompleted, err := parseTime(stringValue(startOperation, "completed_at"))
+		startReadinessAtCompletion, err := readinessAssertionBindsAtCompletion(
+			startAssertion,
+			stringValue(startOperation, "completed_at"),
+			stringValue(startTarget, "server_id"),
+			stringValue(startTarget, "environment_id"),
+			startTarget["instance_ref"],
+		)
 		if err != nil {
-			return nil, err
-		}
-		assertionExpires, err := parseTime(stringValue(startAssertion, "expires_at"))
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("start readiness assertion: %w", err)
 		}
 		defineResultBound := stringValue(defineData, "server_id") == stringValue(defineTarget, "server_id") &&
 			stringValue(defineData, "environment_id") == stringValue(defineTarget, "environment_id")
@@ -1601,17 +1625,22 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			reflect.DeepEqual(startTarget["instance_ref"], startAssertion["instance_ref"]) &&
 			stringValue(startInstance, "environment_id") == stringValue(startData, "environment_id") &&
 			stringValue(assertedInstance, "environment_id") == stringValue(startAssertion, "environment_id")
-		startReadinessCurrent := startReadinessBound && startCompleted.Before(assertionExpires) &&
+		startReadinessCurrent := startReadinessBound && startReadinessAtCompletion &&
 			stringValue(startData, "lifecycle_state") == "ready"
 		defineNoInfrastructure := stringValue(defineData, "lifecycle_state") == "unprovisioned" &&
 			len(arrayValue(defineResult, "affected_resources")) == 0
 		gameSave, execution, proxyDrain := asObject(stopData["game_save"]), asObject(stopData["execution"]), asObject(stopData["proxy_drain"])
+		stopParameters := asObject(asObject(stopOperation["request_snapshot"])["parameters"])
+		drainRequested := boolValue(stopParameters, "drain")
+		drainOutcome := stringValue(proxyDrain, "outcome")
+		drainSatisfied := drainOutcome == "drained" || drainOutcome == "not_configured" ||
+			(drainOutcome == "not_requested" && !drainRequested)
 		stopBound := stringValue(stopData, "server_id") == stringValue(stopTarget, "server_id") &&
 			stringValue(stopData, "environment_id") == stringValue(stopTarget, "environment_id") &&
 			reflect.DeepEqual(stopData["instance_ref"], stopTarget["instance_ref"])
 		stopPostconditions := stopBound && stringValue(stopData, "lifecycle_state") == "stopped" &&
 			stringValue(gameSave, "outcome") == "confirmed" && stringValue(execution, "outcome") == "stopped" &&
-			stringValue(proxyDrain, "outcome") == "drained"
+			drainSatisfied
 		return map[string]any{
 			"schemas_valid":                     true,
 			"server_identity_consistent":        serverIdentityConsistent,
@@ -2095,7 +2124,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"readiness_current":                    readinessCurrent,
 			"session_set_complete":                 sessionSetComplete,
 			"aggregate_counts_match":               countsMatch,
-			"result_accepted":                      accepted,
+			"result_valid_and_bound":                      accepted,
 			"retry_unknown_without_reconciliation": !hasUnknown,
 		}, nil
 	case "storage.backup.partial-upload-not-verified":
@@ -2391,6 +2420,31 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 	default:
 		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
 	}
+}
+
+func readinessAssertionBindsAtCompletion(assertion map[string]any, completedAt, serverID, environmentID string, instanceRef any) (bool, error) {
+	if len(assertion) == 0 {
+		return true, nil
+	}
+	completed, err := parseTime(completedAt)
+	if err != nil {
+		return false, err
+	}
+	observed, err := parseTime(stringValue(assertion, "observed_at"))
+	if err != nil {
+		return false, err
+	}
+	expires, err := parseTime(stringValue(assertion, "expires_at"))
+	if err != nil {
+		return false, err
+	}
+	assertedInstance := asObject(assertion["instance_ref"])
+	bound := stringValue(assertion, "server_id") == serverID &&
+		stringValue(assertion, "environment_id") == environmentID &&
+		stringValue(assertedInstance, "environment_id") == environmentID &&
+		reflect.DeepEqual(instanceRef, assertion["instance_ref"]) &&
+		!completed.Before(observed) && completed.Before(expires)
+	return bound, nil
 }
 
 func sameObjectRefSet(left, right []any) bool {
