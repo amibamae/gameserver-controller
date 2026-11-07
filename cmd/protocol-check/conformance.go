@@ -1863,7 +1863,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"required_checks_complete": true, "all_required_checks_passed": allPassed,
 			"readiness": readiness, "ready_transition_permitted": allPassed,
 		}, nil
-	case "readiness-required-before-transfer", "readiness-target-mismatch-before-transfer":
+	case "readiness-required-before-transfer", "readiness-target-mismatch-before-transfer", "readiness-server-mismatch-before-transfer":
 		request := asObject(input["transfer_request"])
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-request", request); err != nil {
 			return nil, fmt.Errorf("transfer request does not match schema: %w", err)
@@ -1909,7 +1909,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"error_code":           code,
 			"proxy_transfer_calls": calls,
 		}, nil
-	case "velocity-transfer-partial-results", "velocity-transfer-count-mismatch", "velocity-transfer-duplicate-session-result", "velocity-transfer-target-mismatch":
+	case "velocity-transfer-partial-results", "velocity-transfer-count-mismatch", "velocity-transfer-context-mismatch", "velocity-transfer-duplicate-session-result", "velocity-transfer-target-mismatch":
 		request := asObject(input["transfer_request"])
 		result := asObject(input["transfer_result"])
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-request", request); err != nil {
