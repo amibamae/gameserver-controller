@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 )
 
 func (pkg *protocolPackage) runConformance() error {
@@ -50,7 +52,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 	switch fixtureID {
 	case "lifecycle.reject.unlisted-transition":
 		transition := asObject(fixture["requested_transition"])
-		allowed := legalTransitions[[2]string{stringValue(fixture, "initial_state"), stringValue(transition, "to")}]
+		allowed := protocolstate.CanTransitionServer(
+			protocolstate.ServerState(stringValue(fixture, "initial_state")),
+			protocolstate.ServerState(stringValue(transition, "to")),
+		)
 		result := map[string]any{"accepted": allowed, "side_effect_permitted": allowed}
 		if !allowed {
 			result["error_code"] = "core.lifecycle.invalid_transition"
@@ -71,7 +76,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		previousDestroyed := stringValue(previous, "lifecycle_state") == "destroyed"
 		replacementInstanceDistinct := previousRef != nil && replacementRef != nil && !reflect.DeepEqual(previousRef, replacementRef)
 		generationRotated := previous["data_generation_id"] != nil && replacement["data_generation_id"] != nil && previous["data_generation_id"] != replacement["data_generation_id"]
-		reprovisionPermitted := legalTransitions[[2]string{"destroyed", "provisioning"}]
+		reprovisionPermitted := protocolstate.CanTransitionServer(protocolstate.ServerDestroyed, protocolstate.ServerProvisioning)
 		return map[string]any{
 			"previous_server_schema_valid": true, "replacement_server_schema_valid": true,
 			"logical_identity_preserved": identityPreserved, "previous_instance_destroyed": previousDestroyed,
@@ -2278,50 +2283,4 @@ func compareExpected(actual, expected any, path string) error {
 		}
 	}
 	return nil
-}
-
-var legalTransitions = map[[2]string]bool{
-	{"unprovisioned", "provisioning"}: true,
-	{"provisioning", "preparing"}:     true,
-	{"provisioning", "failed"}:        true,
-	{"preparing", "restoring"}:        true,
-	{"preparing", "starting"}:         true,
-	{"preparing", "failed"}:           true,
-	{"restoring", "starting"}:         true,
-	{"restoring", "stopped"}:          true,
-	{"restoring", "failed"}:           true,
-	{"starting", "validating"}:        true,
-	{"starting", "failed"}:            true,
-	{"validating", "ready"}:           true,
-	{"validating", "degraded"}:        true,
-	{"validating", "failed"}:          true,
-	{"ready", "degraded"}:             true,
-	{"ready", "draining"}:             true,
-	{"ready", "stopping"}:             true,
-	{"degraded", "validating"}:        true,
-	{"degraded", "draining"}:          true,
-	{"degraded", "stopping"}:          true,
-	{"degraded", "failed"}:            true,
-	{"draining", "ready"}:             true,
-	{"draining", "stopping"}:          true,
-	{"draining", "failed"}:            true,
-	{"stopping", "backing_up"}:        true,
-	{"stopping", "stopped"}:           true,
-	{"stopping", "failed"}:            true,
-	{"backing_up", "starting"}:        true,
-	{"backing_up", "stopped"}:         true,
-	{"backing_up", "destroying"}:      true,
-	{"backing_up", "failed"}:          true,
-	{"stopped", "starting"}:           true,
-	{"stopped", "restoring"}:          true,
-	{"stopped", "backing_up"}:         true,
-	{"stopped", "destroying"}:         true,
-	{"destroying", "destroyed"}:       true,
-	{"destroying", "failed"}:          true,
-	{"destroyed", "provisioning"}:     true,
-	{"failed", "provisioning"}:        true,
-	{"failed", "preparing"}:           true,
-	{"failed", "restoring"}:           true,
-	{"failed", "stopping"}:            true,
-	{"failed", "destroying"}:          true,
 }
