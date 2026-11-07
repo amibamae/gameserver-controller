@@ -1119,7 +1119,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"must_reconcile_before_retry":      outputPresent && (!outputBound || outcome == "outcome_unknown"),
 			"reconciliation_reference_present": reconciliationPresent,
 		}, nil
-	case "game.compatibility.check.compatible", "game.compatibility.check.migration-required", "game.compatibility.check.incompatible", "game.compatibility.check.unknown", "game.compatibility.check.incomplete", "game.compatibility.check.unknown-reported-compatible", "game.compatib…20 tokens truncated…ect(input["compatibility_input"]), asObject(input["compatibility_output"])
+	case "game.compatibility.check.compatible", "game.compatibility.check.migration-required", "game.compatibility.check.incompatible", "game.compatibility.check.unknown", "game.compatibility.check.incomplete", "game.compatibility.check.unknown-reported-compatible", "game.compatibility.check.target-mismatch":
+		compatibilityInput, compatibilityOutput := asObject(input["compatibility_input"]), asObject(input["compatibility_output"])
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:compatibility-check-input", compatibilityInput); err != nil {
 			return nil, fmt.Errorf("compatibility input does not match schema: %w", err)
 		}
