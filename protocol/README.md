@@ -163,7 +163,7 @@ The tree reflects the initial draft package. The schema inventory is indexed in 
 9. Publish and validate language-neutral schemas, examples, and conformance vectors.
 10. Validate the initial Go implementation against the published schemas and conformance vectors; welcome optional implementations in other languages.
 
-This draft snapshot is version 0.21.0-draft. It remains draft until its semantics, schemas, compatibility rules, security requirements, and conformance tests are reviewed and the initial Go implementation passes the published suite. Contributions in other languages are welcome but are not a release requirement.
+This draft snapshot is version 0.21.0-draft. It remains a draft while its semantics, schemas, compatibility rules, security requirements, and conformance tests are under review. Phase 1 completion means the specification package and Go validator/conformance suite are reviewed; it does not include a controller engine. Stable protocol 1.0 remains gated on the initial Go controller and fake-adapter implementation passing the published behavioral suite. Contributions in other languages are welcome but are not a release requirement.
 
 ## Core design decisions
 
