@@ -211,7 +211,7 @@ It may include:
 - `idempotency_key`: deduplication key for a supported mutating operation.
 - Actor/authorization context supplied by the trusted core, not self-asserted by an untrusted adapter or client.
 
-An idempotency key is scoped to the authenticated caller, operation type, and target unless a contract defines a narrower scope. Reusing a key with different parameters MUST be rejected as a conflict.
+A key supplied by a management client to deduplicate durable operation acceptance is scoped to the authenticated caller, operation type, and target; its format and retention are defined in [operations](operations.md). Reusing that key with different parameters MUST be rejected as a conflict. This client key MUST NOT be presumed to make a provider call idempotent. An adapter-call idempotency token is provider-specific and may be used only when the capability contract declares its semantics.
 
 ## 9. Secret references
 
@@ -243,15 +243,13 @@ Read-only response objects MAY gain optional fields in a compatible minor revisi
 
 Schemas MUST state whether an object is closed or extensible. A minor revision MUST NOT change the meaning, type, or security effect of an existing field.
 
-## 12. Open decisions
+## 12. Resolved policy decisions
 
-The following remain intentionally unresolved:
-- Identifier generation algorithm; identifiers remain opaque and must be collision-resistant within their declared scope.
-- Retention duration and conflict behavior for expired idempotency keys.
-- Final capability-version compatibility and deprecation policy.
-- Full stable error-code registry and extension governance.
-- Maximum lengths and retention rules for operation/event/audit histories.
-- Final remote adapter authentication profile.
-- Whether an optional remote adapter binding is needed beyond local in-process and stdio profiles.
+- **Identifier generation:** The protocol does not standardize a generator. Implementations MUST keep identifiers opaque, choose collision-resistant values, and document their uniqueness scope. Generator selection is implementation-specific.
+- **Idempotency retention:** Management operation-key format, retention, and expired-key behavior are normative in [operations §7](operations.md#7-idempotency-and-duplicate-requests). Provider idempotency tokens remain capability-specific.
+- **Capability versions:** A capability is matched by its exact name and version. Version ranges, implicit fallback, and assuming a newer version is compatible are not supported. A deprecated capability declaration MUST document its replacement, if any, and the earliest planned removal version. A stable major version MUST NOT remove a capability absent an urgent security or data-loss correction.
+- **Error codes:** Core codes use the reserved `core.*` namespace and are governed by [RPC error rules](rpc/errors.md). Adapter and domain codes MUST use documented namespaces. Consumers MUST use the category for broad handling and MUST NOT branch on message text; an unknown code does not change its category's handling.
+- **Lengths and history retention:** Field lengths are defined by their owning schemas; the common protocol sets no universal history-size or retention limit. Each implementation MUST document retention and deletion rules for operations, events, and audit history. It MUST preserve non-terminal operations, unresolved external outcomes, and recovery-critical lock state for as long as recovery is possible or required by policy.
+- **Remote adapters:** Remote adapter authentication and a remote adapter transport are out of scope for the initial 1.0 profile. The initial adapter bindings are local in-process and optional local stdio. A future remote adapter binding requires a separately versioned specification and conformance tests; this does not constrain authentication for the separately specified management API.
 
-These decisions MUST be resolved or explicitly declared out of scope before stable 1.0. They MUST NOT be decided implicitly by an implementation language.
+These choices close the common-type decisions for the draft. Implementations MUST NOT vary these semantics by programming language.
