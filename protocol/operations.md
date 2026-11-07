@@ -130,15 +130,13 @@ External resource identifiers MUST be recorded with their adapter and environmen
 
 Idempotency prevents a lost response or client retry from unintentionally starting the same operation more than once.
 
-For an operation type that supports idempotency:
-- The caller supplies an idempotency key that is unique within the authenticated caller's scope.
-- The controller binds the key to the operation type, target, environment, and canonical validated request parameters.
-- Repeating the same request with the same key MUST return or identify the original operation, including its current or final status.
-- Reusing the key with different parameters MUST be rejected as a conflict.
-- The key-to-operation association MUST be durable.
-- The retention period for keys MUST be long enough to cover the operation lifetime and the documented client retry window.
+For management HTTP operation-acceptance requests, the caller MUST supply the `Idempotency-Key` header. Its value MUST contain 1–128 visible ASCII characters (U+0021 through U+007E), is case-sensitive, and MUST be scoped to the authenticated actor. The key is a deduplication identifier, not an authentication credential. Clients SHOULD use at least 128 bits of randomness.
 
-An idempotency key does not by itself make an external provider call idempotent. Adapter capabilities and operation contracts MUST describe whether a provider action supports a provider idempotency token, safe lookup/reconciliation, or neither.
+The controller MUST bind the actor and key to the operation type, target, environment, and RFC 8785 JCS fingerprint of the canonical validated request parameters. It MUST reject a same-actor reuse with different bound request data using `core.operation.idempotency_conflict`. The same actor, key, and request MUST identify the original operation while its full record is retained.
+
+The actor/key association MUST be durable. It MUST remain associated for the entire non-terminal operation lifetime and MUST be retained with the complete operation record for at least 90 days after the operation becomes terminal. After that period, the controller MAY discard the full operation and request mapping, but MUST retain a compact tombstone for that actor/key for the lifetime of the controller installation. A matching request after full-record expiry MUST be rejected with `core.operation.idempotency_key_expired`; it MUST NOT replay the old operation or create or dispatch a new one. Implementations MUST preserve tombstones through restart and storage migration. The tombstone need retain only enough protected information to recognize the actor/key pair; it need not retain request parameters or the full operation record.
+
+This management key does not by itself make an external provider call idempotent. Adapter capabilities and operation contracts MUST describe whether a provider action supports a distinct provider idempotency token, safe lookup/reconciliation, or neither. A provider token, if used, is scoped and interpreted according to that capability contract.
 
 The protocol MUST NOT claim exactly-once execution. If a call may have reached an external system and the response is lost, the controller records an unknown outcome and reconciles before retrying or issuing dependent actions.
 
@@ -153,13 +151,14 @@ The protocol distinguishes:
 A timeout describes the controller's wait, not necessarily the external action. An operation timeout MUST NOT be interpreted as proof that a provider-side action was cancelled, failed, or reversed.
 
 Retry rules:
-1. Retries MUST be bounded by an explicit policy and operation deadline.
+1. Each implementation or adapter profile MUST declare bounded retry and backoff policies where automatic retry is supported; no universal duration or attempt count is imposed by the protocol.
 2. Backoff and provider retry guidance SHOULD be respected.
 3. An action MAY be retried automatically only when it is known to be safe to repeat, protected by a provider idempotency mechanism, or reconciled to prove the prior attempt did not take effect.
 4. A mutating call with an unknown outcome MUST be reconciled before retry.
 5. Validation, authorization, unsupported-capability, integrity, compatibility, and safety-blocked errors MUST NOT be automatically retried without a changed request or explicit policy.
-6. Exhausted retries MUST lead to a definitive failure only when the outcome is known; otherwise the operation enters `needs_operator` or remains in a documented reconciliation state.
-7. Every attempt and retry decision MUST be recorded.
+6. If an explicit safe retry policy is absent, the default is zero automatic retries for a mutating adapter call.
+7. Exhausted retries MUST lead to a definitive failure only when the outcome is known; otherwise the operation enters `needs_operator` or remains in a documented reconciliation state.
+8. Every attempt and retry decision MUST be recorded.
 
 ## 9. Cancellation
 
@@ -211,7 +210,7 @@ The canonical event object is defined by [operation-event.schema.json](schemas/o
 - `timestamp`: RFC 3339 event time.
 - Optional `step_id`, `status`, and documented safe `data`.
 
-The controller MUST persist an event before making it externally observable. Sequence numbers are ordered per operation, not globally. Consumers MUST tolerate duplicate delivery, detect gaps, and retrieve the operation resource as the authoritative state. An event stream MAY replay events after a supplied sequence cursor. Retention and gap recovery behavior MUST be documented by each implementation.
+The controller MUST persist an event before making it externally observable. Sequence numbers are ordered per operation, not globally. Consumers MUST tolerate duplicate delivery, detect gaps, and retrieve the operation resource as the authoritative state. An event stream MAY replay events after a supplied sequence cursor. Event-stream delivery is at-least-once when events are emitted; duplicate delivery is permitted and consumers MUST deduplicate by event identity or sequence within an operation. Retention and gap recovery behavior MUST be documented by each implementation. The controller MUST NOT depend on event retention for operation recovery because the durable operation snapshot is authoritative.
 
 Progress SHOULD identify a stable machine-readable phase/step identifier, human-readable status text, optional completed/total units or percentage when meaningful, and last-update time. Percentage is optional and MUST NOT imply a completion estimate when work cannot be measured.
 
@@ -245,14 +244,15 @@ A failed operation may therefore leave resources allocated or data preserved for
 
 Mutating operations that affect the same logical server or shared data MUST be serialized according to a documented lock scope. The initial design uses an exclusive per-server lock for operations such as start, stop, backup, restore, upgrade, and destroy.
 
-- A lock records its owning operation ID and scope.
+- A lock records its owning operation ID and scope and is part of durable recovery state.
 - A second conflicting operation MUST be rejected or durably queued according to an explicit policy; it MUST NOT run concurrently by accident.
-- A lock MUST NOT be released merely because a process or connection disappeared.
-- A stale lock requires inspection and reconciliation of its owning operation.
-- Multi-resource operations MUST define a consistent lock acquisition order to avoid deadlock.
+- A lock MUST NOT be released merely because a process or connection disappeared, a worker crashed, or a lease/time limit elapsed.
+- On controller restart, the operation and its lock MUST be restored before dispatching work that could conflict. If the owner or external outcome cannot be safely recovered, the operation MUST enter or remain in reconciliation or `needs_operator`, and the lock MUST remain held.
+- A lock is released only after the owning operation is terminal and its relevant external outcomes are reconciled; the terminal transition and lock release MUST be committed durably as one recovery-safe change.
+- Multi-resource operations MUST acquire locks in a stable, documented order, such as lexical order of `(resource_kind, environment_id, resource_id)`, to avoid deadlock.
 - A suspended operation with unresolved external effects keeps the relevant resource blocked until safe release is confirmed.
 
-The operation protocol does not select a database or distributed lock implementation.
+The operation protocol does not select a database or distributed lock implementation; it does require equivalent durable ownership, recovery, and release semantics.
 
 ## 14. Authorization, approvals, and audit
 
@@ -340,19 +340,18 @@ The controller:
 
 This is the required pattern for any mutating external call whose result may be unknown, not only VM destruction.
 
-## 18. Open decisions
+## 18. Resolved policy decisions
 
-The following remain intentionally unresolved:
-- Complete operation type registry and the full input/output schema for each operation.
-- Final representation and retention of operation and step records.
-- Whether status transitions are represented by a separate event log, snapshots, or both.
-- Idempotency-key format, maximum length, and retention duration.
-- Default timeout, retry, and backoff policy (these may vary by operation and adapter).
-- Exact progress/event delivery semantics and retention.
-- Lock lease and recovery policy details.
-- Whether operation acceptance is exposed synchronously, asynchronously, or through transport-specific patterns. The initial management HTTP binding is asynchronous.
+- **Standard operation catalog:** The initial standard catalog contains `server.define`, `server.provision`, `server.start`, `server.stop`, `server.backup`, `server.restore`, and `server.destroy`. Their request/result schemas and postconditions are the standard catalog for the initial 1.0 profile. New standard core operations require documented schemas and conformance cases. An `upgrade` operation is not part of this initial catalog.
+- **Record representation and retention:** The schemas define the logical operation and step records; physical storage and database choice are implementation-specific. Implementations MUST retain accepted non-terminal operations and recovery-critical data, document terminal-record retention, and never discard a record while its external outcome or lock ownership remains unresolved.
+- **State and events:** The durable operation snapshot is authoritative for reads and recovery. The controller MAY keep a separate event log and MAY expose an event stream. Emitted events are persisted before visibility and may be delivered at least once; event retention and gap recovery are implementation-documented.
+- **Idempotency:** Management operation acceptance uses the required case-sensitive 1–128 visible-ASCII `Idempotency-Key` header. The actor/key association survives the full non-terminal lifetime, the complete operation record is retained for at least 90 days after terminal status, and a compact tombstone remains for the controller installation lifetime. Reuse after full-record expiry returns `core.operation.idempotency_key_expired` without replay, new operation, or dispatch.
+- **Timeouts and retries:** There are no universal numeric timeout, retry, or backoff defaults. Implementations and adapter profiles document bounded policies. If no safe retry policy is declared, a mutating adapter call receives zero automatic retries; an unknown outcome is reconciled before any retry.
+- **Events and progress:** Progress is advisory and events supplement the authoritative operation resource. Consumers handle duplicate delivery and sequence gaps by reading the operation resource. Retention and replay behavior are documented by each implementation.
+- **Locks and recovery:** Durable operation-owned locks survive controller restart and are restored before conflicting dispatch. Worker failure or elapsed time alone does not release a lock. Unresolved external effects keep the lock until reconciled and the operation is terminal. Multi-resource locks use a stable documented order. Storage mechanism is out of scope.
+- **Acceptance:** The initial management HTTP binding accepts mutating requests asynchronously and returns `202 Accepted` only after durable commit. An adapter RPC call is request-response at the transport layer; an adapter result of `accepted` means provider work is pending and does not mean the durable management operation is complete.
 
-These decisions require examples, conformance fixtures, and review. They MUST NOT be decided implicitly by an implementation language or a specific transport.
+These choices close the operation decisions for the draft. Transport-specific bindings MUST preserve them.
 
 ## Related specifications
 
