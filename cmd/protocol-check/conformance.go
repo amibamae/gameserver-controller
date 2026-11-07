@@ -1554,6 +1554,80 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			code, count = "core.operation.idempotency_conflict", 1
 		}
 		return map[string]any{"second_request_accepted": !conflict, "error_code": code, "operation_count": count}, nil
+	case "operations.events.gap-recovery":
+		lastSequence, err := integerValue(fixture["last_consumed_sequence"])
+		if err != nil {
+			return nil, err
+		}
+		events := arrayValue(fixture, "events")
+		if len(events) == 0 {
+			return nil, fmt.Errorf("event sequence must not be empty")
+		}
+		var operationID string
+		currentSequence := lastSequence
+		var expectedSequence, receivedSequence int64
+		gapDetected := false
+		for index, rawEvent := range events {
+			event := asObject(rawEvent)
+			if err := pkg.validateSchema(operationEventSchemaID, event); err != nil {
+				return nil, fmt.Errorf("event %d does not match schema: %w", index, err)
+			}
+			id := stringValue(event, "operation_id")
+			if index == 0 {
+				operationID = id
+			} else if id != operationID {
+				return nil, fmt.Errorf("event %d belongs to a different operation", index)
+			}
+			sequence, err := integerValue(event["sequence"])
+			if err != nil {
+				return nil, err
+			}
+			if sequence <= currentSequence {
+				return nil, fmt.Errorf("event sequence %d does not advance past %d", sequence, currentSequence)
+			}
+			if sequence > currentSequence+1 {
+				gapDetected = true
+				expectedSequence = currentSequence + 1
+				receivedSequence = sequence
+				currentSequence = sequence
+				break
+			}
+			currentSequence = sequence
+		}
+		if !gapDetected {
+			return nil, fmt.Errorf("gap-recovery fixture must contain a missing event sequence")
+		}
+		recovery := asObject(fixture["recovery"])
+		operationResponse := asObject(recovery["operation_resource_get"])
+		responseStatus, err := integerValue(operationResponse["status"])
+		if err != nil {
+			return nil, err
+		}
+		if responseStatus != 200 {
+			return nil, fmt.Errorf("gap recovery requires a successful authoritative operation read")
+		}
+		operation := asObject(operationResponse["operation"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation); err != nil {
+			return nil, fmt.Errorf("authoritative operation snapshot does not match schema: %w", err)
+		}
+		if stringValue(operation, "operation_id") != operationID {
+			return nil, fmt.Errorf("authoritative operation snapshot belongs to a different operation")
+		}
+		return map[string]any{
+			"event_schema_valid":                  true,
+			"operation_schema_valid":              true,
+			"gap_detected":                        true,
+			"expected_sequence":                   expectedSequence,
+			"received_sequence":                   receivedSequence,
+			"authoritative_operation_fetched":     true,
+			"operation_id":                        operationID,
+			"recovered_status":                    operation["status"],
+			"recovered_steps":                     operation["steps"],
+			"missing_event_details_reconstructed": false,
+			"side_effect_dispatches":              0,
+			"replayed_events":                     0,
+			"resume_after_sequence":               currentSequence,
+		}, nil
 	case "operations.events.monotonic-sequence":
 		events := arrayValue(fixture, "events")
 		if len(events) == 0 {

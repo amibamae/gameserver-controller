@@ -1,0 +1,90 @@
+{
+  "fixture_id": "operations.events.gap-recovery",
+  "protocol_version": "0.21.0-draft",
+  "contract": "operation.events",
+  "last_consumed_sequence": 2,
+  "events": [
+    {
+      "event_id": "event-4",
+      "operation_id": "operation-gap-1",
+      "sequence": 4,
+      "event_type": "operation.progress.updated",
+      "timestamp": "2026-11-06T18:45:02Z",
+      "data": {
+        "phase": "uploading",
+        "completed": 4,
+        "total": 6
+      }
+    }
+  ],
+  "recovery": {
+    "operation_resource_get": {
+      "status": 200,
+      "operation": {
+        "operation_id": "operation-gap-1",
+        "operation_type": "server.backup",
+        "protocol_version": "0.21.0-draft",
+        "target": {
+          "server_id": "server-alpha",
+          "environment_id": "staging"
+        },
+        "status": "running",
+        "actor_id": "actor-test",
+        "request_snapshot": {
+          "operation_type": "server.backup",
+          "parameters": {}
+        },
+        "created_at": "2026-11-06T18:44:58Z",
+        "updated_at": "2026-11-06T18:45:02Z",
+        "steps": [
+          {
+            "step_id": "prepare",
+            "step_type": "game.backup.prepare",
+            "status": "succeeded",
+            "attempt": 1
+          },
+          {
+            "step_id": "upload",
+            "step_type": "storage.object.put",
+            "status": "running",
+            "attempt": 1
+          }
+        ]
+      }
+    }
+  },
+  "expected": {
+    "event_schema_valid": true,
+    "operation_schema_valid": true,
+    "gap_detected": true,
+    "expected_sequence": 3,
+    "received_sequence": 4,
+    "authoritative_operation_fetched": true,
+    "operation_id": "operation-gap-1",
+    "recovered_status": "running",
+    "recovered_steps": [
+      {
+        "step_id": "prepare",
+        "step_type": "game.backup.prepare",
+        "status": "succeeded",
+        "attempt": 1
+      },
+      {
+        "step_id": "upload",
+        "step_type": "storage.object.put",
+        "status": "running",
+        "attempt": 1
+      }
+    ],
+    "missing_event_details_reconstructed": false,
+    "side_effect_dispatches": 0,
+    "replayed_events": 0,
+    "resume_after_sequence": 4
+  },
+  "notes": {
+    "sequence_scope": "per-operation",
+    "recovery": "on-gap-fetch-authoritative-operation-snapshot-then-resume-from-highest-observed-sequence",
+    "unobserved_event_details": "must-not-be-reconstructed-from-sequence-numbers",
+    "side_effect_expectation": "none"
+  }
+}
