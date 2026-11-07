@@ -127,6 +127,36 @@ func TestSecretReferenceSchemaValidation(t *testing.T) {
 			},
 		},
 		{
+			name: "secret reference must be a string",
+			value: map[string]any{
+				"secret_ref": true,
+				"purpose":    "backup.authentication",
+			},
+		},
+		{
+			name: "purpose must be a string",
+			value: map[string]any{
+				"secret_ref": "vault://minecraft/production/backup",
+				"purpose":    true,
+			},
+		},
+		{
+			name: "permission scope entries must be strings",
+			value: map[string]any{
+				"secret_ref":      "vault://minecraft/production/backup",
+				"purpose":         "backup.authentication",
+				"permission_scope": []any{true},
+			},
+		},
+		{
+			name: "unknown critical field is rejected",
+			value: map[string]any{
+				"secret_ref":        "vault://minecraft/production/backup",
+				"purpose":           "backup.authentication",
+				"critical_extension": true,
+			},
+		},
+		{
 			name: "literal secret is not a reference",
 			value: map[string]any{
 				"secret_ref": "plaintext-password",
