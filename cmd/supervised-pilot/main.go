@@ -191,7 +191,7 @@ func backup(host string, execute bool, confirmation string, timeout time.Duratio
 		}
 		return fmt.Errorf("backup outcome unknown; %s; inspect %s on %s before retrying", detail, backupUnit, host)
 	}
-	if after.result != "success" || after.exitCode != "0" {
+	if after.active == "failed" || after.result != "success" || after.exitCode != "0" {
 		detail := fmt.Sprintf("systemd invocation_id=%q result=%q exit=%q active=%q", after.invocationID, after.result, after.exitCode, after.active)
 		if auditErr := appendAuditRecord(auditPath, operationID, "failed", host, detail); auditErr != nil {
 			return fmt.Errorf("%s did not report success (%s); audit update failed: %w", backupUnit, detail, auditErr)
