@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-output",
+  "title": "Systemd execution unit restart output",
+  "description": "Completed requires a clean stop and a distinct running incarnation; it does not establish game readiness. Accepted and unknown outcomes require scoped reconciliation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "unit_ref",
+    "target",
+    "release_id",
+    "previous_runtime_id",
+    "outcome",
+    "state",
+    "clean_stop_confirmed",
+    "force_used",
+    "persistent_data_preserved",
+    "observed_at"
+  ],
+  "properties": {
+    "unit_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
+    "target": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "previous_runtime_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "runtime_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "outcome": {
+      "enum": [
+        "completed",
+        "accepted",
+        "outcome_unknown"
+      ]
+    },
+    "state": {
+      "enum": [
+        "stopping",
+        "stopped",
+        "starting",
+        "running",
+        "failed",
+        "unknown"
+      ]
+    },
+    "clean_stop_confirmed": {
+      "type": "boolean"
+    },
+    "force_used": {
+      "const": false
+    },
+    "persistent_data_preserved": {
+      "const": true
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "external_operation_ref": {
+      "allOf": [
+        {
+          "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+        },
+        {
+          "properties": {
+            "resource_kind": {
+              "const": "unit-operation"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "completed"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "runtime_id"
+        ],
+        "properties": {
+          "state": {
+            "const": "running"
+          },
+          "clean_stop_confirmed": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "accepted",
+              "outcome_unknown"
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "required": [
+          "external_operation_ref"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "state": {
+            "const": "starting"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "clean_stop_confirmed": {
+            "const": true
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "unit_ref": {
+    "adapter_id": "execution.systemd",
+    "environment_id": "staging",
+    "resource_kind": "systemd-unit",
+    "external_id": "paper-staging"
+  },
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-test-001"
+    }
+  },
+  "release_id": "paper-test-release",
+  "previous_runtime_id": "runtime-before-001",
+  "runtime_id": "runtime-after-002",
+  "outcome": "completed",
+  "state": "running",
+  "clean_stop_confirmed": true,
+  "force_used": false,
+  "persistent_data_preserved": true,
+  "observed_at": "2026-11-07T12:00:10Z"
+}

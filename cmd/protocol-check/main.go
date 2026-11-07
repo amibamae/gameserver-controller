@@ -25,6 +25,8 @@ const (
 )
 
 var exampleSchemaIDs = map[string]string{
+	"execution-unit-restart-input.json":             "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-input",
+	"execution-unit-restart-output.json":            "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-output",
 	"execution-unit-create-input.json":              "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-create-input",
 	"execution-unit-create-output.json":             "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-create-output",
 	"adapter-descriptor.hosting.json":               "urn:gameserver-controller:0.21.0-draft:common:capability-descriptor",

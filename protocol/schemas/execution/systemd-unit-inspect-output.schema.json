@@ -31,6 +31,16 @@
     "release_ref": {
       "type": "string",
       "maxLength": 500
+    },
+    "runtime_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Opaque identity of the current runtime incarnation. Adapters advertising restart must supply it while running; it changes after a completed restart."
+    },
+    "target": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target",
+      "description": "Exact host binding, required with release_ref and runtime_id when the adapter advertises restart."
     }
   }
 }

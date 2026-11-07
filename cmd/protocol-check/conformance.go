@@ -50,6 +50,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 	fixtureID := stringValue(fixture, "fixture_id")
 	input := asObject(fixture["input"])
 	switch fixtureID {
+	case "execution.unit.restart.clean-stop-distinct-runtime":
+		return evaluateUnitRestart(pkg, fixture)
 	case "execution.unit.create.exact-definition-no-autostart":
 		return evaluateUnitCreate(pkg, fixture)
 	case "game.configure.pinned-schema-and-result-binding":
