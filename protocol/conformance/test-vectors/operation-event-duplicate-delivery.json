@@ -1,0 +1,56 @@
+{
+  "fixture_id": "operations.events.duplicate-delivery",
+  "protocol_version": "0.21.0-draft",
+  "contract": "operation.events",
+  "purpose": "A consumer receives an identical event again after advancing its cursor and applies it only once.",
+  "last_consumed_sequence": 1,
+  "deliveries": [
+    {
+      "event_id": "event-2",
+      "operation_id": "operation-duplicate-1",
+      "sequence": 2,
+      "event_type": "operation.step.started",
+      "timestamp": "2026-11-06T19:05:01Z",
+      "step_id": "provision",
+      "status": "running"
+    },
+    {
+      "event_id": "event-3",
+      "operation_id": "operation-duplicate-1",
+      "sequence": 3,
+      "event_type": "operation.progress.updated",
+      "timestamp": "2026-11-06T19:05:02Z",
+      "data": {
+        "phase": "provisioning",
+        "completed": 1,
+        "total": 3
+      }
+    },
+    {
+      "event_id": "event-2",
+      "operation_id": "operation-duplicate-1",
+      "sequence": 2,
+      "event_type": "operation.step.started",
+      "timestamp": "2026-11-06T19:05:01Z",
+      "step_id": "provision",
+      "status": "running"
+    }
+  ],
+  "expected": {
+    "schema_valid": true,
+    "applied_event_ids": [
+      "event-2",
+      "event-3"
+    ],
+    "applied_event_count": 2,
+    "duplicate_deliveries_ignored": 1,
+    "duplicate_event_applications": 0,
+    "last_consumed_sequence": 3,
+    "cursor_regressed": false
+  },
+  "notes": {
+    "delivery_order": "event-2,event-3,duplicate-event-2",
+    "duplicate_definition": "same event_id and identical canonical event content",
+    "gap_recovery": "not-needed"
+  }
+}
