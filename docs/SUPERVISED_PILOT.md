@@ -31,7 +31,9 @@ The pilot does not stop Paper, restore a world, destroy a server, or install or 
 
 The [machine-readable capacity policy](../pilot/capacity-policy.json) allows at most two VM instances total: one in `production`, plus one shared slot occupied by either `staging` or `testing`. `staging` and `testing` cannot occupy the shared slot at the same time.
 
-A future create flow must reserve its slot before calling the provider. The reservation consumes capacity. Every instance continues to consume capacity until the provider confirms it is absent or destroyed. A create or destroy with an unresolved outcome continues to consume its slot; an unknown create cannot free capacity until provider state confirms absence or destruction. Reject unsupported environments, duplicate or occupied slot requests, and any create that would exceed the total limit.
+A future create flow must reserve its slot atomically before calling the provider. The reservation consumes capacity. Every instance continues to consume capacity until the provider confirms it is absent or destroyed. A create or destroy with an unresolved outcome continues to consume its slot; an unknown create cannot free capacity until provider state confirms absence or destruction. Reject unsupported environments, duplicate or occupied slot requests, and any create that would exceed the total limit.
+
+The repository includes reference cases for available slots, conflicts, unresolved outcomes, the total limit, and confirmed release. The case checker validates those examples against the policy; it is not called by the pilot CLI or any provisioning path.
 
 **This policy is declarative only.** The current `cmd/supervised-pilot` CLI supports backup, status, and local history; it has no VM-create path. The policy is not enforced by that CLI and does not constrain actual provisioning yet.
 

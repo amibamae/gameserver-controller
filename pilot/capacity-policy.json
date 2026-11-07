@@ -23,7 +23,7 @@
     }
   },
   "create_policy": {
-    "reserve_slot_before_provider_create": true,
+    "reserve_slot_atomically_before_provider_create": true,
     "reservation_counts_as_capacity": true,
     "reject_duplicate_or_occupied_slot": true,
     "reject_if_total_would_exceed_limit": true,

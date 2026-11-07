@@ -1,0 +1,171 @@
+{
+  "policy_id": "supervised-pilot-vm-capacity",
+  "cases": [
+    {
+      "id": "production-slot-available",
+      "request_environment": "production",
+      "existing_instances": [],
+      "expected": {
+        "allowed": true,
+        "reason": "slot_available"
+      }
+    },
+    {
+      "id": "staging-slot-available",
+      "request_environment": "staging",
+      "existing_instances": [],
+      "expected": {
+        "allowed": true,
+        "reason": "slot_available"
+      }
+    },
+    {
+      "id": "testing-slot-available",
+      "request_environment": "testing",
+      "existing_instances": [],
+      "expected": {
+        "allowed": true,
+        "reason": "slot_available"
+      }
+    },
+    {
+      "id": "duplicate-production-denied",
+      "request_environment": "production",
+      "existing_instances": [
+        {
+          "environment": "production",
+          "provider_state": "running"
+        }
+      ],
+      "expected": {
+        "allowed": false,
+        "reason": "slot_occupied"
+      }
+    },
+    {
+      "id": "staging-and-testing-share-one-slot",
+      "request_environment": "testing",
+      "existing_instances": [
+        {
+          "environment": "staging",
+          "provider_state": "running"
+        }
+      ],
+      "expected": {
+        "allowed": false,
+        "reason": "slot_occupied"
+      }
+    },
+    {
+      "id": "pending-reservation-counts-as-capacity",
+      "request_environment": "production",
+      "existing_instances": [
+        {
+          "environment": "production",
+          "provider_state": "reserved"
+        }
+      ],
+      "expected": {
+        "allowed": false,
+        "reason": "slot_occupied"
+      }
+    },
+    {
+      "id": "unresolved-create-reserves-production-slot",
+      "request_environment": "production",
+      "existing_instances": [
+        {
+          "environment": "production",
+          "provider_state": "create_outcome_unknown"
+        }
+      ],
+      "expected": {
+        "allowed": false,
+        "reason": "slot_occupied"
+      }
+    },
+    {
+      "id": "unresolved-create-reserves-shared-slot",
+      "request_environment": "testing",
+      "existing_instances": [
+        {
+          "environment": "staging",
+          "provider_state": "create_outcome_unknown"
+        }
+      ],
+      "expected": {
+        "allowed": false,
+        "reason": "slot_occupied"
+      }
+    },
+    {
+      "id": "unresolved-destroy-keeps-slot-occupied",
+      "request_environment": "production",
+      "existing_instances": [
+        {
+          "environment": "production",
+          "provider_state": "destroy_outcome_unknown"
+        }
+      ],
+      "expected": {
+        "allowed": false,
+        "reason": "slot_occupied"
+      }
+    },
+    {
+      "id": "third-create-denied-at-total-limit",
+      "request_environment": "testing",
+      "existing_instances": [
+        {
+          "environment": "production",
+          "provider_state": "running"
+        },
+        {
+          "environment": "staging",
+          "provider_state": "running"
+        }
+      ],
+      "expected": {
+        "allowed": false,
+        "reason": "total_limit_reached"
+      }
+    },
+    {
+      "id": "provider-confirmed-absence-releases-slot",
+      "request_environment": "production",
+      "existing_instances": [
+        {
+          "environment": "production",
+          "provider_state": "absent"
+        }
+      ],
+      "expected": {
+        "allowed": true,
+        "reason": "slot_available"
+      }
+    },
+    {
+      "id": "provider-confirmed-destruction-releases-slot",
+      "request_environment": "production",
+      "existing_instances": [
+        {
+          "environment": "production",
+          "provider_state": "destroyed"
+        }
+      ],
+      "expected": {
+        "allowed": true,
+        "reason": "slot_available"
+      }
+    },
+    {
+      "id": "unsupported-environment-denied",
+      "request_environment": "development",
+      "existing_instances": [],
+      "expected": {
+        "allowed": false,
+        "reason": "unsupported_environment"
+      }
+    }
+  ]
+}
