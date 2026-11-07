@@ -1,0 +1,202 @@
+{
+  "fixture_id": "integration.proxy.backend.drain-unregister-state-confirmation",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.proxy.backend.lifecycle",
+  "purpose": "Only schema-valid, target-bound drain and unregister outputs with the exact confirmed postconditions establish completion; all other outcomes require inspection before retry.",
+  "input": {
+    "target": {
+      "server_id": "minecraft-test",
+      "environment_id": "staging",
+      "backend_id": "paper-staging-01",
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-test-001"
+      }
+    },
+    "observed_at": "2026-11-06T09:30:00Z",
+    "cases": [
+      {
+        "case_id": "drain-confirmed",
+        "action": "drain",
+        "request_outcome": "confirmed",
+        "registration_state": "draining",
+        "routability": "not_routable"
+      },
+      {
+        "case_id": "drain-accepted",
+        "action": "drain",
+        "request_outcome": "accepted",
+        "registration_state": "registered",
+        "routability": "unknown"
+      },
+      {
+        "case_id": "drain-outcome-unknown",
+        "action": "drain",
+        "request_outcome": "outcome_unknown",
+        "registration_state": "unknown",
+        "routability": "unknown"
+      },
+      {
+        "case_id": "unregister-confirmed",
+        "action": "unregister",
+        "request_outcome": "confirmed",
+        "registration_state": "unregistered",
+        "routability": "not_routable"
+      },
+      {
+        "case_id": "unregister-accepted",
+        "action": "unregister",
+        "request_outcome": "accepted",
+        "registration_state": "registered",
+        "routability": "not_routable"
+      },
+      {
+        "case_id": "unregister-rejected",
+        "action": "unregister",
+        "request_outcome": "rejected",
+        "registration_state": "registered",
+        "routability": "routable"
+      },
+      {
+        "case_id": "drain-confirmed-wrong-instance",
+        "action": "drain",
+        "request_outcome": "confirmed",
+        "registration_state": "draining",
+        "routability": "not_routable",
+        "output_target_override": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "backend_id": "paper-staging-01",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-002"
+          }
+        }
+      },
+      {
+        "case_id": "drain-confirmed-wrong-state",
+        "action": "drain",
+        "request_outcome": "confirmed",
+        "registration_state": "registered",
+        "routability": "routable",
+        "expected_schema_valid": false
+      },
+      {
+        "case_id": "unregister-confirmed-wrong-instance",
+        "action": "unregister",
+        "request_outcome": "confirmed",
+        "registration_state": "unregistered",
+        "routability": "not_routable",
+        "output_target_override": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "backend_id": "paper-staging-01",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-002"
+          }
+        }
+      },
+      {
+        "case_id": "unregister-confirmed-wrong-state",
+        "action": "unregister",
+        "request_outcome": "confirmed",
+        "registration_state": "draining",
+        "routability": "routable",
+        "expected_schema_valid": false
+      }
+    ]
+  },
+  "expected": {
+    "schema_expectations_met": true,
+    "case_results": {
+      "drain-confirmed": {
+        "schema_valid": true,
+        "target_bound": true,
+        "completion_confirmed": true,
+        "retry_requires_inspection": false,
+        "observed_registration_state": "draining",
+        "observed_routability": "not_routable"
+      },
+      "drain-accepted": {
+        "schema_valid": true,
+        "target_bound": true,
+        "completion_confirmed": false,
+        "retry_requires_inspection": true,
+        "observed_registration_state": "registered",
+        "observed_routability": "unknown"
+      },
+      "drain-outcome-unknown": {
+        "schema_valid": true,
+        "target_bound": true,
+        "completion_confirmed": false,
+        "retry_requires_inspection": true,
+        "observed_registration_state": "unknown",
+        "observed_routability": "unknown"
+      },
+      "unregister-confirmed": {
+        "schema_valid": true,
+        "target_bound": true,
+        "completion_confirmed": true,
+        "retry_requires_inspection": false,
+        "observed_registration_state": "unregistered",
+        "observed_routability": "not_routable"
+      },
+      "unregister-accepted": {
+        "schema_valid": true,
+        "target_bound": true,
+        "completion_confirmed": false,
+        "retry_requires_inspection": true,
+        "observed_registration_state": "registered",
+        "observed_routability": "not_routable"
+      },
+      "unregister-rejected": {
+        "schema_valid": true,
+        "target_bound": true,
+        "completion_confirmed": false,
+        "retry_requires_inspection": true,
+        "observed_registration_state": "registered",
+        "observed_routability": "routable"
+      },
+      "drain-confirmed-wrong-instance": {
+        "schema_valid": true,
+        "target_bound": false,
+        "completion_confirmed": false,
+        "retry_requires_inspection": true,
+        "observed_registration_state": "draining",
+        "observed_routability": "not_routable"
+      },
+      "unregister-confirmed-wrong-instance": {
+        "schema_valid": true,
+        "target_bound": false,
+        "completion_confirmed": false,
+        "retry_requires_inspection": true,
+        "observed_registration_state": "unregistered",
+        "observed_routability": "not_routable"
+      },
+      "drain-confirmed-wrong-state": {
+        "schema_valid": false,
+        "target_bound": true,
+        "completion_confirmed": false,
+        "retry_requires_inspection": true,
+        "observed_registration_state": "registered",
+        "observed_routability": "routable"
+      },
+      "unregister-confirmed-wrong-state": {
+        "schema_valid": false,
+        "target_bound": true,
+        "completion_confirmed": false,
+        "retry_requires_inspection": true,
+        "observed_registration_state": "draining",
+        "observed_routability": "routable"
+      }
+    }
+  },
+  "side_effect_expectation": "simulated"
+}
