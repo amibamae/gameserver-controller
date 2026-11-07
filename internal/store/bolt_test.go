@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	bolt "go.etcd.io/bbolt"
 
@@ -101,6 +102,154 @@ func TestUpdateUsesRevisionAndProtocolTransitions(t *testing.T) {
 	if _, err := store.UpdateOperation(updated.Revision, changedSchema); !errors.Is(err, ErrImmutableFields) {
 		t.Fatalf("changed accepted schema revision: got %v, want ErrImmutableFields", err)
 	}
+}
+
+func TestOperationAndLogicalServerTransitionCommitAtomically(t *testing.T) {
+	store := openTestStore(t)
+	server := testLogicalServerFixture(t, store)
+	operation := testOperation("lifecycle-atomic")
+	operation.OperationType = "server.provision"
+	operation.RequestSnapshot.OperationType = operation.OperationType
+	operation.RequestFingerprint = "sha256:" + strings.Repeat("a", 64)
+	proof := IdempotencyProof{
+		ActiveKeyVersion: "v1",
+		Candidates: []IdempotencyVerifier{{
+			KeyVersion: "v1", Digest: bytes.Repeat([]byte{1}, 32), BindingDigest: bytes.Repeat([]byte{2}, 32),
+		}},
+	}
+	created, replayed, err := store.AcceptOperation(operation, proof, []string{LogicalServerLockScope("staging", "server-1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayed {
+		t.Fatal("new lifecycle operation unexpectedly replayed")
+	}
+
+	nextOperation := created.Record
+	nextOperation.Status = protocolstate.OperationRunning
+	nextOperation.Steps[0].Status = protocolstate.StepRunning
+	nextOperation.Steps[0].Attempt = 1
+	stepID := nextOperation.Steps[0].StepID
+	nextOperation.CurrentStepID = &stepID
+	nextServer := server.Record
+	nextServer.LifecycleState = protocolstate.ServerProvisioning
+	updatedOperation, updatedServer, err := store.UpdateOperationAndLogicalServer(created.Revision, nextOperation, server.Revision, nextServer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updatedOperation.Revision != created.Revision+1 || updatedServer.Revision != server.Revision+1 ||
+		updatedOperation.Record.Status != protocolstate.OperationRunning || updatedServer.Record.LifecycleState != protocolstate.ServerProvisioning {
+		t.Fatalf("operation and server did not advance together: operation=%#v server=%#v", updatedOperation, updatedServer)
+	}
+	if len(updatedServer.Record.LifecycleEvents) != 1 {
+		t.Fatalf("server state transition event was not persisted: %#v", updatedServer.Record.LifecycleEvents)
+	}
+	event := updatedServer.Record.LifecycleEvents[0]
+	if event.OperationID != operation.OperationID || event.ActorID != operation.ActorID || event.FromState != protocolstate.ServerUnprovisioned ||
+		event.ToState != protocolstate.ServerProvisioning || event.RequestFingerprint != operation.RequestFingerprint || len(event.EvidenceStepIDs) != 0 {
+		t.Fatalf("lifecycle event is not bound to the operation: %#v", event)
+	}
+
+	invalidServer := updatedServer.Record
+	invalidServer.LifecycleState = protocolstate.ServerDestroyed
+	if _, _, err := store.UpdateOperationAndLogicalServer(updatedOperation.Revision, updatedOperation.Record, updatedServer.Revision, invalidServer); !errors.Is(err, protocolstate.ErrIllegalTransition) {
+		t.Fatalf("illegal server transition was accepted: %v", err)
+	}
+	storedOperation, err := store.GetOperation(operation.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storedServer, err := store.GetLogicalServer(server.Record.EnvironmentID, server.Record.ServerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storedOperation.Revision != updatedOperation.Revision || storedServer.Revision != updatedServer.Revision ||
+		storedServer.Record.LifecycleState != protocolstate.ServerProvisioning || len(storedServer.Record.LifecycleEvents) != 1 {
+		t.Fatalf("rejected transition partially committed: operation=%#v server=%#v", storedOperation, storedServer)
+	}
+}
+
+func TestAcceptLifecycleOperationRequiresDefinedLogicalServer(t *testing.T) {
+	store := openTestStore(t)
+	operation := testOperation("lifecycle-without-server")
+	operation.OperationType = "server.provision"
+	operation.RequestSnapshot.OperationType = operation.OperationType
+	operation.RequestFingerprint = "sha256:" + strings.Repeat("c", 64)
+	proof := IdempotencyProof{
+		ActiveKeyVersion: "v1",
+		Candidates: []IdempotencyVerifier{{
+			KeyVersion: "v1", Digest: bytes.Repeat([]byte{3}, 32), BindingDigest: bytes.Repeat([]byte{4}, 32),
+		}},
+	}
+	lockScope := LogicalServerLockScope("staging", "server-1")
+	if _, _, err := store.AcceptOperation(operation, proof, []string{lockScope}); !errors.Is(err, ErrLogicalServerNotFound) {
+		t.Fatalf("lifecycle operation without definition: got %v, want ErrLogicalServerNotFound", err)
+	}
+	if _, err := store.GetOperation(operation.OperationID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("rejected operation was persisted: %v", err)
+	}
+	if _, err := store.GetResourceLock(lockScope); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("rejected operation retained a resource lock: %v", err)
+	}
+}
+
+func TestLifecycleCommitRequiresDurableServerLock(t *testing.T) {
+	store := openTestStore(t)
+	server := testLogicalServerFixture(t, store)
+	operation := testOperation("lifecycle-without-lock")
+	operation.OperationType = "server.provision"
+	operation.RequestSnapshot.OperationType = operation.OperationType
+	operation.RequestFingerprint = "sha256:" + strings.Repeat("b", 64)
+	created, err := store.createOperation(operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextOperation := created.Record
+	nextOperation.Status = protocolstate.OperationRunning
+	nextOperation.Steps[0].Status = protocolstate.StepRunning
+	nextOperation.Steps[0].Attempt = 1
+	nextServer := server.Record
+	nextServer.LifecycleState = protocolstate.ServerProvisioning
+	if _, _, err := store.UpdateOperationAndLogicalServer(created.Revision, nextOperation, server.Revision, nextServer); !errors.Is(err, ErrCorruptStore) {
+		t.Fatalf("lifecycle commit without an acceptance lock: got %v, want ErrCorruptStore", err)
+	}
+	storedOperation, err := store.GetOperation(operation.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	storedServer, err := store.GetLogicalServer("staging", "server-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storedOperation.Revision != created.Revision || storedServer.Revision != server.Revision || storedServer.Record.LifecycleState != protocolstate.ServerUnprovisioned {
+		t.Fatalf("lockless lifecycle commit partially changed state: operation=%#v server=%#v", storedOperation, storedServer)
+	}
+}
+
+func testLogicalServerFixture(t *testing.T, operationStore *BoltStore) StoredLogicalServer {
+	t.Helper()
+	now := time.Now().UTC()
+	server := LogicalServer{
+		ServerID: "server-1", EnvironmentID: "staging", DisplayName: "Test Server",
+		HostingProfile: "vultr-small", StorageProfile: "wasabi-worlds", GameAdapterID: "game.paper",
+		ReleaseChannel: "stable", ExecutionAdapterID: "execution.systemd", ExecutionProfile: "paper-default",
+		Definition: json.RawMessage(`{"server_id":"server-1"}`), LifecycleState: protocolstate.ServerUnprovisioned,
+		DataGenerationStatus: "unknown", LastOperationID: "definition-operation", CreatedAt: now, UpdatedAt: now,
+	}
+	encoded, err := encodeLogicalServer(server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := operationStore.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(logicalServersBucket).Put(logicalServerKey(server.EnvironmentID, server.ServerID), encoded)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := operationStore.GetLogicalServer(server.EnvironmentID, server.ServerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return stored
 }
 
 func TestTerminalOperationRequiresResolvedStepsAndOutcome(t *testing.T) {
@@ -503,6 +652,7 @@ func TestOpenRejectsMissingResourceLockIndexes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			testLogicalServerFixture(t, store)
 			record := testOperation("recovery-index-check")
 			record.OperationType = "server.backup"
 			record.RequestSnapshot.OperationType = record.OperationType

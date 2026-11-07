@@ -52,14 +52,22 @@ transaction that accepts `server.define`. That record starts as
 `unprovisioned`, keeps the selected profile references and original validated
 definition, and is keyed by environment and server ID. Definition requests
 cannot contain adapter steps, secret references, or an external instance
-reference. This is a persistence primitive; standard lifecycle transitions
-and typed operation results are not yet wired to update the server record.
+reference. The store also supports an atomic operation/server-state commit.
+Each committed lifecycle transition records the authenticated actor, operation,
+previous and next state, cause, request fingerprint, timestamp, and completed
+step IDs that provide evidence. The engine routes definitions that implement
+the pure lifecycle projector through this transaction. This is an integration
+seam; standard lifecycle definitions and their typed results are not yet wired
+to update the server record.
 
 Operation acceptance also requires an injected trusted planner. A request
 cannot supply adapter steps, and authorization runs against the planner's
 result before the operation is persisted. The metadata-only definition planner
 is covered; profile-resolving plans for provision, start, stop, backup, restore,
-and destroy have not been implemented.
+and destroy have not been implemented. The store rejects every accepted
+`server.*` lifecycle operation except `server.define` unless its target already
+has a valid durable logical-server record; a rejected request cannot leave an
+operation or lock behind.
 
 `SchemaRequestValidator` checks the standard operation request against the
 compiled protocol schemas, binds `server.define` and `server.provision` targets

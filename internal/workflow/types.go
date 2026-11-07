@@ -51,6 +51,14 @@ type Definition interface {
 	BuildFailureResult(context.Context, store.OperationRecord, store.OperationStep, json.RawMessage) (json.RawMessage, error)
 }
 
+// LifecycleProjector derives a logical-server record from durable operation
+// progress. It is called for every persisted operation update; when it reports
+// a state change, the engine commits the operation and state event atomically.
+// Implementations must be deterministic and must not perform external effects.
+type LifecycleProjector interface {
+	ProjectLifecycle(store.OperationRecord, store.StoredLogicalServer) (store.LogicalServer, bool, error)
+}
+
 type Definitions struct {
 	mu     sync.RWMutex
 	values map[string]Definition
