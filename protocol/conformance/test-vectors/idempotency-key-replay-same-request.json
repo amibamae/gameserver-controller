@@ -1,0 +1,32 @@
+{
+  "fixture_id": "operations.idempotency.same-key-same-request",
+  "protocol_version": "0.21.0-draft",
+  "contract": "operation.accept",
+  "existing_operation_id": "operation-replay-001",
+  "first_request": {
+    "actor_id": "operator-test",
+    "idempotency_key": "replay-key",
+    "operation_type": "server.provision",
+    "server_id": "minecraft-test",
+    "environment_id": "production",
+    "parameters": {
+      "plan_id": "plan-small"
+    }
+  },
+  "second_request": {
+    "actor_id": "operator-test",
+    "idempotency_key": "replay-key",
+    "operation_type": "server.provision",
+    "server_id": "minecraft-test",
+    "environment_id": "production",
+    "parameters": {
+      "plan_id": "plan-small"
+    }
+  },
+  "expected": {
+    "same_operation_reused": true,
+    "operation_id": "operation-replay-001",
+    "operation_count": 1,
+    "side_effect_dispatch_count": 1
+  }
+}
