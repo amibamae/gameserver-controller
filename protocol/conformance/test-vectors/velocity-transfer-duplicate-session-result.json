@@ -88,7 +88,7 @@
     "readiness_current": true,
     "session_set_complete": false,
     "aggregate_counts_match": true,
-    "result_accepted": false,
+    "result_valid_and_bound": false,
     "retry_unknown_without_reconciliation": false,
     "request_result_bound": true
   },

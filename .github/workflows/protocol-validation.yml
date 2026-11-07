@@ -46,5 +46,7 @@ jobs:
         run: go test ./...
       - name: Validate schemas, references, examples, OpenAPI metadata, and conformance vectors
         run: go run ./cmd/protocol-check
-      - name: Print conformance package manifest
-        run: go run ./cmd/protocol-check -manifest
+      - name: Verify conformance package manifest
+        run: |
+          go run ./cmd/protocol-check -manifest > "$RUNNER_TEMP/conformance-package-manifest.json"
+          diff -u protocol/conformance/package-manifest.json "$RUNNER_TEMP/conformance-package-manifest.json"
