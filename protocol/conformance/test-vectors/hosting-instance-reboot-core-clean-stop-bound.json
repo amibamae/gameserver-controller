@@ -1,0 +1,38 @@
+{
+  "fixture_id": "hosting.instance.reboot.core-clean-stop-bound",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "hosting.instance.reboot.core",
+  "purpose": "A clean stop bound to the exact instance permits routine reboot.",
+  "input": {
+    "reboot_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "production",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    },
+    "core_preconditions": {
+      "persistent_data_status": "present",
+      "game_save_confirmed": false,
+      "clean_stop_confirmed": true,
+      "clean_stop_instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "production",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    }
+  },
+  "expected": {
+    "core_preconditions_valid": true,
+    "data_safety_gate_required": true,
+    "save_evidence_bound": false,
+    "clean_stop_evidence_bound": true,
+    "routine_reboot_allowed": true,
+    "emergency_approval_bound": false,
+    "provider_reboot_dispatch_allowed": true,
+    "emergency_bypass_used": false,
+    "game_readiness_established": false
+  }
+}
