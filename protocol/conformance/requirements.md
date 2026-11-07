@@ -117,6 +117,9 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Client treats unknown status values safely.
 - Client never assumes request timeout means operation failure.
 - Authentication and authorization failures do not disclose protected resource details.
+- Remote management authentication rejects invalid signatures, expired credentials, wrong audiences, and revoked credentials with 401; denied requests establish no actor, return no protected resource data, create no operation, and dispatch no adapter call. A valid control request maps the actor only from the authenticated principal.
+- Local authentication derives the actor only from a verified operating-system peer identity; unavailable peer identity and loopback TCP without authenticated peer identity are denied. A client-supplied actor claim cannot replace the peer identity.
+- A synthetic bearer token appears only in the Authorization header over TLS and is absent from URLs, query parameters, request bodies, operation records, logs, errors, events, and audit records.
 - Client-supplied actor, role, or permission claims cannot elevate access; accepted operations use the authenticated principal as `actor_id`, and denied attempts return no protected resource data.
 - Client session expiry alone does not cancel or pause an already accepted durable operation or require a client token refresh; independent reauthorization for sensitive steps still evaluates current permissions, approvals, target, and policy.
 - A list cursor is bound to the authenticated actor and canonical filter scope; reuse under another actor or filter is rejected with a generic invalid-request error and returns no resource items or metadata.
@@ -156,6 +159,8 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [operation-event-sequence.json](test-vectors/operation-event-sequence.json)
 - [operation-event-duplicate-delivery.json](test-vectors/operation-event-duplicate-delivery.json)
 - [operation-survives-client-session-expiry.json](test-vectors/operation-survives-client-session-expiry.json)
+- [management-authentication-actor-spoofing.json](test-vectors/management-authentication-actor-spoofing.json)
+- [management-authentication-credential-profiles.json](test-vectors/management-authentication-credential-profiles.json)
 - [management-pagination-cursor-scope.json](test-vectors/management-pagination-cursor-scope.json)
 - [readiness-required-before-transfer.json](test-vectors/readiness-required-before-transfer.json)
 - [game-readiness-unknown-blocks-ready.json](test-vectors/game-readiness-unknown-blocks-ready.json)
