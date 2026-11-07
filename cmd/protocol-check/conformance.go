@@ -1599,7 +1599,11 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		}
 		recovery := asObject(fixture["recovery"])
 		operationResponse := asObject(recovery["operation_resource_get"])
-		if operationResponse["status"] != int64(200) && operationResponse["status"] != float64(200) {
+		responseStatus, err := integerValue(operationResponse["status"])
+		if err != nil {
+			return nil, err
+		}
+		if responseStatus != 200 {
 			return nil, fmt.Errorf("gap recovery requires a successful authoritative operation read")
 		}
 		operation := asObject(operationResponse["operation"])
