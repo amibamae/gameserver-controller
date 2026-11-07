@@ -15,12 +15,19 @@ controller:
 adapters:
   - id: hosting.example
     category: hosting
+    secret_refs:
+      api_token:
+        secret_ref: systemd-credential://example-vultr-api-token
+        purpose: example Vultr provisioning credential
+        permission_scope:
+          - hosting.instance.create
+          - hosting.instance.inspect
   - id: storage.example
     category: storage
     secret_refs:
       backup_writer:
-        secret_ref: env://GAMECTRL_EXAMPLE_STORAGE_TOKEN
-        purpose: example backup storage access
+        secret_ref: systemd-credential://example-wasabi-staging-writer
+        purpose: example staging backup storage access
         permission_scope:
           - storage.backup.write
   - id: execution.example

@@ -10,7 +10,10 @@ go run ./cmd/config-check validate configs/controller.example.yaml
 
 The command accepts one YAML document, rejects unknown fields, checks references and safety rules, and prints a validation summary. It does not read secrets, open the configured state-store path, contact providers, or start operations.
 
-The example uses fictional adapter profiles and a placeholder environment-variable reference. It contains no credentials. It defines a production boundary but includes only a staging test-server profile, so you do not have to adopt a live production server into controller-managed inventory.
+The example uses fictional adapter profiles and named systemd credential
+references; it contains no credential values. It defines a production boundary
+but includes only a staging test-server profile, so you do not have to adopt a
+live production server into controller-managed inventory.
 
 ## Version 1 shape
 
@@ -24,13 +27,32 @@ Relative state-store paths are resolved against the configuration file by `Resol
 
 ## Secret references
 
-Version 1 accepts only the explicit `env://NAME` reference form. Each reference records a purpose and may include permission scopes and a version reference. Validation checks syntax. It does not read the environment variable, reveal its value, or verify the credential's permissions. A literal credential is not a valid reference.
+Version 1 accepts references only in the explicit
+`systemd-credential://NAME` form. Each reference records a purpose and may
+include permission scopes and a version reference. Validation checks syntax;
+it does not read the credential, reveal its value, or verify its permissions.
+Literal credentials and environment-variable references are rejected. A
+reference names a credential loaded for the controller service; it does not
+contain or encrypt the credential value.
 
-A future resolver must reject missing or unauthorized credentials, never print resolved values, resolve credentials only when needed, and fail closed. Keep credentials out of source control, bootstrap/user-data, command-line arguments, release artifacts, and ordinary logs. Production and staging need distinct least-privilege credentials; staging must not change or delete production backups.
+The runtime resolver is not implemented. It must reject missing or
+unauthorized credentials, never print resolved values, resolve credentials
+only when needed, and fail closed. For the initial Debian/systemd deployment,
+store values as encrypted systemd credentials and load only the named values
+needed by the controller service. Keep credentials out of source control,
+bootstrap/user-data, command-line arguments, process environment variables,
+release artifacts, operation records, and ordinary logs. Production and
+staging storage must use separate least-privilege credentials, with staging
+unable to modify or delete production backups. See [secret management](SECRET_MANAGEMENT.md)
+for the deployment rules. Validation rejects a shared storage credential
+reference across production and staging profiles.
 
 ## What validation covers
 
-The validator checks document shape, duplicate and unknown YAML fields, IDs, adapter categories and references, secret-reference syntax, environment and backup-access rules, lifecycle safeguards, and timeout/retry bounds.
+The validator checks document shape, duplicate and unknown YAML fields, IDs,
+adapter categories and references, protected credential-reference syntax,
+environment and backup-access rules, lifecycle safeguards, and timeout/retry
+bounds.
 
 It does not yet check provider endpoints, network destinations, filesystem symlink or traversal policy, runtime authorization, config migrations, or redacted change plans. Passing validation does not authorize an operation.
 

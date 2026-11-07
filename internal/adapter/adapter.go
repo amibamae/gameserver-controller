@@ -137,6 +137,15 @@ func NewRegistry(schemas *schemaregistry.Registry) (*Registry, error) {
 	return &Registry{schemas: schemas, version: schemas.ProtocolVersion(), adapters: make(map[string]registeredAdapter)}, nil
 }
 
+// ProtocolVersion returns the exact protocol version selected by this
+// registry. Adapters registered here must advertise this version.
+func (r *Registry) ProtocolVersion() string {
+	if r == nil {
+		return ""
+	}
+	return r.version
+}
+
 func (r *Registry) Register(implementation Implementation) error {
 	if r == nil || implementation == nil {
 		return errors.New("registry and adapter implementation are required")

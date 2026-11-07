@@ -38,7 +38,7 @@ The core owns workflow policy and state transitions. It does not call vendor API
 
 ## Adapter boundaries
 
-The protocol works with ordinary VMs and service managers. Docker and Kubernetes are optional integrations, not prerequisites. See [ADR 0003](decisions/0003-execution-agnostic-runtime.md).
+The protocol works with ordinary VMs and service managers. Container and Kubernetes adapters are optional. See [ADR 0003](decisions/0003-execution-agnostic-runtime.md).
 
 ### Hosting
 
@@ -63,6 +63,16 @@ Keep game behavior separate from process management. The execution adapter start
 ### Integrations
 
 Integrations connect the core to proxies, monitoring, alerts, and notifications. They follow documented interfaces and cannot bypass lifecycle or privacy policy. Velocity is a proxy integration, not a hosting provider.
+
+## Optional hosted control plane
+
+The documented management API could later be offered as a hosted service. The service could assign customers names under a service-owned domain for game joins and let customer applications call the same versioned API. A hosted API and a web panel are separate choices: the API can exist without a first-party panel.
+
+The current controller is a local, single-controller design with a local bbolt state store. It is not safe to expose directly as a shared multi-customer service. Before hosting it, tenant identity and authorization must be enforced on every API request and persisted operation; operation idempotency, locks, state, audit events, credentials, DNS records, quotas, and rate limits must all be tenant-scoped. A tenant must only update the exact subdomain and records assigned to it. Provider secrets and spending limits need explicit ownership and isolation rules. The service also needs abuse handling, audit retention, incident response, and backup/recovery plans.
+
+Customer applications should receive scoped API credentials, never Vultr, Wasabi, or DNS provider keys. The API should submit requests through the same controller authorization, capacity, readiness, and lifecycle checks used by first-party clients. Assigning a join subdomain does not itself provide a game proxy or transfer active connections; for direct-join games, use the optional [lobby and DNS wake flow](NO_PROXY_DNS_HANDOFF.md), including its reconnect and DNS-cache behavior.
+
+This hosted deployment is a future product option, not a current commitment or implementation. Keep the API contract transport-independent so local and hosted deployments can share it, while treating multi-tenancy as a separate security milestone rather than assuming it follows automatically from hosting the existing binary.
 
 ## Production and staging boundaries
 
@@ -107,6 +117,6 @@ The lifecycle protocol defines public state transitions. These rules must hold a
 
 Optional telemetry starts disabled. Identifiable player telemetry requires informed opt-in from the server owner and each affected player. See [SECURITY.md](../SECURITY.md).
 
-## Remaining design work
+## Remaining implementation work
 
-Go is selected for the initial implementation. The operation store and in-process adapter boundary now exist. Still to build: runtime config and secret resolution, durable step dispatch and reconciliation, workflow orchestration, audit/event retention, production adapters, per-game health checks, and approval rules for destructive actions.
+Go is selected for the initial implementation. The operation store, in-process adapter boundary, and generic durable workflow engine now exist. Still to build: standard lifecycle workflow definitions and application wiring, runtime config and secret resolution, process transport, audit/event retention, production adapters, per-game health checks, and approval rules for destructive actions. A shared hosted service also requires tenant isolation and operational controls; see the hosted control-plane section above.
