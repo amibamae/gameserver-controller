@@ -143,16 +143,16 @@ func TestSecretReferenceSchemaValidation(t *testing.T) {
 		{
 			name: "permission scope entries must be strings",
 			value: map[string]any{
-				"secret_ref":      "vault://minecraft/production/backup",
-				"purpose":         "backup.authentication",
+				"secret_ref":       "vault://minecraft/production/backup",
+				"purpose":          "backup.authentication",
 				"permission_scope": []any{true},
 			},
 		},
 		{
 			name: "unknown critical field is rejected",
 			value: map[string]any{
-				"secret_ref":        "vault://minecraft/production/backup",
-				"purpose":           "backup.authentication",
+				"secret_ref":         "vault://minecraft/production/backup",
+				"purpose":            "backup.authentication",
 				"critical_extension": true,
 			},
 		},
