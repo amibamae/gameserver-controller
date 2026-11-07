@@ -22,7 +22,8 @@ const (
 	locksBucketName          = "resource_locks"
 	operationLocksBucketName = "operation_locks"
 	keyVersionsBucketName    = "idempotency_key_versions"
-	databaseSchema           = "2"
+	logicalServersBucketName = "logical_servers"
+	databaseSchema           = "3"
 )
 
 var (
@@ -32,6 +33,7 @@ var (
 	locksBucket          = []byte(locksBucketName)
 	operationLocksBucket = []byte(operationLocksBucketName)
 	keyVersionsBucket    = []byte(keyVersionsBucketName)
+	logicalServersBucket = []byte(logicalServersBucketName)
 	schemaKey            = []byte("schema_version")
 )
 
@@ -72,14 +74,14 @@ func OpenBolt(path string) (*BoltStore, error) {
 		if _, err := tx.CreateBucketIfNotExists(operationsBucket); err != nil {
 			return err
 		}
-		for _, name := range [][]byte{idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket} {
+		for _, name := range [][]byte{idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket} {
 			if _, err := tx.CreateBucketIfNotExists(name); err != nil {
 				return err
 			}
 		}
 		version := meta.Get(schemaKey)
 		if version == nil {
-			for _, name := range [][]byte{operationsBucket, idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket} {
+			for _, name := range [][]byte{operationsBucket, idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket} {
 				cursor := tx.Bucket(name).Cursor()
 				if key, _ := cursor.First(); key != nil {
 					return ErrStoreNeedsMigration
@@ -92,6 +94,9 @@ func OpenBolt(path string) (*BoltStore, error) {
 			if key, _ := cursor.First(); key != nil {
 				return ErrStoreNeedsMigration
 			}
+			return meta.Put(schemaKey, []byte(databaseSchema))
+		}
+		if bytes.Equal(version, []byte("2")) {
 			return meta.Put(schemaKey, []byte(databaseSchema))
 		}
 		if !bytes.Equal(version, []byte(databaseSchema)) {
@@ -214,6 +219,24 @@ func (s *BoltStore) AcceptOperation(record OperationRecord, proof IdempotencyPro
 		if operations.Get([]byte(prepared.OperationID)) != nil {
 			return ErrAlreadyExists
 		}
+		var logicalServer *LogicalServer
+		if prepared.OperationType == "server.define" {
+			if len(prepared.Steps) != 0 || len(prepared.RequestSnapshot.SecretRefs) != 0 || len(prepared.Target.InstanceRef) != 0 {
+				return fmt.Errorf("%w: server.define must contain only a logical definition", ErrInvalidRecord)
+			}
+			server, err := newLogicalServerFromDefinition(prepared)
+			if err != nil {
+				return err
+			}
+			key := logicalServerKey(server.EnvironmentID, server.ServerID)
+			if tx.Bucket(logicalServersBucket).Get(key) != nil {
+				return ErrLogicalServerAlreadyExists
+			}
+			server.CreatedAt = prepared.CreatedAt
+			server.UpdatedAt = prepared.CreatedAt
+			server.LastOperationID = prepared.OperationID
+			logicalServer = &server
+		}
 		for _, scope := range scopes {
 			value := tx.Bucket(locksBucket).Get([]byte(scope))
 			if value == nil {
@@ -231,6 +254,15 @@ func (s *BoltStore) AcceptOperation(record OperationRecord, proof IdempotencyPro
 		}
 		if err := operations.Put([]byte(prepared.OperationID), encoded); err != nil {
 			return err
+		}
+		if logicalServer != nil {
+			serverJSON, err := encodeLogicalServer(*logicalServer)
+			if err != nil {
+				return err
+			}
+			if err := tx.Bucket(logicalServersBucket).Put(logicalServerKey(logicalServer.EnvironmentID, logicalServer.ServerID), serverJSON); err != nil {
+				return err
+			}
 		}
 		activeVerifier, _ := findVerifier(proof, proof.ActiveKeyVersion)
 		entry := idempotencyEntry{

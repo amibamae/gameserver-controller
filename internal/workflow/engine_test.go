@@ -44,6 +44,67 @@ func TestRunPersistsAdapterOutputAndCompletes(t *testing.T) {
 	}
 }
 
+func TestServerDefineCompletesWithTypedResultWithoutAdapterDispatch(t *testing.T) {
+	schemas, err := schemaregistry.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapterRegistry, err := adapter.NewRegistry(schemas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operationStore, err := store.OpenBolt(filepath.Join(t.TempDir(), "controller.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = operationStore.Close() })
+	parameters := json.RawMessage(`{"server_id":"server-define","environment_id":"staging","display_name":"Test Server","hosting_profile":"vultr-small","storage_profile":"wasabi-worlds","game":{"adapter_id":"game.paper","release_channel":"stable"},"execution":{"adapter_id":"execution.systemd","profile":"paper-default"}}`)
+	record := store.OperationRecord{
+		OperationID: "define-operation", OperationType: "server.define", ProtocolVersion: schemas.ProtocolVersion(),
+		Target:  store.OperationTarget{ServerID: "server-define", EnvironmentID: "staging"},
+		ActorID: "operator-1", IdempotencyKey: "define-key",
+		RequestFingerprint: "sha256:" + strings.Repeat("a", 64),
+		RequestSnapshot:    store.RequestSnapshot{OperationType: "server.define", Parameters: parameters},
+	}
+	proof := store.IdempotencyProof{
+		ActiveKeyVersion: "test-v1",
+		Candidates:       []store.IdempotencyVerifier{{KeyVersion: "test-v1", Digest: bytes.Repeat([]byte{1}, 32), BindingDigest: bytes.Repeat([]byte{2}, 32)}},
+	}
+	accepted, _, err := operationStore.AcceptOperation(record, proof, []string{store.LogicalServerLockScope("staging", "server-define")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := NewServerDefineDefinition(operationStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definitions := NewDefinitions()
+	if err := definitions.Register("server.define", definition); err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewEngine(operationStore, adapterRegistry, schemas, definitions, &testResumeAuthorizer{}, time.Minute, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed, err := engine.Run(context.Background(), accepted.Record.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if completed.Record.Status != protocolstate.OperationSucceeded {
+		t.Fatalf("server.define status = %q, want succeeded", completed.Record.Status)
+	}
+	if err := schemas.ValidateJSON("urn:gameserver-controller:"+schemas.ProtocolVersion()+":operations:server-define-result", completed.Record.Result); err != nil {
+		t.Fatalf("server.define result is not typed: %v (%s)", err, completed.Record.Result)
+	}
+	server, err := operationStore.GetLogicalServer("staging", "server-define")
+	if err != nil || server.Record.LifecycleState != protocolstate.ServerUnprovisioned {
+		t.Fatalf("server.define changed lifecycle unexpectedly: server=%#v err=%v", server, err)
+	}
+	if _, err := operationStore.GetResourceLock(store.LogicalServerLockScope("staging", "server-define")); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("completed definition retained its lock: %v", err)
+	}
+}
+
 func TestPreconditionFailureSuspendsBeforeAdapterCall(t *testing.T) {
 	fixture := newEngineFixture(t, "precondition", "1", nil)
 	fixture.definition.preconditionErr = errors.New("approval is missing")

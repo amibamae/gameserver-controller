@@ -19,6 +19,7 @@ If you work on game-server automation, cloud adapters, storage tooling, or opera
 - Draft language-neutral contracts for lifecycle operations and adapters.
 - JSON Schemas, examples, and behavioral conformance fixtures, checked by Go CI.
 - A Go operation store and acceptance service, local schema registry, and in-process adapter registry with scripted fakes.
+- A durable logical-server catalog; accepting `server.define` creates its initial `unprovisioned` record atomically with the operation, and its metadata-only workflow returns a typed result without adapter calls.
 - A generic durable workflow engine that persists adapter outcomes and reconciles uncertain steps; standard lifecycle definitions and application wiring remain future work.
 - A bounded accessor for named systemd credentials; runtime and provider-adapter integration remain future work.
 - A configuration validator for the initial local v1 shape. It checks input; it does not load runtime settings or resolve provider credentials.
