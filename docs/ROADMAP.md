@@ -50,7 +50,8 @@ Other-language implementations are welcome contributions, but they are not part 
 ## Phase 2: Implement the Go controller and build a fake-adapter harness
 
 - Use Go for the initial controller implementation and its validation tooling.
-- Choose initial state persistence and configuration validation.
+- [x] Choose the initial operation persistence backend (bbolt).
+- Add configuration validation.
 - Expand language-neutral behavioral tests as contracts mature.
 - Implement fake hosting, storage, execution, game, and integration adapters.
 - Test compatibility, errors, idempotency, timeouts, and recovery without production services.
@@ -133,6 +134,6 @@ The first end-to-end target is Vultr, Wasabi, Paper, and Velocity on Debian. Exi
 
 The Phase 1 protocol package has met its exit criteria on main at version 0.21.0-draft. This untagged branch is development source, not an immutable interoperability snapshot. The supervised backup CLI is code-complete within its limited wrapper scope; it does not create VMs. The two-VM policy is declarative, and a supervised first run plus artifact/storage verification remains an operator handoff.
 
-The schema package covers hosting, storage, execution, game, and integration operations, with typed results for all seven standard server operations. The protocol specification and compatibility rules have been reviewed; Go CI validates schemas, references, examples, OpenAPI 3.2.1 structure, and published conformance vectors. The controller engine and fake-adapter harness, runtime transport, and production adapters remain future work in Phases 2 and 3.
+The schema package covers hosting, storage, execution, game, and integration operations, with typed results for all seven standard server operations. The protocol specification and compatibility rules have been reviewed; Go CI validates schemas, references, examples, OpenAPI 3.2.1 structure, and published conformance vectors. Phase 2 has begun with Go lifecycle/operation transition rules and a durable bbolt operation store; operation acceptance services, the fake-adapter harness, runtime transport, and production adapters remain future work in Phases 2 and 3.
 
 Phase 1 means the reviewed specification package and Go validator/conformance suite are ready for implementation. Stable protocol 1.0 remains gated on the initial Go controller passing behavioral conformance; optional implementations in other languages are welcome but are not a release requirement.
