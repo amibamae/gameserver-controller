@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/amibamae/gameserver-controller/internal/boottiming"
 	"github.com/amibamae/gameserver-controller/internal/credential"
 	"github.com/amibamae/gameserver-controller/internal/pilotcapacity"
 	"github.com/amibamae/gameserver-controller/internal/pilotvultr"
@@ -73,8 +74,8 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 	}
 
 	action := args[0]
-	if action != "status" && action != "backup" && action != "history" && action != "provision" && action != "capacity" {
-		return fmt.Errorf("unknown action %q; expected status, backup, history, provision, or capacity", action)
+	if action != "status" && action != "backup" && action != "history" && action != "provision" && action != "capacity" && action != "boot-status" {
+		return fmt.Errorf("unknown action %q; expected status, backup, history, provision, capacity, or boot-status", action)
 	}
 
 	flags := flag.NewFlagSet("gsc-pilot "+action, flag.ContinueOnError)
@@ -159,6 +160,21 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
 		return showCapacity(policy, statePath, stdout)
+	case "boot-status":
+		if err := allowOnlyFlags(flags, "server-id", "environment"); err != nil {
+			return err
+		}
+		if !safePilotServerID.MatchString(*serverID) {
+			return errors.New("--server-id is required and must be a lower-case identifier")
+		}
+		if *environmentID != "production" && *environmentID != "staging" && *environmentID != "testing" {
+			return errors.New("--environment must be production, staging, or testing")
+		}
+		statePath, err := settings.capacityStatePath()
+		if err != nil {
+			return fmt.Errorf("resolve capacity state path: %w", err)
+		}
+		return showBootStatus(*serverID, *environmentID, statePath, time.Now().UTC(), stdout)
 	default:
 		return usage(stderr)
 	}
@@ -212,6 +228,7 @@ func usage(w io.Writer) error {
 	fmt.Fprintln(w, "  gsc-pilot status --host <ssh-alias>")
 	fmt.Fprintln(w, "  gsc-pilot backup --host <ssh-alias> [--execute --confirm-host <same-alias>]")
 	fmt.Fprintln(w, "  gsc-pilot history")
+	fmt.Fprintln(w, "  gsc-pilot boot-status --server-id <id> --environment <environment>")
 	fmt.Fprintln(w, "  gsc-pilot provision --server-id <id> --environment staging --region <id> --plan <id> --os-id <id> --ssh-key-id <id>")
 	fmt.Fprintln(w, "  gsc-pilot capacity")
 	return errors.New("an action is required")
@@ -386,6 +403,111 @@ func showCapacity(policy pilotcapacity.Policy, statePath string, stdout io.Write
 		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%s\n", reservation.OperationID, reservation.ServerID, reservation.EnvironmentID, reservation.State, instanceID, reservation.ResourceKey)
 	}
 	return nil
+}
+
+func showBootStatus(serverID, environmentID, statePath string, now time.Time, stdout io.Writer) error {
+	if !safePilotServerID.MatchString(serverID) ||
+		(environmentID != "production" && environmentID != "staging" && environmentID != "testing") || now.IsZero() {
+		return errors.New("a valid server ID, environment, and current time are required")
+	}
+	repository, err := store.OpenBolt(statePath)
+	if err != nil {
+		return err
+	}
+	defer repository.Close()
+	reservations, err := repository.ListCapacityReservations()
+	if err != nil {
+		return err
+	}
+	var current *store.CapacityReservation
+	var durations []time.Duration
+	for i := range reservations {
+		reservation := &reservations[i]
+		if reservation.ServerID != serverID || reservation.EnvironmentID != environmentID {
+			continue
+		}
+		if !reservation.ProvisionedAt.IsZero() && !reservation.ReadyAt.IsZero() {
+			if duration := reservation.ReadyAt.Sub(reservation.ProvisionedAt); duration > 0 {
+				durations = append(durations, duration)
+			}
+		}
+		if reservation.State != store.CapacityAbsent && reservation.State != store.CapacityDestroyed {
+			current = reservation
+		}
+	}
+	if current == nil {
+		fmt.Fprintf(stdout, "No controller-owned VM is currently recorded for %s@%s.\n", serverID, environmentID)
+		writeHistoricalBootEstimate(stdout, durations)
+		return nil
+	}
+	if current.State != store.CapacityActive {
+		if !current.ReadyAt.IsZero() {
+			fmt.Fprintf(stdout, "Paper readiness was previously confirmed at %s.\n", current.ReadyAt.UTC().Format(time.RFC3339))
+		}
+		fmt.Fprintf(stdout, "Managed VM state: %s. Current Paper readiness is not confirmed; boot progress is indeterminate.\n", current.State)
+		writeHistoricalBootEstimate(stdout, durations)
+		return nil
+	}
+	if !current.ReadyAt.IsZero() {
+		fmt.Fprintf(stdout, "Paper readiness was confirmed at %s.\n", current.ReadyAt.UTC().Format(time.RFC3339))
+		if !current.ProvisionedAt.IsZero() {
+			fmt.Fprintf(stdout, "Measured provision-to-Paper-ready time: %s.\n", current.ReadyAt.Sub(current.ProvisionedAt).Round(time.Second))
+		}
+		fmt.Fprintln(stdout, "Progress: [####################] 100% (initial boot completed)")
+		return nil
+	}
+	if current.ProvisionedAt.IsZero() {
+		fmt.Fprintln(stdout, "Provider presence is confirmed, but no provisioning timestamp is available; Paper boot progress is indeterminate.")
+		writeHistoricalBootEstimate(stdout, durations)
+		return nil
+	}
+	elapsed := now.Sub(current.ProvisionedAt)
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	fmt.Fprintf(stdout, "Paper readiness is pending. Time since provisioning: %s.\n", elapsed.Round(time.Second))
+	if len(durations) < 3 {
+		fmt.Fprintf(stdout, "Estimate and progress are indeterminate (%d completed boot sample(s); 3 required).\n", len(durations))
+		return nil
+	}
+	estimate, err := boottiming.Estimate(durations, boottiming.DefaultSafetyFactor)
+	if err != nil {
+		fmt.Fprintf(stdout, "Estimate and progress are indeterminate (%d completed boot sample(s)).\n", len(durations))
+		return nil
+	}
+	remaining := estimate - elapsed
+	if remaining < 0 {
+		remaining = 0
+	}
+	percent := boottiming.ProgressPercent(elapsed, estimate, false)
+	fmt.Fprintf(stdout, "Estimated total: %s; estimated time remaining: %s.\n", estimate.Round(time.Second), remaining.Round(time.Second))
+	fmt.Fprintf(stdout, "Progress: %s (advisory; never reaches 100%% before Paper readiness).\n", bootProgressBar(percent))
+	return nil
+}
+
+func writeHistoricalBootEstimate(stdout io.Writer, durations []time.Duration) {
+	if len(durations) < 3 {
+		fmt.Fprintf(stdout, "Historical boot estimate unavailable (%d completed boot sample(s); 3 required).\n", len(durations))
+		return
+	}
+	estimate, err := boottiming.Estimate(durations, boottiming.DefaultSafetyFactor)
+	if err != nil {
+		fmt.Fprintf(stdout, "Historical boot estimate unavailable (%d completed boot sample(s)).\n", len(durations))
+		return
+	}
+	fmt.Fprintf(stdout, "Historical boot estimate: %s (75th percentile plus 25%% buffer; %d samples).\n", estimate.Round(time.Second), len(durations))
+}
+
+func bootProgressBar(percent int) string {
+	const width = 20
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 99 {
+		percent = 99
+	}
+	filled := percent * width / 100
+	return fmt.Sprintf("[%s%s] %d%%", strings.Repeat("#", filled), strings.Repeat("-", width-filled), percent)
 }
 
 func showStatus(host string, stdout io.Writer) error {

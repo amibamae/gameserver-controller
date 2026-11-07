@@ -172,7 +172,7 @@ func (p *Provisioner) Provision(ctx context.Context, request CreateRequest) (sto
 
 		observed, inspectErr := p.provider.GetInstance(ctx, token, created.ID)
 		if inspectErr == nil && observed.ID == created.ID && observed.Label == create.Label {
-			result, reserveErr = p.recordPresent(result, observed.ID)
+			result, reserveErr = p.recordPresent(result, observed)
 			return reserveErr
 		}
 		result, reserveErr = p.reconcile(ctx, token, result)
@@ -231,7 +231,7 @@ func (p *Provisioner) prepare(request CreateRequest) (vultrapi.CreateInstanceReq
 	reservation := store.CapacityReservation{
 		OperationID: request.OperationID, ServerID: request.ServerID,
 		EnvironmentID: request.Environment, CapacityGroup: groupID,
-		Provider: providerID, ResourceKey: label,
+		Provider: providerID, ProviderAdapterID: "hosting.vultr", ResourceKey: label,
 	}
 	return create, reservation, nil
 }
@@ -255,14 +255,20 @@ func (p *Provisioner) reconcile(ctx context.Context, token []byte, reservation s
 	if err != nil || observed.ID != candidate.ID || observed.Label != reservation.ResourceKey {
 		return reservation, ErrOutcomeUnknown
 	}
-	return p.recordPresent(reservation, observed.ID)
+	return p.recordPresent(reservation, observed)
 }
 
-func (p *Provisioner) recordPresent(reservation store.CapacityReservation, instanceID string) (store.CapacityReservation, error) {
+func (p *Provisioner) recordPresent(reservation store.CapacityReservation, instance vultrapi.Instance) (store.CapacityReservation, error) {
 	observedAt := p.observationTime(reservation)
+	provisionedAt, _ := time.Parse(time.RFC3339, instance.DateCreated)
+	if provisionedAt.IsZero() || provisionedAt.Before(reservation.CreatedAt) || provisionedAt.After(observedAt) {
+		provisionedAt = time.Time{}
+	} else {
+		provisionedAt = provisionedAt.UTC()
+	}
 	updated, err := p.store.ObserveCapacity(reservation.OperationID, store.CapacityProviderObservation{
 		Provider: providerID, ResourceKey: reservation.ResourceKey,
-		ProviderInstanceID: instanceID, State: "present", ObservedAt: observedAt,
+		ProviderInstanceID: instance.ID, State: "present", ObservedAt: observedAt, ProvisionedAt: provisionedAt,
 	})
 	if err != nil {
 		return reservation, ErrOutcomeUnknown

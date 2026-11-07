@@ -10,6 +10,7 @@ The pilot is a local CLI for inspecting the existing server, running its backup 
 - Before and after an executed backup, the pilot runs read-only `sudo -n systemctl show --property=ActiveState,SubState,Result,ExecMainStatus,InvocationID minecraft-backup.service`.
 - The pilot sends no script path, script body, or custom unit arguments.
 - `gsc-pilot history` reads the local audit log and makes no SSH connection.
+- `gsc-pilot boot-status --server-id <id> --environment <environment>` reads local timing records and makes no provider API or credential call.
 - `gsc-pilot provision ...` defaults to a dry run. With explicit confirmation and a systemd credential, it reserves capacity and creates one Vultr VM; it does not install a game or claim readiness.
 - `gsc-pilot capacity` reports the policy limit and durable local reservations.
 
@@ -49,6 +50,10 @@ Only after reviewing the dry run, an operator may add `--execute --confirm-creat
 The provider key is read only through the configured systemd credential reference, defaulting to `systemd-credential://vultr-pilot-api-token`. Execute the command from a systemd-managed process that receives this named credential through `LoadCredentialEncrypted`; do not pass the key in arguments, environment variables, config, or logs. See [secret management](SECRET_MANAGEMENT.md). The repository does not yet include an operator unit or automate credential provisioning, so do not run the billable command until the host-side systemd credential setup has been reviewed.
 
 `gsc-pilot capacity` displays durable reservation state from the current account's `.local/state/gsc-pilot/pilot.db`. The bbolt database is local state and must be backed up and protected like other controller state. Do not delete it to clear an occupied slot; reconcile the provider outcome first. This pilot does not yet adopt an existing VM, destroy an instance, install Paper, restore a world, configure DNS, or check game readiness.
+
+For controller-owned VMs, the local store can record the provider creation timestamp and the time Paper's required readiness checks pass. If Vultr does not return a usable creation timestamp, the pilot leaves that time unknown; it does not substitute the later provider observation time. `gsc-pilot boot-status` uses completed intervals for the same server and environment to show an advisory estimate after at least three samples; it uses the 75th percentile with a 25% safety factor. Progress stays below 100% until readiness is confirmed. With fewer samples, an unmanaged VM, or an unknown creation timestamp, progress is indeterminate. A completed initial boot is historical evidence, not a live Paper health check. Readiness recorded for a non-active VM remains historical and does not show current progress as ready. The first ready timestamp is committed atomically with the successful `server.start` transition and bound to the exact hosting adapter and VM. Older reservations without adapter identity remain usable for capacity enforcement but do not gain automatic timing samples. These measurements stay local. Sharing aggregate averages with a hosted lobby/DNS service remains a separate future opt-in and is never required for local timing.
+
+The current pilot CLI does not yet run the controller's `server.start` workflow. A controller process must use the same local store for its Paper readiness observation to appear in `boot-status`; the command does not infer readiness from Vultr's provider state or from systemd's VM status.
 
 ### Updating from an earlier pilot build
 
