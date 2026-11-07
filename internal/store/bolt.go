@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	bolt "go.etcd.io/bbolt"
@@ -241,6 +242,22 @@ func (s *BoltStore) AcceptOperation(record OperationRecord, proof IdempotencyPro
 			server.UpdatedAt = prepared.CreatedAt
 			server.LastOperationID = prepared.OperationID
 			logicalServer = &server
+		} else if strings.HasPrefix(prepared.OperationType, "server.") {
+			key := logicalServerKey(prepared.Target.EnvironmentID, prepared.Target.ServerID)
+			value := tx.Bucket(logicalServersBucket).Get(key)
+			if value == nil {
+				return ErrLogicalServerNotFound
+			}
+			var server StoredLogicalServer
+			if err := json.Unmarshal(value, &server); err != nil {
+				return fmt.Errorf("%w: decode logical server: %v", ErrCorruptStore, err)
+			}
+			if server.Revision == 0 || server.Record.EnvironmentID != prepared.Target.EnvironmentID || server.Record.ServerID != prepared.Target.ServerID {
+				return fmt.Errorf("%w: logical server key does not match its record", ErrCorruptStore)
+			}
+			if err := validatePersistedLogicalServer(server.Record); err != nil {
+				return fmt.Errorf("%w: invalid logical server record", ErrCorruptStore)
+			}
 		}
 		for _, scope := range scopes {
 			value := tx.Bucket(locksBucket).Get([]byte(scope))
@@ -382,72 +399,214 @@ func (s *BoltStore) UpdateOperation(expectedRevision uint64, next OperationRecor
 	}
 	var updated StoredOperation
 	err := s.db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(operationsBucket)
-		value := bucket.Get([]byte(next.OperationID))
-		if value == nil {
-			return ErrNotFound
-		}
-		current, err := decodeEnvelope(value)
-		if err != nil {
-			return err
-		}
-		if current.Revision != expectedRevision {
-			return ErrRevisionConflict
-		}
-		if protocolstate.IsTerminalOperation(current.Record.Status) {
-			return ErrTerminalOperation
-		}
-		if !sameAcceptedRequest(current.Record, next) {
-			return ErrImmutableFields
-		}
-		if next.Status != current.Record.Status {
-			if err := protocolstate.ValidateOperationTransition(current.Record.Status, next.Status); err != nil {
-				return err
-			}
-		}
-		if err := validateStepChanges(current.Record.Steps, next.Steps, next.Status); err != nil {
-			return err
-		}
-		if next.Steps == nil {
-			next.Steps = []OperationStep{}
-		}
-		now := monotonicTimestamp(current.Record.UpdatedAt, time.Now().UTC())
-		next.CreatedAt = current.Record.CreatedAt
-		next.UpdatedAt = now
-		next.StartedAt = current.Record.StartedAt
-		if next.StartedAt == nil && next.Status == protocolstate.OperationRunning {
-			startedAt := now
-			next.StartedAt = &startedAt
-		}
-		next.Steps = updateStepTimestamps(current.Record.Steps, next.Steps, now)
-		if protocolstate.IsTerminalOperation(next.Status) {
-			completedAt := now
-			next.CompletedAt = &completedAt
-		} else {
-			next.CompletedAt = nil
-		}
-		if err := validateRecord(next); err != nil {
-			return err
-		}
-		if err := validateTerminalOutcome(next); err != nil {
-			return err
-		}
-		if protocolstate.IsTerminalOperation(next.Status) {
-			if err := releaseOperationLocks(tx, next.OperationID); err != nil {
-				return err
-			}
-		}
-		if current.Revision == ^uint64(0) {
-			return fmt.Errorf("%w: revision exhausted", ErrInvalidRecord)
-		}
-		updated = StoredOperation{Record: next, Revision: current.Revision + 1}
-		encoded, err := json.Marshal(operationEnvelope{Revision: updated.Revision, Record: updated.Record})
-		if err != nil {
-			return fmt.Errorf("encode operation record: %w", err)
-		}
-		return bucket.Put([]byte(next.OperationID), encoded)
+		var err error
+		updated, err = updateOperationTx(tx, expectedRevision, next)
+		return err
 	})
 	if err != nil {
+		return StoredOperation{}, err
+	}
+	return updated, nil
+}
+
+// UpdateOperationAndLogicalServer commits one operation update and its
+// corresponding lifecycle state transition atomically. The next state is
+// checked against the protocol transition table and the event is derived from
+// the persisted operation identity and completed step evidence.
+func (s *BoltStore) UpdateOperationAndLogicalServer(expectedOperationRevision uint64, operation OperationRecord, expectedServerRevision uint64, server LogicalServer) (StoredOperation, StoredLogicalServer, error) {
+	if operation.OperationID == "" || operation.Target.ServerID == "" || operation.Target.EnvironmentID == "" {
+		return StoredOperation{}, StoredLogicalServer{}, fmt.Errorf("%w: operation target is required for lifecycle commit", ErrInvalidRecord)
+	}
+	if !strings.HasPrefix(operation.OperationType, "server.") || operation.OperationType == "server.define" {
+		return StoredOperation{}, StoredLogicalServer{}, fmt.Errorf("%w: only mutating server operations may commit lifecycle transitions", ErrInvalidRecord)
+	}
+	var updatedOperation StoredOperation
+	var updatedServer StoredLogicalServer
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		operationValue := tx.Bucket(operationsBucket).Get([]byte(operation.OperationID))
+		if operationValue == nil {
+			return ErrNotFound
+		}
+		currentOperation, err := decodeEnvelope(operationValue)
+		if err != nil {
+			return err
+		}
+		if currentOperation.Revision != expectedOperationRevision {
+			return ErrRevisionConflict
+		}
+		if requiredScope, required := requiredLogicalServerLock(currentOperation.Record); required {
+			if err := requireOperationLock(tx, operation.OperationID, requiredScope); err != nil {
+				return err
+			}
+		}
+		committed, err := updateOperationTx(tx, expectedOperationRevision, operation)
+		if err != nil {
+			return err
+		}
+		serverKey := logicalServerKey(operation.Target.EnvironmentID, operation.Target.ServerID)
+		value := tx.Bucket(logicalServersBucket).Get(serverKey)
+		if value == nil {
+			return ErrLogicalServerNotFound
+		}
+		var current StoredLogicalServer
+		if err := json.Unmarshal(value, &current); err != nil {
+			return fmt.Errorf("%w: decode logical server: %v", ErrCorruptStore, err)
+		}
+		if current.Revision == 0 || current.Record.EnvironmentID != operation.Target.EnvironmentID || current.Record.ServerID != operation.Target.ServerID {
+			return fmt.Errorf("%w: logical server key or revision mismatch", ErrCorruptStore)
+		}
+		if current.Revision != expectedServerRevision {
+			return ErrRevisionConflict
+		}
+		if err := validatePersistedLogicalServer(current.Record); err != nil {
+			return fmt.Errorf("%w: invalid logical server record", ErrCorruptStore)
+		}
+		if len(currentOperation.Record.Target.InstanceRef) > 0 && !equalCanonicalJSON(currentOperation.Record.Target.InstanceRef, current.Record.InstanceRef) {
+			return ErrLogicalServerTargetMismatch
+		}
+		if !sameLogicalServerIdentity(current.Record, server) {
+			return ErrImmutableFields
+		}
+		if server.LifecycleState == current.Record.LifecycleState {
+			return fmt.Errorf("%w: lifecycle commit must advance the server state", ErrInvalidRecord)
+		}
+		if err := protocolstate.ValidateServerTransition(current.Record.LifecycleState, server.LifecycleState); err != nil {
+			return err
+		}
+		if current.Revision == ^uint64(0) {
+			return fmt.Errorf("%w: logical server revision exhausted", ErrInvalidRecord)
+		}
+		server.LifecycleEvents = append([]LogicalServerStateEvent(nil), current.Record.LifecycleEvents...)
+		server.LastOperationID = operation.OperationID
+		server.UpdatedAt = monotonicTimestamp(current.Record.UpdatedAt, committed.Record.UpdatedAt)
+		evidence := make([]string, 0, len(operation.Steps))
+		for _, step := range operation.Steps {
+			if step.Status == protocolstate.StepSucceeded {
+				evidence = append(evidence, step.StepID)
+			}
+		}
+		server.LifecycleEvents = append(server.LifecycleEvents, LogicalServerStateEvent{
+			Sequence: uint64(len(server.LifecycleEvents) + 1), OperationID: operation.OperationID,
+			ActorID: committed.Record.ActorID, OperationType: committed.Record.OperationType,
+			FromState: current.Record.LifecycleState, ToState: server.LifecycleState,
+			Cause: committed.Record.OperationType, RequestFingerprint: committed.Record.RequestFingerprint,
+			EvidenceStepIDs: evidence, OccurredAt: server.UpdatedAt,
+		})
+		if err := validatePersistedLogicalServer(server); err != nil {
+			return err
+		}
+		updatedServer = StoredLogicalServer{Record: server, Revision: current.Revision + 1}
+		encodedServer, err := json.Marshal(updatedServer)
+		if err != nil {
+			return fmt.Errorf("encode logical server record: %w", err)
+		}
+		if err := tx.Bucket(logicalServersBucket).Put(serverKey, encodedServer); err != nil {
+			return err
+		}
+		updatedOperation = committed
+		return nil
+	})
+	if err != nil {
+		return StoredOperation{}, StoredLogicalServer{}, err
+	}
+	return updatedOperation, updatedServer, nil
+}
+
+func requireOperationLock(tx *bolt.Tx, operationID, requiredScope string) error {
+	value := tx.Bucket(operationLocksBucket).Get([]byte(operationID))
+	if value == nil {
+		return fmt.Errorf("%w: operation %q has no durable lock index", ErrCorruptStore, operationID)
+	}
+	var scopes []string
+	if err := json.Unmarshal(value, &scopes); err != nil {
+		return fmt.Errorf("%w: decode operation lock scopes: %v", ErrCorruptStore, err)
+	}
+	validated, err := validateLockScopes(scopes)
+	if err != nil || len(validated) != len(scopes) {
+		return fmt.Errorf("%w: operation has invalid lock scopes", ErrCorruptStore)
+	}
+	if !containsString(validated, requiredScope) {
+		return fmt.Errorf("%w: operation lock index omits required server lock %q", ErrCorruptStore, requiredScope)
+	}
+	value = tx.Bucket(locksBucket).Get([]byte(requiredScope))
+	if value == nil {
+		return fmt.Errorf("%w: required server lock %q is missing", ErrCorruptStore, requiredScope)
+	}
+	lock, err := decodeResourceLock(value)
+	if err != nil {
+		return err
+	}
+	if lock.OperationID != operationID || lock.Scope != requiredScope {
+		return fmt.Errorf("%w: required server lock %q has a mismatched owner or scope", ErrCorruptStore, requiredScope)
+	}
+	return nil
+}
+
+func updateOperationTx(tx *bolt.Tx, expectedRevision uint64, next OperationRecord) (StoredOperation, error) {
+	bucket := tx.Bucket(operationsBucket)
+	value := bucket.Get([]byte(next.OperationID))
+	if value == nil {
+		return StoredOperation{}, ErrNotFound
+	}
+	current, err := decodeEnvelope(value)
+	if err != nil {
+		return StoredOperation{}, err
+	}
+	if current.Revision != expectedRevision {
+		return StoredOperation{}, ErrRevisionConflict
+	}
+	if protocolstate.IsTerminalOperation(current.Record.Status) {
+		return StoredOperation{}, ErrTerminalOperation
+	}
+	if !sameAcceptedRequest(current.Record, next) {
+		return StoredOperation{}, ErrImmutableFields
+	}
+	if next.Status != current.Record.Status {
+		if err := protocolstate.ValidateOperationTransition(current.Record.Status, next.Status); err != nil {
+			return StoredOperation{}, err
+		}
+	}
+	if err := validateStepChanges(current.Record.Steps, next.Steps, next.Status); err != nil {
+		return StoredOperation{}, err
+	}
+	if next.Steps == nil {
+		next.Steps = []OperationStep{}
+	}
+	now := monotonicTimestamp(current.Record.UpdatedAt, time.Now().UTC())
+	next.CreatedAt = current.Record.CreatedAt
+	next.UpdatedAt = now
+	next.StartedAt = current.Record.StartedAt
+	if next.StartedAt == nil && next.Status == protocolstate.OperationRunning {
+		startedAt := now
+		next.StartedAt = &startedAt
+	}
+	next.Steps = updateStepTimestamps(current.Record.Steps, next.Steps, now)
+	if protocolstate.IsTerminalOperation(next.Status) {
+		completedAt := now
+		next.CompletedAt = &completedAt
+	} else {
+		next.CompletedAt = nil
+	}
+	if err := validateRecord(next); err != nil {
+		return StoredOperation{}, err
+	}
+	if err := validateTerminalOutcome(next); err != nil {
+		return StoredOperation{}, err
+	}
+	if protocolstate.IsTerminalOperation(next.Status) {
+		if err := releaseOperationLocks(tx, next.OperationID); err != nil {
+			return StoredOperation{}, err
+		}
+	}
+	if current.Revision == ^uint64(0) {
+		return StoredOperation{}, fmt.Errorf("%w: revision exhausted", ErrInvalidRecord)
+	}
+	updated := StoredOperation{Record: next, Revision: current.Revision + 1}
+	encoded, err := json.Marshal(operationEnvelope{Revision: updated.Revision, Record: updated.Record})
+	if err != nil {
+		return StoredOperation{}, fmt.Errorf("encode operation record: %w", err)
+	}
+	if err := bucket.Put([]byte(next.OperationID), encoded); err != nil {
 		return StoredOperation{}, err
 	}
 	return updated, nil

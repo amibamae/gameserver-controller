@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -55,6 +56,44 @@ func NewEngine(operationStore store.OperationStore, adapters adapterRuntime, sch
 		resumeAuthorizer: resumeAuthorizer, stepTimeout: stepTimeout, maxStepAttempts: maxStepAttempts,
 		activeOperations: make(map[string]bool),
 	}, nil
+}
+
+func (e *Engine) updateOperation(expectedRevision uint64, next store.OperationRecord) (store.StoredOperation, error) {
+	definition, registered := e.definitions.get(next.OperationType)
+	projector, projectsLifecycle := definition.(LifecycleProjector)
+	if next.OperationType == "server.define" {
+		return e.store.UpdateOperation(expectedRevision, next)
+	}
+	if strings.HasPrefix(next.OperationType, "server.") {
+		if !registered || !projectsLifecycle {
+			return store.StoredOperation{}, fmt.Errorf("operation %q has no registered lifecycle projector", next.OperationType)
+		}
+	} else if !registered || !projectsLifecycle {
+		return e.store.UpdateOperation(expectedRevision, next)
+	}
+	lifecycleStore, ok := e.store.(store.LifecycleOperationStore)
+	if !ok {
+		return store.StoredOperation{}, errors.New("lifecycle workflow requires an atomic logical-server operation store")
+	}
+	currentServer, err := lifecycleStore.GetLogicalServer(next.Target.EnvironmentID, next.Target.ServerID)
+	if err != nil {
+		return store.StoredOperation{}, fmt.Errorf("load logical server before lifecycle projection: %w", err)
+	}
+	projectedServer, transition, err := projector.ProjectLifecycle(next, currentServer)
+	if err != nil {
+		return store.StoredOperation{}, fmt.Errorf("project logical-server lifecycle state: %w", err)
+	}
+	if !transition {
+		if !reflect.DeepEqual(projectedServer, currentServer.Record) {
+			return store.StoredOperation{}, errors.New("lifecycle projector changed the server record without a state transition")
+		}
+		return e.store.UpdateOperation(expectedRevision, next)
+	}
+	updated, _, err := lifecycleStore.UpdateOperationAndLogicalServer(expectedRevision, next, currentServer.Revision, projectedServer)
+	if err != nil {
+		return store.StoredOperation{}, err
+	}
+	return updated, nil
 }
 
 // Advance advances one durable workflow boundary. An uncertain step is
@@ -158,7 +197,7 @@ func (e *Engine) Resume(ctx context.Context, authenticatedOperatorID, operationI
 	next := current.Record
 	next.Status = protocolstate.OperationReconciling
 	next.Error = nil
-	return e.store.UpdateOperation(current.Revision, next)
+	return e.updateOperation(current.Revision, next)
 }
 
 func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.StoredOperation, error) {
@@ -183,7 +222,7 @@ func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.S
 	if current.Record.Status == protocolstate.OperationPending {
 		next := current.Record
 		next.Status = protocolstate.OperationRunning
-		current, err = e.store.UpdateOperation(current.Revision, next)
+		current, err = e.updateOperation(current.Revision, next)
 		if err != nil {
 			return store.StoredOperation{}, err
 		}
@@ -203,7 +242,7 @@ func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.S
 				next.Status = protocolstate.OperationRunning
 				next.Error = nil
 				next.CurrentStepID = nil
-				current, err = e.store.UpdateOperation(current.Revision, next)
+				current, err = e.updateOperation(current.Revision, next)
 				if err != nil {
 					return store.StoredOperation{}, err
 				}
@@ -211,7 +250,7 @@ func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.S
 				next := current.Record
 				next.Status = protocolstate.OperationRunning
 				next.CurrentStepID = nil
-				current, err = e.store.UpdateOperation(current.Revision, next)
+				current, err = e.updateOperation(current.Revision, next)
 				if err != nil {
 					return store.StoredOperation{}, err
 				}
@@ -224,7 +263,7 @@ func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.S
 				next := current.Record
 				next.Status = protocolstate.OperationRunning
 				next.Error = nil
-				current, err = e.store.UpdateOperation(current.Revision, next)
+				current, err = e.updateOperation(current.Revision, next)
 				if err != nil {
 					return store.StoredOperation{}, err
 				}
@@ -247,7 +286,7 @@ func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.S
 			unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
 			unknown.Steps[stepIndex].Error = protocolError("core.adapter.outcome_unknown", "internal", "The previous adapter invocation has no recorded response.", current.Record.OperationID, false, "reconcile", false)
 			unknown.Error = json.RawMessage(unknown.Steps[stepIndex].Error)
-			current, err = e.store.UpdateOperation(current.Revision, unknown)
+			current, err = e.updateOperation(current.Revision, unknown)
 			if err != nil {
 				return store.StoredOperation{}, err
 			}
@@ -298,7 +337,7 @@ func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.S
 	claimed.Steps[stepIndex].Attempt++
 	currentStepID := claimed.Steps[stepIndex].StepID
 	claimed.CurrentStepID = &currentStepID
-	current, err = e.store.UpdateOperation(current.Revision, claimed)
+	current, err = e.updateOperation(current.Revision, claimed)
 	if err != nil {
 		return store.StoredOperation{}, err
 	}
@@ -349,7 +388,7 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 			unknownError := protocolError("core.adapter.outcome_unknown", "internal", "The adapter call may have taken effect but returned no definitive result.", running.Record.OperationID, false, "reconcile", false)
 			unknown.Steps[stepIndex].Error = unknownError
 			unknown.Error = json.RawMessage(unknownError)
-			return e.store.UpdateOperation(running.Revision, unknown)
+			return e.updateOperation(running.Revision, unknown)
 		}
 		failure := protocolError("core.adapter.invocation_failed", "provider_failure", "The adapter call failed before a side effect was confirmed.", running.Record.OperationID, false, "inspect_operation", true)
 		failed := running.Record
@@ -367,7 +406,7 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 		unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
 		unknown.Steps[stepIndex].Error = protocolError("core.adapter.invalid_response", "internal", "The adapter returned a malformed response after dispatch.", running.Record.OperationID, false, "reconcile", false)
 		unknown.Error = json.RawMessage(unknown.Steps[stepIndex].Error)
-		return e.store.UpdateOperation(running.Revision, unknown)
+		return e.updateOperation(running.Revision, unknown)
 	}
 	if response.Result.Outcome != adapter.OutcomeCompleted && response.Result.Outcome != adapter.OutcomeAccepted && response.Result.Outcome != adapter.OutcomeUnknown {
 		unknown := running.Record
@@ -375,7 +414,7 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 		unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
 		unknown.Steps[stepIndex].Error = protocolError("core.adapter.invalid_outcome", "internal", "The adapter returned an unsupported outcome after dispatch.", running.Record.OperationID, false, "reconcile", false)
 		unknown.Error = json.RawMessage(unknown.Steps[stepIndex].Error)
-		return e.store.UpdateOperation(running.Revision, unknown)
+		return e.updateOperation(running.Revision, unknown)
 	}
 
 	updated := running.Record
@@ -389,7 +428,7 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 			unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
 			unknown.Steps[stepIndex].Error = protocolError("core.adapter.external_reference_changed", "internal", "The adapter returned a different external operation reference for a recorded step.", running.Record.OperationID, false, "reconcile", false)
 			unknown.Error = json.RawMessage(unknown.Steps[stepIndex].Error)
-			return e.store.UpdateOperation(running.Revision, unknown)
+			return e.updateOperation(running.Revision, unknown)
 		}
 		updated.Steps[stepIndex].ExternalOperationRef = append(json.RawMessage(nil), response.Result.ExternalOperationRef...)
 	}
@@ -397,11 +436,11 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 	case adapter.OutcomeCompleted:
 		updated.Steps[stepIndex].Status = protocolstate.StepSucceeded
 		updated.Steps[stepIndex].Output = append(json.RawMessage(nil), response.Result.Output...)
-		return e.store.UpdateOperation(running.Revision, updated)
+		return e.updateOperation(running.Revision, updated)
 	case adapter.OutcomeAccepted:
 		updated.Status = protocolstate.OperationWaiting
 		updated.Steps[stepIndex].Status = protocolstate.StepWaiting
-		return e.store.UpdateOperation(running.Revision, updated)
+		return e.updateOperation(running.Revision, updated)
 	case adapter.OutcomeUnknown:
 		updated.Status = protocolstate.OperationReconciling
 		updated.CurrentStepID = stringPointer(step.StepID)
@@ -409,7 +448,7 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 		unknownError := protocolError("core.adapter.outcome_unknown", "internal", "The adapter reported that the external outcome is unknown.", running.Record.OperationID, false, "reconcile", false)
 		updated.Steps[stepIndex].Error = unknownError
 		updated.Error = json.RawMessage(unknownError)
-		return e.store.UpdateOperation(running.Revision, updated)
+		return e.updateOperation(running.Revision, updated)
 	default:
 		failure := protocolError("core.adapter.invalid_outcome", "internal", "The adapter returned an unsupported outcome value.", running.Record.OperationID, false, "inspect_operation", true)
 		failed := running.Record
@@ -429,7 +468,7 @@ func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, s
 		unknown.Steps[stepIndex].Error = unknownError
 		unknown.Error = json.RawMessage(unknownError)
 		var err error
-		current, err = e.store.UpdateOperation(current.Revision, unknown)
+		current, err = e.updateOperation(current.Revision, unknown)
 		if err != nil {
 			return store.StoredOperation{}, err
 		}
@@ -454,7 +493,7 @@ func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, s
 	if len(resolution.ExternalOperationRef) > 0 && len(step.ExternalOperationRef) == 0 {
 		updated := current.Record
 		updated.Steps[stepIndex].ExternalOperationRef = append(json.RawMessage(nil), resolution.ExternalOperationRef...)
-		current, err = e.store.UpdateOperation(current.Revision, updated)
+		current, err = e.updateOperation(current.Revision, updated)
 		if err != nil {
 			return store.StoredOperation{}, err
 		}
@@ -477,12 +516,12 @@ func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, s
 		next.Steps[stepIndex].Output = append(json.RawMessage(nil), resolution.Output...)
 		next.Steps[stepIndex].Error = nil
 		next.CurrentStepID = nil
-		return e.store.UpdateOperation(current.Revision, next)
+		return e.updateOperation(current.Revision, next)
 	case ResolutionPending:
 		next.Status = protocolstate.OperationWaiting
 		next.Steps[stepIndex].Status = protocolstate.StepWaiting
 		next.Steps[stepIndex].Error = nil
-		return e.store.UpdateOperation(current.Revision, next)
+		return e.updateOperation(current.Revision, next)
 	case ResolutionSafeToRetry:
 		if step.Attempt >= e.maxStepAttempts {
 			return e.suspend(current, "core.operation.retry_limit", "The safe retry limit for this step has been reached.")
@@ -495,7 +534,7 @@ func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, s
 		next.Steps[stepIndex].Attempt++
 		next.Steps[stepIndex].Error = nil
 		next.CurrentStepID = stringPointer(step.StepID)
-		running, err := e.store.UpdateOperation(current.Revision, next)
+		running, err := e.updateOperation(current.Revision, next)
 		if err != nil {
 			return store.StoredOperation{}, err
 		}
@@ -530,7 +569,7 @@ func (e *Engine) finishSuccess(ctx context.Context, current store.StoredOperatio
 	next.Error = nil
 	next.Result = append(json.RawMessage(nil), result...)
 	next.CurrentStepID = nil
-	return e.store.UpdateOperation(current.Revision, next)
+	return e.updateOperation(current.Revision, next)
 }
 
 func (e *Engine) failBeforeDispatch(ctx context.Context, current store.StoredOperation, stepIndex int, definition Definition, code, message, category string) (store.StoredOperation, error) {
@@ -559,7 +598,7 @@ func (e *Engine) fail(ctx context.Context, current store.StoredOperation, failed
 	} else {
 		failed.Result = nil
 	}
-	return e.store.UpdateOperation(current.Revision, failed)
+	return e.updateOperation(current.Revision, failed)
 }
 
 func (e *Engine) suspend(current store.StoredOperation, code, message string) (store.StoredOperation, error) {
@@ -578,7 +617,7 @@ func (e *Engine) suspend(current store.StoredOperation, code, message string) (s
 			next.Steps[i].Error = append(json.RawMessage(nil), next.Error...)
 		}
 	}
-	return e.store.UpdateOperation(current.Revision, next)
+	return e.updateOperation(current.Revision, next)
 }
 
 func (e *Engine) preflight(record store.OperationRecord, step store.OperationStep) (adapter.Capability, error) {
@@ -641,7 +680,7 @@ func (e *Engine) stepDeadline(ctx context.Context, record store.OperationRecord)
 func (e *Engine) clearCurrentStep(current store.StoredOperation) (store.StoredOperation, error) {
 	next := current.Record
 	next.CurrentStepID = nil
-	return e.store.UpdateOperation(current.Revision, next)
+	return e.updateOperation(current.Revision, next)
 }
 
 func (e *Engine) recoverOne(current store.StoredOperation) (store.StoredOperation, error) {
@@ -658,7 +697,7 @@ func (e *Engine) recoverOne(current store.StoredOperation) (store.StoredOperatio
 	unknownError := protocolError("core.adapter.outcome_unknown", "internal", "The controller restarted while this adapter step was running.", current.Record.OperationID, false, "reconcile", false)
 	next.Steps[index].Error = unknownError
 	next.Error = json.RawMessage(unknownError)
-	return e.store.UpdateOperation(current.Revision, next)
+	return e.updateOperation(current.Revision, next)
 }
 
 func (e *Engine) begin(operationID string) bool {
