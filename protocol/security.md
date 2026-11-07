@@ -47,7 +47,7 @@ A capability declaration describes what an adapter can do; it does not grant a c
 
 ## 4. Approvals and destructive actions
 
-An approval MUST be bound to an exact action, logical server, environment, provider/adapter, concrete instance/resource reference, plan fingerprint, expiry, and approver identity. Any material change invalidates the approval.
+An approval MUST be bound to an exact action, logical server, environment, provider/adapter, concrete instance/resource reference, plan fingerprint, expiry, and approver identity. The controller MUST evaluate that binding and the expiry against the exact request immediately before each sensitive or destructive step; an approval expires at its `expires_at` timestamp. Any material change invalidates the approval.
 
 Destroy of an instance containing persistent game data MUST be blocked unless:
 - A verified backup is associated with the current data generation.
@@ -97,7 +97,7 @@ Player identifiers and telemetry MUST be minimized. Optional identifiable player
 An implementation MUST pass tests proving:
 - Caller cannot self-elevate permissions.
 - Adapter cannot bypass core policy.
-- Missing/invalid approval blocks destruction.
+- Destruction approval is bound to the exact action, server, environment, adapter, instance, plan fingerprint, expiry, and approver; expired or mismatched approvals block provider dispatch.
 - Failed backup verification blocks destruction.
 - Staging cannot write/delete production backups.
 - Secret values are absent from logs/errors/events.
