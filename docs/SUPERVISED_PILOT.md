@@ -50,7 +50,7 @@ Before you execute:
 
 The [capacity policy file](../pilot/capacity-policy.json) sets an initial hard limit of **one controller-owned VM**. That single slot can serve production or one shared `staging`/`testing` VM. A live production VM may remain unmanaged and does not consume controller-owned capacity; production adoption is optional. A Vultr instance created by the controller counts as managed. Staging and testing share the one slot, so the controller cannot manage both at once.
 
-A future Vultr create/adopt path must reserve a slot atomically before calling the provider. The reservation consumes capacity. Each controller-owned instance continues to count until Vultr confirms it is absent or destroyed. An unresolved create or destroy also consumes the slot. For an unknown create result, do not free capacity until provider state confirms absence or destruction. Reject unsupported environments, duplicate or occupied slot requests, and requests that exceed the limit.
+A Vultr create path must reserve a slot atomically before calling the provider. The reservation consumes capacity. Each controller-owned instance continues to count until Vultr confirms it is absent or destroyed. An unresolved create or destroy also consumes the slot. For an unknown create result, do not free capacity just because a list is empty. Reject unsupported environments, duplicate or occupied slot requests, and requests that exceed the limit. Production adoption remains optional and is not implemented yet.
 
 The intended hard-coded cap lives in source-controlled
 `pilot/capacity-policy.json`; it is not a runtime CLI flag or Go constant.
@@ -61,15 +61,19 @@ the pilot with the new cap. The total cannot exceed the sum of the declared
 per-environment slots. The checker covers free slots, unmanaged production,
 conflicts, unresolved outcomes, and confirmed release.
 
-Today, the checker validates the policy file, but the backup/status CLI has no
-Vultr create/adopt path. Editing the file and rebuilding the current CLI does
-not change runtime behavior yet. The future provider workflow must read the
-checked-in policy before it calls the API.
+The checker validates the policy file. The new internal `pilotvultr` service
+uses a supplied policy with the Vultr client, but the backup/status CLI does
+not call that service yet. Editing the file and rebuilding the current CLI does
+not change runtime behavior. The CLI still needs to load the checked-in policy
+before it can call the provider.
 
-The shared bbolt store now has a durable reservation primitive that atomically
+The shared bbolt store has a durable reservation primitive that atomically
 checks the policy's total and group limits and keeps unresolved provider
-outcomes counted. The pilot CLI and Vultr workflow do not call it yet, so this
-is a reusable foundation rather than runtime enforcement.
+outcomes counted. The `pilotvultr` service calls it before a create, claims the
+dispatch once, and confirms the exact instance before marking it active. An
+unknown result is checked by its unique label and never resent; an empty list
+keeps the slot reserved. The service has fake-provider tests, but no CLI calls
+it yet, so the policy remains declarative in the shipped pilot command.
 
 **The policy is declarative only today.** The current `cmd/supervised-pilot` CLI supports backup, status, and local history. It cannot create or adopt Vultr instances.
 

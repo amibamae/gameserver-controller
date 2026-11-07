@@ -112,6 +112,7 @@ func TestCreateInstanceUnknownOutcomesAreNotRetried(t *testing.T) {
 		body   string
 	}{
 		{name: "server error", status: http.StatusInternalServerError, body: `{"error":"sensitive provider detail"}`},
+		{name: "request timeout response", status: http.StatusRequestTimeout, body: `{"error":"request timed out"}`},
 		{name: "malformed accepted response", status: http.StatusAccepted, body: `{"instance":{}}`},
 		{name: "empty accepted response", status: http.StatusAccepted, body: ""},
 	}
