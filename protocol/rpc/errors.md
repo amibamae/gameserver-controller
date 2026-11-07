@@ -60,6 +60,7 @@ Initial codes include:
 - `core.validation.invalid_request`
 - `core.authorization.denied`
 - `core.lifecycle.invalid_transition`
+- `core.operation.conflict` (category `conflict`)
 - `core.operation.idempotency_conflict`
 - `core.operation.idempotency_key_expired` (category `conflict`)
 - `core.operation.outcome_unknown`
