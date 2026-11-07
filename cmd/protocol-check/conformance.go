@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 )
 
 func (pkg *protocolPackage) runConformance() error {
@@ -168,6 +169,63 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"instance_postcondition_confirmed": postconditionConfirmed,
 			"unknown_requires_inspection":      status == "unknown",
 			"result_requires_inspection":       !referencesBound || status == "unknown" || status == "failed",
+		}, nil
+	case "hosting.instance.destroy.approval-exact-scope", "hosting.instance.destroy.approval-wrong-action", "hosting.instance.destroy.approval-target-mismatch", "hosting.instance.destroy.approval-environment-mismatch", "hosting.instance.destroy.approval-plan-mismatch", "hosting.instance.destroy.approval-expired", "hosting.instance.destroy.approval-missing-approver":
+		destroyInput := asObject(input["destroy_input"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:instance-destroy-input", destroyInput); err != nil {
+			return nil, fmt.Errorf("hosting destroy input does not match schema: %w", err)
+		}
+		preconditions := asObject(fixture["core_preconditions"])
+		request := asObject(fixture["request_binding"])
+		approval := asObject(preconditions["approval"])
+		target := asObject(destroyInput["instance_ref"])
+		requestBindingMatches := stringValue(request, "action") == "hosting.instance.destroy" &&
+			stringValue(request, "logical_server_id") != "" &&
+			stringValue(request, "environment_id") == stringValue(target, "environment_id") &&
+			stringValue(request, "adapter_id") == stringValue(target, "adapter_id") &&
+			stringValue(request, "plan_fingerprint") != "" &&
+			reflect.DeepEqual(asObject(request["instance_ref"]), target)
+		approvalScopeMatches := stringValue(approval, "action") == stringValue(request, "action") &&
+			stringValue(approval, "logical_server_id") == stringValue(request, "logical_server_id") &&
+			stringValue(approval, "environment_id") == stringValue(request, "environment_id") &&
+			stringValue(approval, "adapter_id") == stringValue(request, "adapter_id") &&
+			reflect.DeepEqual(asObject(approval["instance_ref"]), target) &&
+			reflect.DeepEqual(asObject(approval["instance_ref"]), asObject(request["instance_ref"])) &&
+			stringValue(approval, "plan_fingerprint") != "" &&
+			stringValue(approval, "plan_fingerprint") == stringValue(request, "plan_fingerprint")
+		evaluatedAt, evaluationErr := time.Parse(time.RFC3339, stringValue(fixture, "evaluation_time"))
+		expiresAt, expiryErr := time.Parse(time.RFC3339, stringValue(approval, "expires_at"))
+		approvalCurrent := boolValue(approval, "valid") && evaluationErr == nil && expiryErr == nil && expiresAt.After(evaluatedAt)
+		approvalApproverPresent := stringValue(approval, "approval_id") != "" && stringValue(approval, "approver_id") != ""
+		approvalBound := requestBindingMatches && approvalScopeMatches && approvalCurrent && approvalApproverPresent
+		allowed := boolValue(preconditions, "authorization_valid") && approvalBound &&
+			boolValue(preconditions, "backup_verified") && boolValue(preconditions, "backup_generation_matches") &&
+			boolValue(preconditions, "instance_stopped")
+		output := asObject(input["destroy_output"])
+		outputPresent := len(output) > 0
+		targetBound, confirmed := false, false
+		if outputPresent {
+			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:instance-destroy-output", output); err != nil {
+				return nil, fmt.Errorf("hosting destroy output does not match schema: %w", err)
+			}
+			targetBound = reflect.DeepEqual(target, asObject(output["instance_ref"]))
+			confirmed = allowed && targetBound && stringValue(output, "outcome") == "completed" && stringValue(output, "state") == "destroyed"
+		}
+		providerCalls := 0
+		if allowed {
+			providerCalls = 1
+		}
+		return map[string]any{
+			"schemas_valid": true,
+			"request_binding_matches": requestBindingMatches,
+			"approval_scope_matches": approvalScopeMatches,
+			"approval_current": approvalCurrent,
+			"approval_approver_present": approvalApproverPresent,
+			"approval_bound": approvalBound,
+			"destroy_dispatch_allowed": allowed,
+			"provider_destroy_calls": providerCalls,
+			"target_bound": targetBound,
+			"destruction_confirmed": confirmed,
 		}, nil
 	case "hosting.instance.destroy.authorization-required", "hosting.instance.destroy.verified-backup-required", "hosting.instance.destroy.current-generation-backup-required", "hosting.instance.destroy.stopped-required", "hosting.instance.destroy.completed-destroyed", "hosting.instance.destroy.accepted-not-destroyed", "hosting.instance.destroy.unknown-requires-inspection", "hosting.instance.destroy.target-mismatch":
 		destroyInput := asObject(input["destroy_input"])

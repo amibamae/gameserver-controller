@@ -1,0 +1,65 @@
+{
+  "fixture_id": "hosting.instance.destroy.approval-missing-approver",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "hosting.instance.destroy",
+  "purpose": "An approval without approver identity cannot authorize destruction.",
+  "evaluation_time": "2026-11-07T12:00:00Z",
+  "request_binding": {
+    "action": "hosting.instance.destroy",
+    "logical_server_id": "server-paper-021",
+    "environment_id": "staging",
+    "adapter_id": "hosting.example",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-021"
+    },
+    "plan_fingerprint": "sha256:synthetic-plan-021"
+  },
+  "input": {
+    "destroy_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      }
+    }
+  },
+  "core_preconditions": {
+    "authorization_valid": true,
+    "backup_verified": true,
+    "backup_generation_matches": true,
+    "instance_stopped": true,
+    "approval": {
+      "valid": true,
+      "approval_id": "approval-021",
+      "approver_id": "",
+      "action": "hosting.instance.destroy",
+      "logical_server_id": "server-paper-021",
+      "environment_id": "staging",
+      "adapter_id": "hosting.example",
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-021"
+      },
+      "plan_fingerprint": "sha256:synthetic-plan-021",
+      "expires_at": "2026-11-07T13:00:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "request_binding_matches": true,
+    "approval_scope_matches": true,
+    "approval_current": true,
+    "approval_approver_present": false,
+    "approval_bound": false,
+    "destroy_dispatch_allowed": false,
+    "provider_destroy_calls": 0,
+    "target_bound": false,
+    "destruction_confirmed": false
+  }
+}
