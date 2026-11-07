@@ -55,11 +55,6 @@ type LogicalServerRepository interface {
 	ListLogicalServers() ([]StoredLogicalServer, error)
 }
 
-type logicalServerEnvelope struct {
-	Revision uint64        `json:"revision"`
-	Record   LogicalServer `json:"record"`
-}
-
 type serverDefinitionInput struct {
 	ServerID       string `json:"server_id"`
 	EnvironmentID  string `json:"environment_id"`
