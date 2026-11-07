@@ -1,6 +1,6 @@
 # Protocol Specification
 
-**Status:** Reviewed Phase 1 draft specification, version 0.21.0-draft. The repository contains normative draft prose, JSON Schemas, RPC and management API bindings, examples, and conformance vectors. Go is the initial implementation language and is used for protocol tooling. Go CI validates schema structure, references, examples, OpenAPI structure, and conformance vectors. The full controller and production adapters are not yet implemented.
+**Status:** Reviewed Phase 1 draft specification, version 0.21.0-draft. The repository contains normative draft prose, JSON Schemas, RPC and management API bindings, examples, and conformance vectors. Go is the initial implementation language and is used for protocol tooling. Go CI validates schema structure, references, examples, OpenAPI structure, and conformance vectors. The Go operation store, acceptance service, local schema registry, and in-process adapter boundary are implemented; durable workflow dispatch, the management runtime, and production adapters are not yet implemented.
 
 ## Purpose
 

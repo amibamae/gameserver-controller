@@ -109,4 +109,4 @@ Optional telemetry starts disabled. Identifiable player telemetry requires infor
 
 ## Open design work
 
-Go is selected for the initial implementation. Remaining implementation decisions include the durable state store, concurrency and recovery model, adapter versioning, configuration and secret references, audit format and retention, per-game health checks, and approval rules for destructive actions.
+Go is selected for the initial implementation. The first durable operation store and in-process adapter boundary now exist. Remaining implementation work includes configuration and secret resolution, durable step dispatch and reconciliation, workflow orchestration, audit and event storage/retention, production adapter implementations, per-game health checks, and approval rules for destructive actions.

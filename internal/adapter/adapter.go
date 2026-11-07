@@ -1,0 +1,330 @@
+// Package adapter defines the in-process Go adapter boundary and validates
+// calls against the versioned protocol schemas.
+package adapter
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
+)
+
+var (
+	ErrAdapterNotFound       = errors.New("adapter is not registered")
+	ErrUnsupportedCapability = errors.New("adapter does not advertise capability")
+	ErrMutatingContext       = errors.New("mutating call requires durable operation and step IDs")
+)
+
+type Category string
+
+const (
+	CategoryHosting     Category = "hosting"
+	CategoryStorage     Category = "storage"
+	CategoryExecution   Category = "execution"
+	CategoryGame        Category = "game"
+	CategoryIntegration Category = "integration"
+)
+
+type Descriptor struct {
+	AdapterID               string         `json:"adapter_id"`
+	Category                Category       `json:"category"`
+	DisplayName             string         `json:"display_name"`
+	ImplementationVersion   string         `json:"implementation_version"`
+	ProtocolVersions        []string       `json:"protocol_versions"`
+	ContractVersions        []string       `json:"contract_versions"`
+	ConfigurationSchemaURI  string         `json:"configuration_schema_uri,omitempty"`
+	RequiredPermissions     []string       `json:"required_permissions"`
+	Capabilities            []Capability   `json:"capabilities"`
+	Constraints             map[string]any `json:"constraints,omitempty"`
+	DocumentationURI        string         `json:"documentation_uri,omitempty"`
+	StreamTransportProfiles []string       `json:"stream_transport_profiles,omitempty"`
+}
+
+type Capability struct {
+	Name                string         `json:"name"`
+	Version             string         `json:"version"`
+	Mutating            bool           `json:"mutating"`
+	InputSchemaURI      string         `json:"input_schema_uri"`
+	OutputSchemaURI     string         `json:"output_schema_uri"`
+	Constraints         map[string]any `json:"constraints,omitempty"`
+	RequiredPermissions []string       `json:"required_permissions,omitempty"`
+}
+
+type RequestContext struct {
+	RequestID      string    `json:"request_id"`
+	CorrelationID  string    `json:"correlation_id"`
+	OperationID    string    `json:"operation_id,omitempty"`
+	StepID         string    `json:"step_id,omitempty"`
+	ServerID       string    `json:"server_id,omitempty"`
+	EnvironmentID  string    `json:"environment_id"`
+	Deadline       time.Time `json:"deadline"`
+	IdempotencyKey string    `json:"idempotency_key,omitempty"`
+}
+
+type InvokeParams struct {
+	ProtocolVersion string          `json:"protocol_version"`
+	Capability      string          `json:"capability"`
+	RequestContext  RequestContext  `json:"request_context"`
+	Input           json.RawMessage `json:"input"`
+}
+
+type InvokeRequest struct {
+	JSONRPC string       `json:"jsonrpc"`
+	ID      string       `json:"id"`
+	Method  string       `json:"method"`
+	Params  InvokeParams `json:"params"`
+}
+
+type Outcome string
+
+const (
+	OutcomeCompleted Outcome = "completed"
+	OutcomeAccepted  Outcome = "accepted"
+	OutcomeUnknown   Outcome = "outcome_unknown"
+)
+
+type InvokeResult struct {
+	Outcome              Outcome         `json:"outcome"`
+	ExternalOperationRef json.RawMessage `json:"external_operation_ref,omitempty"`
+	Output               json.RawMessage `json:"output"`
+	ObservedAt           time.Time       `json:"observed_at"`
+}
+
+type InvokeResponse struct {
+	JSONRPC string       `json:"jsonrpc"`
+	ID      string       `json:"id"`
+	Result  InvokeResult `json:"result"`
+}
+
+type Implementation interface {
+	Descriptor() Descriptor
+	Invoke(context.Context, InvokeRequest) (InvokeResponse, error)
+}
+
+// InvocationError reports whether a failed call may already have changed an
+// external system. Callers must reconcile mutating calls with this flag before
+// retrying them.
+type InvocationError struct {
+	MayHaveSideEffects bool
+	Cause              error
+}
+
+func (e *InvocationError) Error() string { return e.Cause.Error() }
+func (e *InvocationError) Unwrap() error { return e.Cause }
+
+type registeredAdapter struct {
+	implementation Implementation
+	descriptor     Descriptor
+	capabilities   map[string]Capability
+}
+
+type Registry struct {
+	schemas  *schemaregistry.Registry
+	version  string
+	mu       sync.RWMutex
+	adapters map[string]registeredAdapter
+}
+
+func NewRegistry(schemas *schemaregistry.Registry) (*Registry, error) {
+	if schemas == nil || schemas.ProtocolVersion() == "" {
+		return nil, errors.New("a loaded protocol schema registry is required")
+	}
+	return &Registry{schemas: schemas, version: schemas.ProtocolVersion(), adapters: make(map[string]registeredAdapter)}, nil
+}
+
+func (r *Registry) Register(implementation Implementation) error {
+	if r == nil || implementation == nil {
+		return errors.New("registry and adapter implementation are required")
+	}
+	descriptor := cloneDescriptor(implementation.Descriptor())
+	descriptorSchema := "urn:gameserver-controller:" + r.version + ":common:capability-descriptor"
+	encoded, err := json.Marshal(descriptor)
+	if err != nil {
+		return fmt.Errorf("encode adapter descriptor: %w", err)
+	}
+	if err := r.schemas.ValidateJSON(descriptorSchema, encoded); err != nil {
+		return fmt.Errorf("invalid adapter descriptor: %w", err)
+	}
+	if !contains(descriptor.ProtocolVersions, r.version) {
+		return fmt.Errorf("adapter %q does not support protocol %q", descriptor.AdapterID, r.version)
+	}
+	prefix, ok := capabilityPrefix(descriptor.Category)
+	if !ok {
+		return fmt.Errorf("adapter %q has unsupported category %q", descriptor.AdapterID, descriptor.Category)
+	}
+	capabilities := make(map[string]Capability, len(descriptor.Capabilities))
+	for _, capability := range descriptor.Capabilities {
+		if !strings.HasPrefix(capability.Name, prefix) {
+			return fmt.Errorf("capability %q does not belong to category %q", capability.Name, descriptor.Category)
+		}
+		if _, duplicate := capabilities[capability.Name]; duplicate {
+			return fmt.Errorf("adapter %q advertises duplicate capability %q", descriptor.AdapterID, capability.Name)
+		}
+		if !r.schemas.HasSchema(capability.InputSchemaURI) || !r.schemas.HasSchema(capability.OutputSchemaURI) {
+			return fmt.Errorf("capability %q references an unregistered input or output schema", capability.Name)
+		}
+		capabilities[capability.Name] = capability
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.adapters[descriptor.AdapterID]; exists {
+		return fmt.Errorf("adapter %q is already registered", descriptor.AdapterID)
+	}
+	r.adapters[descriptor.AdapterID] = registeredAdapter{implementation: implementation, descriptor: descriptor, capabilities: capabilities}
+	return nil
+}
+
+func (r *Registry) Descriptor(adapterID string) (Descriptor, error) {
+	if r == nil {
+		return Descriptor{}, ErrAdapterNotFound
+	}
+	r.mu.RLock()
+	registered, ok := r.adapters[adapterID]
+	r.mu.RUnlock()
+	if !ok {
+		return Descriptor{}, ErrAdapterNotFound
+	}
+	return cloneDescriptor(registered.descriptor), nil
+}
+
+func (r *Registry) Invoke(ctx context.Context, adapterID string, request InvokeRequest) (InvokeResponse, error) {
+	if r == nil {
+		return InvokeResponse{}, ErrAdapterNotFound
+	}
+	r.mu.RLock()
+	registered, ok := r.adapters[adapterID]
+	r.mu.RUnlock()
+	if !ok {
+		return InvokeResponse{}, ErrAdapterNotFound
+	}
+	capability, ok := registered.capabilities[request.Params.Capability]
+	if !ok {
+		return InvokeResponse{}, ErrUnsupportedCapability
+	}
+	if ctx == nil {
+		return InvokeResponse{}, errors.New("invocation context is required")
+	}
+	if request.Params.ProtocolVersion != r.version {
+		return InvokeResponse{}, fmt.Errorf("request protocol version %q does not match selected version %q", request.Params.ProtocolVersion, r.version)
+	}
+	if request.Params.RequestContext.Deadline.IsZero() {
+		return InvokeResponse{}, errors.New("request context deadline is required")
+	}
+	if capability.Mutating && (request.Params.RequestContext.OperationID == "" || request.Params.RequestContext.StepID == "") {
+		return InvokeResponse{}, ErrMutatingContext
+	}
+	if request.ID != request.Params.RequestContext.RequestID {
+		return InvokeResponse{}, errors.New("JSON-RPC ID must match request_context.request_id")
+	}
+	encodedRequest, err := json.Marshal(request)
+	if err != nil {
+		return InvokeResponse{}, fmt.Errorf("encode adapter request: %w", err)
+	}
+	requestSchema := "urn:gameserver-controller:" + r.version + ":rpc:adapter-invoke-request"
+	if err := r.schemas.ValidateJSON(requestSchema, encodedRequest); err != nil {
+		return InvokeResponse{}, fmt.Errorf("invalid adapter invocation request: %w", err)
+	}
+	if err := r.schemas.ValidateJSON(capability.InputSchemaURI, request.Params.Input); err != nil {
+		return InvokeResponse{}, fmt.Errorf("invalid input for capability %q: %w", capability.Name, err)
+	}
+	inputCopy := append(json.RawMessage(nil), request.Params.Input...)
+	request.Params.Input = inputCopy
+	if err := ctx.Err(); err != nil {
+		return InvokeResponse{}, err
+	}
+	callContext, cancel := context.WithDeadline(ctx, request.Params.RequestContext.Deadline)
+	defer cancel()
+	if err := callContext.Err(); err != nil {
+		return InvokeResponse{}, err
+	}
+	response, err := registered.implementation.Invoke(callContext, request)
+	if err != nil {
+		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: err}
+	}
+	if response.JSONRPC != "2.0" || response.ID != request.ID {
+		return InvokeResponse{}, &InvocationError{
+			MayHaveSideEffects: capability.Mutating,
+			Cause:              errors.New("adapter response JSON-RPC version or ID does not match the request"),
+		}
+	}
+	if response.Result.ObservedAt.IsZero() {
+		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("adapter response observed_at is required")}
+	}
+	if err := r.schemas.ValidateJSON(capability.OutputSchemaURI, response.Result.Output); err != nil {
+		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: fmt.Errorf("invalid output for capability %q: %w", capability.Name, err)}
+	}
+	encodedResponse, err := json.Marshal(response)
+	if err != nil {
+		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: fmt.Errorf("encode adapter response: %w", err)}
+	}
+	responseSchema := "urn:gameserver-controller:" + r.version + ":rpc:adapter-invoke-result"
+	if err := r.schemas.ValidateJSON(responseSchema, encodedResponse); err != nil {
+		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: fmt.Errorf("invalid adapter response: %w", err)}
+	}
+	return response, nil
+}
+
+func capabilityPrefix(category Category) (string, bool) {
+	switch category {
+	case CategoryHosting:
+		return "hosting.", true
+	case CategoryStorage:
+		return "storage.", true
+	case CategoryExecution:
+		return "execution.", true
+	case CategoryGame:
+		return "game.", true
+	case CategoryIntegration:
+		return "integrations.", true
+	default:
+		return "", false
+	}
+}
+
+func contains(values []string, expected string) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func cloneDescriptor(value Descriptor) Descriptor {
+	value.ProtocolVersions = cloneSlice(value.ProtocolVersions)
+	value.ContractVersions = cloneSlice(value.ContractVersions)
+	value.RequiredPermissions = cloneSlice(value.RequiredPermissions)
+	value.StreamTransportProfiles = cloneSlice(value.StreamTransportProfiles)
+	value.Capabilities = cloneSlice(value.Capabilities)
+	for i := range value.Capabilities {
+		value.Capabilities[i].RequiredPermissions = cloneSlice(value.Capabilities[i].RequiredPermissions)
+		value.Capabilities[i].Constraints = cloneMap(value.Capabilities[i].Constraints)
+	}
+	value.Constraints = cloneMap(value.Constraints)
+	return value
+}
+
+func cloneSlice[T any](values []T) []T {
+	if values == nil {
+		return nil
+	}
+	result := make([]T, len(values))
+	copy(result, values)
+	return result
+}
+
+func cloneMap(value map[string]any) map[string]any {
+	if value == nil {
+		return nil
+	}
+	result := make(map[string]any, len(value))
+	for key, entry := range value {
+		result[key] = entry
+	}
+	return result
+}
