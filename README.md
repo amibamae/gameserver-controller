@@ -93,4 +93,4 @@ AI tools may assist development, but the controller must never depend on an AI s
 
 ## License
 
-This project uses GNU AGPL-3.0-only. See [LICENSE](LICENSE).
+This project uses GNU AGPL-3.0-only. See [LICENSE](LICENSE). Third-party components retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
