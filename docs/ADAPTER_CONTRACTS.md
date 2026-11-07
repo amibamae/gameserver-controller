@@ -41,7 +41,7 @@ An upload acknowledgment does not verify a backup. The core must confirm integri
 
 ## Execution environments
 
-The execution adapter manages a process or workload on a provisioned host. The first reference is systemd on a Linux VM. Containers, Kubernetes, and Agones remain optional.
+The execution adapter manages a process or workload on a provisioned host. The first reference is systemd on a Linux VM. Containers and Kubernetes remain optional.
 
 The execution adapter reports service state. The game adapter defines installation, save behavior, readiness, data paths, and version compatibility. See the [execution contract](../protocol/adapters/execution.md).
 
@@ -92,7 +92,7 @@ Use fake adapters for core tests. Test production adapters only against isolated
 |---|---|---|
 | Hosting | Vultr | OVH or another provider |
 | Storage | Wasabi through its S3-compatible API | Other object stores |
-| Execution | systemd on Debian VM | Containers, Kubernetes, Agones |
+| Execution | systemd on Debian VM | Containers, Kubernetes |
 | Game | Minecraft Java with Paper | Terraria, Valheim, ARK |
 | Integration | Velocity | Other proxies, monitoring, notifications |
 
