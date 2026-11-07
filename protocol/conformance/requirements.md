@@ -53,7 +53,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Successful standard operations validate their typed result schema and bind result server/environment/instance fields to the durable operation target.
 - `server.define` leaves the logical server `unprovisioned` and creates no external resource; `server.start` includes a readiness assertion bound to the exact instance; `server.stop` confirms game save and runtime termination.
 - Operation record commits before side effect.
-- Same idempotency key and same request maps to the same operation.
+- Same idempotency key and same request returns the same stable operation reference and does not dispatch a second side effect.
 - Same key and changed request is conflict.
 - Unknown external outcome enters reconciliation.
 - Cancellation does not imply rollback. An undispatched step with no possible external effect can be cancelled without a provider call; a mutating call that may have been dispatched without a definitive response remains `reconciling` or `needs_operator`, is not reported `cancelled`, and is not retried before reconciliation.
@@ -131,6 +131,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [invalid-lifecycle-transition.json](test-vectors/invalid-lifecycle-transition.json)
 - [backup-verification-blocks-destroy.json](test-vectors/backup-verification-blocks-destroy.json)
 - [idempotency-key-conflict.json](test-vectors/idempotency-key-conflict.json)
+- [idempotency-key-replay-same-request.json](test-vectors/idempotency-key-replay-same-request.json)
 - [unknown-provider-outcome.json](test-vectors/unknown-provider-outcome.json)
 - [staging-production-write-denied.json](test-vectors/staging-production-write-denied.json)
 - [backup-stale-generation-blocks-destroy.json](test-vectors/backup-stale-generation-blocks-destroy.json)
