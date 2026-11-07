@@ -78,6 +78,17 @@
       ]
     },
     {
+      "name": "execution.unit.restart",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-output",
+      "required_permissions": [
+        "runtime.start",
+        "runtime.stop"
+      ]
+    },
+    {
       "name": "execution.unit.start",
       "version": "1",
       "mutating": true,

@@ -12,6 +12,7 @@
   "required_permissions": [
     "game.configure",
     "game.install",
+    "game.save",
     "game.release.inspect",
     "game.inspect",
     "runtime.inspect"
@@ -72,6 +73,16 @@
         "max_checks_per_request": 64,
         "unknown_check_result_blocks_readiness": true
       }
+    },
+    {
+      "name": "game.save.request",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:save-request-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:save-request-output",
+      "required_permissions": [
+        "game.save"
+      ]
     },
     {
       "name": "game.release.describe",

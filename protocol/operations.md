@@ -124,6 +124,8 @@ Proposed step statuses:
 
 An adapter's synchronous response may indicate that an external provider accepted a request and returned a provider operation reference. That is not necessarily completion. The controller records the reference and polls, waits for an event, or otherwise reconciles until the defined postcondition is observed.
 
+For a given adapter ID, capability name, and capability version, the input and output schema URIs MUST remain immutable. A schema URI change MUST use a new capability version. During dispatch and reconciliation, implementations MUST validate the step input and output against the schema pair declared by the selected adapter descriptor for that exact capability version.
+
 External resource identifiers MUST be recorded with their adapter and environment scope as defined in [common protocol types](common-types.md).
 
 ## 7. Idempotency and duplicate requests

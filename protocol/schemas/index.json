@@ -87,6 +87,14 @@
       "id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-logs-read-output"
     },
     {
+      "path": "execution/systemd-unit-restart-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-input"
+    },
+    {
+      "path": "execution/systemd-unit-restart-output.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-output"
+    },
+    {
       "path": "execution/systemd-unit-start-input.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-start-input"
     },
