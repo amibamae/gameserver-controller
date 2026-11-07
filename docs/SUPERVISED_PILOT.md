@@ -1,63 +1,65 @@
 # Supervised backup pilot
 
-The supervised pilot is a local CLI wrapper around the server's existing `minecraft-backup.service`. It does not install or replace the systemd unit or the backup script that unit already runs. The unit definition and script are not stored in this repository; the external server setup remains their source of truth.
+The pilot is a local CLI wrapper around the server's existing `minecraft-backup.service`. It does not install or replace the unit or the script that unit runs. Neither is stored in this repository; the server setup remains the source of truth.
 
-## What the pilot sends
+## Commands and remote effects
 
 - `gsc-pilot status --host <ssh-alias>` makes read-only `systemctl show` calls for `minecraft-vanilla.service`, `minecraft-backup.service`, and `minecraft-backup.timer`.
-- `gsc-pilot backup --host <ssh-alias>` is a dry run.
+- `gsc-pilot backup --host <ssh-alias>` prints a dry run. It does not connect to the server.
 - The only mutating remote command is exactly `sudo -n systemctl start --wait minecraft-backup.service`.
-- Before and after an executed backup, the pilot makes read-only `sudo -n systemctl show --property=ActiveState,SubState,Result,ExecMainStatus,InvocationID minecraft-backup.service` calls.
-- The pilot does not send a script path, script contents, or custom arguments to the backup unit.
-- `gsc-pilot history` reads the local audit log and makes no remote connection.
+- Before and after an executed backup, the pilot runs read-only `sudo -n systemctl show --property=ActiveState,SubState,Result,ExecMainStatus,InvocationID minecraft-backup.service`.
+- The pilot sends no script path, script body, or custom unit arguments.
+- `gsc-pilot history` reads the local audit log and makes no SSH connection.
 
-The SSH account needs non-interactive sudo access for the pilot's `systemctl show` and `systemctl start --wait` calls.
+The SSH account needs non-interactive sudo permission for the pilot's `systemctl show` and `systemctl start --wait` commands.
 
-Execute with both flags and the exact same SSH alias:
+For an executed backup, pass both flags with the same SSH alias:
 
 ```sh
 gsc-pilot backup --host <ssh-alias> --execute --confirm-host <ssh-alias>
 ```
 
-## How completion is reported
+## What counts as success
 
-The pilot does not trust the `systemctl start --wait` exit status alone. After the command returns, it reads systemd again and reports service success only when the invocation ID is new, the unit is in a completed state (`inactive/dead` or `active/exited`), `Result=success`, and `ExecMainStatus=0`.
+Do not trust `systemctl start --wait`'s exit code by itself. After the command returns, the pilot reads systemd again. It reports service success only when the new invocation ID differs from the previous one, the unit has reached a completed state (`inactive/dead` or `active/exited`), `Result=success`, and `ExecMainStatus=0`.
 
-If the post-run invocation ID is missing or malformed, a nonempty prior ID is malformed or unchanged, the unit remains nonterminal (including still running), or post-run state cannot be read, the pilot records an unknown outcome and does not retry. Inspect the existing service and its logs before trying again.
+The pilot records an unknown outcome and will not retry if the post-run invocation ID is missing, malformed, or unchanged; if the unit remains nonterminal, including still running; or if it cannot read the final state. Inspect the service and its logs before you try again.
 
-The pilot does not stop Paper, restore a world, destroy a server, or install or modify the backup service.
+The pilot does not stop Paper, restore a world, destroy a server, or install or change the backup service.
 
-## Operator handoff checklist
+## Operator handoff
 
-No live-server validation is claimed by the repository's automated checks or by this checklist. It describes an operator-supervised handoff; it does not report that a live backup has been run. The one-managed-VM capacity policy below remains declarative and is not enforced by the pilot CLI.
+The repository's automated checks and this checklist do not claim that a live backup has been run. This is a supervised handoff, not a live-server validation report. The one-managed-VM policy below is declarative; the pilot CLI does not enforce it.
 
-Before an executed backup:
+Before you execute:
 
-1. Confirm the SSH alias resolves to the intended server and review its host key.
-2. Confirm the SSH account has non-interactive sudo access for the pilot's read-only `systemctl show` calls and `systemctl start --wait minecraft-backup.service`.
+1. Confirm the SSH alias reaches the intended server and review its host key.
+2. Check that the account has non-interactive sudo for the read-only `systemctl show` calls and the exact backup start command.
 3. Run `gsc-pilot status --host <ssh-alias>` and review the game, backup, and timer unit states.
-4. Run `gsc-pilot backup --host <ssh-alias>` without `--execute`. Review the target and service in the dry-run output; dry-run does not connect to the server.
-5. Execute only after those checks, using the exact same alias for both flags:
+4. Run `gsc-pilot backup --host <ssh-alias>` without `--execute`. Review the service and target in the dry-run output.
+5. Only then run the command with both flags and the same alias:
 
    ```sh
    gsc-pilot backup --host <ssh-alias> --execute --confirm-host <ssh-alias>
    ```
 
-6. Review the command result and run `gsc-pilot history` under the same local account. If the result is `outcome_unknown`, do not retry; inspect the service state and logs through the existing server process before deciding what to do.
-7. After systemd reports success, separately confirm that the expected backup artifacts exist and that the existing backup process verifies their storage and integrity. The pilot's `service_succeeded` event confirms only the systemd invocation result.
+6. Review the result and run `gsc-pilot history` as the same local user. If the result is `outcome_unknown`, do not retry; inspect service state and logs through the server's existing process first.
+7. After systemd reports success, verify that the expected backup artifacts exist. Then use the existing backup process to check storage and integrity. The `service_succeeded` event confirms the systemd invocation only.
 
 ## Declarative VM capacity policy
 
-The [machine-readable capacity policy](../pilot/capacity-policy.json) sets the pilot's initial hard cap to **one controller-owned VM total**. The single managed slot may be used for production or for one shared `staging`/`testing` VM. A live production server may remain unmanaged and does not consume this controller-owned capacity; production adoption is optional. The controller-created Vultr VM will count as managed. `staging` and `testing` share one slot and cannot be managed at the same time.
+The [capacity policy file](../pilot/capacity-policy.json) sets an initial hard limit of **one controller-owned VM**. That single slot can serve production or one shared `staging`/`testing` VM. A live production VM may remain unmanaged and does not consume controller-owned capacity; production adoption is optional. A Vultr instance created by the controller counts as managed. Staging and testing share the one slot, so the controller cannot manage both at once.
 
-A future Vultr create/adopt flow must reserve capacity atomically before calling the provider API. The reservation consumes capacity. Every controller-owned instance continues to consume capacity until the provider confirms it is absent or destroyed. A create or destroy with an unresolved outcome continues to consume capacity; an unknown create cannot free the slot until provider state confirms absence or destruction. Reject unsupported environments, duplicate or occupied slot requests, and any create/adopt request that would exceed the total limit.
+A future Vultr create/adopt path must reserve a slot atomically before calling the provider. The reservation consumes capacity. Each controller-owned instance continues to count until Vultr confirms it is absent or destroyed. An unresolved create or destroy also consumes the slot. For an unknown create result, do not free capacity until provider state confirms absence or destruction. Reject unsupported environments, duplicate or occupied slot requests, and requests that exceed the limit.
 
-The intended hard-coded cap is source-controlled in `pilot/capacity-policy.json`, not exposed as a runtime CLI flag. Once the Vultr create/adopt path is implemented, maintainers can change `max_instances_total` in that file, increment `policy_version`, validate the policy, and rebuild the pilot with the new cap. The configured total may not exceed the sum of the declared per-environment slots. The checker runs reference cases for available slots, unmanaged production, conflicts, unresolved outcomes, and confirmed release. Today the checker validates the file but the backup/status CLI has no Vultr create/adopt path, so editing the file does not change runtime behavior yet. The future Vultr path must consume this checked-in setting before calling the API.
+The intended cap lives in source-controlled `pilot/capacity-policy.json`; it is not a CLI flag. Once create/adopt exists, maintainers can change `max_instances_total`, increment `policy_version`, validate the policy, and rebuild the pilot. The total cannot exceed the sum of the declared per-environment slots. The checker covers free slots, unmanaged production, conflicts, unresolved outcomes, and confirmed release.
 
-**This policy is declarative only today.** The current `cmd/supervised-pilot` CLI supports backup, status, and local history; it has no Vultr create/adopt path. The policy does not constrain actual provisioning until that path is implemented.
+Today, the checker validates the policy file, but the backup/status CLI has no Vultr create/adopt path. Editing the file does not change runtime behavior yet. The future provider workflow must read the checked-in policy before it calls the API.
 
-## What success does not prove
+**The policy is declarative only today.** The current `cmd/supervised-pilot` CLI supports backup, status, and local history. It cannot create or adopt Vultr instances.
 
-The `service_succeeded` audit event confirms only the systemd invocation result. The pilot does not inspect the existing script, backup files, object storage, checksums, or world contents. Do not treat this event as proof that a usable backup exists; verify the backup through the server's existing backup process.
+## What the success event proves
 
-The audit log is stored locally at `~/.local/state/gsc-pilot/operations.jsonl` with owner-only file permissions. Pilot tests use fake SSH; they do not run the service or connect to a live server.
+The `service_succeeded` audit event records a successful systemd invocation. It does not inspect the backup script, files, object storage, checksums, or world contents. Use the server's existing backup process to verify that a usable backup exists.
+
+The local audit log is `~/.local/state/gsc-pilot/operations.jsonl` with owner-only file permissions. Pilot tests use fake SSH; they do not run the service or connect to a live server.
