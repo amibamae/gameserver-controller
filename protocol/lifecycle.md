@@ -52,7 +52,7 @@ The protocol does not use `deleted` as a synonym for `destroyed`. Permanent dele
 
 The `ready` lifecycle state records the controller's current logical-server state; it is not, by itself, a portable proof that a particular external routing action may proceed. When a routing or cutover action requires fresh readiness evidence, the controller MUST issue a short-lived readiness assertion conforming to [readiness-assertion.schema.json](schemas/lifecycle/readiness-assertion.schema.json).
 
-An assertion MUST bind the exact `server_id`, `environment_id`, current infrastructure `instance_ref`, and `readiness_check_set_id`, with `observed_at` and `expires_at` timestamps. The check-set identifier names the versioned set of checks whose successful completion supports the assertion. An assertion is valid only while the current time is earlier than `expires_at`; the controller MUST enforce a maximum staleness period for each check set and MUST NOT extend an assertion merely because the server remains in the `ready` state.
+An assertion MUST bind the exact `server_id`, `environment_id`, current infrastructure `instance_ref`, and `readiness_check_set_id`, with `observed_at` and `expires_at` timestamps. The check-set identifier names the versioned set of checks whose successful completion supports the assertion. Each game adapter MUST declare the exact versioned readiness check set and check IDs that apply to a game release and environment; the controller MUST NOT infer one universal checklist across games. For a readiness evaluation, the controller MUST request that set and require exactly one current result for every required check, with matching check versions and exact server, environment, instance, and release binding. A missing, duplicate, extra, stale, failed, unknown, or mismatched result MUST prevent a `ready` transition and readiness assertion. Game-specific checks, including Paper-specific checks, belong in that game's adapter profile. An assertion is valid only while the current time is earlier than `expires_at`; the controller MUST enforce a maximum staleness period for each check set and MUST NOT extend an assertion merely because the server remains in the `ready` state.
 
 Before a routing side effect, the controller MUST re-read the logical server state and current instance reference, confirm they still match the assertion, and confirm that no newer failed health observation or lifecycle transition invalidated it. Instance replacement, transition out of `ready`, check-set revision, or expiry invalidates the assertion. An assertion is evidence of a recent observation, not caller authorization or adapter permission; normal authorization and routing policy still apply.
 
@@ -135,11 +135,11 @@ A start from `stopped` follows `starting` -> `validating` -> `ready`. A restart 
 
 ### 5.3 Stop
 
-A normal stop from `ready` follows `draining` -> `stopping` -> `stopped`. The game adapter MUST define the save/flush behavior and the execution adapter MUST report whether graceful stop completed. A forced stop is an explicit, separately authorized fallback and MUST be recorded as such.
+A normal stop from `ready` follows `draining` -> `stopping` -> `stopped`. The game adapter MUST define the save/flush behavior and the execution adapter MUST report whether graceful stop completed. A forced stop is a separately authorized fallback within the `stopping` operation; it does not require a distinct public lifecycle state. It MAY be invoked only after graceful-stop failure or under an explicitly defined emergency policy, with approval bound to the exact execution unit and reason where approval is required by policy. The operation and audit record MUST distinguish graceful from forced stop and retain the authorization and outcome evidence. An accepted or uncertain force-stop result is not proof that the runtime stopped; the controller MUST inspect or reconcile before retrying or advancing the lifecycle.
 
 ### 5.4 Backup
 
-A backup while running follows `ready` -> `draining` -> `stopping` -> `backing_up`. A stopped server follows `stopped` -> `backing_up`. Online/low-downtime backup is an optional capability and MUST declare its consistency guarantees; it MUST NOT be assumed by the core.
+A backup while running follows `ready` -> `draining` -> `stopping` -> `backing_up`. A stopped server follows `stopped` -> `backing_up`. Online/low-downtime backup is an optional capability and MUST declare its consistency guarantees; it MUST NOT be assumed by the core. A snapshot captured while writes continue MUST identify a verifiable data generation and write watermark that proves which writes it contains. Without such evidence, the backup MAY be used for recovery but MUST NOT authorize destruction after the runtime resumes writing; the conservative offline generation rule in §6 applies.
 
 The backup operation MUST capture a manifest that identifies the logical server, environment, source instance/runtime, game and world versions, selected data paths, creation time, checksum algorithm and values, and source operation. A storage upload acknowledgment is not proof of a verified backup.
 
@@ -166,7 +166,7 @@ Restoring over existing data requires a separate safety plan and approval accord
 
 ### 5.7 Replacement
 
-Replacement preserves `server_id` but creates a new instance reference. The old instance MUST remain recorded until its state and data disposition are reconciled. A replacement MUST restore from a specifically selected verified backup or use an explicitly documented data migration capability. The controller MUST NOT route to the replacement until it is `ready` and proxy integration confirms registration.
+Replacement preserves `server_id` and `environment_id` but creates a new infrastructure instance reference. The replacement reference MUST identify a different concrete provider resource from the prior instance; an old external reference MUST never be reassigned to the replacement. The old instance reference and observations MUST remain in operation/audit history until its state and data disposition are reconciled. A replacement MUST restore from a specifically selected verified backup or use an explicitly documented data migration capability, and MUST start a new data generation before any write epoch. The controller MUST NOT route to the replacement until it is `ready` and proxy integration confirms registration.
 
 ## 6. Persistent-data generation
 
@@ -182,11 +182,11 @@ To determine whether a backup represents the current persistent data before dest
 
 A backup is eligible to authorize destruction only when it is integrity-verified, belongs to the same logical server and environment, and its `data_generation_id` exactly matches the current known generation. Backup age alone is not sufficient.
 
-The generation ID is opaque and is not a player-visible counter. It MUST be recorded in the logical server record, backup manifest, operation result, and audit evidence. The protocol does not prescribe UUID/ULID generation.
+The generation ID is an opaque identity token for one persistent-data write epoch, not a timestamp, age, or player-visible counter. It MUST NOT be reused for a later write epoch. It MUST be recorded in the logical server record, backup manifest, operation result, and audit evidence. Freshness means exact equality with the current known generation (or a separately verified game-native write watermark); age alone never establishes freshness. The protocol does not prescribe UUID/ULID generation.
 
 ## 7. Readiness and routing
 
-`ready` means all server-specific mandatory checks passed at a recorded time. A process merely existing, a TCP port merely listening, or a provider merely reporting a running VM is insufficient.
+`ready` means all checks in the server's declared, versioned game-specific readiness set passed at a recorded time. Each game adapter MUST declare the required check IDs and versions for the target release and applicable environment. The controller MUST require exactly one fresh result for every declared check, bound to the exact server, environment, instance, and release, and MUST accept only `pass` results. Missing, duplicate, extra, stale, failed, unknown, or target-mismatched results MUST block `ready`. There is no universal core checklist; a Paper adapter, for example, defines its own checks. A process merely existing, a TCP port merely listening, or a provider merely reporting a running VM is insufficient.
 
 A readiness policy may include:
 - Host/bootstrap completion.
@@ -232,14 +232,15 @@ A lifecycle-conforming implementation MUST:
 - Reconcile ambiguous provider/runtime outcomes before retry.
 - Pass the lifecycle test vectors in [conformance](conformance/requirements.md).
 
-## 12. Open review items
+## 12. Closed lifecycle decisions for this draft
 
-This draft intentionally leaves the following for maintainer review before stabilization:
-- Whether forced stop requires a distinct public state or remains an operation detail.
-- Exact policy for backups that use a game-native online snapshot capability.
-- Exact definition of data-generation identity and backup freshness.
-- Whether logical-server permanent retirement should be a separate administrative resource lifecycle.
-- The minimum mandatory readiness checks for each game adapter.
+The following decisions close the lifecycle review items for this draft:
+
+- **Forced stop:** It remains a separately authorized and auditable fallback within `stopping`; no additional public lifecycle state is introduced (§5.3).
+- **Online backups:** They are optional adapter capabilities. They authorize destruction after resumed writes only when the adapter proves the captured write generation/watermark; otherwise the offline generation rule applies (§5.4 and §6).
+- **Generation identity and freshness:** A generation ID identifies one write epoch and is never reused. A backup is current only when its verified generation exactly matches the current known generation, or a separately verified native watermark proves coverage (§6).
+- **Permanent retirement:** Deleting the logical server record or backup metadata is an administrative/data-retention lifecycle outside this protocol. `destroyed` means the infrastructure instance is confirmed absent; logical identity and backup references remain (§3 and §5.5).
+- **Readiness:** Every game adapter declares the versioned check set for its release and environment. The controller requires one fresh, target-bound passing result per check; no universal per-game checklist is imposed by the core (§3.1 and §7).
 
 ## Related specifications
 
