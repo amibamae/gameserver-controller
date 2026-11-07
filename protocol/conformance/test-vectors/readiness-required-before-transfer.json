@@ -4,26 +4,42 @@
   "contract_area": "integration.velocity.players.transfer",
   "purpose": "An expired readiness assertion must prevent any proxy transfer side effect.",
   "input": {
-    "readiness_assertion": {
-      "assertion_id": "expired-001",
+    "transfer_request": {
       "server_id": "minecraft-test",
       "environment_id": "test",
-      "instance_ref": {
+      "source_backend_id": "velocity-lobby",
+      "destination_backend_id": "paper-main",
+      "waiting_cohort_id": "waiting-cohort-001",
+      "expected_instance_ref": {
         "adapter_id": "hosting.example",
         "environment_id": "test",
         "resource_kind": "instance",
         "external_id": "instance-test-001"
       },
-      "readiness_check_set_id": "paper-ready-v1",
-      "observed_at": "2026-11-05T22:40:00Z",
-      "expires_at": "2026-11-05T22:41:00Z"
+      "readiness_assertion": {
+        "assertion_id": "expired-001",
+        "server_id": "minecraft-test",
+        "environment_id": "test",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "test",
+          "resource_kind": "instance",
+          "external_id": "instance-test-001"
+        },
+        "readiness_check_set_id": "paper-ready-v1",
+        "observed_at": "2026-11-05T22:40:00Z",
+        "expires_at": "2026-11-05T22:41:00Z"
+      },
+      "player_session_ids": [
+        "proxy-session-001"
+      ]
     },
-    "validation_time": "2026-11-05T22:42:00Z",
-    "player_session_ids": [
-      "proxy-session-001"
-    ]
+    "validation_time": "2026-11-05T22:42:00Z"
   },
   "expected": {
+    "request_schema_valid": true,
+    "target_bound": true,
+    "readiness_current": false,
     "outcome": "rejected",
     "error_code": "readiness_assertion_expired",
     "proxy_transfer_calls": 0
