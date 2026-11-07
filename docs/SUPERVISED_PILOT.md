@@ -27,6 +27,14 @@ If the post-run invocation ID is missing or malformed, a nonempty prior ID is ma
 
 The pilot does not stop Paper, restore a world, destroy a server, or install or modify the backup service.
 
+## Declarative VM capacity policy
+
+The [machine-readable capacity policy](../pilot/capacity-policy.json) allows at most two VM instances total: one in `production`, plus one shared slot occupied by either `staging` or `testing`. `staging` and `testing` cannot occupy the shared slot at the same time.
+
+A future create flow must reserve its slot before calling the provider. The reservation consumes capacity. Every instance continues to consume capacity until the provider confirms it is absent or destroyed. A create or destroy with an unresolved outcome continues to consume its slot; an unknown create cannot free capacity until provider state confirms absence or destruction. Reject unsupported environments, duplicate or occupied slot requests, and any create that would exceed the total limit.
+
+**This policy is declarative only.** The current `cmd/supervised-pilot` CLI supports backup, status, and local history; it has no VM-create path. The policy is not enforced by that CLI and does not constrain actual provisioning yet.
+
 ## What success does not prove
 
 The `service_succeeded` audit event confirms only the systemd invocation result. The pilot does not inspect the existing script, backup files, object storage, checksums, or world contents. Do not treat this event as proof that a usable backup exists; verify the backup through the server's existing backup process.
