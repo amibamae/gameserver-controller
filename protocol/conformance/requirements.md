@@ -1,10 +1,10 @@
 # Conformance and Interoperability Requirements
 
-**Status:** Draft, version 0.21.0-draft. Passing these requirements is a future release gate; no implementation is currently certified by this document.
+**Status:** Draft, version 0.21.0-draft. The initial Go implementation and validation tools exist, but these requirements remain a future release gate; this document does not certify an implementation.
 
 ## 1. Purpose
 
-Conformance tests let independent implementations determine whether they follow the same protocol behavior. A test suite MUST be language-neutral and MUST NOT assume a specific database, framework, operating system, or UI.
+Use conformance tests to check whether independent implementations follow the same protocol behavior. A test suite MUST be language-neutral and MUST NOT assume a specific database, framework, operating system, or UI.
 
 ## 2. Conformance targets
 
