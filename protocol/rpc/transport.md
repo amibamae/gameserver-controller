@@ -56,7 +56,7 @@ Graceful adapter shutdown is requested by closing stdin after no new calls are s
 
 ## 8. Future bindings
 
-A future remote binding MAY use HTTPS, mutual TLS, or another authenticated transport. It MUST preserve capability semantics, request context, deadlines, structured errors, idempotency, reconciliation, and authorization boundaries. A new transport binding requires its own versioned specification and conformance tests.
+Remote adapter authentication and transport are out of scope for the initial 1.0 profile, which uses in-process adapters and the optional local stdio binding. A future remote binding MAY use HTTPS, mutual TLS, or another authenticated transport. It MUST preserve capability semantics, request context, deadlines, structured errors, idempotency, reconciliation, and authorization boundaries. A new remote binding requires a separately versioned specification and conformance tests.
 
 
 ## 9. Bounded local stream profile
