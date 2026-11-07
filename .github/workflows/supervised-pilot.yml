@@ -1,3 +1,4 @@
+/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 name: Supervised pilot build
 
 on:
@@ -6,6 +7,7 @@ on:
       - "cmd/supervised-pilot/**"
       - "cmd/pilot-capacity-check/**"
       - "pilot/**"
+      - "internal/pilotcapacity/**"
       - "docs/SUPERVISED_PILOT.md"
       - ".github/workflows/supervised-pilot.yml"
       - "go.mod"
@@ -15,6 +17,7 @@ on:
       - "cmd/supervised-pilot/**"
       - "cmd/pilot-capacity-check/**"
       - "pilot/**"
+      - "internal/pilotcapacity/**"
       - "docs/SUPERVISED_PILOT.md"
       - ".github/workflows/supervised-pilot.yml"
       - "go.mod"
