@@ -146,6 +146,7 @@ func (r *staticStartProfileResolver) ResolveServerStart(context.Context, store.L
 type serverStartFixture struct {
 	store     *store.BoltStore
 	schemas   *schemaregistry.Registry
+	registry  *adapter.Registry
 	workflow  *ServerStartWorkflow
 	engine    *Engine
 	operation store.StoredOperation
@@ -180,6 +181,9 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 			{Name: "execution.unit.start", Version: "1", Mutating: true,
 				InputSchemaURI:  "urn:gameserver-controller:" + version + ":execution:systemd-unit-start-input",
 				OutputSchemaURI: "urn:gameserver-controller:" + version + ":execution:systemd-unit-start-output", RequiredPermissions: []string{}},
+			{Name: "execution.unit.graceful_stop", Version: "1", Mutating: true,
+				InputSchemaURI:  "urn:gameserver-controller:" + version + ":execution:systemd-unit-graceful-stop-input",
+				OutputSchemaURI: "urn:gameserver-controller:" + version + ":execution:systemd-unit-graceful-stop-output", RequiredPermissions: []string{}},
 			{Name: "execution.unit.inspect", Version: "1", Mutating: false,
 				InputSchemaURI:  "urn:gameserver-controller:" + version + ":execution:systemd-unit-inspect-input",
 				OutputSchemaURI: "urn:gameserver-controller:" + version + ":execution:systemd-unit-inspect-output", RequiredPermissions: []string{}},
@@ -197,13 +201,18 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 	game := fakeadapter.New(adapter.Descriptor{
 		AdapterID: "game.paper", Category: adapter.CategoryGame, DisplayName: "fake Paper", ImplementationVersion: "test-1",
 		ProtocolVersions: []string{version}, ContractVersions: []string{"1"}, RequiredPermissions: []string{},
-		Capabilities: []adapter.Capability{{Name: "game.readiness.check", Version: "1", Mutating: false,
-			InputSchemaURI:  "urn:gameserver-controller:" + version + ":game:readiness-check-input",
-			OutputSchemaURI: "urn:gameserver-controller:" + version + ":game:readiness-check-output", RequiredPermissions: []string{},
-			Constraints: map[string]any{"readiness_check_sets": []any{map[string]any{
-				"game_release_id": startTestRelease, "environment_ids": []string{startTestEnvID},
-				"readiness_check_set_id": startTestSetID, "required_checks": checkDeclarations,
-			}}}}},
+		Capabilities: []adapter.Capability{
+			{Name: "game.readiness.check", Version: "1", Mutating: false,
+				InputSchemaURI:  "urn:gameserver-controller:" + version + ":game:readiness-check-input",
+				OutputSchemaURI: "urn:gameserver-controller:" + version + ":game:readiness-check-output", RequiredPermissions: []string{},
+				Constraints: map[string]any{"readiness_check_sets": []any{map[string]any{
+					"game_release_id": startTestRelease, "environment_ids": []string{startTestEnvID},
+					"readiness_check_set_id": startTestSetID, "required_checks": checkDeclarations,
+				}}}},
+			{Name: "game.save.request", Version: "1", Mutating: true,
+				InputSchemaURI:  "urn:gameserver-controller:" + version + ":game:save-request-input",
+				OutputSchemaURI: "urn:gameserver-controller:" + version + ":game:save-request-output", RequiredPermissions: []string{}},
+		},
 	})
 	for _, fake := range []*fakeadapter.Scripted{hosting, execution, game} {
 		if err := registry.Register(fake); err != nil {
@@ -298,7 +307,7 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 		t.Fatal(err)
 	}
 	return serverStartFixture{
-		store: operationStore, schemas: schemas, workflow: workflow, engine: engine, operation: accepted,
+		store: operationStore, schemas: schemas, registry: registry, workflow: workflow, engine: engine, operation: accepted,
 		hosting: hosting, execution: execution, game: game, profiles: profileResolver,
 	}
 }

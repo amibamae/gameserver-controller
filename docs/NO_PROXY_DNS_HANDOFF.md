@@ -12,7 +12,7 @@ using one join hostname and that the controller owns the relevant DNS record.
    wake request to the controller API. It never receives Vultr or Wasabi keys.
 3. The controller deduplicates requests, checks the environment and VM cap,
    then starts or provisions the controller-owned server. The lobby displays
-   an estimated wait and disconnects the player with that reason.
+   a conservative rejoin estimate and disconnects the player with that reason.
 4. If the player reconnects before readiness, the lobby reads the operation
    status, repeats the estimate, and disconnects them again. It does not hold
    a player session open while the VM boots.
@@ -28,6 +28,32 @@ record changes are not instantaneous. Use the lowest safe TTL supported by the
 DNS provider, keep the lobby available during the transition, and report that
 a reconnect may take longer than the boot ETA. See [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035.html)
 and [RFC 8767](https://www.rfc-editor.org/rfc/rfc8767.html).
+
+## Local boot timing and optional shared telemetry
+
+For each controller-owned VM, record the local duration from confirmed
+provisioning to Paper's required readiness checks passing. Use prior durations
+for that server/profile to show an estimated wait and an advisory progress bar
+while the backend boots. The display must remain below 100% until Paper is
+actually ready; timing estimates never permit DNS changes or player routing.
+When there are too few measurements, show a conservative configured estimate
+and make progress indeterminate rather than inventing precision.
+
+Local boot timing supports the owner's estimate and progress display. Sharing
+averaged boot durations with a hosted lobby/DNS service is separate optional
+telemetry: it starts disabled, and the server owner must explicitly opt in to
+that sharing. The service may use the shared average only with an additional
+safety buffer and a separate DNS-TTL allowance when giving players a rejoin
+estimate. Without opt-in or enough shared samples, use a conservative fallback.
+Install, upgrade, and migration must not enable sharing silently.
+
+Shared telemetry contains only boot-duration measurements and the minimum
+server-profile/release grouping needed for a useful average. It must not include
+player names, UUIDs, IP addresses, connection history, gameplay activity, or
+credentials. Explain its fields, purpose, destination, retention, access, and
+withdrawal path as required by [the telemetry policy](../SECURITY.md#optional-telemetry).
+Wake-up, readiness, DNS handoff, and the local progress display must continue
+when sharing is disabled.
 
 ## Safety and DNS ownership
 
@@ -52,7 +78,9 @@ and [RFC 8767](https://www.rfc-editor.org/rfc/rfc8767.html).
   them to the lobby or player application.
 
 The future implementation needs a DNS integration contract for record inspect,
-update, and reconciliation; an authenticated wake API; and operation tests for
-duplicate requests, boot failure, readiness failure, DNS update uncertainty,
-TTL delay, shutdown handoff, and credential isolation. This flow is not
-implemented by the current pilot or controller.
+update, and reconciliation; an authenticated wake API; local provision-to-Paper
+readiness timing and advisory progress; and separately owner-enabled shared
+boot-duration averages with bounded retention. Tests must cover duplicate
+requests, boot failure, readiness failure, sharing opt-in/opt-out, DNS update
+uncertainty, TTL delay, shutdown handoff, and credential isolation. This flow
+is not implemented by the current pilot or controller.
