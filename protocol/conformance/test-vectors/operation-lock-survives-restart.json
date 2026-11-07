@@ -1,0 +1,38 @@
+{
+  "fixture_id": "operations.recovery.restart-preserves-lock",
+  "protocol_version": "0.21.0-draft",
+  "contract": "operation.recovery",
+  "pre_restart": {
+    "operation": {
+      "operation_id": "operation-recovery-001",
+      "status": "reconciling",
+      "unresolved_step_status": "outcome_unknown"
+    },
+    "lock": {
+      "owner_operation_id": "operation-recovery-001",
+      "resource_kind": "server",
+      "environment_id": "production",
+      "resource_id": "minecraft-prod"
+    }
+  },
+  "restart": {
+    "controller_restarted": true,
+    "external_outcome": "unknown"
+  },
+  "conflicting_request": {
+    "operation_type": "server.destroy",
+    "resource_kind": "server",
+    "environment_id": "production",
+    "resource_id": "minecraft-prod",
+    "authorized": true
+  },
+  "expected": {
+    "operation_status_after_restart": "reconciling",
+    "lock_held_after_restart": true,
+    "lock_owner_operation_id": "operation-recovery-001",
+    "conflicting_request_accepted": false,
+    "error_code": "core.operation.conflict",
+    "new_operation_created": false,
+    "side_effect_dispatch_count": 0
+  }
+}
