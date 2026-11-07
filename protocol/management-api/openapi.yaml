@@ -76,8 +76,10 @@ paths:
       parameters:
         - in: header
           name: Idempotency-Key
+          in: header
           required: true
-          schema: { type: string, minLength: 1, maxLength: 200 }
+          description: Case-sensitive actor-scoped key; 1–128 visible ASCII characters. Reuse after the retained operation record expires returns a conflict and never creates a new operation.
+          schema: { type: string, minLength: 1, maxLength: 128, pattern: "^[!-~]{1,128}$" }
       requestBody:
         required: true
         content:
@@ -127,8 +129,10 @@ paths:
       parameters:
         - in: header
           name: Idempotency-Key
+          in: header
           required: true
-          schema: { type: string, minLength: 1, maxLength: 200 }
+          description: Case-sensitive actor-scoped key; 1–128 visible ASCII characters. Reuse after the retained operation record expires returns a conflict and never creates a new operation.
+          schema: { type: string, minLength: 1, maxLength: 128, pattern: "^[!-~]{1,128}$" }
       requestBody:
         required: true
         content:
