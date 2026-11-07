@@ -105,7 +105,7 @@ func TestVultrProvisionDefaultsToDryRunWithoutCredentialOrDatabase(t *testing.T)
 		t.Fatalf("provision dry run failed: %v\n%s", err, output)
 	}
 	if !strings.Contains(output, "Dry run: no provider API call, credential read, or capacity reservation") ||
-		!strings.Contains(output, "Configured hard limit: 1 controller-owned VM") {
+		!strings.Contains(output, "Configured hard limit: 2 controller-owned VM") {
 		t.Fatalf("missing dry-run or capacity information: %q", output)
 	}
 	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
@@ -231,7 +231,7 @@ func TestCapacityCommandShowsPersistedReservations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("capacity command failed: %v\n%s", err, output)
 	}
-	for _, expected := range []string{"Managed VM capacity: 1/1", "pilot-test", "staging", "reserved", "gsc-managed-test"} {
+	for _, expected := range []string{"Managed VM capacity: 1/2", "pilot-test", "staging", "reserved", "gsc-managed-test"} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("capacity output %q does not include %q", output, expected)
 		}

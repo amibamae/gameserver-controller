@@ -11,13 +11,16 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
-func TestLoadPolicyReservesByConfiguredEnvironmentAndLimit(t *testing.T) {
+func TestLoadPolicyReservesTwoSlotsAcrossGroupsAndBlocksThird(t *testing.T) {
 	policy, err := LoadPolicy("capacity-policy.json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !policy.RuntimeEnforced {
 		t.Fatal("capacity policy did not load its runtime enforcement flag")
+	}
+	if policy.MaxInstancesTotal != 2 {
+		t.Fatalf("total capacity = %d; want two controller-owned VMs", policy.MaxInstancesTotal)
 	}
 	repository, err := store.OpenBolt(filepath.Join(t.TempDir(), "controller.db"))
 	if err != nil {
@@ -37,8 +40,16 @@ func TestLoadPolicyReservesByConfiguredEnvironmentAndLimit(t *testing.T) {
 	request.ServerID = "production-server"
 	request.EnvironmentID = "production"
 	request.ResourceKey = "gsc-production-server"
+	reservation, created, err = policy.ReserveCapacity(repository, request)
+	if err != nil || !created || reservation.CapacityGroup != "production" {
+		t.Fatalf("production reservation in the other group = (%+v, %t, %v)", reservation, created, err)
+	}
+	request.OperationID = "pilot-testing-create"
+	request.ServerID = "testing-server"
+	request.EnvironmentID = "testing"
+	request.ResourceKey = "gsc-testing-server"
 	if _, _, err := policy.ReserveCapacity(repository, request); !errors.Is(err, store.ErrCapacityReached) {
-		t.Fatalf("second managed VM with configured total limit: got %v, want ErrCapacityReached", err)
+		t.Fatalf("third managed VM after both groups are full: got %v, want ErrCapacityReached", err)
 	}
 }
 

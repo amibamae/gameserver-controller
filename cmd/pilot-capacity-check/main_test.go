@@ -84,18 +84,26 @@ func TestUnmanagedProductionDoesNotConsumePilotSlot(t *testing.T) {
 	}
 }
 
-func TestConfiguredLimitCanBeChangedInPolicyFile(t *testing.T) {
+func TestCurrentPolicyAllowsTwoManagedVMsInSeparateGroups(t *testing.T) {
 	policy, cases := loadPolicyFixtures(t)
-	policy.MaxInstancesTotal = 2
-	policy.PolicyVersion++
+	if policy.MaxInstancesTotal != 2 {
+		t.Fatalf("max_instances_total = %d; want two managed slots", policy.MaxInstancesTotal)
+	}
 	if validationErrors := validateDocuments(policy, cases); len(validationErrors) != 0 {
-		t.Fatalf("changing the configured limit to two should remain valid: %s", strings.Join(validationErrors, "; "))
+		t.Fatalf("published two-slot policy and cases are inconsistent: %s", strings.Join(validationErrors, "; "))
 	}
 	got := decide(policy, "staging", []existingInstance{
 		{Environment: "production", ProviderState: "running", Managed: boolPointer(true)},
 	})
 	if got != (decision{Allowed: true, Reason: "slot_available"}) {
-		t.Fatalf("decision with a two-VM policy = %+v; want the second managed slot available", got)
+		t.Fatalf("second managed slot in another group = %+v; want slot available", got)
+	}
+	got = decide(policy, "testing", []existingInstance{
+		{Environment: "production", ProviderState: "running", Managed: boolPointer(true)},
+		{Environment: "staging", ProviderState: "running", Managed: boolPointer(true)},
+	})
+	if got.Allowed || !matchesExpectedReason(got.Reason, "capacity_reached") {
+		t.Fatalf("third managed slot = %+v; want capacity reached", got)
 	}
 }
 
