@@ -1,4 +1,3 @@
-/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 # Development Roadmap
 
 **Status:** Planning document. The phases are ordered to reduce production risk; dates are not commitments.
