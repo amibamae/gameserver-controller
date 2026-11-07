@@ -1,0 +1,845 @@
+{
+  "fixture_id": "game.configure.pinned-schema-and-result-binding",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "game.configure",
+  "purpose": "Validate pinned configuration schema identity, exact result binding, validation before application, and unknown-outcome reconciliation without fetching arbitrary schemas or applying configuration.",
+  "input": {
+    "release": {
+      "game_adapter_id": "game.minecraft-paper",
+      "game_name": "Minecraft Java Edition",
+      "release_id": "paper-1.21.11-build-3",
+      "game_version": "1.21.11+build.3",
+      "targets": [
+        {
+          "os_family": "linux",
+          "architecture": "x86_64"
+        }
+      ],
+      "artifacts": [
+        {
+          "artifact_id": "paper-server-jar",
+          "artifact_uri": "https://artifacts.example.test/paper-1.21.11-build-3.jar",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      ],
+      "runtime_requirements": [
+        {
+          "runtime_id": "java",
+          "version_requirement": "21"
+        }
+      ],
+      "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+      "configuration_schema_checksum": {
+        "algorithm": "sha256",
+        "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "data_format": {
+        "format_id": "minecraft-java-world",
+        "version": "region-v1"
+      },
+      "required_execution_capabilities": [
+        "execution.unit.inspect",
+        "execution.unit.start",
+        "execution.unit.graceful_stop"
+      ]
+    }
+  },
+  "evaluations": [
+    {
+      "case_id": "valid-applied",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "valid-unchanged",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "unchanged",
+        "validation_result": "valid",
+        "application_started": false,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "invalid-rejected",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "rejected",
+        "validation_result": "invalid",
+        "application_started": false,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [
+          {
+            "path": "/server-port",
+            "code": "out_of_range",
+            "message": "Port must be within the supported range."
+          }
+        ],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "unknown-validation-not-applied",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "rejected",
+        "validation_result": "unknown",
+        "application_started": false,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "unknown-validation-started",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "outcome_unknown",
+        "validation_result": "unknown",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "unknown-application-after-validation",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "outcome_unknown",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "schema-uri-mismatch",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "https://untrusted.example.test/config.schema.json",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "schema-checksum-mismatch",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "request-release-mismatch",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "other-release",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "other-release",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "result-release-mismatch",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "other-release",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "result-instance-mismatch",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "other-instance"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "request-environment-mismatch",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "production",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "production",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "invalid-secret-reference",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {
+          "password": "plaintext"
+        }
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    }
+  ],
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "valid-applied",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": true,
+        "must_reconcile_before_retry": false
+      },
+      {
+        "case_id": "valid-unchanged",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": true,
+        "must_reconcile_before_retry": false
+      },
+      {
+        "case_id": "invalid-rejected",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": false
+      },
+      {
+        "case_id": "unknown-validation-not-applied",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": false
+      },
+      {
+        "case_id": "unknown-validation-started",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": false,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": true
+      },
+      {
+        "case_id": "unknown-application-after-validation",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": true
+      },
+      {
+        "case_id": "schema-uri-mismatch",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": false,
+        "release_bound": true,
+        "dispatch_allowed": false,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": false
+      },
+      {
+        "case_id": "schema-checksum-mismatch",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": false,
+        "release_bound": true,
+        "dispatch_allowed": false,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": false
+      },
+      {
+        "case_id": "request-release-mismatch",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": false,
+        "dispatch_allowed": false,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": false
+      },
+      {
+        "case_id": "result-release-mismatch",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": false,
+        "validation_before_application": true,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": true
+      },
+      {
+        "case_id": "result-instance-mismatch",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": false,
+        "validation_before_application": true,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": true
+      },
+      {
+        "case_id": "request-environment-mismatch",
+        "request_schema_valid": true,
+        "request_target_consistent": false,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": false,
+        "result_schema_valid": true,
+        "result_target_bound": false,
+        "validation_before_application": true,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": false
+      },
+      {
+        "case_id": "invalid-secret-reference",
+        "request_schema_valid": false,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": false,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": false
+      }
+    ]
+  },
+  "side_effect_expected": "none"
+}

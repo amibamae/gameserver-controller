@@ -50,6 +50,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 	fixtureID := stringValue(fixture, "fixture_id")
 	input := asObject(fixture["input"])
 	switch fixtureID {
+	case "game.configure.pinned-schema-and-result-binding":
+		return evaluateConfiguration(pkg, fixture)
 	case "lifecycle.reject.unlisted-transition":
 		transition := asObject(fixture["requested_transition"])
 		allowed := protocolstate.CanTransitionServer(
