@@ -1,0 +1,269 @@
+{
+  "fixture_id": "operations.typed-define-start-stop-no-proxy-drain",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "operations.result",
+  "purpose": "Typed successful results identify the logical server, prove readiness for start, and record save/termination postconditions for stop.",
+  "input": {
+    "define_operation": {
+      "operation_id": "operation-define-007",
+      "operation_type": "server.define",
+      "protocol_version": "0.21.0-draft",
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging"
+      },
+      "status": "succeeded",
+      "actor_id": "operator-example",
+      "request_snapshot": {
+        "operation_type": "server.define",
+        "parameters": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "display_name": "Test Paper Server",
+          "hosting_profile": "test-small",
+          "storage_profile": "test-backup",
+          "game": {
+            "adapter_id": "game.minecraft-paper",
+            "release_channel": "stable"
+          },
+          "execution": {
+            "adapter_id": "execution.systemd",
+            "profile": "paper"
+          }
+        }
+      },
+      "created_at": "2026-11-06T07:30:00Z",
+      "updated_at": "2026-11-06T07:30:02Z",
+      "started_at": "2026-11-06T07:30:01Z",
+      "completed_at": "2026-11-06T07:30:02Z",
+      "steps": [
+        {
+          "step_id": "create-logical-record",
+          "step_type": "core.server.define",
+          "status": "succeeded",
+          "attempt": 1
+        }
+      ],
+      "result": {
+        "outcome_summary": "Logical server record created without infrastructure.",
+        "affected_resources": [],
+        "completed_steps": [],
+        "failed_steps": [],
+        "warnings": [],
+        "unresolved_conditions": [],
+        "audit_event_ids": [
+          "audit-operation-result-007"
+        ],
+        "partial": false,
+        "operation_type": "server.define",
+        "operation_data": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "lifecycle_state": "unprovisioned"
+        }
+      }
+    },
+    "start_operation": {
+      "operation_id": "operation-start-007",
+      "operation_type": "server.start",
+      "protocol_version": "0.21.0-draft",
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-001"
+        }
+      },
+      "status": "succeeded",
+      "actor_id": "operator-example",
+      "request_snapshot": {
+        "operation_type": "server.start",
+        "parameters": {
+          "expected_instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-001"
+          }
+        }
+      },
+      "created_at": "2026-11-06T07:32:00Z",
+      "updated_at": "2026-11-06T07:33:30Z",
+      "started_at": "2026-11-06T07:32:01Z",
+      "completed_at": "2026-11-06T07:33:30Z",
+      "steps": [
+        {
+          "step_id": "start-runtime",
+          "step_type": "execution.unit.start",
+          "status": "succeeded",
+          "attempt": 1
+        },
+        {
+          "step_id": "validate-readiness",
+          "step_type": "game.readiness.check",
+          "status": "succeeded",
+          "attempt": 1
+        }
+      ],
+      "result": {
+        "outcome_summary": "Runtime started and readiness was confirmed.",
+        "affected_resources": [
+          {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-001"
+          },
+          {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "service",
+            "external_id": "paper-staging.service"
+          }
+        ],
+        "completed_steps": [],
+        "failed_steps": [],
+        "warnings": [],
+        "unresolved_conditions": [],
+        "audit_event_ids": [
+          "audit-operation-result-007"
+        ],
+        "partial": false,
+        "operation_type": "server.start",
+        "operation_data": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-001"
+          },
+          "lifecycle_state": "ready",
+          "readiness_assertion": {
+            "assertion_id": "readiness-paper-007",
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-001"
+            },
+            "readiness_check_set_id": "paper-required-v1",
+            "observed_at": "2026-11-06T07:33:00Z",
+            "expires_at": "2026-11-06T07:34:00Z"
+          }
+        }
+      }
+    },
+    "stop_operation": {
+      "operation_id": "operation-stop-007",
+      "operation_type": "server.stop",
+      "protocol_version": "0.21.0-draft",
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-001"
+        }
+      },
+      "status": "succeeded",
+      "actor_id": "operator-example",
+      "request_snapshot": {
+        "operation_type": "server.stop",
+        "parameters": {
+          "drain": true
+        }
+      },
+      "created_at": "2026-11-06T07:34:00Z",
+      "updated_at": "2026-11-06T07:36:00Z",
+      "started_at": "2026-11-06T07:34:01Z",
+      "completed_at": "2026-11-06T07:36:00Z",
+      "steps": [
+        {
+          "step_id": "drain-proxy",
+          "step_type": "integration.proxy.backend.drain",
+          "status": "succeeded",
+          "attempt": 1
+        },
+        {
+          "step_id": "save-and-stop",
+          "step_type": "execution.unit.graceful_stop",
+          "status": "succeeded",
+          "attempt": 1
+        }
+      ],
+      "result": {
+        "outcome_summary": "Players were drained, game data was saved, and the runtime was confirmed stopped.",
+        "affected_resources": [
+          {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-001"
+          },
+          {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "service",
+            "external_id": "paper-staging.service"
+          }
+        ],
+        "completed_steps": [],
+        "failed_steps": [],
+        "warnings": [],
+        "unresolved_conditions": [],
+        "audit_event_ids": [
+          "audit-operation-result-007"
+        ],
+        "partial": false,
+        "operation_type": "server.stop",
+        "operation_data": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-001"
+          },
+          "lifecycle_state": "stopped",
+          "game_save": {
+            "outcome": "confirmed",
+            "observed_at": "2026-11-06T07:35:00Z"
+          },
+          "execution": {
+            "unit_ref": {
+              "adapter_id": "execution.systemd",
+              "environment_id": "staging",
+              "resource_kind": "service",
+              "external_id": "paper-staging.service"
+            },
+            "outcome": "stopped",
+            "observed_at": "2026-11-06T07:35:30Z"
+          },
+          "proxy_drain": {
+            "outcome": "not_configured",
+            "observed_at": "2026-11-06T07:34:30Z"
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "server_identity_consistent": true,
+    "define_has_no_infrastructure": true,
+    "start_readiness_bound_and_current": true,
+    "stop_postconditions_confirmed": true,
+    "define_result_bound": true
+  },
+  "side_effect_expected": "none"
+}
