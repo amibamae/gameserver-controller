@@ -3,47 +3,173 @@
   "$id": "urn:gameserver-controller:0.21.0-draft:lifecycle:server",
   "title": "Logical server record",
   "type": "object",
-  "additionalProperties": false,
-  "required": ["server_id", "environment_id", "lifecycle_state", "created_at", "updated_at"],
+  "additionalProperties": true,
+  "required": [
+    "server_id",
+    "environment_id",
+    "lifecycle_state",
+    "created_at",
+    "updated_at"
+  ],
   "properties": {
-    "server_id": {"type": "string", "minLength": 1, "maxLength": 200},
-    "environment_id": {"type": "string", "minLength": 1, "maxLength": 200},
-    "display_name": {"type": "string", "maxLength": 200},
-    "lifecycle_state": {
-      "enum": ["unprovisioned", "provisioning", "preparing", "restoring", "starting", "validating", "ready", "degraded", "draining", "stopping", "backing_up", "stopped", "destroying", "destroyed", "failed"]
+    "server_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
     },
-    "desired_state": {"enum": ["running", "stopped", "destroyed"]},
-    "data_generation_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 200},
-    "data_generation_status": {"enum": ["known", "unknown"]},
-    "instance_ref": {"$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"},
+    "environment_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "display_name": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "lifecycle_state": {
+      "enum": [
+        "unprovisioned",
+        "provisioning",
+        "preparing",
+        "restoring",
+        "starting",
+        "validating",
+        "ready",
+        "degraded",
+        "draining",
+        "stopping",
+        "backing_up",
+        "stopped",
+        "destroying",
+        "destroyed",
+        "failed"
+      ]
+    },
+    "desired_state": {
+      "enum": [
+        "running",
+        "stopped",
+        "destroyed"
+      ]
+    },
+    "data_generation_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "data_generation_status": {
+      "enum": [
+        "known",
+        "unknown"
+      ]
+    },
+    "instance_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
     "instance_observation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["state", "observed_at"],
+      "required": [
+        "state",
+        "observed_at"
+      ],
       "properties": {
-        "state": {"enum": ["unknown", "creating", "active", "stopping", "stopped", "destroying", "absent", "error"]},
-        "observed_at": {"type": "string", "format": "date-time"},
-        "source_adapter_id": {"type": "string", "maxLength": 160}
+        "state": {
+          "enum": [
+            "unknown",
+            "creating",
+            "active",
+            "stopping",
+            "stopped",
+            "destroying",
+            "absent",
+            "error"
+          ]
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source_adapter_id": {
+          "type": "string",
+          "maxLength": 160
+        }
       }
     },
     "runtime_observation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["state", "observed_at"],
+      "required": [
+        "state",
+        "observed_at"
+      ],
       "properties": {
-        "state": {"enum": ["unknown", "absent", "installed", "stopped", "starting", "running", "healthy", "unhealthy", "stopping", "failed"]},
-        "observed_at": {"type": "string", "format": "date-time"},
-        "execution_adapter_id": {"type": "string", "maxLength": 160},
-        "game_adapter_id": {"type": "string", "maxLength": 160},
-        "release_ref": {"type": "string", "maxLength": 500}
+        "state": {
+          "enum": [
+            "unknown",
+            "absent",
+            "installed",
+            "stopped",
+            "starting",
+            "running",
+            "healthy",
+            "unhealthy",
+            "stopping",
+            "failed"
+          ]
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "execution_adapter_id": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "game_adapter_id": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "release_ref": {
+          "type": "string",
+          "maxLength": 500
+        }
       }
     },
-    "last_operation_id": {"type": "string", "maxLength": 200},
-    "created_at": {"type": "string", "format": "date-time"},
-    "updated_at": {"type": "string", "format": "date-time"},
-    "last_ready_at": {"type": "string", "format": "date-time"}
+    "last_operation_id": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_ready_at": {
+      "type": "string",
+      "format": "date-time"
+    }
   },
-  "if": {"properties": {"data_generation_status": {"const": "known"}}, "required": ["data_generation_status"]},
-  "then": {"required": ["data_generation_id"]}
-
+  "if": {
+    "properties": {
+      "data_generation_status": {
+        "const": "known"
+      }
+    },
+    "required": [
+      "data_generation_status"
+    ]
+  },
+  "then": {
+    "required": [
+      "data_generation_id"
+    ]
+  },
+  "description": "Read-only logical server resource. Unknown optional properties MAY be added at this top level; nested observations remain closed."
 }

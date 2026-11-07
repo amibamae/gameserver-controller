@@ -1,0 +1,58 @@
+{
+  "fixture_id": "lifecycle.replacement.identity",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "lifecycle.replacement",
+  "purpose": "Reprovisioning preserves the logical server identity while using a distinct infrastructure identity and data generation.",
+  "input": {
+    "previous_server": {
+      "server_id": "server-replace-001",
+      "environment_id": "staging",
+      "lifecycle_state": "destroyed",
+      "data_generation_id": "generation-old-001",
+      "data_generation_status": "known",
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "vm-old-001"
+      },
+      "created_at": "2026-11-06T08:00:00Z",
+      "updated_at": "2026-11-06T09:00:00Z",
+      "instance_observation": {
+        "state": "absent",
+        "observed_at": "2026-11-06T09:00:00Z",
+        "source_adapter_id": "hosting.example"
+      }
+    },
+    "replacement_server": {
+      "server_id": "server-replace-001",
+      "environment_id": "staging",
+      "lifecycle_state": "preparing",
+      "data_generation_id": "generation-new-002",
+      "data_generation_status": "known",
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "vm-new-002"
+      },
+      "created_at": "2026-11-06T08:00:00Z",
+      "updated_at": "2026-11-06T09:00:00Z",
+      "instance_observation": {
+        "state": "active",
+        "observed_at": "2026-11-06T09:00:00Z",
+        "source_adapter_id": "hosting.example"
+      }
+    }
+  },
+  "expected": {
+    "previous_server_schema_valid": true,
+    "replacement_server_schema_valid": true,
+    "logical_identity_preserved": true,
+    "previous_instance_destroyed": true,
+    "replacement_instance_distinct": true,
+    "data_generation_rotated": true,
+    "reprovision_transition_permitted": true,
+    "replacement_safe": true
+  }
+}

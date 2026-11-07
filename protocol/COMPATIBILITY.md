@@ -19,7 +19,7 @@ A build number or implementation version MUST NOT be used as a substitute for pr
 
 ## 2. Negotiation is explicit and fail-closed
 
-Peers MUST advertise the protocol versions they support and MUST select a version present in both sets. The selected version MUST be recorded in the session and in every durable operation created through that session.
+Peers MUST advertise the protocol versions they support and MUST select exactly one version present in both sets. The selected version MUST be recorded in the session and in every durable operation created through that session. A peer MUST NOT retry initialization with a lower version after any failed negotiation response to bypass validation, authorization, or policy checks; the caller must correct the cause or report incompatibility.
 
 A peer MUST NOT silently:
 - Select the newest version without checking the other peer's supported set.
@@ -56,21 +56,24 @@ Generated language bindings MAY be produced from the schemas, but generated code
 
 ## 5. Object and enum evolution
 
-Each schema MUST state whether an object is closed or extensible.
+Each schema MUST state whether an object is closed or extensible and the scope of that extensibility.
 
-- Closed request and command objects reject unknown fields. An extension MUST be introduced by a reviewed protocol change or an explicitly defined namespaced `extensions` map.
-- Extensible read-only response objects MAY add optional fields. Clients MUST ignore unknown optional fields when the field is not needed for a safety decision.
-- Unknown enum values or lifecycle states that affect routing, authorization, destructive actions, or recovery MUST cause a safe refusal or operator-visible compatibility error. They MUST NOT be guessed or mapped to a known value.
+- Request and command objects, including nested request parameters, MUST be closed unless they define a specific namespaced `extensions` map. Unknown fields in those objects are rejected.
+- The read-only `lifecycle:server` and `operations:operation` resource schemas are extensible only at their top level. They MAY add unknown optional top-level properties; their nested targets, steps, observations, progress, and other objects remain closed unless their own schema explicitly says otherwise.
+- Clients MUST ignore unknown optional fields on an extensible response resource when those fields are not needed for a safety decision. Unknown fields MUST NOT change the meaning of known fields or supply a required safety precondition.
+- Lifecycle, operation, instance, runtime, and other safety-critical status/state enums remain closed. An unknown value that affects routing, authorization, destructive actions, or recovery MUST fail safely and SHOULD be reported with `core.compatibility.unknown_state`; it MUST NOT be guessed, coerced, or mapped to a known value.
 - A new required behavior MUST be represented by a new protocol/capability contract version or a new required capability, not inferred from implementation version.
 
 ## 6. Durable operations across upgrades
 
 An accepted operation is bound to the protocol version and validated request under which it was created. The controller MUST retain enough version information and request metadata to resume or reconcile it after a process restart or software upgrade.
 
-An implementation MUST NOT reinterpret an in-flight operation using newer defaults. It MUST either:
-- Continue using the recorded operation semantics and compatible adapter capability versions;
+An implementation MUST NOT reinterpret an in-flight operation using newer defaults. Every dispatched adapter step MUST retain the exact adapter identity and capability name and version used when it was accepted. The implementation MUST either:
+- Continue using the recorded operation semantics and that exact capability version;
 - Reconcile the external state and migrate the operation through an explicitly documented, tested migration; or
-- Suspend the operation for operator intervention.
+- Suspend the operation for operator intervention when the recorded semantics or capability version cannot be honored.
+
+It MUST NOT substitute a newer or older capability version by inference. If no explicit tested migration exists, it MUST suspend rather than replay or reinterpret the step.
 
 A migration MUST preserve operation identity, idempotency binding, completed steps, external references, warnings, errors, and audit history. It MUST NOT repeat an external side effect merely because the implementation changed.
 
@@ -82,13 +85,13 @@ A client-facing API revision MUST NOT silently change adapter RPC semantics. A c
 
 ## 8. Deprecation and removal
 
-Before a stable contract is removed, maintainers SHOULD provide:
+Before a stable contract is removed, maintainers MUST provide:
 - A deprecation notice identifying the exact field, state, method, or capability.
 - A replacement and migration example.
 - The first version in which deprecation applies and the earliest version in which removal is permitted.
 - A conformance fixture proving the replacement behavior.
 
-Security fixes and changes needed to prevent data loss or unsafe routing MAY require accelerated removal. Such changes MUST document the risk and migration impact.
+Security fixes and changes needed to prevent data loss or unsafe routing MAY require accelerated removal. Such changes MUST document the risk and migration impact, the affected versions, and the safest available migration path.
 
 ## 9. Compatibility release gate
 
@@ -96,8 +99,11 @@ Every protocol release MUST validate:
 - Schema index uniqueness, IDs, paths, and local references.
 - All published examples against their declared schemas.
 - Conformance fixture structure and expected safety behavior.
-- Negotiation success and no-overlap failure.
-- Unknown optional fields and unknown safety-critical enum/state values.
-- In-flight operation recovery when the controller or adapter implementation version changes.
+- Exact protocol negotiation, no-overlap failure, and refusal to downgrade after an error.
+- Tolerance of unknown optional top-level fields on read-only server/operation resources, while requests and nested closed objects reject them.
+- Safe refusal for unknown safety-critical enum/state values.
+- Destroyed-server replacement preserving logical identity while using a distinct infrastructure identity.
+- Required readiness completeness and exact target binding.
+- In-flight operation recovery across controller/adapter upgrades using the recorded protocol and exact capability versions without replaying completed effects.
 
 The initial Go implementation MUST pass the published conformance suite before release. Other-language implementations are welcome community contributions and MAY run the same suite, but a second language is not a release requirement. A schema-valid message alone is not evidence of behavioral interoperability.
