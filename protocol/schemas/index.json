@@ -27,6 +27,14 @@
       "id": "urn:gameserver-controller:0.21.0-draft:common:secret-reference"
     },
     {
+      "path": "execution/systemd-unit-create-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-create-input"
+    },
+    {
+      "path": "execution/systemd-unit-create-output.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-create-output"
+    },
+    {
       "path": "execution/systemd-unit-delete-input.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-delete-input"
     },

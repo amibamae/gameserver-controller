@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-create-output",
+  "title": "Systemd execution unit create output",
+  "description": "A newly created unit is stopped. An unchanged unit may already be running; this request never starts it and never establishes game readiness.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "unit_ref",
+    "target",
+    "release_id",
+    "definition_checksum",
+    "outcome",
+    "state",
+    "started_by_request",
+    "persistent_data_preserved",
+    "observed_at"
+  ],
+  "properties": {
+    "unit_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
+    "target": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "definition_checksum": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum"
+    },
+    "outcome": {
+      "enum": [
+        "created",
+        "unchanged",
+        "accepted",
+        "outcome_unknown"
+      ]
+    },
+    "state": {
+      "enum": [
+        "stopped",
+        "running",
+        "unknown"
+      ]
+    },
+    "started_by_request": {
+      "const": false
+    },
+    "persistent_data_preserved": {
+      "const": true
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "external_operation_ref": {
+      "allOf": [
+        {
+          "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+        },
+        {
+          "properties": {
+            "resource_kind": {
+              "const": "unit-operation"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "created"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "const": "stopped"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "unchanged"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "enum": [
+              "stopped",
+              "running"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "accepted",
+              "outcome_unknown"
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "state": {
+            "const": "unknown"
+          }
+        },
+        "required": [
+          "external_operation_ref"
+        ]
+      }
+    }
+  ]
+}
