@@ -417,10 +417,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		sort.Strings(leakedSurfaces)
 		return map[string]any{
 			"remote_attempts": remoteResults,
-			"local_attempts": localResults,
+			"local_attempts":  localResults,
 			"token_redaction": map[string]any{
 				"token_absent_from_observed_surfaces": len(leakedSurfaces) == 0,
-				"leaked_surfaces": leakedSurfaces,
+				"leaked_surfaces":                     leakedSurfaces,
 			},
 		}, nil
 	case "management.authentication.actor-spoofing":
