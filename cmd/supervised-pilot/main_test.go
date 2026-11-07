@@ -242,13 +242,15 @@ func TestBackupRequiresServiceInvocationToBeFinished(t *testing.T) {
 		name          string
 		active        string
 		sub           string
+		result        string
+		exitCode      string
 		unknownResult bool
 		failedResult  bool
 	}{
 		{name: "running service", active: "active", sub: "running", unknownResult: true},
 		{name: "completed oneshot", active: "inactive", sub: "dead"},
 		{name: "completed oneshot retained active", active: "active", sub: "exited"},
-		{name: "failed state with contradictory success fields", active: "failed", sub: "failed", failedResult: true},
+		{name: "failed state with contradictory success fields", active: "failed", sub: "failed", result: "success", exitCode: "0", failedResult: true},
 	}
 
 	for _, test := range tests {
@@ -256,8 +258,35 @@ func TestBackupRequiresServiceInvocationToBeFinished(t *testing.T) {
 			logPath, home := installFakeSSH(t, false, false)
 			t.Setenv("POST_ACTIVE_STATE", test.active)
 			t.Setenv("POST_SUB_STATE", test.sub)
+			t.Setenv("POST_RESULT", test.result)
+			t.Setenv("POST_EXIT_CODE", test.exitCode)
 
 			output, err := runBackup(t, "backup", "--host", "server.example", "--execute", "--confirm-host", "server.example")
+			if test.unknownResult {
+				if err == nil || !strings.Contains(err.Error(), "outcome unknown") {
+					t.Fatalf("expected running service to be unknown, got %v; output=%s", err, output)
+				}
+			} else if test.failedResult {
+				if err == nil || !strings.Contains(err.Error(), "did not report success") {
+					t.Fatalf("expected failed unit state to reject success, got %v; output=%s", err, output)
+				}
+			} else if err != nil || !strings.Contains(output, "completed successfully") {
+				t.Fatalf("expected completed service success, got %v; output=%s", err, output)
+			}
+
+			commands, readErr := os.ReadFile(logPath)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if strings.Count(string(commands), "systemctl start --wait minecraft-backup.service") != 1 {
+				t.Fatalf("backup invocation was repeated; SSH log: %s", commands)
+			}
+
+			auditPath := filepath.Join(home, ".local", "state", "gsc-pilot", "operations.jsonl")
+			audit, readErr := os.ReadFile(auditPath)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
 			if test.unknownResult {
 				if !strings.Contains(string(audit), `"event":"outcome_unknown"`) || strings.Contains(string(audit), `"event":"service_succeeded"`) {
 					t.Fatalf("expected unknown, not success, in audit log; got %s", audit)
