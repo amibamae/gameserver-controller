@@ -51,6 +51,20 @@ type Definition interface {
 	BuildFailureResult(context.Context, store.OperationRecord, store.OperationStep, json.RawMessage) (json.RawMessage, error)
 }
 
+// CompletionValidator checks operation postconditions after every planned
+// adapter step succeeded. It lets a definition fail a completed observation
+// safely without rewriting an adapter step's immutable successful output.
+type CompletionValidator interface {
+	ValidateCompletion(context.Context, store.OperationRecord) error
+}
+
+// PreconditionFailureHandler distinguishes a definitive, observed blocker from
+// an unresolved precondition. A definitive result may fail the operation and
+// release its lock; uncertain failures remain suspended for operator review.
+type PreconditionFailureHandler interface {
+	HandlePreconditionFailure(context.Context, store.OperationRecord, store.OperationStep, error) (Resolution, error)
+}
+
 // LifecycleProjector derives a logical-server record from durable operation
 // progress. It is called for every persisted operation update; when it reports
 // a state change, the engine commits the operation and state event atomically.
