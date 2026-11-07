@@ -1,8 +1,10 @@
 # Adapter Contracts
 
-**Status:** Proposed language-neutral contracts. No adapter API is implemented yet.
+**Status:** Language-neutral contracts with an initial Go in-process adapter API. Production adapters and the optional process transport are not implemented.
 
 The detailed drafts live under [protocol/adapters](../protocol/adapters/README.md). They define five categories: hosting, storage, execution, game, and integration.
+
+The Go registry validates adapter descriptors and capability inputs and outputs against the bundled protocol schema package. Scripted in-process fakes cover each category for local tests. The registry is a boundary and test harness; it does not implement lifecycle policy, durable dispatch, authorization, or provider behavior.
 
 ## Shared rules
 

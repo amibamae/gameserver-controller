@@ -16,6 +16,10 @@ Adapters connect the controller core to infrastructure and external systems. Ada
 
 Adapters are replaceable implementations of a contract. A category does not imply a particular vendor, programming language, process model, or deployment topology.
 
+## Current Go implementation status
+
+The repository now provides an in-process Go adapter interface and registry. It validates descriptors, capability inputs, and capability outputs using the bundled local schema package; it rejects unadvertised capabilities before invoking an adapter. Scripted fakes exercise the interface for all five categories without network or provider access. Durable operation-step dispatch, workflow policy, reconciliation, production adapters, and the optional stdio process binding remain separate implementation work. Passing these fake-adapter interface tests is not a claim that any production adapter is conformant.
+
 ## Common requirements
 
 Every adapter MUST:

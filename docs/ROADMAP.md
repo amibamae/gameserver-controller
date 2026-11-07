@@ -52,9 +52,12 @@ Other-language implementations are welcome contributions, but they are not part 
 - Use Go for the initial controller implementation and its validation tooling.
 - [x] Choose the initial operation persistence backend (bbolt).
 - [x] Implement durable operation acceptance with JCS request fingerprints, actor-scoped idempotency, and per-server locks.
+- [x] Bundle the protocol schemas and add a closed local schema registry for runtime validation.
+- [x] Add the Go in-process adapter registry and scripted fake adapters for all five categories.
 - Add configuration validation.
 - Expand language-neutral behavioral tests as contracts mature.
-- Implement fake hosting, storage, execution, game, and integration adapters.
+- Implement lifecycle workflows and durable step dispatch/reconciliation against the adapter registry.
+- Expand fake-adapter scenarios to cover workflow preconditions, failures, timeout, and recovery.
 - Test compatibility, errors, idempotency, timeouts, and recovery without production services.
 - Establish build, test, dependency, and release practices that do not require AI.
 
@@ -135,6 +138,6 @@ The first end-to-end target is Vultr, Wasabi, Paper, and Velocity on Debian. Exi
 
 The Phase 1 protocol package has met its exit criteria on main at version 0.21.0-draft. This untagged branch is development source, not an immutable interoperability snapshot. The supervised backup CLI is code-complete within its limited wrapper scope; it does not create VMs. The two-VM policy is declarative, and a supervised first run plus artifact/storage verification remains an operator handoff.
 
-The schema package covers hosting, storage, execution, game, and integration operations, with typed results for all seven standard server operations. The protocol specification and compatibility rules have been reviewed; Go CI validates schemas, references, examples, OpenAPI 3.2.1 structure, and published conformance vectors. Phase 2 now includes Go lifecycle/operation transition rules, a durable bbolt operation store, and an acceptance service with actor-scoped idempotency and per-server locks. The fake-adapter harness, configuration validation, runtime transport, and production adapters remain future work in Phases 2 and 3.
+The schema package covers hosting, storage, execution, game, and integration operations, with typed results for all seven standard server operations. The protocol specification and compatibility rules have been reviewed; Go CI validates schemas, references, examples, OpenAPI 3.2.1 structure, and published conformance vectors. Phase 2 now includes Go lifecycle/operation transition rules, a durable bbolt operation store, atomic acceptance with actor-scoped idempotency and per-server locks, an embedded local schema registry, and an in-process adapter registry with scripted fakes for all five categories. Durable step dispatch, workflow orchestration/reconciliation, configuration validation, process transport, and production adapters remain future work in Phases 2 and 3.
 
 Phase 1 means the reviewed specification package and Go validator/conformance suite are ready for implementation. Stable protocol 1.0 remains gated on the initial Go controller passing behavioral conformance; optional implementations in other languages are welcome but are not a release requirement.
