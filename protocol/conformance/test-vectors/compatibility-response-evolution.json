@@ -1,0 +1,143 @@
+{
+  "fixture_id": "compatibility.response-evolution",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "protocol.compatibility",
+  "purpose": "Read-only server and operation resources tolerate unknown top-level optional fields while closed request shapes and safety-critical states fail safely.",
+  "input": {
+    "server": {
+      "server_id": "server-compat-001",
+      "environment_id": "staging",
+      "lifecycle_state": "ready",
+      "created_at": "2026-11-06T08:00:00Z",
+      "updated_at": "2026-11-06T09:00:00Z",
+      "instance_observation": {
+        "state": "active",
+        "observed_at": "2026-11-06T09:00:00Z",
+        "source_adapter_id": "hosting.example"
+      },
+      "future_readonly_field": {
+        "revision": 2
+      }
+    },
+    "operation": {
+      "operation_id": "op-compat-001",
+      "operation_type": "server.start",
+      "protocol_version": "0.21.0-draft",
+      "target": {
+        "server_id": "server-compat-001",
+        "environment_id": "staging"
+      },
+      "status": "pending",
+      "actor_id": "actor-example",
+      "request_snapshot": {
+        "operation_type": "server.start",
+        "parameters": {}
+      },
+      "created_at": "2026-11-06T08:00:00Z",
+      "updated_at": "2026-11-06T09:00:00Z",
+      "steps": [],
+      "idempotency_key": "compat-key-001",
+      "future_trace_hint": "safe-to-ignore"
+    },
+    "request": {
+      "operation_type": "server.define",
+      "parameters": {
+        "server_id": "server-compat-001",
+        "environment_id": "staging",
+        "display_name": "Compat server",
+        "hosting_profile": "hosting.standard",
+        "storage_profile": "storage.standard",
+        "game": {
+          "adapter_id": "game.paper",
+          "release_channel": "stable"
+        },
+        "execution": {
+          "adapter_id": "execution.systemd",
+          "profile": "default"
+        }
+      }
+    },
+    "request_with_unknown_field": {
+      "operation_type": "server.define",
+      "parameters": {
+        "server_id": "server-compat-001",
+        "environment_id": "staging",
+        "display_name": "Compat server",
+        "hosting_profile": "hosting.standard",
+        "storage_profile": "storage.standard",
+        "game": {
+          "adapter_id": "game.paper",
+          "release_channel": "stable"
+        },
+        "execution": {
+          "adapter_id": "execution.systemd",
+          "profile": "default"
+        }
+      },
+      "unrecognized_command_flag": true
+    },
+    "server_with_unknown_nested_observation_field": {
+      "server_id": "server-compat-001",
+      "environment_id": "staging",
+      "lifecycle_state": "ready",
+      "created_at": "2026-11-06T08:00:00Z",
+      "updated_at": "2026-11-06T09:00:00Z",
+      "instance_observation": {
+        "state": "active",
+        "observed_at": "2026-11-06T09:00:00Z",
+        "source_adapter_id": "hosting.example",
+        "future_provider_phase": "waiting"
+      },
+      "future_readonly_field": {
+        "revision": 2
+      }
+    },
+    "server_with_unknown_lifecycle_state": {
+      "server_id": "server-compat-001",
+      "environment_id": "staging",
+      "lifecycle_state": "paused_for_future_reason",
+      "created_at": "2026-11-06T08:00:00Z",
+      "updated_at": "2026-11-06T09:00:00Z",
+      "instance_observation": {
+        "state": "active",
+        "observed_at": "2026-11-06T09:00:00Z",
+        "source_adapter_id": "hosting.example"
+      },
+      "future_readonly_field": {
+        "revision": 2
+      }
+    },
+    "operation_with_unknown_status": {
+      "operation_id": "op-compat-001",
+      "operation_type": "server.start",
+      "protocol_version": "0.21.0-draft",
+      "target": {
+        "server_id": "server-compat-001",
+        "environment_id": "staging"
+      },
+      "status": "paused_for_future_reason",
+      "actor_id": "actor-example",
+      "request_snapshot": {
+        "operation_type": "server.start",
+        "parameters": {}
+      },
+      "created_at": "2026-11-06T08:00:00Z",
+      "updated_at": "2026-11-06T09:00:00Z",
+      "steps": [],
+      "idempotency_key": "compat-key-001",
+      "future_trace_hint": "safe-to-ignore"
+    }
+  },
+  "expected": {
+    "server_resource_valid": true,
+    "operation_resource_valid": true,
+    "unknown_optional_top_level_fields_ignored": true,
+    "valid_request_accepted": true,
+    "unknown_request_field_rejected": true,
+    "unknown_nested_response_field_rejected": true,
+    "unknown_lifecycle_state_rejected": true,
+    "unknown_operation_status_rejected": true,
+    "unknown_state_error_code": "core.compatibility.unknown_state",
+    "adapter_calls": 0
+  }
+}
