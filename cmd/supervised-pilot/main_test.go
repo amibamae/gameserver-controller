@@ -231,7 +231,6 @@ func TestStatusReportsSystemdInvocationID(t *testing.T) {
 	}
 }
 
-
 func TestBackupRequiresServiceInvocationToBeFinished(t *testing.T) {
 	tests := []struct {
 		name          string
