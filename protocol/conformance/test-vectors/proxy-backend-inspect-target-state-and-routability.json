@@ -1,0 +1,384 @@
+{
+  "fixture_id": "integration.proxy.inspect.target-state-and-routability",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.proxy.backend.inspect",
+  "purpose": "Routing is permitted only from an exact, environment-consistent inspection that confirms a registered and routable backend; contradictory and unknown state fails closed.",
+  "input": {
+    "evaluations": [
+      {
+        "case_id": "registered-and-routable-exact-target",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          }
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "registration_state": "registered",
+          "routability": "routable",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      },
+      {
+        "case_id": "registered-but-not-routable",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          }
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "registration_state": "registered",
+          "routability": "not_routable",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      },
+      {
+        "case_id": "draining-backend-is-not-routable",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          }
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "registration_state": "draining",
+          "routability": "not_routable",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      },
+      {
+        "case_id": "unregistered-backend-is-not-routable",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          }
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "registration_state": "unregistered",
+          "routability": "not_routable",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      },
+      {
+        "case_id": "unknown-state-never-permits-routing",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          }
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "registration_state": "unknown",
+          "routability": "unknown",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      },
+      {
+        "case_id": "inspection-response-for-different-instance",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          }
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-002"
+            }
+          },
+          "registration_state": "registered",
+          "routability": "routable",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      },
+      {
+        "case_id": "instance-environment-mismatch-blocks-routing",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "production",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          }
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "production",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "registration_state": "registered",
+          "routability": "routable",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      },
+      {
+        "case_id": "unregistered-routable-contradiction-rejected-by-schema",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          }
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "registration_state": "unregistered",
+          "routability": "routable",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      },
+      {
+        "case_id": "draining-routable-contradiction-rejected-by-schema",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          }
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "registration_state": "draining",
+          "routability": "routable",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "registered-and-routable-exact-target",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "target_environment_consistent": true,
+        "routing_permitted": true
+      },
+      {
+        "case_id": "registered-but-not-routable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "target_environment_consistent": true,
+        "routing_permitted": false
+      },
+      {
+        "case_id": "draining-backend-is-not-routable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "target_environment_consistent": true,
+        "routing_permitted": false
+      },
+      {
+        "case_id": "unregistered-backend-is-not-routable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "target_environment_consistent": true,
+        "routing_permitted": false
+      },
+      {
+        "case_id": "unknown-state-never-permits-routing",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "target_environment_consistent": true,
+        "routing_permitted": false
+      },
+      {
+        "case_id": "inspection-response-for-different-instance",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": false,
+        "target_environment_consistent": true,
+        "routing_permitted": false
+      },
+      {
+        "case_id": "instance-environment-mismatch-blocks-routing",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "target_environment_consistent": false,
+        "routing_permitted": false
+      },
+      {
+        "case_id": "unregistered-routable-contradiction-rejected-by-schema",
+        "request_schema_valid": true,
+        "response_schema_valid": false,
+        "target_bound": true,
+        "target_environment_consistent": true,
+        "routing_permitted": false
+      },
+      {
+        "case_id": "draining-routable-contradiction-rejected-by-schema",
+        "request_schema_valid": true,
+        "response_schema_valid": false,
+        "target_bound": true,
+        "target_environment_consistent": true,
+        "routing_permitted": false
+      }
+    ]
+  },
+  "side_effect_expectation": "none"
+}

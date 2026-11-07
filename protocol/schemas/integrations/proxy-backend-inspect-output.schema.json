@@ -39,5 +39,48 @@
       "type": "string",
       "format": "date-time"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "registration_state": {
+            "enum": [
+              "draining",
+              "unregistered"
+            ]
+          }
+        },
+        "required": [
+          "registration_state"
+        ]
+      },
+      "then": {
+        "properties": {
+          "routability": {
+            "const": "not_routable"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "routability": {
+            "const": "routable"
+          }
+        },
+        "required": [
+          "routability"
+        ]
+      },
+      "then": {
+        "properties": {
+          "registration_state": {
+            "const": "registered"
+          }
+        }
+      }
+    }
+  ]
 }
