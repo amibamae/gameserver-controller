@@ -57,7 +57,18 @@
       "format": "date-time"
     },
     "external_operation_ref": {
-      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+      "allOf": [
+        {
+          "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+        },
+        {
+          "properties": {
+            "resource_kind": {
+              "const": "unit-operation"
+            }
+          }
+        }
+      ]
     }
   },
   "allOf": [
