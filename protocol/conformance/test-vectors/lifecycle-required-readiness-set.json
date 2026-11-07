@@ -1,0 +1,214 @@
+{
+  "fixture_id": "lifecycle.required-readiness-set",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "lifecycle.readiness",
+  "purpose": "Only one fresh, target-bound passing result for every check in the declared game-specific set permits ready.",
+  "declared_check_set": {
+    "readiness_check_set_id": "game.paper:paper-1.21.11:checks-v1",
+    "check_ids": [
+      "paper.startup-complete",
+      "paper.world-loaded"
+    ],
+    "check_versions": {
+      "paper.startup-complete": "1",
+      "paper.world-loaded": "2"
+    }
+  },
+  "input": {
+    "server_id": "paper-staging-001",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "vm-paper-001"
+    },
+    "game_release_id": "paper-1.21.11-build-3",
+    "required_check_ids": [
+      "paper.startup-complete",
+      "paper.world-loaded"
+    ]
+  },
+  "evaluations": [
+    {
+      "case_id": "all-required-checks-pass",
+      "output": {
+        "server_id": "paper-staging-001",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-paper-001"
+        },
+        "game_release_id": "paper-1.21.11-build-3",
+        "observed_at": "2026-11-06T09:05:00Z",
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "result": "pass",
+            "observed_at": "2026-11-06T09:04:58Z"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "result": "pass",
+            "observed_at": "2026-11-06T09:04:59Z"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "required-check-missing",
+      "output": {
+        "server_id": "paper-staging-001",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-paper-001"
+        },
+        "game_release_id": "paper-1.21.11-build-3",
+        "observed_at": "2026-11-06T09:05:00Z",
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "result": "pass",
+            "observed_at": "2026-11-06T09:04:58Z"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "required-check-duplicated",
+      "output": {
+        "server_id": "paper-staging-001",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-paper-001"
+        },
+        "game_release_id": "paper-1.21.11-build-3",
+        "observed_at": "2026-11-06T09:05:00Z",
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "result": "pass",
+            "observed_at": "2026-11-06T09:04:58Z"
+          },
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "result": "pass",
+            "observed_at": "2026-11-06T09:04:58Z"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "wrong-instance-target",
+      "output": {
+        "server_id": "paper-staging-001",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-paper-old-000"
+        },
+        "game_release_id": "paper-1.21.11-build-3",
+        "observed_at": "2026-11-06T09:05:00Z",
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "result": "pass",
+            "observed_at": "2026-11-06T09:04:58Z"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "result": "pass",
+            "observed_at": "2026-11-06T09:04:59Z"
+          }
+        ]
+      }
+    },
+    {
+      "case_id": "unknown-result-enum",
+      "output": {
+        "server_id": "paper-staging-001",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-paper-001"
+        },
+        "game_release_id": "paper-1.21.11-build-3",
+        "observed_at": "2026-11-06T09:05:00Z",
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "result": "pass",
+            "observed_at": "2026-11-06T09:04:58Z"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "result": "future",
+            "observed_at": "2026-11-06T09:04:59Z"
+          }
+        ]
+      }
+    }
+  ],
+  "expected": {
+    "readiness_check_set_valid": true,
+    "evaluations": [
+      {
+        "case_id": "all-required-checks-pass",
+        "ready_transition_permitted": true,
+        "readiness": "ready",
+        "block_reason": null,
+        "error_code": null
+      },
+      {
+        "case_id": "required-check-missing",
+        "ready_transition_permitted": false,
+        "readiness": "not_ready",
+        "block_reason": "required_check_set_mismatch",
+        "error_code": null
+      },
+      {
+        "case_id": "required-check-duplicated",
+        "ready_transition_permitted": false,
+        "readiness": "not_ready",
+        "block_reason": "required_check_set_mismatch",
+        "error_code": null
+      },
+      {
+        "case_id": "wrong-instance-target",
+        "ready_transition_permitted": false,
+        "readiness": "not_ready",
+        "block_reason": "target_mismatch",
+        "error_code": null
+      },
+      {
+        "case_id": "unknown-result-enum",
+        "ready_transition_permitted": false,
+        "readiness": "unknown",
+        "block_reason": "unknown_state",
+        "error_code": "core.compatibility.unknown_state"
+      }
+    ],
+    "ready_transition_requires_complete_passing_set": true
+  }
+}
