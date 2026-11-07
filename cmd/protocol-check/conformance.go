@@ -58,6 +58,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return evaluateGameReleaseDescription(pkg, fixture)
 	case "game.install.release-binding-and-reconciliation":
 		return evaluateGameInstallContract(pkg, fixture)
+	case "operations.type-binding":
+		return evaluateOperationTypeBinding(pkg, fixture)
 	case "game.configure.pinned-schema-and-result-binding":
 		return evaluateConfiguration(pkg, fixture)
 	case "lifecycle.reject.unlisted-transition":
