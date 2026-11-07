@@ -8,9 +8,10 @@
     "external_id": "instance-paper-test-001"
   },
   "game_release_id": "paper-1.21.11-build-3",
-  "required_check_ids": [
-    "paper.startup-complete",
-    "paper.world-loaded",
-    "paper.players-joinable"
+  "readiness_check_set_id": "game.paper:paper-1.21.11:checks-v1",
+  "required_checks": [
+    {"check_id": "paper.startup-complete", "check_version": "1"},
+    {"check_id": "paper.world-loaded", "check_version": "2"},
+    {"check_id": "paper.players-joinable", "check_version": "1"}
   ]
 }

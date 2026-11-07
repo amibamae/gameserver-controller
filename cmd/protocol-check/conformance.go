@@ -89,20 +89,32 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			return nil, fmt.Errorf("readiness request does not match schema: %w", err)
 		}
 		set := asObject(fixture["declared_check_set"])
-		required := arrayValue(input, "required_check_ids")
+		requiredEntries := arrayValue(input, "required_checks")
 		declared := arrayValue(set, "check_ids")
 		versions := asObject(set["check_versions"])
-		setValid := stringValue(set, "readiness_check_set_id") != "" && uniqueStrings(declared) && sameStringSet(required, declared)
-		for _, rawID := range required {
-			checkID, ok := rawID.(string)
-			if !ok {
+		required := make([]any, 0, len(requiredEntries))
+		requiredVersions := make(map[string]string, len(requiredEntries))
+		setValid := stringValue(set, "readiness_check_set_id") != "" &&
+			stringValue(input, "readiness_check_set_id") == stringValue(set, "readiness_check_set_id") &&
+			uniqueStrings(declared)
+		for _, rawRequirement := range requiredEntries {
+			requirement := asObject(rawRequirement)
+			checkID := stringValue(requirement, "check_id")
+			checkVersion := stringValue(requirement, "check_version")
+			if checkID == "" || checkVersion == "" {
 				setValid = false
 				continue
 			}
-			if version, ok := versions[checkID].(string); !ok || version == "" {
+			if _, duplicate := requiredVersions[checkID]; duplicate {
+				setValid = false
+			}
+			required = append(required, checkID)
+			requiredVersions[checkID] = checkVersion
+			if declaredVersion, ok := versions[checkID].(string); !ok || declaredVersion == "" || declaredVersion != checkVersion {
 				setValid = false
 			}
 		}
+		setValid = setValid && sameStringSet(required, declared)
 		caseResults := make([]any, 0, len(arrayValue(fixture, "evaluations")))
 		for _, rawCase := range arrayValue(fixture, "evaluations") {
 			readinessCase := asObject(rawCase)
@@ -1783,29 +1795,46 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		if !bound {
 			return nil, fmt.Errorf("readiness output must remain bound to the exact requested target and release")
 		}
-		requiredIDs := arrayValue(input, "required_check_ids")
-		if !uniqueStrings(requiredIDs) {
-			return nil, fmt.Errorf("required check IDs must be unique")
+		requiredChecks := arrayValue(input, "required_checks")
+		if len(requiredChecks) == 0 {
+			return nil, fmt.Errorf("readiness request must contain required checks")
 		}
-		requested := make(map[string]bool, len(requiredIDs))
-		for _, rawID := range requiredIDs {
-			requested[rawID.(string)] = true
+		requested := make(map[string]string, len(requiredChecks))
+		for _, rawRequirement := range requiredChecks {
+			requirement := asObject(rawRequirement)
+			checkID := stringValue(requirement, "check_id")
+			checkVersion := stringValue(requirement, "check_version")
+			if checkID == "" || checkVersion == "" {
+				return nil, fmt.Errorf("required check IDs and versions must be non-empty")
+			}
+			if _, duplicate := requested[checkID]; duplicate {
+				return nil, fmt.Errorf("required check IDs must be unique")
+			}
+			requested[checkID] = checkVersion
 		}
 		results := arrayValue(output, "check_results")
 		if len(results) != len(requested) {
 			return nil, fmt.Errorf("readiness output must contain exactly one result for every required check")
 		}
-		observed := make(map[string]string, len(results))
+		type observedReadiness struct {
+			result string
+		}
+		observed := make(map[string]observedReadiness, len(results))
 		for _, rawResult := range results {
 			item := asObject(rawResult)
 			checkID := stringValue(item, "check_id")
-			if !requested[checkID] {
+			expectedVersion, exists := requested[checkID]
+			if !exists {
 				return nil, fmt.Errorf("readiness output contains an unrequested check %q", checkID)
 			}
 			if _, exists := observed[checkID]; exists {
 				return nil, fmt.Errorf("readiness output contains duplicate check %q", checkID)
 			}
-			observed[checkID] = stringValue(item, "result")
+			version := stringValue(item, "check_version")
+			if version == "" || version != expectedVersion {
+				return nil, fmt.Errorf("readiness output check %q has a missing or mismatched version", checkID)
+			}
+			observed[checkID] = observedReadiness{result: stringValue(item, "result")}
 		}
 		allPassed, hasFailure, hasUnknown := true, false, false
 		for checkID := range requested {
@@ -1813,14 +1842,14 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			if !exists {
 				return nil, fmt.Errorf("readiness output is missing required check %q", checkID)
 			}
-			switch result {
+			switch result.result {
 			case "pass":
 			case "fail":
 				allPassed, hasFailure = false, true
 			case "unknown":
 				allPassed, hasUnknown = false, true
 			default:
-				return nil, fmt.Errorf("unknown readiness result %q for check %q", result, checkID)
+				return nil, fmt.Errorf("unknown readiness result %q for check %q", result.result, checkID)
 			}
 		}
 		readiness := "ready"

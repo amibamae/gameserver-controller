@@ -16,8 +16,8 @@ func TestBuildReadinessAssertionBindsPassingEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	operation, server, step, checkSet := readinessFixture(schemas.ProtocolVersion())
-	encoded, err := buildReadinessAssertionAt(schemas, operation, server, step.StepID, checkSet, time.Minute, readinessFixtureNow())
+	operation, server, step := readinessFixture(schemas.ProtocolVersion())
+	encoded, err := buildReadinessAssertionAt(schemas, operation, server, step.StepID, time.Minute, readinessFixtureNow())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestBuildReadinessAssertionBindsPassingEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	if assertion.ServerID != operation.Target.ServerID || assertion.EnvironmentID != operation.Target.EnvironmentID ||
-		!equalJSON(assertion.InstanceRef, server.InstanceRef) || assertion.ReadinessCheckSetID != checkSet.ID {
+		!equalJSON(assertion.InstanceRef, server.InstanceRef) || assertion.ReadinessCheckSetID != "game.example:release-1:checks-v1" {
 		t.Fatalf("assertion lost target or check-set binding: %+v", assertion)
 	}
 	if _, err := time.Parse(time.RFC3339Nano, assertion.ObservedAt); err != nil {
@@ -40,14 +40,14 @@ func TestBuildReadinessAssertionBindsPassingEvidence(t *testing.T) {
 	if err != nil || !expiresAt.Equal(wantExpiry) {
 		t.Fatalf("assertion expiration = %q, want=%q, observed=%q, err=%v", assertion.ExpiresAt, wantExpiry.Format(time.RFC3339), assertion.ObservedAt, err)
 	}
-	second, err := buildReadinessAssertionAt(schemas, operation, server, step.StepID, checkSet, time.Minute, readinessFixtureNow())
+	second, err := buildReadinessAssertionAt(schemas, operation, server, step.StepID, time.Minute, readinessFixtureNow())
 	if err != nil || string(second) != string(encoded) {
 		t.Fatalf("same durable evidence did not produce deterministic assertion: %s, %v", second, err)
 	}
 	changedObservation := store.OperationRecord{OperationID: operation.OperationID, OperationType: operation.OperationType,
 		ProtocolVersion: operation.ProtocolVersion, Target: operation.Target, Steps: append([]store.OperationStep(nil), operation.Steps...)}
 	changedObservation.Steps[0].Output = json.RawMessage(strings.Replace(string(step.Output), `"observed_at":"2026-11-07T09:00:00Z"`, `"observed_at":"2026-11-07T09:00:01Z"`, 1))
-	third, err := buildReadinessAssertionAt(schemas, changedObservation, server, step.StepID, checkSet, time.Minute, readinessFixtureNow())
+	third, err := buildReadinessAssertionAt(schemas, changedObservation, server, step.StepID, time.Minute, readinessFixtureNow())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,12 +137,12 @@ func TestBuildReadinessAssertionRejectsUnsafeEvidence(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			operation, server, step, checkSet := readinessFixture(schemas.ProtocolVersion())
+			operation, server, step := readinessFixture(schemas.ProtocolVersion())
 			test.mutate(&operation, &server, &step)
 			if len(operation.Steps) > 0 {
 				operation.Steps[0] = step
 			}
-			if _, err := buildReadinessAssertionAt(schemas, operation, server, step.StepID, checkSet, time.Minute, readinessFixtureNow()); err == nil {
+			if _, err := buildReadinessAssertionAt(schemas, operation, server, step.StepID, time.Minute, readinessFixtureNow()); err == nil {
 				t.Fatal("unsafe readiness evidence unexpectedly produced an assertion")
 			}
 		})
@@ -154,9 +154,9 @@ func TestBuildReadinessAssertionRequiresBoundedTTL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	operation, server, step, checkSet := readinessFixture(schemas.ProtocolVersion())
+	operation, server, step := readinessFixture(schemas.ProtocolVersion())
 	for _, ttl := range []time.Duration{0, -time.Second, maxReadinessAssertionTTL + time.Nanosecond} {
-		if _, err := buildReadinessAssertionAt(schemas, operation, server, step.StepID, checkSet, ttl, readinessFixtureNow()); err == nil {
+		if _, err := buildReadinessAssertionAt(schemas, operation, server, step.StepID, ttl, readinessFixtureNow()); err == nil {
 			t.Fatalf("accepted invalid assertion TTL %s", ttl)
 		}
 	}
@@ -166,9 +166,9 @@ func readinessFixtureNow() time.Time {
 	return time.Date(2026, time.November, 7, 9, 0, 30, 0, time.UTC)
 }
 
-func readinessFixture(protocolVersion string) (store.OperationRecord, store.LogicalServer, store.OperationStep, ReadinessCheckSet) {
+func readinessFixture(protocolVersion string) (store.OperationRecord, store.LogicalServer, store.OperationStep) {
 	instanceRef := json.RawMessage(`{"adapter_id":"hosting.example","environment_id":"staging","resource_kind":"instance","external_id":"instance-1"}`)
-	input := json.RawMessage(`{"server_id":"pilot-test","environment_id":"staging","instance_ref":{"adapter_id":"hosting.example","environment_id":"staging","resource_kind":"instance","external_id":"instance-1"},"game_release_id":"paper-1.21","required_check_ids":["process","network"]}`)
+	input := json.RawMessage(`{"server_id":"pilot-test","environment_id":"staging","instance_ref":{"adapter_id":"hosting.example","environment_id":"staging","resource_kind":"instance","external_id":"instance-1"},"game_release_id":"paper-1.21","readiness_check_set_id":"game.example:release-1:checks-v1","required_checks":[{"check_id":"process","check_version":"1"},{"check_id":"network","check_version":"2"}]}`)
 	output := json.RawMessage(`{"server_id":"pilot-test","environment_id":"staging","instance_ref":{"adapter_id":"hosting.example","environment_id":"staging","resource_kind":"instance","external_id":"instance-1"},"game_release_id":"paper-1.21","observed_at":"2026-11-07T09:00:00Z","check_results":[{"check_id":"process","check_version":"1","result":"pass","observed_at":"2026-11-07T08:59:59Z"},{"check_id":"network","check_version":"2","result":"pass","observed_at":"2026-11-07T08:59:59Z"}]}`)
 	operation := store.OperationRecord{
 		OperationID: "start-operation", OperationType: "server.start",
@@ -185,12 +185,5 @@ func readinessFixture(protocolVersion string) (store.OperationRecord, store.Logi
 	}
 	operation.ProtocolVersion = protocolVersion
 	operation.Steps = []store.OperationStep{step}
-	checkSet := ReadinessCheckSet{
-		ID: "game.example:release-1:checks-v1",
-		CheckVersions: map[string]string{
-			"process": "1",
-			"network": "2",
-		},
-	}
-	return operation, server, step, checkSet
+	return operation, server, step
 }

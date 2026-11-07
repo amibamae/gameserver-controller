@@ -10,7 +10,8 @@
     "environment_id",
     "instance_ref",
     "game_release_id",
-    "required_check_ids"
+    "readiness_check_set_id",
+    "required_checks"
   ],
   "properties": {
     "server_id": {
@@ -31,16 +32,36 @@
       "minLength": 1,
       "maxLength": 200
     },
-    "required_check_ids": {
+    "readiness_check_set_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "required_checks": {
       "type": "array",
       "minItems": 1,
       "maxItems": 64,
       "uniqueItems": true,
       "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 160,
-        "pattern": "^[a-z][a-z0-9._-]*$"
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "check_id",
+          "check_version"
+        ],
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-z][a-z0-9._-]*$"
+          },
+          "check_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          }
+        }
       }
     }
   }

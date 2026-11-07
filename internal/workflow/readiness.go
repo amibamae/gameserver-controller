@@ -16,11 +16,17 @@ import (
 const maxReadinessAssertionTTL = 15 * time.Minute
 
 type readinessCheckInput struct {
-	ServerID         string          `json:"server_id"`
-	EnvironmentID    string          `json:"environment_id"`
-	InstanceRef      json.RawMessage `json:"instance_ref"`
-	GameReleaseID    string          `json:"game_release_id"`
-	RequiredCheckIDs []string        `json:"required_check_ids"`
+	ServerID            string                      `json:"server_id"`
+	EnvironmentID       string                      `json:"environment_id"`
+	InstanceRef         json.RawMessage             `json:"instance_ref"`
+	GameReleaseID       string                      `json:"game_release_id"`
+	ReadinessCheckSetID string                      `json:"readiness_check_set_id"`
+	RequiredChecks      []readinessCheckRequirement `json:"required_checks"`
+}
+
+type readinessCheckRequirement struct {
+	CheckID      string `json:"check_id"`
+	CheckVersion string `json:"check_version"`
 }
 
 type readinessCheckOutput struct {
@@ -49,24 +55,16 @@ type readinessAssertion struct {
 	ExpiresAt           string          `json:"expires_at"`
 }
 
-// ReadinessCheckSet is the exact versioned check contract selected from the
-// trusted game profile for a release and environment. It must not come from
-// client-supplied adapter steps.
-type ReadinessCheckSet struct {
-	ID            string
-	CheckVersions map[string]string
-}
-
 // BuildReadinessAssertion turns a stored game readiness observation into a
 // short-lived controller assertion. The step ID is resolved from the supplied
 // operation snapshot; callers must load that record from the durable store.
 // Every requested check must pass, and the assertion is bound to that exact
 // server, environment, release, and managed instance.
-func BuildReadinessAssertion(schemas schemaRuntime, operation store.OperationRecord, server store.LogicalServer, stepID string, checkSet ReadinessCheckSet, ttl time.Duration) (json.RawMessage, error) {
-	return buildReadinessAssertionAt(schemas, operation, server, stepID, checkSet, ttl, time.Now().UTC())
+func BuildReadinessAssertion(schemas schemaRuntime, operation store.OperationRecord, server store.LogicalServer, stepID string, ttl time.Duration) (json.RawMessage, error) {
+	return buildReadinessAssertionAt(schemas, operation, server, stepID, ttl, time.Now().UTC())
 }
 
-func buildReadinessAssertionAt(schemas schemaRuntime, operation store.OperationRecord, server store.LogicalServer, stepID string, checkSet ReadinessCheckSet, ttl time.Duration, now time.Time) (json.RawMessage, error) {
+func buildReadinessAssertionAt(schemas schemaRuntime, operation store.OperationRecord, server store.LogicalServer, stepID string, ttl time.Duration, now time.Time) (json.RawMessage, error) {
 	if schemas == nil || ttl <= 0 || ttl > maxReadinessAssertionTTL {
 		return nil, errors.New("schema registry and readiness assertion TTL (1ns..15m) are required")
 	}
@@ -129,24 +127,18 @@ func buildReadinessAssertionAt(schemas schemaRuntime, operation store.OperationR
 		!equalJSON(input.InstanceRef, server.InstanceRef) || !equalJSON(output.InstanceRef, server.InstanceRef) {
 		return nil, errors.New("readiness evidence is not bound to the requested server, release, and managed instance")
 	}
-	if len(input.RequiredCheckIDs) == 0 || len(output.CheckResults) != len(input.RequiredCheckIDs) {
+	if input.ReadinessCheckSetID == "" || len(input.RequiredChecks) == 0 || len(output.CheckResults) != len(input.RequiredChecks) {
 		return nil, errors.New("readiness evidence must contain exactly one result for every required check")
 	}
-	if checkSet.ID == "" || len(checkSet.ID) > 200 || len(checkSet.CheckVersions) != len(input.RequiredCheckIDs) {
-		return nil, errors.New("the exact declared readiness check set and one version per required check are required")
-	}
-	required := make(map[string]struct{}, len(input.RequiredCheckIDs))
-	for _, id := range input.RequiredCheckIDs {
-		if id == "" {
-			return nil, errors.New("readiness request contains an empty required check ID")
+	required := make(map[string]string, len(input.RequiredChecks))
+	for _, requirement := range input.RequiredChecks {
+		if requirement.CheckID == "" || requirement.CheckVersion == "" {
+			return nil, errors.New("readiness request contains an empty required check ID or version")
 		}
-		if _, duplicate := required[id]; duplicate {
-			return nil, fmt.Errorf("readiness request repeats required check %q", id)
+		if _, duplicate := required[requirement.CheckID]; duplicate {
+			return nil, fmt.Errorf("readiness request repeats required check %q", requirement.CheckID)
 		}
-		required[id] = struct{}{}
-		if version := checkSet.CheckVersions[id]; version == "" {
-			return nil, fmt.Errorf("declared readiness check set has no version for %q", id)
-		}
+		required[requirement.CheckID] = requirement.CheckVersion
 	}
 	aggregateObservedAt, err := time.Parse(time.RFC3339Nano, output.ObservedAt)
 	if err != nil {
@@ -158,11 +150,12 @@ func buildReadinessAssertionAt(schemas schemaRuntime, operation store.OperationR
 	expiresAt := aggregateObservedAt.Add(ttl)
 	checkVersions := make([]string, 0, len(output.CheckResults))
 	for _, check := range output.CheckResults {
-		if _, ok := required[check.CheckID]; !ok {
+		expectedVersion, ok := required[check.CheckID]
+		if !ok {
 			return nil, fmt.Errorf("readiness observation contains unrequested check %q", check.CheckID)
 		}
 		delete(required, check.CheckID)
-		if check.CheckVersion == "" || check.CheckVersion != checkSet.CheckVersions[check.CheckID] || check.Result != "pass" {
+		if check.CheckVersion == "" || check.CheckVersion != expectedVersion || check.Result != "pass" {
 			return nil, fmt.Errorf("required readiness check %q did not pass at its declared version", check.CheckID)
 		}
 		observedAt, parseErr := time.Parse(time.RFC3339Nano, check.ObservedAt)
@@ -178,7 +171,7 @@ func buildReadinessAssertionAt(schemas schemaRuntime, operation store.OperationR
 		return nil, errors.New("readiness observation omitted one or more required checks")
 	}
 	sort.Strings(checkVersions)
-	checkDigest := sha256.Sum256([]byte(checkSet.ID + "\x00" + joinCheckVersions(checkVersions)))
+	checkDigest := sha256.Sum256([]byte(input.ReadinessCheckSetID + "\x00" + joinCheckVersions(checkVersions)))
 	outputDigest := sha256.Sum256(step.Output)
 	assertionDigest := sha256.Sum256([]byte(operation.OperationID + "\x00" + step.StepID + "\x00" + hex.EncodeToString(outputDigest[:]) + "\x00" + hex.EncodeToString(checkDigest[:])))
 	assertion := readinessAssertion{
@@ -186,7 +179,7 @@ func buildReadinessAssertionAt(schemas schemaRuntime, operation store.OperationR
 		ServerID:            operation.Target.ServerID,
 		EnvironmentID:       operation.Target.EnvironmentID,
 		InstanceRef:         append(json.RawMessage(nil), server.InstanceRef...),
-		ReadinessCheckSetID: checkSet.ID,
+		ReadinessCheckSetID: input.ReadinessCheckSetID,
 		ObservedAt:          aggregateObservedAt.UTC().Format(time.RFC3339Nano),
 		ExpiresAt:           expiresAt.UTC().Format(time.RFC3339Nano),
 	}
