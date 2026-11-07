@@ -408,6 +408,9 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		if token == "" || len(surfaces) == 0 {
 			return nil, fmt.Errorf("token redaction fixture must include a synthetic token and observed surfaces")
 		}
+		authorizationHeader := stringValue(redaction, "authorization_header")
+		authorizationOverTLS := boolValue(redaction, "authorization_over_tls")
+		tokenInCorrectHeader := authorizationHeader == "Bearer "+token
 		leakedSurfaces := make([]string, 0)
 		for surface, rawValue := range surfaces {
 			if strings.Contains(fmt.Sprint(rawValue), token) {
@@ -419,8 +422,9 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"remote_attempts": remoteResults,
 			"local_attempts":  localResults,
 			"token_redaction": map[string]any{
-				"token_absent_from_observed_surfaces": len(leakedSurfaces) == 0,
-				"leaked_surfaces":                     leakedSurfaces,
+				"token_in_authorization_header_over_tls": tokenInCorrectHeader && authorizationOverTLS,
+				"token_absent_from_observed_surfaces":    len(leakedSurfaces) == 0,
+				"leaked_surfaces":                        leakedSurfaces,
 			},
 		}, nil
 	case "management.authentication.actor-spoofing":
