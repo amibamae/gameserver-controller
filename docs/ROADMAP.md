@@ -1,3 +1,4 @@
+/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 # Development Roadmap
 
 **Status:** Planning document. The phases are ordered to reduce production risk; dates are not commitments.
@@ -66,7 +67,7 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - [ ] Implement the remaining standard lifecycle workflows: provision, backup, restore, and destroy.
 - [x] Add fake-adapter cases for workflow preconditions, definitive and ambiguous failures, timeout, bounded retry, accepted outcomes, and restart recovery.
 - [x] Test compatibility, errors, idempotency, timeouts, and recovery without production services.
-- [ ] Establish build, test, dependency, and release practices that do not require AI.
+- [x] Establish build, test, dependency, and release practices that do not require AI.
 
 **Exit criteria:** A minimal controller passes the agreed suite with fake adapters, no production credentials, and no live infrastructure.
 
