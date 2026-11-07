@@ -77,7 +77,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"logical_identity_preserved": identityPreserved, "previous_instance_destroyed": previousDestroyed,
 			"replacement_instance_distinct": replacementInstanceDistinct, "data_generation_rotated": generationRotated,
 			"reprovision_transition_permitted": reprovisionPermitted,
-			"replacement_safe": identityPreserved && previousDestroyed && replacementInstanceDistinct && generationRotated && reprovisionPermitted,
+			"replacement_safe":                 identityPreserved && previousDestroyed && replacementInstanceDistinct && generationRotated && reprovisionPermitted,
 		}, nil
 	case "lifecycle.required-readiness-set":
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:readiness-check-input", input); err != nil {
@@ -103,11 +103,11 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			readinessCase := asObject(rawCase)
 			output := asObject(readinessCase["output"])
 			result := map[string]any{
-				"case_id": stringValue(readinessCase, "case_id"),
+				"case_id":                    stringValue(readinessCase, "case_id"),
 				"ready_transition_permitted": false,
-				"readiness": "not_ready",
-				"block_reason": any(nil),
-				"error_code": any(nil),
+				"readiness":                  "not_ready",
+				"block_reason":               any(nil),
+				"error_code":                 any(nil),
 			}
 			unknownState := false
 			for _, rawResult := range arrayValue(output, "check_results") {
@@ -216,11 +216,11 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return map[string]any{
 			"server_resource_valid": true, "operation_resource_valid": true,
 			"unknown_optional_top_level_fields_ignored": true, "valid_request_accepted": requestValid,
-			"unknown_request_field_rejected": unknownRequestRejected,
+			"unknown_request_field_rejected":         unknownRequestRejected,
 			"unknown_nested_response_field_rejected": nestedServerRejected,
-			"unknown_lifecycle_state_rejected": unknownLifecycleRejected,
-			"unknown_operation_status_rejected": unknownOperationStatusRejected,
-			"unknown_state_error_code": "core.compatibility.unknown_state", "adapter_calls": 0,
+			"unknown_lifecycle_state_rejected":       unknownLifecycleRejected,
+			"unknown_operation_status_rejected":      unknownOperationStatusRejected,
+			"unknown_state_error_code":               "core.compatibility.unknown_state", "adapter_calls": 0,
 		}, nil
 	case "compatibility.operation-upgrade-recovery":
 		operation := asObject(input["operation"])
