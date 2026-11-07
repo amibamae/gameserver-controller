@@ -1119,7 +1119,221 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"must_reconcile_before_retry":      outputPresent && (!outputBound || outcome == "outcome_unknown"),
 			"reconciliation_reference_present": reconciliationPresent,
 		}, nil
-	case "game.compatibility.check.compatible", "game.compatibility.check.migration-required", "game.compatibility.check.incompatible", "game.compatibility.check.unknown", "game.compatibility.check.incomplete", "game.compatibility.check.unknown-reported-compatible", "game.compatib…2267 tokens truncated…]
+	case "game.compatibility.check.compatible", "game.compatibility.check.migration-required", "game.compatibility.check.incompatible", "game.compatibility.check.unknown", "game.compatibility.check.incomplete", "game.compatibility.check.unknown-reported-compatible", "game.compatibility.check.target-mismatch":
+		compatibilityInput, compatibilityOutput := asObject(input["compatibility_input"]), asObject(input["compatibility_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:compatibility-check-input", compatibilityInput); err != nil {
+			return nil, fmt.Errorf("compatibility input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:compatibility-check-output", compatibilityOutput); err != nil {
+			return nil, fmt.Errorf("compatibility output does not match schema: %w", err)
+		}
+		manifest := asObject(compatibilityInput["source_manifest"])
+		sourceGame := asObject(manifest["game"])
+		targetRelease := asObject(compatibilityInput["target_release"])
+		targetBound := stringValue(compatibilityOutput, "backup_id") == stringValue(manifest, "backup_id") &&
+			stringValue(compatibilityOutput, "environment_id") == stringValue(manifest, "environment_id") &&
+			stringValue(compatibilityOutput, "data_generation_id") == stringValue(manifest, "data_generation_id") &&
+			stringValue(compatibilityOutput, "source_game_adapter_id") == stringValue(sourceGame, "adapter_id") &&
+			stringValue(compatibilityOutput, "source_game_version") == stringValue(sourceGame, "version") &&
+			stringValue(compatibilityOutput, "target_game_adapter_id") == stringValue(targetRelease, "game_adapter_id") &&
+			stringValue(compatibilityOutput, "target_release_id") == stringValue(targetRelease, "release_id") &&
+			stringValue(compatibilityOutput, "target_game_version") == stringValue(targetRelease, "game_version")
+		requested := make(map[string]bool)
+		for _, rawID := range arrayValue(compatibilityInput, "required_check_ids") {
+			requested[rawID.(string)] = true
+		}
+		observed := make(map[string]string)
+		results := arrayValue(compatibilityOutput, "check_results")
+		complete := len(results) == len(requested)
+		for _, rawResult := range results {
+			result := asObject(rawResult)
+			checkID := stringValue(result, "check_id")
+			if !requested[checkID] {
+				complete = false
+			}
+			if _, exists := observed[checkID]; exists {
+				complete = false
+			}
+			observed[checkID] = stringValue(result, "result")
+		}
+		hasIncompatible, hasUnknown, hasMigration := false, false, false
+		for checkID := range requested {
+			result, exists := observed[checkID]
+			if !exists {
+				complete = false
+			}
+			switch result {
+			case "compatible":
+			case "migration_required":
+				hasMigration = true
+			case "incompatible":
+				hasIncompatible = true
+			case "unknown":
+				hasUnknown = true
+			default:
+				complete = false
+			}
+		}
+		derived := "compatible"
+		if hasIncompatible {
+			derived = "incompatible"
+		} else if hasUnknown || !complete {
+			derived = "unknown"
+		} else if hasMigration {
+			derived = "migration_required"
+		}
+		reportedMatches := stringValue(compatibilityOutput, "compatibility_status") == derived
+		return map[string]any{
+			"schemas_valid":                  true,
+			"target_bound":                   targetBound,
+			"check_set_complete":             complete,
+			"derived_compatibility_status":   derived,
+			"reported_compatibility_matches": reportedMatches,
+			"compatibility_result_accepted":  targetBound && complete && reportedMatches && derived == "compatible",
+		}, nil
+	case "game.health.check.unknown-not-healthy":
+		healthInput, healthOutput := asObject(input["health_input"]), asObject(input["health_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:health-check-input", healthInput); err != nil {
+			return nil, fmt.Errorf("health input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:health-check-output", healthOutput); err != nil {
+			return nil, fmt.Errorf("health output does not match schema: %w", err)
+		}
+		healthInstance := asObject(healthInput["instance_ref"])
+		bound := healthInput["server_id"] == healthOutput["server_id"] &&
+			healthInput["environment_id"] == healthOutput["environment_id"] &&
+			stringValue(healthInstance, "environment_id") == stringValue(healthInput, "environment_id") &&
+			healthInput["game_release_id"] == healthOutput["game_release_id"] &&
+			reflect.DeepEqual(healthInput["instance_ref"], healthOutput["instance_ref"])
+		required := arrayValue(healthInput, "required_check_ids")
+		results := arrayValue(healthOutput, "check_results")
+		requested := make(map[string]bool, len(required))
+		for _, rawID := range required {
+			requested[rawID.(string)] = true
+		}
+		observed := make(map[string]string, len(results))
+		complete := len(results) == len(requested)
+		for _, rawResult := range results {
+			item := asObject(rawResult)
+			id := stringValue(item, "check_id")
+			if !requested[id] {
+				complete = false
+			}
+			if _, exists := observed[id]; exists {
+				complete = false
+			}
+			observed[id] = stringValue(item, "result")
+		}
+		health := "healthy"
+		hasFailure, hasUnknown, hasWarning := false, false, false
+		for id := range requested {
+			result, ok := observed[id]
+			if !ok {
+				complete = false
+			}
+			switch result {
+			case "pass":
+			case "warn":
+				hasWarning = true
+			case "fail":
+				hasFailure = true
+			case "unknown":
+				hasUnknown = true
+			default:
+				complete = false
+			}
+		}
+		incompleteEvidence := hasUnknown || !complete
+		if hasFailure {
+			health = "unhealthy"
+		} else if incompleteEvidence {
+			health = "unknown"
+		} else if hasWarning {
+			health = "degraded"
+		}
+		return map[string]any{
+			"schemas_valid":           true,
+			"target_bound":            bound,
+			"check_set_complete":      complete,
+			"derived_health":          health,
+			"reported_health_matches": stringValue(healthOutput, "health") == health,
+			"unknown_not_healthy":     !incompleteEvidence || stringValue(healthOutput, "health") != "healthy",
+		}, nil
+	case "game.backup.validate.exact-objects", "game.backup.validate.unknown-not-valid":
+		backupInput, backupOutput := asObject(input["backup_input"]), asObject(input["backup_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-validate-input", backupInput); err != nil {
+			return nil, fmt.Errorf("backup validation input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-validate-output", backupOutput); err != nil {
+			return nil, fmt.Errorf("backup validation output does not match schema: %w", err)
+		}
+		manifest := asObject(backupInput["manifest"])
+		manifestBinding := stringValue(backupInput, "backup_id") == stringValue(manifest, "backup_id") &&
+			stringValue(backupInput, "environment_id") == stringValue(manifest, "environment_id") &&
+			stringValue(backupOutput, "backup_id") == stringValue(manifest, "backup_id") &&
+			stringValue(backupOutput, "environment_id") == stringValue(manifest, "environment_id") &&
+			stringValue(backupOutput, "data_generation_id") == stringValue(manifest, "data_generation_id")
+		manifestRefs := make([]any, 0, len(arrayValue(manifest, "objects")))
+		for _, rawObject := range arrayValue(manifest, "objects") {
+			manifestRefs = append(manifestRefs, asObject(rawObject)["object_ref"])
+		}
+		streamRefs := make([]any, 0, len(arrayValue(backupInput, "object_streams")))
+		for _, rawStream := range arrayValue(backupInput, "object_streams") {
+			streamRefs = append(streamRefs, asObject(rawStream)["object_ref"])
+		}
+		streamsBound := sameObjectRefSet(manifestRefs, streamRefs)
+		for _, rawStream := range arrayValue(backupInput, "object_streams") {
+			stream := asObject(rawStream)
+			if stringValue(asObject(stream["object_ref"]), "environment_id") != stringValue(backupInput, "environment_id") {
+				streamsBound = false
+			}
+			matched := false
+			for _, rawObject := range arrayValue(manifest, "objects") {
+				object := asObject(rawObject)
+				if !reflect.DeepEqual(object["object_ref"], stream["object_ref"]) {
+					continue
+				}
+				matched = true
+				expectedSize, err := integerValue(object["size_bytes"])
+				if err != nil {
+					return nil, err
+				}
+				maximumBytes, err := integerValue(asObject(stream["transfer_ref"])["maximum_bytes"])
+				if err != nil {
+					return nil, err
+				}
+				if maximumBytes < expectedSize {
+					streamsBound = false
+				}
+				break
+			}
+			if !matched {
+				streamsBound = false
+			}
+		}
+		required := arrayValue(backupInput, "required_check_ids")
+		results := arrayValue(backupOutput, "check_results")
+		requested := make(map[string]bool, len(required))
+		for _, rawID := range required {
+			requested[rawID.(string)] = true
+		}
+		observed := make(map[string]string, len(results))
+		complete := len(results) == len(requested)
+		for _, rawResult := range results {
+			item := asObject(rawResult)
+			id := stringValue(item, "check_id")
+			if !requested[id] {
+				complete = false
+			}
+			if _, exists := observed[id]; exists {
+				complete = false
+			}
+			observed[id] = stringValue(item, "result")
+		}
+		derived := "valid"
+		hasFailure, hasUnknown := false, false
+		for id := range requested {
+			result, ok := observed[id]
 			if !ok {
 				complete = false
 			}
