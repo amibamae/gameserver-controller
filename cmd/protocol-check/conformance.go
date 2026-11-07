@@ -1539,9 +1539,9 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			operationCount, dispatchCount = 1, 1
 		}
 		return map[string]any{
-			"same_operation_reused":       reused,
-			"operation_id":                operationID,
-			"operation_count":             operationCount,
+			"same_operation_reused":      reused,
+			"operation_id":               operationID,
+			"operation_count":            operationCount,
 			"side_effect_dispatch_count": dispatchCount,
 		}, nil
 	case "operations.idempotency.same-key-different-request":
