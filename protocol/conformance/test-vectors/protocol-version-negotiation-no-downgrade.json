@@ -1,0 +1,66 @@
+{
+  "fixture_id": "compatibility.protocol-version-negotiation",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "protocol.compatibility",
+  "purpose": "Negotiation selects one exact mutually supported protocol version and never downgrades after a failed validation or authorization.",
+  "cases": [
+    {
+      "case_id": "mutual-version",
+      "local_protocol_versions": [
+        "0.21.0-draft"
+      ],
+      "peer_protocol_versions": [
+        "0.21.0-draft"
+      ],
+      "selected_protocol_version": "0.21.0-draft"
+    },
+    {
+      "case_id": "no-mutual-version",
+      "local_protocol_versions": [
+        "0.21.0-draft"
+      ],
+      "peer_protocol_versions": [
+        "0.20.0-draft"
+      ],
+      "selected_protocol_version": "0.21.0-draft"
+    },
+    {
+      "case_id": "downgrade-after-validation-error",
+      "local_protocol_versions": [
+        "0.21.0-draft",
+        "0.20.0-draft"
+      ],
+      "peer_protocol_versions": [
+        "0.21.0-draft",
+        "0.20.0-draft"
+      ],
+      "selected_protocol_version": "0.20.0-draft",
+      "version_that_failed_validation_or_authorization": "0.21.0-draft"
+    }
+  ],
+  "expected": {
+    "cases": [
+      {
+        "case_id": "mutual-version",
+        "accepted": true,
+        "error_code": null,
+        "session_created": true,
+        "adapter_calls": 0
+      },
+      {
+        "case_id": "no-mutual-version",
+        "accepted": false,
+        "error_code": "core.compatibility.unsupported_version",
+        "session_created": false,
+        "adapter_calls": 0
+      },
+      {
+        "case_id": "downgrade-after-validation-error",
+        "accepted": false,
+        "error_code": "core.compatibility.unsupported_version",
+        "session_created": false,
+        "adapter_calls": 0
+      }
+    ]
+  }
+}
