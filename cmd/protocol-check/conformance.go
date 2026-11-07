@@ -145,16 +145,16 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			return nil, fmt.Errorf("fixture requires unchanged authorization and no separate sensitive-step reauthorization gate")
 		}
 		return map[string]any{
-			"operation_schema_valid":                          true,
-			"operation_id":                                     stringValue(operation, "operation_id"),
-			"operation_status_after_expiry":                   stringValue(operation, "status"),
-			"operation_remains_durable":                       true,
-			"operation_continues_without_client_session":      true,
-			"operation_cancelled_due_to_session_expiry":       false,
+			"operation_schema_valid":                             true,
+			"operation_id":                                       stringValue(operation, "operation_id"),
+			"operation_status_after_expiry":                      stringValue(operation, "status"),
+			"operation_remains_durable":                          true,
+			"operation_continues_without_client_session":         true,
+			"operation_cancelled_due_to_session_expiry":          false,
 			"session_expiry_alone_requires_client_token_refresh": false,
-			"authorization_context_unchanged":                 true,
-			"sensitive_step_reauthorization_still_applies":     true,
-			"token_material_exposed":                          false,
+			"authorization_context_unchanged":                    true,
+			"sensitive_step_reauthorization_still_applies":       true,
+			"token_material_exposed":                             false,
 		}, nil
 	case "operations.cancellation.before-dispatch", "operations.cancellation.unknown-after-dispatch":
 		initial := asObject(fixture["initial"])
