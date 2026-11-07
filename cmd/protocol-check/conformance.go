@@ -1614,7 +1614,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			return nil, fmt.Errorf("authoritative operation snapshot belongs to a different operation")
 		}
 		return map[string]any{
-			"event_schema_valid":                 true,
+			"event_schema_valid":                  true,
 			"operation_schema_valid":              true,
 			"gap_detected":                        true,
 			"expected_sequence":                   expectedSequence,
