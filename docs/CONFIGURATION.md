@@ -1,8 +1,6 @@
 # Configuration and Secret References
 
-**Status:** Version 1 is parsed and validated by `config-check`. This is a
-side-effect-free validation tool, not yet a runtime configuration loader or
-provider credential resolver.
+**Status:** The v1 configuration validator is implemented in `config-check`. It checks files without loading runtime settings or resolving provider credentials.
 
 ## Validate a file
 
@@ -10,63 +8,30 @@ provider credential resolver.
 go run ./cmd/config-check validate configs/controller.example.yaml
 ```
 
-The command accepts one YAML document, rejects unknown fields, checks
-references and safety rules, and prints only a validation summary. It does not
-resolve secrets, open the configured state-store path, contact providers, or
-start operations. The example uses fictional adapter profiles and a placeholder
-environment-variable reference; it contains no credentials. It declares the
-production boundary but includes only a staging test-server profile, so a live
-production server does not have to be adopted into controller-managed inventory.
+The command accepts one YAML document, rejects unknown fields, checks references and safety rules, and prints a validation summary. It does not read secrets, open the configured state-store path, contact providers, or start operations.
+
+The example uses fictional adapter profiles and a placeholder environment-variable reference. It contains no credentials. It defines a production boundary but includes only a staging test-server profile, so you do not have to adopt a live production server into controller-managed inventory.
 
 ## Version 1 shape
 
-The validator requires `schema_version: 1`, local controller mode, a bbolt
-state-store path, bounded operation timeout and retry defaults, and enabled
-local audit. Adapter profiles declare one of the five protocol categories:
-`hosting`, `storage`, `execution`, `game`, or `integration`. Their IDs use the
-matching category prefix. Each server references an existing environment and
-hosting, storage, execution, and game profiles; integration is optional.
+The validator requires `schema_version: 1`, local controller mode, a bbolt state-store path, bounded operation timeouts and retry defaults, and enabled local audit.
 
-Environments are classified as `production`, `staging`, or `testing`.
-Production declares `production_backup_access: read_write`; staging and testing
-may use `none` or `read_only`, never `read_write`. These are validated policy
-declarations. They do not enforce access against a storage service. A server
-must declare verified backup and operator approval as prerequisites for
-destroy. An optional idle-shutdown duration is validated but not scheduled by
-this tool.
+Adapter profiles use one of five protocol categories: `hosting`, `storage`, `execution`, `game`, or `integration`. Their IDs must use the matching category prefix. Each server points to an existing environment and hosting, storage, execution, and game profile. Integration is optional.
 
-Relative state-store paths are interpreted relative to the configuration file
-by `ResolveStateStorePath`; absolute local paths are retained. The validator
-does not create the parent directory, canonicalize symlinks, or prevent a
-separate runtime from opening a path.
+Environments are `production`, `staging`, or `testing`. Production declares `production_backup_access: read_write`; staging and testing may declare `none` or `read_only`, never `read_write`. The validator checks these policy declarations but does not enforce access at the storage service. A server must list verified backup and operator approval as destroy prerequisites. The validator checks an optional idle-shutdown duration but does not schedule it.
+
+Relative state-store paths are resolved against the configuration file by `ResolveStateStorePath`; absolute local paths remain absolute. The validator does not create parent directories, canonicalize symlinks, or stop a separate runtime from opening a path.
 
 ## Secret references
 
-Version 1 accepts secret references only in the explicit `env://NAME` form.
-Each reference also records a purpose and may include permission scopes and a
-version reference. Validation checks the reference's syntax; it does not read
-the environment variable, reveal its value, or verify the permissions of a
-credential. Literal credentials are not valid references.
+Version 1 accepts only the explicit `env://NAME` reference form. Each reference records a purpose and may include permission scopes and a version reference. Validation checks syntax. It does not read the environment variable, reveal its value, or verify the credential's permissions. A literal credential is not a valid reference.
 
-Any future resolver must reject missing or unauthorized credentials, never
-print resolved values, resolve credentials only when needed, and fail closed.
-Credentials must stay out of source control, bootstrap/user-data, command-line
-arguments, release artifacts, and ordinary logs. Production and staging must
-use distinct least-privilege credentials, with staging unable to modify or
-delete production backups.
+A future resolver must reject missing or unauthorized credentials, never print resolved values, resolve credentials only when needed, and fail closed. Keep credentials out of source control, bootstrap/user-data, command-line arguments, release artifacts, and ordinary logs. Production and staging need distinct least-privilege credentials; staging must not change or delete production backups.
 
-## Implemented validation boundaries
+## What validation covers
 
-The validator checks document shape, duplicate/unknown YAML fields, IDs,
-adapter categories and references, secret-reference syntax, environment
-classification and backup access, lifecycle safeguards, and timeout/retry
-bounds. It does not yet validate provider endpoints, network destinations,
-filesystem symlink or traversal policy, runtime authorization, config
-migrations, or redacted change plans. Passing validation alone does not
-authorize an operation.
+The validator checks document shape, duplicate and unknown YAML fields, IDs, adapter categories and references, secret-reference syntax, environment and backup-access rules, lifecycle safeguards, and timeout/retry bounds.
 
-The persistent operation store selected for the initial controller is bbolt;
-SQLite in the older proposal is superseded. Runtime config loading, environment
-isolation enforcement, approval identity, and provider adapters remain later
-implementation work. See [the roadmap](ROADMAP.md) for the current Phase 2
-gate.
+It does not yet check provider endpoints, network destinations, filesystem symlink or traversal policy, runtime authorization, config migrations, or redacted change plans. Passing validation does not authorize an operation.
+
+The initial operation store uses bbolt; SQLite from the earlier proposal is superseded. Runtime config loading, environment-isolation enforcement, approval identity, and provider adapters remain future work. See the [roadmap](ROADMAP.md) for the current Phase 2 gate.
