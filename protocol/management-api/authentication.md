@@ -2,54 +2,57 @@
 
 **Status:** Draft, protocol version 0.21.0-draft.
 
-## 1. Purpose
+## 1. What authentication establishes
 
-Authentication establishes the identity of an operator or service calling the management API. Authentication does not itself grant permission to inspect or mutate a resource. Authorization is defined in [authorization.md](authorization.md) and enforced by the controller core.
+Authentication tells the controller which operator or service called the management API. It does not grant permission to inspect or change a resource. The controller core makes that decision under [authorization.md](authorization.md).
 
 ## 2. Deployment profiles
 
-### Local-only profile
+### Local-only controller
 
-A local controller MAY expose an API only through a protected local socket (such as a Unix-domain socket) or in-process application interface. It MAY derive the actor identity from the operating-system peer identity. This local profile is not represented by the remote bearer-authentication OpenAPI security scheme; an implementation MUST document how local peer identity is established and passed to the core. A local TCP listener without authenticated peer identity MUST NOT be treated as trusted merely because it listens on loopback; local process compromise is within the threat model.
+A local controller may expose its API through a protected local socket, such as a Unix-domain socket, or through an in-process interface. It may identify the caller from the operating-system peer identity. This profile is not the remote bearer-authentication scheme in OpenAPI, so an implementation must document how it establishes and passes local identity to the core.
 
-### Remote profile
+A loopback TCP listener is not trusted by default. Without authenticated peer identity, it cannot establish who the caller is; a compromised local process is within the threat model.
 
-A remotely reachable management API MUST use TLS and authenticated requests. The initial OpenAPI binding describes HTTP bearer authentication as a placeholder. Token issuer, audience, signature/opaque-token validation, lifetime, rotation, revocation, and identity mapping are deployment configuration and MUST be documented by each implementation.
+### Remote controller
 
-Bearer tokens MUST be transmitted only in the Authorization header over TLS. Tokens MUST NOT appear in URLs, query parameters, request bodies, operation records, or logs.
+A remotely reachable management API must use TLS and authenticate each request. The initial OpenAPI contract shows HTTP bearer authentication as a placeholder. Each deployment must document its token issuer, audience, signature or opaque-token validation, lifetime, rotation, revocation, and identity mapping.
 
-### Service-to-service profile
+Send bearer tokens only in the Authorization header over TLS. Never put one in a URL, query parameter, request body, operation record, or log.
 
-Automation identities SHOULD be separate from human operator identities. Credentials SHOULD be short-lived, audience-restricted, and scoped to the minimum actions/environment required. Client credentials MUST NOT be confused with adapter/provider credentials.
+### Service-to-service calls
 
-## 3. Actor identity
+Keep automation identities separate from human operators. Use short-lived, audience-restricted credentials with only the actions and environments the service needs. Do not confuse a management client credential with an adapter or provider credential.
 
-The controller establishes a trusted actor record from the authenticated principal. It records a stable actor identifier, authentication method, and relevant identity issuer or local OS principal.
+## 3. Trusted actor identity
 
-The client MUST NOT submit a role or permission list that the controller trusts as authoritative. Any actor identifier in request metadata is informational only unless independently bound to the authenticated principal by the implementation.
+The controller maps the authenticated principal to a trusted actor record. It records a stable actor ID, authentication method, and relevant issuer or local OS principal.
 
-## 4. Session and token handling
+A client may include an actor ID in request metadata, but the controller must not trust a client-supplied role or permission list. Treat actor metadata as informational unless the implementation independently binds it to the authenticated principal.
 
-Implementations MUST document:
-- Credential issuance and provisioning.
+## 4. Token and session handling
+
+Every implementation documents:
+
+- How it issues and provisions credentials.
 - Expiry and clock-skew behavior.
-- Revocation and credential rotation.
+- Revocation and rotation.
 - Audience and controller-instance binding.
-- Authentication failure behavior and rate limiting.
-- Redaction requirements.
+- Authentication failures and rate limits.
+- Redaction rules.
 
-Logout or token expiry MUST NOT, by itself, cancel or pause an already accepted durable operation. The operation continues under its durably recorded request and actor context; the expired client session does not need to be renewed for that accepted operation to continue. This does not preserve stale authorization indefinitely: the controller MUST re-evaluate current permissions, target, approvals, and policy immediately before any sensitive step where those checks are required, and MUST pause or reject work when reauthorization fails. Session expiry MUST NOT be treated as either a cancellation request or a way to satisfy a fresh authorization check.
+A logout or expired token does not, by itself, cancel or pause a durable operation already accepted by the controller. That work continues under its recorded request and actor context. But the controller must check current permissions, approvals, target, and policy again before a sensitive step when required. If that check fails, pause or reject the step. Expiry is neither a cancellation request nor fresh authorization.
 
-## 5. Errors and information disclosure
+## 5. Errors and protected information
 
-Unauthenticated requests receive 401. Authenticated but unauthorized requests receive 403, subject to resource-existence privacy policy. Implementations MAY return 404 instead of 403 when revealing that a resource exists would disclose sensitive information.
+Return 401 for unauthenticated requests. Return 403 for authenticated requests that lack permission, subject to resource-privacy rules. An implementation may return 404 instead of 403 when confirming that a resource exists would reveal protected information.
 
-Authentication errors MUST NOT reveal secret material, token validity internals, or unnecessary account details.
+Authentication errors must not expose secret material, token-validation details, or unnecessary account information.
 
-## 6. Conformance
+## 6. Conformance checks
 
-Test remote requests with invalid signatures, expired credentials, wrong audiences, and revoked credentials; each is unauthenticated, returns 401, establishes no actor, returns no protected data, creates no operation, and dispatches no adapter call. Include a valid credential control and verify that the trusted actor comes from the authenticated principal.
+Test remote requests with invalid signatures, expired credentials, wrong audiences, and revoked credentials. Each must return 401, establish no actor, reveal no protected data, create no operation, and dispatch no adapter call. A valid control request must establish its actor from the authenticated principal.
 
-For the local profile, test a verified operating-system peer identity, unavailable peer identity, and loopback TCP without authenticated peer identity. Only the verified peer identity establishes the actor; a client-supplied actor claim is never authoritative.
+For local access, test a verified OS peer identity, missing peer identity, and loopback TCP without authenticated peer identity. Only the verified peer may establish the actor; a client-supplied actor claim is never authoritative.
 
-Inject a synthetic bearer token and verify it appears only in the Authorization header over TLS. It MUST NOT appear in URLs, query parameters, request bodies, operation records, logs, errors, events, or audit records. Also test actor spoofing and operation continuation after client session expiry using the shared conformance vectors.
+Use a synthetic bearer token and confirm it appears only in the Authorization header over TLS, never in URLs, query parameters, request bodies, operation records, logs, errors, events, or audit records. Also test actor spoofing and the continuation of an accepted operation after the client's session expires, using the shared conformance vectors.
