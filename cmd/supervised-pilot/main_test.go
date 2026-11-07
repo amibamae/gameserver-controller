@@ -20,8 +20,8 @@ func installFakeSSH(t *testing.T, failPreflight, failStart bool, sameInvocation 
 	t.Setenv("FAIL_START", map[bool]string{true: "1", false: "0"}[failStart])
 	same := len(sameInvocation) > 0 && sameInvocation[0]
 	t.Setenv("SAME_INVOCATION", map[bool]string{true: "1", false: "0"}[same])
-		t.Setenv("PRE_INVOCATION_ID", "00000000000000000000000000000001")
-		t.Setenv("POST_INVOCATION_ID", "00000000000000000000000000000002")
+	t.Setenv("PRE_INVOCATION_ID", "00000000000000000000000000000001")
+	t.Setenv("POST_INVOCATION_ID", "00000000000000000000000000000002")
 	t.Setenv("POST_ACTIVE_STATE", "")
 	t.Setenv("POST_SUB_STATE", "")
 	t.Setenv("POST_RESULT", "")
