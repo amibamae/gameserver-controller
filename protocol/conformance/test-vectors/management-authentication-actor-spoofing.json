@@ -2,12 +2,12 @@
   "fixture_id": "management.authentication.actor-spoofing",
   "protocol_version": "0.21.0-draft",
   "contract": "management_api.authentication",
-  "purpose": "Client-supplied actor, role, or permission claims cannot replace the trusted authenticated principal.",
+  "purpose": "Client-supplied actor, role, or permission claims cannot replace the trusted authenticated principal or authorize a durable operation.",
   "input": {
     "authenticated_principal": {
       "actor_id": "actor-staging",
       "permissions": [
-        "server.inspect"
+        "server.backup"
       ],
       "environments": [
         "staging"
@@ -25,15 +25,10 @@
           "*"
         ],
         "required_permission": "server.destroy",
-        "target_environment": "production",
-        "authorized_response_items": [
-          {
-            "server_id": "production-1"
-          }
-        ]
+        "target_environment": "production"
       },
       {
-        "attempt_id": "spoofed-inspect-claim",
+        "attempt_id": "spoofed-backup-claim",
         "claimed_actor_id": "actor-production-admin",
         "claimed_roles": [
           "superadmin"
@@ -42,13 +37,9 @@
           "server.destroy",
           "*"
         ],
-        "required_permission": "server.inspect",
+        "required_permission": "server.backup",
         "target_environment": "staging",
-        "authorized_response_items": [
-          {
-            "server_id": "staging-1"
-          }
-        ]
+        "operation_id": "operation-staging-backup-1"
       }
     ]
   },
@@ -59,22 +50,19 @@
         "attempt_id": "spoof-production-destroy",
         "accepted": false,
         "error_category": "authorization",
-        "operation_actor_id": null,
+        "operation_resource": null,
         "request_claims_used_for_auth": false,
-        "resource_items": [],
         "protected_resource_data_returned": false
       },
       {
-        "attempt_id": "spoofed-inspect-claim",
+        "attempt_id": "spoofed-backup-claim",
         "accepted": true,
         "error_category": null,
-        "operation_actor_id": "actor-staging",
+        "operation_resource": {
+          "operation_id": "operation-staging-backup-1",
+          "actor_id": "actor-staging"
+        },
         "request_claims_used_for_auth": false,
-        "resource_items": [
-          {
-            "server_id": "staging-1"
-          }
-        ],
         "protected_resource_data_returned": true
       }
     ],
@@ -83,6 +71,7 @@
   "notes": {
     "spoofed_claims": "production admin actor and role/permission claims are request metadata only",
     "authorization": "uses authenticated-principal permissions and environment scope exclusively",
-    "denial": "no production resource item or metadata is returned"
+    "denial": "no production resource or operation metadata is returned",
+    "accepted_operation": "durable actor_id is taken from the authenticated principal"
   }
 }
