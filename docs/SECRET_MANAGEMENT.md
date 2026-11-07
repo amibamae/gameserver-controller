@@ -2,8 +2,9 @@
 
 **Status:** Required design for provider integrations. The repository contains
 only example credential references, never real keys. A bounded systemd
-credential accessor exists in `internal/credential`; the controller runtime
-and provider adapters do not use it yet, and the pilot does not call Vultr or
+credential accessor exists in `internal/credential`. The capacity-backed
+`pilotvultr` service accepts a credential resolver, but no production command
+wires it to the systemd accessor yet. The pilot CLI does not call Vultr or
 Wasabi.
 
 ## Initial Debian deployment
@@ -14,8 +15,9 @@ needed by the controller service. Use `systemd-creds encrypt` and the service
 unit's `LoadCredentialEncrypted=` setting. Do not place a value in a unit file,
 YAML configuration, shell command, environment variable, bootstrap script, or
 user-data. Run the controller under a dedicated unprivileged service account.
-The application reads a named file through `$CREDENTIALS_DIRECTORY` only when
-the provider call needs it; the path is not hard-coded. Systemd documents that
+The production command should read a named file through
+`$CREDENTIALS_DIRECTORY` only when the provider call needs it; the path is not
+hard-coded. Systemd documents that
 service credentials are restricted to the service user, are not propagated
 through the process environment, and can be encrypted for storage.
 

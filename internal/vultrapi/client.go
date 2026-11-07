@@ -133,7 +133,7 @@ func NewClientAt(baseURL string, httpClient *http.Client) (*Client, error) {
 // Any transport/5xx/response-parse failure after dispatch is reported as an
 // unknown outcome so the caller can reconcile by the unique label or tag.
 func (c *Client) CreateInstance(ctx context.Context, token []byte, input CreateInstanceRequest) (Instance, error) {
-	if err := validateCreateRequest(input); err != nil {
+	if err := ValidateCreateInstanceRequest(input); err != nil {
 		return Instance{}, err
 	}
 	body, err := json.Marshal(createInstanceBody{
@@ -248,6 +248,9 @@ func (c *Client) request(ctx context.Context, token []byte, method, path string,
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		if response.StatusCode >= 400 && response.StatusCode < 500 {
+			if response.StatusCode == http.StatusRequestTimeout && mutation {
+				return nil, ErrOutcomeUnknown
+			}
 			return nil, fmt.Errorf("%w: HTTP %d", ErrProviderReject, response.StatusCode)
 		}
 		if mutation {
@@ -265,7 +268,9 @@ func (c *Client) request(ctx context.Context, token []byte, method, path string,
 	return value, nil
 }
 
-func validateCreateRequest(input CreateInstanceRequest) error {
+// ValidateCreateInstanceRequest checks the provider fields before a caller
+// claims a durable create-dispatch marker. It performs no network request.
+func ValidateCreateInstanceRequest(input CreateInstanceRequest) error {
 	if !validShortField(input.Region, 200) || !validShortField(input.Plan, 200) || input.OSID <= 0 ||
 		!validLabel(input.Label) || (input.Hostname != "" && !validHostname(input.Hostname)) {
 		return fmt.Errorf("%w: region, plan, os_id, label, or hostname is invalid", ErrInvalidRequest)

@@ -135,13 +135,12 @@ func (s *BoltStore) ReserveCapacity(reservation CapacityReservation, totalLimit,
 	return result, created, nil
 }
 
-// MarkCapacityCreateSent must be called immediately before dispatching a
-// provider create request. The outcome remains counted until reconciled.
+// MarkCapacityCreateSent is a one-time dispatch claim. Callers must claim it
+// immediately before sending the provider create request; a repeated claim
+// fails so a retry cannot accidentally dispatch the same create again. The
+// outcome remains counted until reconciled.
 func (s *BoltStore) MarkCapacityCreateSent(operationID string) (CapacityReservation, error) {
 	return s.updateCapacity(operationID, func(current CapacityReservation) (CapacityReservation, error) {
-		if current.State == CapacityCreateOutcomeUnknown {
-			return current, nil
-		}
 		if current.State != CapacityReserved {
 			return CapacityReservation{}, ErrCapacityTransition
 		}
@@ -150,13 +149,13 @@ func (s *BoltStore) MarkCapacityCreateSent(operationID string) (CapacityReservat
 	})
 }
 
-// MarkCapacityDestroySent keeps a deletion in capacity until provider
-// reconciliation confirms absence or destruction.
+// MarkCapacityDestroySent is a one-time dispatch claim. Callers must claim it
+// immediately before sending the provider destroy request; a repeated claim
+// fails so a retry cannot accidentally dispatch the same destroy again.
+// Capacity remains occupied until provider reconciliation confirms absence or
+// destruction.
 func (s *BoltStore) MarkCapacityDestroySent(operationID string) (CapacityReservation, error) {
 	return s.updateCapacity(operationID, func(current CapacityReservation) (CapacityReservation, error) {
-		if current.State == CapacityDestroyOutcomeUnknown {
-			return current, nil
-		}
 		if current.State != CapacityActive {
 			return CapacityReservation{}, ErrCapacityTransition
 		}

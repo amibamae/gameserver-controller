@@ -39,6 +39,88 @@ func TestReserveCapacityIsAtomicAcrossConcurrentCreates(t *testing.T) {
 	}
 }
 
+func TestCapacityCreateDispatchClaimIsOneShotUnderConcurrency(t *testing.T) {
+	store := openTestStore(t)
+	reservation, _, err := store.ReserveCapacity(capacityRequest("op-claim", "server-claim", "staging", "shared_nonproduction"), 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const callers = 12
+	start := make(chan struct{})
+	results := make(chan error, callers)
+	var wait sync.WaitGroup
+	for range callers {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			<-start
+			_, claimErr := store.MarkCapacityCreateSent(reservation.OperationID)
+			results <- claimErr
+		}()
+	}
+	close(start)
+	wait.Wait()
+	close(results)
+
+	succeeded, rejected := 0, 0
+	for claimErr := range results {
+		switch {
+		case claimErr == nil:
+			succeeded++
+		case errors.Is(claimErr, ErrCapacityTransition):
+			rejected++
+		default:
+			t.Fatalf("unexpected dispatch claim error: %v", claimErr)
+		}
+	}
+	if succeeded != 1 || rejected != callers-1 {
+		t.Fatalf("dispatch claims succeeded=%d rejected=%d; want 1 and %d", succeeded, rejected, callers-1)
+	}
+}
+
+func TestCapacityDestroyDispatchClaimIsOneShotUnderConcurrency(t *testing.T) {
+	store := openTestStore(t)
+	reservation, _, err := store.ReserveCapacity(capacityRequest("op-destroy-claim", "server-destroy-claim", "staging", "shared_nonproduction"), 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reservation, err = store.ObserveCapacity(reservation.OperationID, capacityObservation(reservation, "present", "instance-claim", time.Now().UTC().Add(time.Second)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const callers = 12
+	start := make(chan struct{})
+	results := make(chan error, callers)
+	var wait sync.WaitGroup
+	for range callers {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			<-start
+			_, claimErr := store.MarkCapacityDestroySent(reservation.OperationID)
+			results <- claimErr
+		}()
+	}
+	close(start)
+	wait.Wait()
+	close(results)
+
+	succeeded, rejected := 0, 0
+	for claimErr := range results {
+		switch {
+		case claimErr == nil:
+			succeeded++
+		case errors.Is(claimErr, ErrCapacityTransition):
+			rejected++
+		default:
+			t.Fatalf("unexpected destroy dispatch claim error: %v", claimErr)
+		}
+	}
+	if succeeded != 1 || rejected != callers-1 {
+		t.Fatalf("destroy dispatch claims succeeded=%d rejected=%d; want 1 and %d", succeeded, rejected, callers-1)
+	}
+}
+
 func TestReserveCapacityIsIdempotentAndRejectsOccupiedSlot(t *testing.T) {
 	store := openTestStore(t)
 	request := capacityRequest("op-1", "server-1", "staging", "shared_nonproduction")
@@ -70,6 +152,9 @@ func TestUnresolvedCreateAndDestroyKeepCapacityUntilProviderObservation(t *testi
 	if _, err := store.MarkCapacityCreateSent(reservation.OperationID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := store.MarkCapacityCreateSent(reservation.OperationID); !errors.Is(err, ErrCapacityTransition) {
+		t.Fatalf("duplicate create dispatch claim: got %v, want ErrCapacityTransition", err)
+	}
 	assertCapacityBlocked(t, store, "op-blocked-1", "server-2", "testing", "shared_nonproduction", 1, 1)
 
 	reservation, err = store.ObserveCapacity(reservation.OperationID, capacityObservation(reservation, "absent", "", time.Now().UTC().Add(time.Second)))
@@ -89,6 +174,9 @@ func TestUnresolvedCreateAndDestroyKeepCapacityUntilProviderObservation(t *testi
 	reservation, err = store.MarkCapacityDestroySent(reservation.OperationID)
 	if err != nil || reservation.State != CapacityDestroyOutcomeUnknown {
 		t.Fatalf("destroy request state = (%+v, %v)", reservation, err)
+	}
+	if _, err := store.MarkCapacityDestroySent(reservation.OperationID); !errors.Is(err, ErrCapacityTransition) {
+		t.Fatalf("duplicate destroy dispatch claim: got %v, want ErrCapacityTransition", err)
 	}
 	assertCapacityBlocked(t, store, "op-blocked-2", "server-3", "staging", "shared_nonproduction", 1, 1)
 
