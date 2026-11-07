@@ -38,7 +38,7 @@ Implementations MUST document:
 - Authentication failure behavior and rate limiting.
 - Redaction requirements.
 
-Logout or token expiry MUST NOT be assumed to cancel already accepted durable operations. Operation authorization and cancellation are separate concerns.
+Logout or token expiry MUST NOT, by itself, cancel or pause an already accepted durable operation. The operation continues under its durably recorded request and actor context; the expired client session does not need to be renewed for that accepted operation to continue. This does not preserve stale authorization indefinitely: the controller MUST re-evaluate current permissions, target, approvals, and policy immediately before any sensitive step where those checks are required, and MUST pause or reject work when reauthorization fails. Session expiry MUST NOT be treated as either a cancellation request or a way to satisfy a fresh authorization check.
 
 ## 5. Errors and information disclosure
 
