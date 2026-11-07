@@ -41,6 +41,14 @@ Successful install results MUST identify exactly the pinned release artifact IDs
 
 The game adapter defines mandatory readiness checks and optional health checks. A process running or a port listening is insufficient when game-specific readiness can be checked.
 
+For each supported game release and environment, the adapter MUST declare a
+`readiness_check_set_id` and exactly one `check_id`/`check_version` pair for
+each required check. The controller MUST select that exact set through trusted
+profile resolution and persist the set ID and pairs in the immutable
+`game.readiness.check` input. The adapter MUST return exactly those check IDs
+at those versions; a missing, duplicate, extra, or version-mismatched result
+cannot permit `ready`.
+
 `game.validate_installation` reports `valid` only when its output binds the exact target and release and contains exactly one `verified` result with matching expected/observed checksums for every pinned artifact; missing, duplicate, unavailable, mismatched, or unknown results cannot permit start.
 
 A readiness result MUST identify:
