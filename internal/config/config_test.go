@@ -20,15 +20,28 @@ controller:
 adapters:
   - id: hosting.local
     category: hosting
-  - id: storage.local
+  - id: storage.production
     category: storage
+    secret_refs:
+      backup_writer:
+        secret_ref: systemd-credential://wasabi-production-writer
+        purpose: production backup writer
+  - id: storage.staging
+    category: storage
+    secret_refs:
+      production_reader:
+        secret_ref: systemd-credential://wasabi-staging-production-reader
+        purpose: read selected production backup
+      backup_writer:
+        secret_ref: systemd-credential://wasabi-staging-writer
+        purpose: staging backup writer
   - id: execution.local
     category: execution
   - id: game.paper
     category: game
     secret_refs:
       server_password:
-        secret_ref: env://GAME_SERVER_PASSWORD
+        secret_ref: systemd-credential://example-game-server-password
         purpose: test-only example
         permission_scope: [game.server.read]
 environments:
@@ -43,7 +56,7 @@ servers:
     environment_id: production
     adapters:
       hosting: hosting.local
-      storage: storage.local
+      storage: storage.production
       execution: execution.local
       game: game.paper
     lifecycle:
@@ -53,7 +66,7 @@ servers:
     environment_id: staging
     adapters:
       hosting: hosting.local
-      storage: storage.local
+      storage: storage.staging
       execution: execution.local
       game: game.paper
     lifecycle:
@@ -67,7 +80,7 @@ func TestParseValidConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value.SchemaVersion != SchemaVersion || len(value.Servers) != 2 || len(value.Adapters) != 4 {
+	if value.SchemaVersion != SchemaVersion || len(value.Servers) != 2 || len(value.Adapters) != 5 {
 		t.Fatalf("unexpected decoded config summary: version=%d adapters=%d servers=%d", value.SchemaVersion, len(value.Adapters), len(value.Servers))
 	}
 }
@@ -104,8 +117,9 @@ func TestValidateRejectsUnsafeSecretAndEnvironmentPolicy(t *testing.T) {
 	tests := []struct {
 		name, before, after, want string
 	}{
-		{"literal secret", "env://GAME_SERVER_PASSWORD", "hunter2", "secret_ref"},
-		{"malformed environment name", "env://GAME_SERVER_PASSWORD", "env://BAD-NAME", "secret_ref"},
+		{"literal secret", "systemd-credential://example-game-server-password", "hunter2", "secret_ref"},
+		{"environment reference rejected", "systemd-credential://example-game-server-password", "env://GAME_SERVER_PASSWORD", "secret_ref"},
+		{"malformed credential name", "systemd-credential://example-game-server-password", "systemd-credential://BAD/../PATH", "secret_ref"},
 		{"staging production write", "classification: staging\n    production_backup_access: read_only", "classification: staging\n    production_backup_access: read_write", "must not have production backup write access"},
 		{"disabled backup gate", "require_verified_backup_before_destroy: true", "require_verified_backup_before_destroy: false", "require_verified_backup_before_destroy"},
 		{"disabled destroy approval", "require_approval_for_destroy: true", "require_approval_for_destroy: false", "require_approval_for_destroy"},
@@ -118,6 +132,14 @@ func TestValidateRejectsUnsafeSecretAndEnvironmentPolicy(t *testing.T) {
 				t.Fatalf("Parse error = %v, want substring %q", err, test.want)
 			}
 		})
+	}
+}
+
+func TestValidateRejectsSharedStorageCredentialAcrossEnvironments(t *testing.T) {
+	input := strings.Replace(validConfig, "systemd-credential://wasabi-staging-writer", "systemd-credential://wasabi-production-writer", 1)
+	_, err := Parse(strings.NewReader(input))
+	if err == nil || !strings.Contains(err.Error(), "must not be shared between production and staging/testing") {
+		t.Fatalf("shared production/staging storage credential: got %v", err)
 	}
 }
 

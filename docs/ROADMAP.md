@@ -58,9 +58,10 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - [x] Add the in-process adapter registry and scripted fakes for all five categories.
 - [x] Validate the initial local v1 configuration without side effects; runtime loading and secret resolution remain future work.
 - [x] Persist immutable adapter-step inputs and schema-validated completed outputs with the exact capability identities.
+- [x] Implement generic durable adapter dispatch, outcome persistence, reconciliation hooks, bounded safe retry, and restart recovery.
 - [ ] Expand language-neutral behavior tests as contracts mature.
-- [ ] Implement lifecycle workflows and durable dispatch/reconciliation through the adapter registry.
-- [ ] Add fake-adapter cases for workflow preconditions, failure, timeout, and recovery.
+- [ ] Implement and wire the seven standard server lifecycle workflows over the durable engine.
+- [x] Add fake-adapter cases for workflow preconditions, definitive and ambiguous failures, timeout, bounded retry, accepted outcomes, and restart recovery.
 - [ ] Test compatibility, errors, idempotency, timeouts, and recovery without production services.
 - [ ] Establish build, test, dependency, and release practices that do not require AI.
 
@@ -84,6 +85,7 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - Provision a disposable instance and restore its selected world.
 - Add Velocity readiness and routing.
 - Route lobby players only after the backend passes readiness checks.
+- For games without a proxy, add the optional lobby wake and managed DNS handoff described in [the design](NO_PROXY_DNS_HANDOFF.md); players reconnect after readiness.
 - Detect when the backend is idle.
 - Stop Paper, back up and verify the world, then destroy the VM.
 - Fail closed if save, upload, verification, authorization, or cleanup checks fail.
@@ -128,6 +130,17 @@ Web, desktop, and mobile clients may develop in parallel; the controller does no
 - Do not require maintainers to host a web panel.
 - Do not expose provider credentials or let clients bypass lifecycle policy.
 
+An optional hosted offering could expose the same API to customer applications
+and assign join subdomains under a service-owned domain. This is a future
+deployment option, not part of the local pilot or a commitment to run a web
+panel. The current single-controller state store must not be exposed as a
+shared customer service. Tenant-scoped API authorization, persisted state and
+idempotency, locks, credentials, DNS record ownership, quotas, rate limits,
+audit, and operational isolation are prerequisites; see the [architecture
+notes](ARCHITECTURE.md#optional-hosted-control-plane). Treat this as a separate
+multi-tenant security and operations milestone after the single-tenant
+lifecycle works.
+
 ## What counts as complete
 
 A phase needs more than code. Include documentation, configuration examples, automated and failure-path tests, security and permission review, and isolated validation. Keep secrets and production data out of the repository. Require operator approval for production-impacting changes.
@@ -144,6 +157,6 @@ The Phase 1 package on main has met its exit criteria for protocol version `0.21
 
 The schema package covers hosting, storage, execution, game, and integration operations, with typed results for all seven standard server operations. The protocol specification and compatibility rules have been reviewed. Go CI checks schemas, references, examples, OpenAPI 3.2.1 structure, and published conformance fixtures.
 
-Phase 2 now includes Go lifecycle/operation transition rules, a durable bbolt store, atomic acceptance with actor-scoped idempotency and per-server locks, immutable step-input and completed-output snapshots, an embedded local schema registry, an in-process adapter registry with scripted fakes for all five categories, and side-effect-free validation for the initial local configuration. Durable step dispatch, workflow orchestration/reconciliation, runtime config loading and secret resolution, process transport, and production adapters remain future work across Phases 2 and 3.
+Phase 2 now includes Go lifecycle/operation transition rules, a durable bbolt store, atomic acceptance with actor-scoped idempotency and per-server locks, immutable step-input and completed-output snapshots, an embedded local schema registry, an in-process adapter registry with scripted fakes for all five categories, generic durable dispatch/reconciliation with restart recovery, fake workflow tests, and side-effect-free validation for the initial local configuration. Standard lifecycle definitions and application wiring, runtime config loading and secret resolution, process transport, and production adapters remain future work across Phases 2 and 3. The initial credential-reference policy uses systemd credentials, but runtime resolution and provider integrations are not implemented. The pilot capacity policy remains declarative until a Vultr create/adopt path consumes it.
 
 Phase 1 means the reviewed specification package and Go validator/conformance suite are ready for implementation. Stable protocol 1.0 still requires the initial Go controller to pass the published behavioral suite. Other-language implementations are welcome, but they are not a release requirement.

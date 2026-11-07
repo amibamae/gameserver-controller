@@ -18,11 +18,13 @@ import (
 const SchemaVersion = 1
 
 var (
-	identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
-	adapterIDPattern  = regexp.MustCompile(`^[a-z][a-z0-9.-]{1,159}$`)
-	secretNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
-	envNamePattern    = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
+	identifierPattern     = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
+	adapterIDPattern      = regexp.MustCompile(`^[a-z][a-z0-9.-]{1,159}$`)
+	secretNamePattern     = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	credentialNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 )
+
+const systemdCredentialScheme = "systemd-credential://"
 
 type Config struct {
 	SchemaVersion int              `yaml:"schema_version"`
@@ -215,6 +217,7 @@ func Validate(value Config) error {
 		add(server.Lifecycle.RequireVerifiedBackupBeforeDestroy, label+".lifecycle.require_verified_backup_before_destroy must be true")
 		add(server.Lifecycle.RequireApprovalForDestroy, label+".lifecycle.require_approval_for_destroy must be true")
 	}
+	validateStorageSecretIsolation(&problems, value.Servers, environmentByID, adapterByID)
 
 	if len(problems) > 0 {
 		sort.Strings(problems)
@@ -227,8 +230,8 @@ func validateSecretReference(problems *[]string, label, name string, reference S
 	if !secretNamePattern.MatchString(name) {
 		*problems = append(*problems, label+" must use a lower-case secret name")
 	}
-	if !strings.HasPrefix(reference.SecretRef, "env://") || !envNamePattern.MatchString(strings.TrimPrefix(reference.SecretRef, "env://")) {
-		*problems = append(*problems, label+".secret_ref must reference an environment variable as env://NAME")
+	if !validSystemdCredentialReference(reference.SecretRef) {
+		*problems = append(*problems, label+".secret_ref must reference a systemd credential as systemd-credential://NAME")
 	}
 	if strings.TrimSpace(reference.Purpose) == "" || len(reference.Purpose) > 100 {
 		*problems = append(*problems, label+".purpose must be 1 to 100 characters")
@@ -246,6 +249,45 @@ func validateSecretReference(problems *[]string, label, name string, reference S
 			*problems = append(*problems, label+".permission_scope contains duplicate "+scope)
 		}
 		seen[scope] = struct{}{}
+	}
+}
+
+func validSystemdCredentialReference(reference string) bool {
+	if !strings.HasPrefix(reference, systemdCredentialScheme) {
+		return false
+	}
+	return credentialNamePattern.MatchString(strings.TrimPrefix(reference, systemdCredentialScheme))
+}
+
+func validateStorageSecretIsolation(problems *[]string, servers []ServerProfile, environments map[string]Environment, adapters map[string]AdapterProfile) {
+	uses := make(map[string]map[string]struct{})
+	for _, server := range servers {
+		environment, exists := environments[server.EnvironmentID]
+		if !exists {
+			continue
+		}
+		profile, exists := adapters[server.Adapters.Storage]
+		if !exists || profile.Category != "storage" {
+			continue
+		}
+		for _, reference := range profile.SecretRefs {
+			if !validSystemdCredentialReference(reference.SecretRef) {
+				continue
+			}
+			if uses[reference.SecretRef] == nil {
+				uses[reference.SecretRef] = make(map[string]struct{})
+			}
+			uses[reference.SecretRef][environment.Classification] = struct{}{}
+		}
+	}
+	for _, classifications := range uses {
+		_, usedByProduction := classifications["production"]
+		_, usedByStaging := classifications["staging"]
+		_, usedByTesting := classifications["testing"]
+		if usedByProduction && (usedByStaging || usedByTesting) {
+			*problems = append(*problems, "storage secret references must not be shared between production and staging/testing servers")
+			return
+		}
 	}
 }
 

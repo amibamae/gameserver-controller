@@ -52,9 +52,19 @@ The [capacity policy file](../pilot/capacity-policy.json) sets an initial hard l
 
 A future Vultr create/adopt path must reserve a slot atomically before calling the provider. The reservation consumes capacity. Each controller-owned instance continues to count until Vultr confirms it is absent or destroyed. An unresolved create or destroy also consumes the slot. For an unknown create result, do not free capacity until provider state confirms absence or destruction. Reject unsupported environments, duplicate or occupied slot requests, and requests that exceed the limit.
 
-The intended cap lives in source-controlled `pilot/capacity-policy.json`; it is not a CLI flag. Once create/adopt exists, maintainers can change `max_instances_total`, increment `policy_version`, validate the policy, and rebuild the pilot. The total cannot exceed the sum of the declared per-environment slots. The checker covers free slots, unmanaged production, conflicts, unresolved outcomes, and confirmed release.
+The intended hard-coded cap lives in source-controlled
+`pilot/capacity-policy.json`; it is not a runtime CLI flag or Go constant.
+Once the Vultr create/adopt path consumes this policy, maintainers can change
+the integer `max_instances_total`, increment `policy_version`, validate it
+with `go run ./cmd/pilot-capacity-check` from the repository root, and rebuild
+the pilot with the new cap. The total cannot exceed the sum of the declared
+per-environment slots. The checker covers free slots, unmanaged production,
+conflicts, unresolved outcomes, and confirmed release.
 
-Today, the checker validates the policy file, but the backup/status CLI has no Vultr create/adopt path. Editing the file does not change runtime behavior yet. The future provider workflow must read the checked-in policy before it calls the API.
+Today, the checker validates the policy file, but the backup/status CLI has no
+Vultr create/adopt path. Editing the file and rebuilding the current CLI does
+not change runtime behavior yet. The future provider workflow must read the
+checked-in policy before it calls the API.
 
 **The policy is declarative only today.** The current `cmd/supervised-pilot` CLI supports backup, status, and local history. It cannot create or adopt Vultr instances.
 

@@ -26,7 +26,7 @@ func TestValidateCommand(t *testing.T) {
 func TestValidateCommandDoesNotPrintSecretValues(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "controller.yaml")
-	input := strings.ReplaceAll(readExample(t), "env://GAMECTRL_EXAMPLE_STORAGE_TOKEN", "env://VERY_PRIVATE_REFERENCE_SHOULD_NOT_PRINT")
+	input := strings.ReplaceAll(readExample(t), "systemd-credential://example-wasabi-staging-writer", "systemd-credential://very-private-reference-should-not-print")
 	if err := os.WriteFile(configPath, []byte(input), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestValidateCommandDoesNotPrintSecretValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	combined := stdout.String() + stderr.String()
-	if strings.Contains(combined, "VERY_PRIVATE_REFERENCE_SHOULD_NOT_PRINT") {
+	if strings.Contains(combined, "very-private-reference-should-not-print") {
 		t.Fatalf("command printed secret reference: %q", combined)
 	}
 }

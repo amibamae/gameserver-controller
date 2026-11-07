@@ -1,12 +1,12 @@
 # Adapter Contracts
 
-**Status:** The contracts remain language-neutral. The repository has an initial Go in-process adapter API; production adapters and the optional process transport are not implemented.
+**Status:** The contracts remain language-neutral. The repository has an initial Go in-process adapter API and a generic durable workflow engine; standard lifecycle workflows, production adapters, and the optional process transport are not implemented.
 
 The detailed drafts live under [protocol/adapters](../protocol/adapters/README.md): hosting, storage, execution, game, and integration.
 
 ## What exists in Go
 
-The Go registry validates adapter descriptors and capability inputs and outputs against the bundled protocol schemas. Scripted in-process fakes cover all five categories for local tests. This gives the core a boundary to test against; it does not implement lifecycle policy, durable dispatch, authorization, or provider behavior.
+The Go registry validates adapter descriptors and capability inputs and outputs against the bundled protocol schemas. Scripted in-process fakes cover all five categories for local tests. The registry is a boundary and test harness; it does not implement lifecycle policy, authorization, or provider behavior. The separate [workflow engine](WORKFLOW_ENGINE.md) persists adapter calls and reconciles uncertain outcomes, but the standard lifecycle workflows are not wired yet.
 
 Before an adapter step runs, the operation records its validated input and exact adapter/capability version. A confirmed result records the schema-validated output. Durable step snapshots may contain secret references, never resolved credentials.
 
