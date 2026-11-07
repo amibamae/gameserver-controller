@@ -30,6 +30,9 @@ type RequestValidator interface {
 }
 
 type Authorizer interface {
+	// AuthorizeTarget checks actor access to the operation and target without
+	// resolved steps. It runs before the planner can inspect target state.
+	AuthorizeTarget(context.Context, string, store.OperationRecord) error
 	AuthorizeOperation(context.Context, string, store.OperationRecord) error
 }
 
@@ -69,8 +72,9 @@ func NewService(operationStore OperationStore, validator RequestValidator, autho
 	return &Service{store: operationStore, validator: validator, authorizer: authorizer, locks: locks, planner: planner, keyring: keyring}, nil
 }
 
-// Accept validates the request, asks the injected controller planner to build
-// its immutable step plan, authorizes that exact plan, binds idempotency to the
+// Accept validates and authorizes the target before asking the injected
+// controller planner to build its immutable step plan. It authorizes that exact
+// plan, binds idempotency to the
 // authenticated actor and canonical request, then atomically stores the
 // operation and resource reservations before any worker can dispatch it.
 func (s *Service) Accept(ctx context.Context, authenticatedActorID, idempotencyKey string, record store.OperationRecord) (store.StoredOperation, bool, error) {
@@ -111,6 +115,9 @@ func (s *Service) Accept(ctx context.Context, authenticatedActorID, idempotencyK
 		return store.StoredOperation{}, false, ErrFingerprintMismatch
 	}
 	record.RequestFingerprint = fingerprint
+	if err := s.authorizer.AuthorizeTarget(ctx, authenticatedActorID, record); err != nil {
+		return store.StoredOperation{}, false, fmt.Errorf("authorize target: %w", err)
+	}
 	steps, err := s.planner.BuildPlan(ctx, record)
 	if err != nil {
 		return store.StoredOperation{}, false, fmt.Errorf("build trusted operation plan: %w", err)

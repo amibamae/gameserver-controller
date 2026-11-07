@@ -37,6 +37,7 @@ type ServerStopProfileResolver interface {
 }
 
 type serverStopParameters struct {
+	DrainTimeoutMS    *int64          `json:"drain_timeout_ms,omitempty"`
 	Drain             *bool           `json:"drain,omitempty"`
 	GracefulTimeoutMS *int64          `json:"graceful_timeout_ms,omitempty"`
 	Force             bool            `json:"force,omitempty"`
@@ -76,6 +77,9 @@ func (w *ServerStopWorkflow) BuildPlan(ctx context.Context, operation store.Oper
 	var parameters serverStopParameters
 	if err := json.Unmarshal(operation.RequestSnapshot.Parameters, &parameters); err != nil {
 		return nil, errors.New("decode server.stop parameters")
+	}
+	if parameters.DrainTimeoutMS != nil {
+		return nil, errors.New("drain_timeout_ms is unavailable until proxy drain is integrated")
 	}
 	if parameters.Force {
 		return nil, errors.New("force stop is unavailable until exact-target approval validation is wired")

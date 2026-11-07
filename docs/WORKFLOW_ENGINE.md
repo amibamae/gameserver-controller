@@ -110,15 +110,17 @@ reference. The store also supports an atomic operation/server-state commit.
 Each committed lifecycle transition records the authenticated actor, operation,
 previous and next state, cause, request fingerprint, timestamp, and completed
 step IDs that provide evidence. The engine routes definitions that implement
-the pure lifecycle projector through this transaction. This is an integration
-seam; standard lifecycle definitions and their typed results are not yet wired
-to update the server record.
+the pure lifecycle projector through this transaction. Definition, start, and
+graceful-stop workflows use this transaction to update server state alongside
+their durable progress and typed results.
 
 Operation acceptance also requires an injected trusted planner. A request
-cannot supply adapter steps, and authorization runs against the planner's
-result before the operation is persisted. The metadata-only definition planner
-is covered; profile-resolving plans for provision, start, stop, backup, restore,
-and destroy have not been implemented. The store rejects every accepted
+cannot supply adapter steps. The injected authorizer must check actor access
+to the operation and target before planning can inspect server state, then
+authorize the exact resolved plan before persistence. Definition, start, and
+graceful-stop planners are covered. Provision, backup, restore, and destroy
+plans remain incomplete. Stop planning rejects `drain_timeout_ms` until proxy
+drain is integrated, including when the caller disables drain. The store rejects every accepted
 `server.*` lifecycle operation except `server.define` unless its target already
 has a valid durable logical-server record; a rejected request cannot leave an
 operation or lock behind.

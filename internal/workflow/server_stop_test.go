@@ -250,3 +250,13 @@ func stopOperationRecord(version string, parameters json.RawMessage) store.Opera
 		RequestSnapshot: store.RequestSnapshot{OperationType: "server.stop", Parameters: parameters},
 	}
 }
+
+func TestServerStopRejectsUnsupportedDrainTimeout(t *testing.T) {
+	fixture := newServerStopFixture(t, adapter.OutcomeCompleted, adapter.OutcomeCompleted)
+	for _, parameters := range []string{`{"drain_timeout_ms":0}`, `{"drain":false,"drain_timeout_ms":1000}`} {
+		operation := stopOperationRecord(fixture.base.schemas.ProtocolVersion(), json.RawMessage(parameters))
+		if _, err := fixture.workflow.BuildPlan(context.Background(), operation); err == nil {
+			t.Fatalf("unsupported drain timeout accepted: %s", parameters)
+		}
+	}
+}
