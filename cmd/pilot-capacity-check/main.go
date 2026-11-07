@@ -13,18 +13,26 @@ import (
 )
 
 type policyDocument struct {
-	PolicyID          string                    `json:"policy_id"`
-	PolicyVersion     int                       `json:"policy_version"`
-	Enforcement       *enforcementPolicy        `json:"enforcement"`
-	MaxInstancesTotal int                       `json:"max_instances_total"`
-	CapacityGroups    map[string]capacityGroup  `json:"capacity_groups"`
-	CreatePolicy      *createPolicy             `json:"create_policy"`
+	PolicyID          string                   `json:"policy_id"`
+	PolicyVersion     int                      `json:"policy_version"`
+	Enforcement       *enforcementPolicy       `json:"enforcement"`
+	MaxInstancesTotal int                      `json:"max_instances_total"`
+	OwnershipScope    *ownershipScope          `json:"ownership_scope"`
+	CapacityGroups    map[string]capacityGroup `json:"capacity_groups"`
+	CreatePolicy      *createPolicy            `json:"create_policy"`
 }
 
 type enforcementPolicy struct {
-	Mode           string `json:"mode"`
+	Mode            string `json:"mode"`
 	RuntimeEnforced *bool  `json:"runtime_enforced"`
-	Reason         string `json:"reason"`
+	Reason          string `json:"reason"`
+}
+
+type ownershipScope struct {
+	CapacityCountsOnlyControllerOwnedInstances   *bool `json:"capacity_counts_only_controller_owned_instances"`
+	UnmanagedProductionMayRemainLive             *bool `json:"unmanaged_production_may_remain_live"`
+	ProductionAdoptionIsOptional                 *bool `json:"production_adoption_is_optional"`
+	ProviderCreatedInstancesAreControllerManaged *bool `json:"provider_created_instances_are_controller_managed"`
 }
 
 type capacityGroup struct {
@@ -33,36 +41,38 @@ type capacityGroup struct {
 }
 
 type createPolicy struct {
-	ReserveSlotAtomicallyBeforeProviderCreate *bool             `json:"reserve_slot_atomically_before_provider_create"`
-	ReservationCountsAsCapacity               *bool             `json:"reservation_counts_as_capacity"`
-	RejectDuplicateOrOccupiedSlot             *bool             `json:"reject_duplicate_or_occupied_slot"`
-	RejectIfTotalWouldExceedLimit             *bool             `json:"reject_if_total_would_exceed_limit"`
-	RejectUnsupportedEnvironment              *bool             `json:"reject_unsupported_environment"`
-	Occupancy                                 *occupancyPolicy  `json:"occupancy"`
+	ReserveSlotAtomicallyBeforeProviderCreate *bool            `json:"reserve_slot_atomically_before_provider_create"`
+	ReservationCountsAsCapacity               *bool            `json:"reservation_counts_as_capacity"`
+	RejectDuplicateOrOccupiedSlot             *bool            `json:"reject_duplicate_or_occupied_slot"`
+	RejectIfTotalWouldExceedLimit             *bool            `json:"reject_if_total_would_exceed_limit"`
+	RejectUnsupportedEnvironment              *bool            `json:"reject_unsupported_environment"`
+	Occupancy                                 *occupancyPolicy `json:"occupancy"`
 }
 
 type occupancyPolicy struct {
-	CountEveryInstanceWithoutProviderConfirmedAbsenceOrDestruction *bool    `json:"count_every_instance_without_provider_confirmed_absence_or_destruction"`
-	CountUnresolvedCreateOutcome                                  *bool    `json:"count_unresolved_create_outcome"`
-	CountUnresolvedDestroyOutcome                                 *bool    `json:"count_unresolved_destroy_outcome"`
-	ReleaseOnlyAfterProviderConfirmation                          []string `json:"release_only_after_provider_confirmation"`
+	CountEveryManagedInstanceWithoutProviderConfirmedAbsenceOrDestruction *bool    `json:"count_every_managed_instance_without_provider_confirmed_absence_or_destruction"`
+	CountUnresolvedCreateOutcome                                          *bool    `json:"count_unresolved_create_outcome"`
+	CountUnresolvedDestroyOutcome                                         *bool    `json:"count_unresolved_destroy_outcome"`
+	ReleaseOnlyAfterProviderConfirmation                                  []string `json:"release_only_after_provider_confirmation"`
 }
 
 type casesDocument struct {
-	PolicyID string        `json:"policy_id"`
-	Cases    []policyCase  `json:"cases"`
+	PolicyID string       `json:"policy_id"`
+	Cases    []policyCase `json:"cases"`
 }
 
 type policyCase struct {
-	ID                string              `json:"id"`
+	ID                 string             `json:"id"`
+	RequestAction      string             `json:"request_action"`
 	RequestEnvironment string             `json:"request_environment"`
-	ExistingInstances []existingInstance   `json:"existing_instances"`
-	Expected          *expectedDecision    `json:"expected"`
+	ExistingInstances  []existingInstance `json:"existing_instances"`
+	Expected           *expectedDecision  `json:"expected"`
 }
 
 type existingInstance struct {
-	Environment  string `json:"environment"`
+	Environment   string `json:"environment"`
 	ProviderState string `json:"provider_state"`
+	Managed       *bool  `json:"managed"`
 }
 
 type expectedDecision struct {
@@ -129,8 +139,8 @@ func validateDocuments(policy policyDocument, cases casesDocument) []string {
 	}
 
 	add(policy.PolicyID == "supervised-pilot-vm-capacity", "policy_id must be supervised-pilot-vm-capacity")
-	add(policy.PolicyVersion == 1, "policy_version must be 1")
-	add(policy.MaxInstancesTotal == 2, "max_instances_total must be 2")
+	add(policy.PolicyVersion >= 2, "policy_version must be at least 2")
+	add(policy.MaxInstancesTotal > 0, "max_instances_total must be greater than zero")
 
 	staticPolicyErrors := 0
 	if policy.Enforcement == nil {
@@ -139,7 +149,17 @@ func validateDocuments(policy policyDocument, cases casesDocument) []string {
 	} else {
 		add(policy.Enforcement.Mode == "declarative", "enforcement.mode must be declarative")
 		add(policy.Enforcement.RuntimeEnforced != nil && !*policy.Enforcement.RuntimeEnforced, "enforcement.runtime_enforced must be false")
-		add(strings.Contains(policy.Enforcement.Reason, "no VM-create operation"), "enforcement.reason must explain that the CLI has no VM-create operation")
+		add(strings.Contains(policy.Enforcement.Reason, "no Vultr create or adopt operation"), "enforcement.reason must explain that the CLI has no Vultr create/adopt operation")
+	}
+	if policy.OwnershipScope == nil {
+		errors = append(errors, "ownership_scope must be an object")
+		staticPolicyErrors++
+	} else {
+		ownership := policy.OwnershipScope
+		add(ownership.CapacityCountsOnlyControllerOwnedInstances != nil && *ownership.CapacityCountsOnlyControllerOwnedInstances, "ownership_scope.capacity_counts_only_controller_owned_instances must be true")
+		add(ownership.UnmanagedProductionMayRemainLive != nil && *ownership.UnmanagedProductionMayRemainLive, "ownership_scope.unmanaged_production_may_remain_live must be true")
+		add(ownership.ProductionAdoptionIsOptional != nil && *ownership.ProductionAdoptionIsOptional, "ownership_scope.production_adoption_is_optional must be true")
+		add(ownership.ProviderCreatedInstancesAreControllerManaged != nil && *ownership.ProviderCreatedInstancesAreControllerManaged, "ownership_scope.provider_created_instances_are_controller_managed must be true")
 	}
 	expectedGroups := map[string]capacityGroup{
 		"production": {
@@ -162,7 +182,7 @@ func validateDocuments(policy policyDocument, cases casesDocument) []string {
 			environments = append(environments, group.AcceptedEnvironments...)
 		}
 		sort.Strings(environments)
-		add(total == policy.MaxInstancesTotal, "sum of capacity groups must equal max_instances_total")
+		add(policy.MaxInstancesTotal <= total, "max_instances_total cannot exceed the sum of capacity-group slots")
 		add(reflect.DeepEqual(environments, []string{"production", "staging", "testing"}), "capacity groups must assign production, staging, and testing exactly once")
 	}
 	if policy.CreatePolicy == nil {
@@ -183,7 +203,7 @@ func validateDocuments(policy policyDocument, cases casesDocument) []string {
 			staticPolicyErrors++
 		} else {
 			occupancy := create.Occupancy
-			checkTrue(occupancy.CountEveryInstanceWithoutProviderConfirmedAbsenceOrDestruction, "create_policy.occupancy.count_every_instance_without_provider_confirmed_absence_or_destruction")
+			checkTrue(occupancy.CountEveryManagedInstanceWithoutProviderConfirmedAbsenceOrDestruction, "create_policy.occupancy.count_every_managed_instance_without_provider_confirmed_absence_or_destruction")
 			checkTrue(occupancy.CountUnresolvedCreateOutcome, "create_policy.occupancy.count_unresolved_create_outcome")
 			checkTrue(occupancy.CountUnresolvedDestroyOutcome, "create_policy.occupancy.count_unresolved_destroy_outcome")
 			add(reflect.DeepEqual(occupancy.ReleaseOnlyAfterProviderConfirmation, []string{"absent", "destroyed"}), "create_policy.occupancy.release_only_after_provider_confirmation must be [absent, destroyed]")
@@ -212,13 +232,17 @@ func validateDocuments(policy policyDocument, cases casesDocument) []string {
 			errors = append(errors, testCase.ID+".request_environment must be a non-empty string")
 			continue
 		}
+		if testCase.RequestAction != "create" && testCase.RequestAction != "adopt" {
+			errors = append(errors, testCase.ID+".request_action must be create or adopt")
+			continue
+		}
 		if testCase.ExistingInstances == nil {
 			errors = append(errors, testCase.ID+".existing_instances must be an array")
 			continue
 		}
 		invalidInstance := false
 		for _, instance := range testCase.ExistingInstances {
-			if instance.Environment == "" || instance.ProviderState == "" {
+			if instance.Environment == "" || instance.ProviderState == "" || instance.Managed == nil {
 				invalidInstance = true
 				break
 			}
@@ -233,12 +257,19 @@ func validateDocuments(policy policyDocument, cases casesDocument) []string {
 		}
 		if staticPolicyErrors == 0 && policy.Enforcement != nil && policy.CreatePolicy != nil && policy.CreatePolicy.Occupancy != nil {
 			actual := decide(policy, testCase.RequestEnvironment, testCase.ExistingInstances)
-			if actual.Allowed != *testCase.Expected.Allowed || actual.Reason != testCase.Expected.Reason {
+			if actual.Allowed != *testCase.Expected.Allowed || !matchesExpectedReason(actual.Reason, testCase.Expected.Reason) {
 				errors = append(errors, fmt.Sprintf("%s: expected {allowed:%t reason:%q}, got {allowed:%t reason:%q}", testCase.ID, *testCase.Expected.Allowed, testCase.Expected.Reason, actual.Allowed, actual.Reason))
 			}
 		}
 	}
 	return errors
+}
+
+func matchesExpectedReason(actual, expected string) bool {
+	if expected == "capacity_reached" {
+		return actual == "total_limit_reached" || actual == "slot_occupied"
+	}
+	return actual == expected
 }
 
 func decide(policy policyDocument, environment string, instances []existingInstance) decision {
@@ -271,7 +302,7 @@ func decide(policy policyDocument, environment string, instances []existingInsta
 		groupEnvironments[accepted] = true
 	}
 	for _, instance := range instances {
-		if releasedStates[instance.ProviderState] {
+		if instance.Managed == nil || !*instance.Managed || releasedStates[instance.ProviderState] {
 			continue
 		}
 		occupied++

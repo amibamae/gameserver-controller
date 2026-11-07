@@ -29,7 +29,7 @@ The pilot does not stop Paper, restore a world, destroy a server, or install or 
 
 ## Operator handoff checklist
 
-No live-server validation is claimed by the repository's automated checks or by this checklist. It describes an operator-supervised handoff; it does not report that a live backup has been run. The two-VM capacity policy below remains declarative and is not enforced by the pilot CLI.
+No live-server validation is claimed by the repository's automated checks or by this checklist. It describes an operator-supervised handoff; it does not report that a live backup has been run. The one-managed-VM capacity policy below remains declarative and is not enforced by the pilot CLI.
 
 Before an executed backup:
 
@@ -48,13 +48,13 @@ Before an executed backup:
 
 ## Declarative VM capacity policy
 
-The [machine-readable capacity policy](../pilot/capacity-policy.json) allows at most two VM instances total: one in `production`, plus one shared slot occupied by either `staging` or `testing`. `staging` and `testing` cannot occupy the shared slot at the same time.
+The [machine-readable capacity policy](../pilot/capacity-policy.json) sets the pilot's initial hard cap to **one controller-owned VM total**. The single managed slot may be used for production or for one shared `staging`/`testing` VM. A live production server may remain unmanaged and does not consume this controller-owned capacity; production adoption is optional. The controller-created Vultr VM will count as managed. `staging` and `testing` share one slot and cannot be managed at the same time.
 
-A future create flow must reserve its slot atomically before calling the provider. The reservation consumes capacity. Every instance continues to consume capacity until the provider confirms it is absent or destroyed. A create or destroy with an unresolved outcome continues to consume its slot; an unknown create cannot free capacity until provider state confirms absence or destruction. Reject unsupported environments, duplicate or occupied slot requests, and any create that would exceed the total limit.
+A future Vultr create/adopt flow must reserve capacity atomically before calling the provider API. The reservation consumes capacity. Every controller-owned instance continues to consume capacity until the provider confirms it is absent or destroyed. A create or destroy with an unresolved outcome continues to consume capacity; an unknown create cannot free the slot until provider state confirms absence or destruction. Reject unsupported environments, duplicate or occupied slot requests, and any create/adopt request that would exceed the total limit.
 
-The repository includes reference cases for available slots, conflicts, unresolved outcomes, the total limit, and confirmed release. From the repository root, run `go run ./cmd/pilot-capacity-check` to validate them against the policy. This Go checker is a declarative reference check; it is not called by the pilot CLI or any provisioning path.
+The intended hard-coded cap is source-controlled in `pilot/capacity-policy.json`, not exposed as a runtime CLI flag. Once the Vultr create/adopt path is implemented, maintainers can change `max_instances_total` in that file, increment `policy_version`, validate the policy, and rebuild the pilot with the new cap. The configured total may not exceed the sum of the declared per-environment slots. The checker runs reference cases for available slots, unmanaged production, conflicts, unresolved outcomes, and confirmed release. Today the checker validates the file but the backup/status CLI has no Vultr create/adopt path, so editing the file does not change runtime behavior yet. The future Vultr path must consume this checked-in setting before calling the API.
 
-**This policy is declarative only.** The current `cmd/supervised-pilot` CLI supports backup, status, and local history; it has no VM-create path. The policy is not enforced by that CLI and does not constrain actual provisioning yet.
+**This policy is declarative only today.** The current `cmd/supervised-pilot` CLI supports backup, status, and local history; it has no Vultr create/adopt path. The policy does not constrain actual provisioning until that path is implemented.
 
 ## What success does not prove
 

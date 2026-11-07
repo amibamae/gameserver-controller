@@ -1,12 +1,18 @@
 {
   "policy_id": "supervised-pilot-vm-capacity",
-  "policy_version": 1,
+  "policy_version": 2,
   "enforcement": {
     "mode": "declarative",
     "runtime_enforced": false,
-    "reason": "The current supervised-pilot CLI has no VM-create operation."
+    "reason": "The current supervised-pilot CLI has no Vultr create or adopt operation."
   },
-  "max_instances_total": 2,
+  "max_instances_total": 1,
+  "ownership_scope": {
+    "capacity_counts_only_controller_owned_instances": true,
+    "unmanaged_production_may_remain_live": true,
+    "production_adoption_is_optional": true,
+    "provider_created_instances_are_controller_managed": true
+  },
   "capacity_groups": {
     "production": {
       "max_instances": 1,
@@ -29,7 +35,7 @@
     "reject_if_total_would_exceed_limit": true,
     "reject_unsupported_environment": true,
     "occupancy": {
-      "count_every_instance_without_provider_confirmed_absence_or_destruction": true,
+      "count_every_managed_instance_without_provider_confirmed_absence_or_destruction": true,
       "count_unresolved_create_outcome": true,
       "count_unresolved_destroy_outcome": true,
       "release_only_after_provider_confirmation": [

@@ -37,17 +37,8 @@ environments:
     production_backup_access: read_only
 
 servers:
-  - id: production-server
-    environment_id: production
-    adapters:
-      hosting: hosting.example
-      storage: storage.example
-      execution: execution.example
-      game: game.paper
-    lifecycle:
-      require_verified_backup_before_destroy: true
-      require_approval_for_destroy: true
-  - id: staging-server
+  # Production may remain live outside controller-managed inventory.
+  - id: pilot-test-server
     environment_id: staging
     adapters:
       hosting: hosting.example
