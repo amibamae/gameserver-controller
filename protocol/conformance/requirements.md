@@ -56,7 +56,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Same idempotency key and same request maps to the same operation.
 - Same key and changed request is conflict.
 - Unknown external outcome enters reconciliation.
-- Cancellation does not imply rollback.
+- Cancellation does not imply rollback. An undispatched step with no possible external effect can be cancelled without a provider call; a mutating call that may have been dispatched without a definitive response remains `reconciling` or `needs_operator`, is not reported `cancelled`, and is not retried before reconciliation.
 - Controller restart preserves non-terminal operations and resource locks.
 - Partial effects remain visible.
 

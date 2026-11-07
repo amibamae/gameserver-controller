@@ -172,7 +172,7 @@ The controller MUST determine whether cancellation is safe for the current opera
 - After an irreversible action or defined point of no return, cancellation may be rejected.
 - A partially completed workflow may require a separate, explicitly authorized compensating operation.
 
-When cancellation is requested, status becomes `cancellation_requested` while the controller evaluates and applies the operation-specific rules. It becomes `cancelled` only after the controller confirms that no further work will be performed by that operation and records any remaining external state. If the external outcome is uncertain, the operation enters `reconciling` or `needs_operator`, not `cancelled`.
+When cancellation is requested, status becomes `cancellation_requested` while the controller evaluates and applies the operation-specific rules. It becomes `cancelled` only after the controller confirms that no further work will be performed by that operation and records any remaining external state. If the external outcome is uncertain, the operation enters `reconciling` or `needs_operator`, not `cancelled`. In particular, if a mutating call may have been dispatched but its response is missing, the controller MUST keep the operation non-terminal in `reconciling` (or `needs_operator` when reconciliation is unavailable), preserve the step intent and any resource lock, and reconcile before retrying or ending cancellation. If durable state proves the step was never dispatched and no external effect is possible, the controller MAY cancel it without a provider call.
 
 The protocol MUST define cancellation behavior and any point of no return for each operation type. Implementations MUST NOT promise that all operations are cancellable.
 

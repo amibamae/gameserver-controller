@@ -90,6 +90,37 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"storage_get_advertised":               hasGet,
 			"storage_stream_capabilities_accepted": storageStreamCapabilitiesAccepted,
 		}, nil
+	case "operations.cancellation.before-dispatch", "operations.cancellation.unknown-after-dispatch":
+		initial := asObject(fixture["initial"])
+		cancellationRequested := boolValue(fixture, "cancellation_requested")
+		dispatchRecorded := boolValue(initial, "dispatch_recorded")
+		providerResponseReceived := boolValue(initial, "provider_response_received")
+		operationStatus, stepStatus := "", ""
+		cancelled, cancellationApplied, reconciliationRequired := false, false, false
+		resourceLockRetained := false
+		completedSteps := arrayValue(initial, "completed_step_ids")
+		if cancellationRequested && !dispatchRecorded && !boolValue(initial, "external_effect_possible") {
+			operationStatus, stepStatus = "cancelled", "cancelled"
+			cancelled, cancellationApplied = true, true
+		} else if cancellationRequested && dispatchRecorded && !providerResponseReceived {
+			operationStatus, stepStatus = "reconciling", "outcome_unknown"
+			reconciliationRequired = true
+			resourceLockRetained = boolValue(initial, "resource_lock_held")
+		} else {
+			return nil, fmt.Errorf("cancellation fixture must describe an undispatched step or a dispatched step with unknown outcome")
+		}
+		return map[string]any{
+			"cancellation_request_recorded": cancellationRequested,
+			"cancellation_applied":          cancellationApplied,
+			"cancelled":                     cancelled,
+			"operation_status":              operationStatus,
+			"step_status":                   stepStatus,
+			"reconciliation_required":       reconciliationRequired,
+			"retry_without_reconciliation":  false,
+			"additional_provider_calls":     0,
+			"resource_lock_retained":        resourceLockRetained,
+			"completed_step_ids_preserved":  completedSteps,
+		}, nil
 	case "operations.reconcile.unknown-create-outcome":
 		initial := asObject(fixture["initial"])
 		unknown := boolValue(initial, "dispatch_recorded") && !boolValue(initial, "provider_response_received")
