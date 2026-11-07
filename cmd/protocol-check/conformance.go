@@ -1554,6 +1554,58 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			code, count = "core.operation.idempotency_conflict", 1
 		}
 		return map[string]any{"second_request_accepted": !conflict, "error_code": code, "operation_count": count}, nil
+	case "operations.events.duplicate-delivery":
+		lastSequence, err := integerValue(fixture["last_consumed_sequence"])
+		if err != nil {
+			return nil, err
+		}
+		deliveries := arrayValue(fixture, "deliveries")
+		if len(deliveries) == 0 {
+			return nil, fmt.Errorf("event deliveries must not be empty")
+		}
+		var operationID string
+		seen := make(map[string]map[string]any)
+		appliedEventIDs := make([]any, 0, len(deliveries))
+		duplicateCount := 0
+		for index, rawEvent := range deliveries {
+			event := asObject(rawEvent)
+			if err := pkg.validateSchema(operationEventSchemaID, event); err != nil {
+				return nil, fmt.Errorf("delivery %d does not match schema: %w", index, err)
+			}
+			id := stringValue(event, "operation_id")
+			if index == 0 {
+				operationID = id
+			} else if id != operationID {
+				return nil, fmt.Errorf("delivery %d belongs to a different operation", index)
+			}
+			eventID := stringValue(event, "event_id")
+			if previous, exists := seen[eventID]; exists {
+				if !reflect.DeepEqual(previous, event) {
+					return nil, fmt.Errorf("duplicate event ID %q has different content", eventID)
+				}
+				duplicateCount++
+				continue
+			}
+			sequence, err := integerValue(event["sequence"])
+			if err != nil {
+				return nil, err
+			}
+			if sequence != lastSequence+1 {
+				return nil, fmt.Errorf("new event sequence %d does not immediately follow cursor %d", sequence, lastSequence)
+			}
+			seen[eventID] = event
+			appliedEventIDs = append(appliedEventIDs, eventID)
+			lastSequence = sequence
+		}
+		return map[string]any{
+			"schema_valid":                 true,
+			"applied_event_ids":            appliedEventIDs,
+			"applied_event_count":          len(appliedEventIDs),
+			"duplicate_deliveries_ignored": duplicateCount,
+			"duplicate_event_applications": 0,
+			"last_consumed_sequence":       lastSequence,
+			"cursor_regressed":             false,
+		}, nil
 	case "operations.events.gap-recovery":
 		lastSequence, err := integerValue(fixture["last_consumed_sequence"])
 		if err != nil {
