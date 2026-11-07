@@ -549,6 +549,12 @@ func validateStepChanges(current, next []OperationStep, operationStatus protocol
 			(previous.CapabilityVersion != "" && previous.CapabilityVersion != candidate.CapabilityVersion) {
 			return fmt.Errorf("%w: recorded adapter capability identity cannot change", ErrImmutableFields)
 		}
+		if !bytes.Equal(previous.Input, candidate.Input) {
+			return fmt.Errorf("%w: recorded step input cannot change", ErrImmutableFields)
+		}
+		if len(previous.Output) > 0 && !bytes.Equal(previous.Output, candidate.Output) {
+			return fmt.Errorf("%w: recorded step output cannot change", ErrImmutableFields)
+		}
 		if len(previous.ExternalOperationRef) > 0 && !bytes.Equal(previous.ExternalOperationRef, candidate.ExternalOperationRef) {
 			return fmt.Errorf("%w: recorded external operation reference cannot change", ErrImmutableFields)
 		}

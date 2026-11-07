@@ -235,6 +235,7 @@ func TestRecordedCapabilityIdentityCannotChange(t *testing.T) {
 	operation.Steps[0].AdapterID = "hosting.example"
 	operation.Steps[0].CapabilityName = "hosting.instance.create"
 	operation.Steps[0].CapabilityVersion = "1"
+	operation.Steps[0].Input = json.RawMessage(`{}`)
 	created, err := store.createOperation(operation)
 	if err != nil {
 		t.Fatal(err)
@@ -251,6 +252,96 @@ func TestRecordedCapabilityIdentityCannotChange(t *testing.T) {
 	changed.Steps[0].CapabilityVersion = "2"
 	if _, err := store.UpdateOperation(runningStored.Revision, changed); !errors.Is(err, ErrImmutableFields) {
 		t.Fatalf("changed dispatched capability version: got %v, want ErrImmutableFields", err)
+	}
+}
+
+func TestAdapterStepInputsAndOutputsAreDurableAndImmutable(t *testing.T) {
+	store := openTestStore(t)
+	operation := testOperation("adapter-step-data")
+	operation.Steps[0].AdapterID = "hosting.example"
+	operation.Steps[0].CapabilityName = "hosting.instance.create"
+	operation.Steps[0].CapabilityVersion = "1"
+	operation.Steps[0].Input = json.RawMessage(`{"server_id":"server-1","environment_id":"staging"}`)
+	created, err := store.createOperation(operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	running := created.Record
+	running.Status = protocolstate.OperationRunning
+	running.Steps[0].Status = protocolstate.StepRunning
+	running.Steps[0].Attempt = 1
+	currentStep := running.Steps[0].StepID
+	running.CurrentStepID = &currentStep
+	runningStored, err := store.UpdateOperation(created.Revision, running)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	completed := runningStored.Record
+	completed.Steps[0].Status = protocolstate.StepSucceeded
+	completed.Steps[0].Output = json.RawMessage(`{"provider_state":"running"}`)
+	completedStored, err := store.UpdateOperation(runningStored.Revision, completed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(completedStored.Record.Steps[0].Input) != string(operation.Steps[0].Input) || string(completedStored.Record.Steps[0].Output) != string(completed.Steps[0].Output) {
+		t.Fatalf("adapter input/output did not round-trip: %#v", completedStored.Record.Steps[0])
+	}
+
+	changedInput := completedStored.Record
+	changedInput.Steps[0].Input = json.RawMessage(`{"server_id":"other"}`)
+	if _, err := store.UpdateOperation(completedStored.Revision, changedInput); !errors.Is(err, ErrImmutableFields) {
+		t.Fatalf("changed accepted step input: got %v, want ErrImmutableFields", err)
+	}
+	changedOutput := completedStored.Record
+	changedOutput.Steps[0].Output = json.RawMessage(`{"provider_state":"absent"}`)
+	if _, err := store.UpdateOperation(completedStored.Revision, changedOutput); !errors.Is(err, ErrImmutableFields) {
+		t.Fatalf("changed recorded step output: got %v, want ErrImmutableFields", err)
+	}
+}
+
+func TestAdapterStepRequiresObjectInputAndSucceededOutput(t *testing.T) {
+	store := openTestStore(t)
+	missingInput := testOperation("missing-step-input")
+	missingInput.Steps[0].AdapterID = "hosting.example"
+	missingInput.Steps[0].CapabilityName = "hosting.instance.create"
+	missingInput.Steps[0].CapabilityVersion = "1"
+	if _, err := store.createOperation(missingInput); !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("adapter step without input: got %v, want ErrInvalidRecord", err)
+	}
+	invalidInput := testOperation("invalid-step-input")
+	invalidInput.Steps[0].AdapterID = "hosting.example"
+	invalidInput.Steps[0].CapabilityName = "hosting.instance.create"
+	invalidInput.Steps[0].CapabilityVersion = "1"
+	invalidInput.Steps[0].Input = json.RawMessage(`[1,2]`)
+	if _, err := store.createOperation(invalidInput); !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("adapter step with non-object input: got %v, want ErrInvalidRecord", err)
+	}
+
+	missingOutput := testOperation("missing-step-output")
+	missingOutput.Steps[0].AdapterID = "hosting.example"
+	missingOutput.Steps[0].CapabilityName = "hosting.instance.create"
+	missingOutput.Steps[0].CapabilityVersion = "1"
+	missingOutput.Steps[0].Input = json.RawMessage(`{}`)
+	created, err := store.createOperation(missingOutput)
+	if err != nil {
+		t.Fatal(err)
+	}
+	running := created.Record
+	running.Status = protocolstate.OperationRunning
+	running.Steps[0].Status = protocolstate.StepRunning
+	running.Steps[0].Attempt = 1
+	currentStep := running.Steps[0].StepID
+	running.CurrentStepID = &currentStep
+	runningStored, err := store.UpdateOperation(created.Revision, running)
+	if err != nil {
+		t.Fatal(err)
+	}
+	completed := runningStored.Record
+	completed.Steps[0].Status = protocolstate.StepSucceeded
+	if _, err := store.UpdateOperation(runningStored.Revision, completed); !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("succeeded adapter step without output: got %v, want ErrInvalidRecord", err)
 	}
 }
 

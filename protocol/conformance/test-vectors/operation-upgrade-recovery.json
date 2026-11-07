@@ -34,6 +34,13 @@
           "adapter_id": "hosting.example",
           "capability_name": "hosting.instance.create",
           "capability_version": "1",
+          "input": {
+            "server_id": "server-recover-001",
+            "environment_id": "staging"
+          },
+          "output": {
+            "provider_state": "running"
+          },
           "completed_at": "2026-11-06T08:30:00Z"
         },
         {
@@ -44,6 +51,9 @@
           "adapter_id": "hosting.example",
           "capability_name": "hosting.instance.wait",
           "capability_version": "1",
+          "input": {
+            "provider_operation_id": "provider-op-001"
+          },
           "started_at": "2026-11-06T08:30:01Z",
           "external_operation_ref": {
             "adapter_id": "hosting.example",

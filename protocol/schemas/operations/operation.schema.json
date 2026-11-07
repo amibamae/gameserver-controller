@@ -190,6 +190,14 @@
             "type": "string",
             "maxLength": 160
           },
+          "input": {
+            "type": "object",
+            "description": "Immutable, validated adapter input for this step. Secret values MUST remain references."
+          },
+          "output": {
+            "type": "object",
+            "description": "Schema-validated adapter output recorded after a definitive completed outcome."
+          },
           "started_at": {
             "type": [
               "string",
@@ -233,7 +241,8 @@
             "then": {
               "required": [
                 "adapter_id",
-                "capability_version"
+                "capability_version",
+                "input"
               ]
             }
           },
@@ -247,6 +256,22 @@
               "required": [
                 "adapter_id",
                 "capability_name"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {"const": "succeeded"}
+              },
+              "required": [
+                "status",
+                "capability_name"
+              ]
+            },
+            "then": {
+              "required": [
+                "output"
               ]
             }
           }

@@ -76,6 +76,8 @@ type OperationStep struct {
 	AdapterID            string                   `json:"adapter_id,omitempty"`
 	CapabilityName       string                   `json:"capability_name,omitempty"`
 	CapabilityVersion    string                   `json:"capability_version,omitempty"`
+	Input                json.RawMessage          `json:"input,omitempty"`
+	Output               json.RawMessage          `json:"output,omitempty"`
 	StartedAt            *time.Time               `json:"started_at,omitempty"`
 	CompletedAt          *time.Time               `json:"completed_at,omitempty"`
 	ExternalOperationRef json.RawMessage          `json:"external_operation_ref,omitempty"`
@@ -197,6 +199,18 @@ func validateRecord(record OperationRecord) error {
 		}
 		if step.CapabilityVersion != "" && (step.AdapterID == "" || step.CapabilityName == "") {
 			return invalidField(fmt.Sprintf("steps[%d].capability", i))
+		}
+		if step.CapabilityName != "" && !isJSONObject(step.Input) {
+			return invalidField(fmt.Sprintf("steps[%d].input", i))
+		}
+		if len(step.Input) > 0 && !isJSONObject(step.Input) {
+			return invalidField(fmt.Sprintf("steps[%d].input", i))
+		}
+		if len(step.Output) > 0 && (!isJSONObject(step.Output) || step.Status != protocolstate.StepSucceeded) {
+			return invalidField(fmt.Sprintf("steps[%d].output", i))
+		}
+		if step.Status == protocolstate.StepSucceeded && step.CapabilityName != "" && len(step.Output) == 0 {
+			return invalidField(fmt.Sprintf("steps[%d].output", i))
 		}
 		if len(step.ExternalOperationRef) > 0 && !isJSONObject(step.ExternalOperationRef) {
 			return invalidField(fmt.Sprintf("steps[%d].external_operation_ref", i))

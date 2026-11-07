@@ -6,6 +6,8 @@ The detailed drafts live under [protocol/adapters](../protocol/adapters/README.m
 
 The Go registry validates adapter descriptors and capability inputs and outputs against the bundled protocol schema package. Scripted in-process fakes cover each category for local tests. The registry is a boundary and test harness; it does not implement lifecycle policy, durable dispatch, authorization, or provider behavior.
 
+Adapter-invoking operation steps persist their validated input and exact adapter/capability version before dispatch. A definitive completed outcome records the schema-validated output. These durable step snapshots contain secret references only, never resolved credential values.
+
 ## Shared rules
 
 - The core defines each contract; adapters implement it.
