@@ -31,7 +31,9 @@ The pilot does not stop Paper, restore a world, destroy a server, or install or 
 
 ## Vultr provisioning
 
-The [capacity policy](../pilot/capacity-policy.json) sets a source-controlled hard limit of **one controller-owned VM total**. The one slot can be production or the shared staging/testing slot. An existing live production server may remain unmanaged and does not consume this limit. Changing the cap requires editing the policy file, incrementing its version, validating it, and rebuilding the pilot.
+The [capacity policy](../internal/pilotcapacity/capacity-policy.json) sets a source-controlled hard limit of **one controller-owned VM total**. The one slot can be production or the shared staging/testing slot. An existing live production server may remain unmanaged and does not consume this limit. The policy is embedded in the pilot binary; changing the cap requires editing the file, incrementing its version, validating it, and rebuilding the pilot. The CLI does not accept a policy-file or state-database override.
+
+To change the limit, edit `internal/pilotcapacity/capacity-policy.json`, increment `policy_version`, then run `go run ./cmd/pilot-capacity-check` and `go test ./internal/pilotcapacity ./cmd/supervised-pilot`. Rebuild `gsc-pilot` before using the updated limit; changing the source file does not change an already-built executable.
 
 Provisioning is dry-run by default. For example:
 
@@ -46,7 +48,19 @@ Only after reviewing the dry run, an operator may add `--execute --confirm-creat
 
 The provider key is read only through the configured systemd credential reference, defaulting to `systemd-credential://vultr-pilot-api-token`. Execute the command from a systemd-managed process that receives this named credential through `LoadCredentialEncrypted`; do not pass the key in arguments, environment variables, config, or logs. See [secret management](SECRET_MANAGEMENT.md). The repository does not yet include an operator unit or automate credential provisioning, so do not run the billable command until the host-side systemd credential setup has been reviewed.
 
-`gsc-pilot capacity` displays durable reservation state. The bbolt database is local state and must be backed up and protected like other controller state. Do not delete it to clear an occupied slot; reconcile the provider outcome first. This pilot does not yet adopt an existing VM, destroy an instance, install Paper, restore a world, configure DNS, or check game readiness.
+`gsc-pilot capacity` displays durable reservation state from the current account's `.local/state/gsc-pilot/pilot.db`. The bbolt database is local state and must be backed up and protected like other controller state. Do not delete it to clear an occupied slot; reconcile the provider outcome first. This pilot does not yet adopt an existing VM, destroy an instance, install Paper, restore a world, configure DNS, or check game readiness.
+
+### Updating from an earlier pilot build
+
+Stop all pilot processes before moving state. Earlier builds defaulted to `var/pilot.db` under the working directory and allowed `--state-db` to select another location. Before using `provision` or `capacity` with this build, carry forward the exact database used by the earlier build. For the old default, copy it to the account-state path below and move the original aside; replace `/path/to/account-home` with the home directory of the account that runs the pilot:
+
+```sh
+install -d -m 0700 /path/to/account-home/.local/state/gsc-pilot
+install -m 0600 var/pilot.db /path/to/account-home/.local/state/gsc-pilot/pilot.db
+mv var/pilot.db var/pilot.db.pre-upgrade
+```
+
+For an earlier custom `--state-db` path, use that exact source file instead of `var/pilot.db`. If the new account-state database already exists and is different, do not overwrite or combine either database; reconcile the recorded provider instances before choosing the authoritative state. The pilot refuses to use its state path when it finds the old default database in the current working directory. After migration, run `gsc-pilot capacity` and confirm every unresolved or managed VM still occupies its slot. Keep the pre-upgrade copy until the records have been checked.
 
 ## Operator handoff
 

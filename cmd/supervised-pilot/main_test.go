@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -78,13 +79,16 @@ func runBackup(t *testing.T, args ...string) (string, error) {
 	return stdout.String() + stderr.String(), err
 }
 
-func pilotPolicyPath() string {
-	return filepath.Join("..", "..", "pilot", "capacity-policy.json")
+func runPilotWithState(t *testing.T, statePath string, args ...string) (string, error) {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	err := runWithSettings(args, &stdout, &stderr, runtimeSettings{stateDBPath: statePath})
+	return stdout.String() + stderr.String(), err
 }
 
-func provisionArgs(policyPath, statePath string) []string {
+func provisionArgs() []string {
 	return []string{
-		"provision", "--capacity-policy", policyPath, "--state-db", statePath,
+		"provision",
 		"--server-id", "pilot-test", "--environment", "staging",
 		"--region", "ewr", "--plan", "vc2-1c-2gb", "--os-id", "362",
 		"--hostname", "pilot-test.example.invalid", "--ssh-key-id", "sshkey-123",
@@ -94,8 +98,7 @@ func provisionArgs(policyPath, statePath string) []string {
 func TestVultrProvisionDefaultsToDryRunWithoutCredentialOrDatabase(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state", "pilot.db")
 	t.Setenv("CREDENTIALS_DIRECTORY", "")
-	args := provisionArgs(pilotPolicyPath(), statePath)
-	output, err := runBackup(t, args...)
+	output, err := runPilotWithState(t, statePath, provisionArgs()...)
 	if err != nil {
 		t.Fatalf("provision dry run failed: %v\n%s", err, output)
 	}
@@ -111,8 +114,8 @@ func TestVultrProvisionDefaultsToDryRunWithoutCredentialOrDatabase(t *testing.T)
 func TestVultrProvisionRequiresExactConfirmationBeforeCredentialAccess(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state", "pilot.db")
 	t.Setenv("CREDENTIALS_DIRECTORY", "")
-	args := append(provisionArgs(pilotPolicyPath(), statePath), "--execute", "--confirm-create", "wrong@staging")
-	output, err := runBackup(t, args...)
+	args := append(provisionArgs(), "--execute", "--confirm-create", "wrong@staging")
+	output, err := runPilotWithState(t, statePath, args...)
 	if err == nil || !strings.Contains(err.Error(), "must exactly match") {
 		t.Fatalf("expected exact-create confirmation error, got %v (%s)", err, output)
 	}
@@ -122,11 +125,72 @@ func TestVultrProvisionRequiresExactConfirmationBeforeCredentialAccess(t *testin
 }
 
 func TestVultrProvisionDryRunRejectsOperationID(t *testing.T) {
-	args := append(provisionArgs(pilotPolicyPath(), filepath.Join(t.TempDir(), "pilot.db")),
+	statePath := filepath.Join(t.TempDir(), "pilot.db")
+	args := append(provisionArgs(),
 		"--operation-id", "0123456789abcdef0123456789abcdef")
-	output, err := runBackup(t, args...)
+	output, err := runPilotWithState(t, statePath, args...)
 	if err == nil || !strings.Contains(err.Error(), "--operation-id requires --execute") {
 		t.Fatalf("expected dry-run operation ID rejection, got %v (%s)", err, output)
+	}
+}
+
+func TestProvisionCannotOverrideEmbeddedCapacityPolicyOrStateDatabase(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "pilot.db")
+	for _, args := range [][]string{
+		append(provisionArgs(), "--capacity-policy", filepath.Join(t.TempDir(), "permissive.json")),
+		append(provisionArgs(), "--state-db", filepath.Join(t.TempDir(), "empty.db")),
+	} {
+		if _, err := runPilotWithState(t, statePath, args...); err == nil {
+			t.Fatalf("accepted runtime capacity override: %v", args[len(provisionArgs()):])
+		}
+	}
+	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
+		t.Fatalf("rejected override created the capacity database: %v", err)
+	}
+}
+
+func TestCapacityStatePathIgnoresHomeEnvironmentOverride(t *testing.T) {
+	currentUser, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", t.TempDir())
+	path, err := (runtimeSettings{}).capacityStatePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(currentUser.HomeDir, ".local", "state", "gsc-pilot", "pilot.db")
+	if path != want {
+		t.Fatalf("capacity state path = %q, want account-owned path %q", path, want)
+	}
+}
+
+func TestResolveCapacityStatePathUsesAccountStateDirectory(t *testing.T) {
+	accountHome := t.TempDir()
+	workingDirectory := t.TempDir()
+	got, err := resolveCapacityStatePath(accountHome, workingDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(accountHome, ".local", "state", "gsc-pilot", "pilot.db")
+	if got != want {
+		t.Fatalf("capacity state path = %q, want %q", got, want)
+	}
+}
+
+func TestResolveCapacityStatePathRefusesUndiscoveredLegacyDatabase(t *testing.T) {
+	accountHome := t.TempDir()
+	workingDirectory := t.TempDir()
+	legacyPath := filepath.Join(workingDirectory, "var", "pilot.db")
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyPath, []byte("previous capacity database"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := resolveCapacityStatePath(accountHome, workingDirectory)
+	if err == nil || !strings.Contains(err.Error(), legacyPath) || !strings.Contains(err.Error(), filepath.Join(accountHome, ".local", "state", "gsc-pilot", "pilot.db")) {
+		t.Fatalf("expected migration refusal naming both paths, got %v", err)
 	}
 }
 
@@ -134,8 +198,8 @@ func TestVultrProvisionUsesSystemdCredentialDirectory(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state", "pilot.db")
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("CREDENTIALS_DIRECTORY", "")
-	args := append(provisionArgs(pilotPolicyPath(), statePath), "--execute", "--confirm-create", "pilot-test@staging")
-	output, err := runBackup(t, args...)
+	args := append(provisionArgs(), "--execute", "--confirm-create", "pilot-test@staging")
+	output, err := runPilotWithState(t, statePath, args...)
 	if err == nil || !strings.Contains(err.Error(), "systemd credential directory") {
 		t.Fatalf("expected missing systemd credential error, got %v (%s)", err, output)
 	}
@@ -161,7 +225,7 @@ func TestCapacityCommandShowsPersistedReservations(t *testing.T) {
 	if err := repository.Close(); err != nil {
 		t.Fatal(err)
 	}
-	output, err := runBackup(t, "capacity", "--capacity-policy", pilotPolicyPath(), "--state-db", statePath)
+	output, err := runPilotWithState(t, statePath, "capacity")
 	if err != nil {
 		t.Fatalf("capacity command failed: %v\n%s", err, output)
 	}

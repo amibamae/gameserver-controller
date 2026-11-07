@@ -1,6 +1,8 @@
 package pilotcapacity
 
 import (
+	"bytes"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +17,11 @@ var (
 	ErrInvalidPolicy          = errors.New("invalid pilot capacity policy")
 	ErrUnsupportedEnvironment = errors.New("unsupported pilot capacity environment")
 )
+
+// capacity-policy.json is the single editable source for the rebuilt pilot.
+//
+//go:embed capacity-policy.json
+var embeddedPolicy []byte
 
 type Policy struct {
 	PolicyID          string
@@ -76,6 +83,12 @@ func LoadPolicy(path string) (Policy, error) {
 	}
 	defer file.Close()
 	return DecodePolicy(file)
+}
+
+// LoadEmbeddedPolicy returns the capacity policy compiled into gsc-pilot.
+// Operators change the source JSON and rebuild to change runtime limits.
+func LoadEmbeddedPolicy() (Policy, error) {
+	return DecodePolicy(bytes.NewReader(embeddedPolicy))
 }
 
 func DecodePolicy(reader io.Reader) (Policy, error) {

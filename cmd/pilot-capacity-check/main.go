@@ -94,7 +94,7 @@ func main() {
 
 func run(root string, stdout io.Writer) error {
 	var policy policyDocument
-	if err := readJSON(filepath.Join(root, "pilot", "capacity-policy.json"), &policy); err != nil {
+	if err := readJSON(filepath.Join(root, "internal", "pilotcapacity", "capacity-policy.json"), &policy); err != nil {
 		return fmt.Errorf("read capacity policy: %w", err)
 	}
 	var cases casesDocument
