@@ -1,4 +1,3 @@
-/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 # Contributing
 
 I welcome bug reports, design criticism, documentation fixes, tests, features, and adapters for games, hosting providers, and storage providers. You do not need to be an expert, and you do not need to use AI.
