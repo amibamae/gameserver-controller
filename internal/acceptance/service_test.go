@@ -21,11 +21,19 @@ func (allowValidator) ValidateOperationRequest(context.Context, store.OperationR
 
 type allowAuthorizer struct{}
 
+func (allowAuthorizer) AuthorizeTarget(context.Context, string, store.OperationRecord) error {
+	return nil
+}
+
 func (allowAuthorizer) AuthorizeOperation(context.Context, string, store.OperationRecord) error {
 	return nil
 }
 
 type authorizerFunc func(context.Context, string, store.OperationRecord) error
+
+func (authorizerFunc) AuthorizeTarget(context.Context, string, store.OperationRecord) error {
+	return nil
+}
 
 func (f authorizerFunc) AuthorizeOperation(ctx context.Context, actorID string, record store.OperationRecord) error {
 	return f(ctx, actorID, record)
@@ -354,6 +362,10 @@ func TestIdempotencyConflictAndResourceConflict(t *testing.T) {
 
 type rejectingAuthorizer struct{ err error }
 
+func (a rejectingAuthorizer) AuthorizeTarget(context.Context, string, store.OperationRecord) error {
+	return a.err
+}
+
 func (a rejectingAuthorizer) AuthorizeOperation(context.Context, string, store.OperationRecord) error {
 	return a.err
 }
@@ -522,5 +534,24 @@ func TestLogicalServerLockScopeIsUnambiguous(t *testing.T) {
 	second := LogicalServerLockScope("a", "b/c")
 	if first == second || strings.Contains(first, "\x00") {
 		t.Fatalf("unexpected lock scope encoding: first=%q second=%q", first, second)
+	}
+}
+
+func TestTargetDenialPreventsPlanning(t *testing.T) {
+	operationStore, _ := openStore(t)
+	called := false
+	planner := OperationPlanFunc(func(context.Context, store.OperationRecord) ([]store.OperationStep, error) {
+		called = true
+		return nil, errors.New("private server state")
+	})
+	service, err := NewService(operationStore, allowValidator{}, rejectingAuthorizer{err: ErrUnauthorized}, LogicalServerLockPolicy{}, planner, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := service.Accept(context.Background(), "actor", "key", testOperation()); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("target denial: %v", err)
+	}
+	if called {
+		t.Fatal("planner inspected target state before authorization")
 	}
 }
