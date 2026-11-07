@@ -34,6 +34,14 @@ The pilot does not stop Paper, restore a world, destroy a server, or install or 
 
 The [capacity policy](../internal/pilotcapacity/capacity-policy.json) sets a source-controlled hard limit of **two controller-owned VMs total**: one production VM and one shared staging/testing VM. An existing live production server may remain unmanaged and does not consume these slots. The policy is embedded in the pilot binary; changing the cap requires editing the file, incrementing its version, validating it, and rebuilding the pilot. The CLI does not accept a policy-file or state-database override.
 
+### Production-like trial and production rollout
+
+The two owned slots support a staged rollout. First use the shared staging/testing slot with the less expensive Vultr plan to validate the intended production setup against disposable or staging data. Keep the existing live production server running and unmanaged during this test. The policy allows one controller-owned VM in each slot at the same time, so the final production VM can be provisioned while the test VM still occupies staging/testing.
+
+After the trial passes, take a fresh backup of the world you plan to move, verify the backup and its contents, and restore it onto a newly created VM using the more expensive production plan. Keep the existing live server untouched until the new VM is ready and an operator approves the traffic cutover. Only controller-owned VMs count toward the two-slot cap; the existing unmanaged production server does not. You do not need to adopt the old server as part of this rollout.
+
+This is the intended rollout, not a workflow the current CLI can complete. The pilot can provision a VM, but it does not install Paper, restore a world, verify backup artifacts, run readiness checks, or switch DNS or proxy traffic. The `backup --execute` success event proves only that systemd ran the service successfully. The first real backup against an isolated test server remains a supervised handoff.
+
 To change the limit, edit `internal/pilotcapacity/capacity-policy.json`, increment `policy_version`, then run `go run ./cmd/pilot-capacity-check` and `go test ./internal/pilotcapacity ./cmd/supervised-pilot`. Rebuild `gsc-pilot` before using the updated limit; changing the source file does not change an already-built executable.
 
 Provisioning is dry-run by default. For example:
