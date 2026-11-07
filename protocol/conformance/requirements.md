@@ -109,6 +109,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Client treats unknown status values safely.
 - Client never assumes request timeout means operation failure.
 - Authentication and authorization failures do not disclose protected resource details.
+- Client-supplied actor, role, or permission claims cannot elevate access; accepted operations use the authenticated principal as `actor_id`, and denied attempts return no protected resource data.
 - Client session expiry alone does not cancel or pause an already accepted durable operation or require a client token refresh; independent reauthorization for sensitive steps still evaluates current permissions, approvals, target, and policy.
 - A list cursor is bound to the authenticated actor and canonical filter scope; reuse under another actor or filter is rejected with a generic invalid-request error and returns no resource items or metadata.
 
