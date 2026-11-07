@@ -1995,7 +1995,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"readiness_current":                    readinessCurrent,
 			"session_set_complete":                 sessionSetComplete,
 			"aggregate_counts_match":               countsMatch,
-			"result_accepted":                      accepted,
+			"result_valid_and_bound":                      accepted,
 			"retry_unknown_without_reconciliation": !hasUnknown,
 		}, nil
 	case "storage.backup.partial-upload-not-verified":
