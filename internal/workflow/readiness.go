@@ -16,15 +16,15 @@ import (
 const maxReadinessAssertionTTL = 15 * time.Minute
 
 type readinessCheckInput struct {
-	ServerID            string                      `json:"server_id"`
-	EnvironmentID       string                      `json:"environment_id"`
-	InstanceRef         json.RawMessage             `json:"instance_ref"`
-	GameReleaseID       string                      `json:"game_release_id"`
-	ReadinessCheckSetID string                      `json:"readiness_check_set_id"`
-	RequiredChecks      []readinessCheckRequirement `json:"required_checks"`
+	ServerID            string                 `json:"server_id"`
+	EnvironmentID       string                 `json:"environment_id"`
+	InstanceRef         json.RawMessage        `json:"instance_ref"`
+	GameReleaseID       string                 `json:"game_release_id"`
+	ReadinessCheckSetID string                 `json:"readiness_check_set_id"`
+	RequiredChecks      []ReadinessRequirement `json:"required_checks"`
 }
 
-type readinessCheckRequirement struct {
+type ReadinessRequirement struct {
 	CheckID      string `json:"check_id"`
 	CheckVersion string `json:"check_version"`
 }

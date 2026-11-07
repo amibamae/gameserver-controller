@@ -322,7 +322,7 @@ func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.S
 		return e.suspend(current, "core.compatibility.capability_unavailable", "The exact adapter capability recorded for this step is unavailable or incompatible.")
 	}
 	if err := definition.CheckPreconditions(ctx, current.Record, step); err != nil {
-		return e.suspend(current, "core.safety.precondition_unmet", "Workflow preconditions or authorization are not currently satisfied.")
+		return e.handlePreconditionFailure(ctx, current, step, definition, err, false)
 	}
 	if ctx.Err() != nil {
 		return current, ctx.Err()
@@ -342,6 +342,20 @@ func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.S
 		return store.StoredOperation{}, err
 	}
 	return e.dispatch(ctx, current, stepIndex, definition, capability)
+}
+
+func (e *Engine) handlePreconditionFailure(ctx context.Context, current store.StoredOperation, step store.OperationStep, definition Definition, cause error, priorEffectResolved bool) (store.StoredOperation, error) {
+	if handler, ok := definition.(PreconditionFailureHandler); ok && (step.Status == protocolstate.StepPending || priorEffectResolved) {
+		resolution, err := handler.HandlePreconditionFailure(ctx, current.Record, step, cause)
+		if err == nil && resolution.State == ResolutionDefinitiveError && validProtocolError(e.schemas, resolution.Error) {
+			failed := current.Record
+			failed.Status = protocolstate.OperationFailed
+			failed.Error = append(json.RawMessage(nil), resolution.Error...)
+			failed.CurrentStepID = nil
+			return e.fail(ctx, current, failed, -1, definition, resolution.Error)
+		}
+	}
+	return e.suspend(current, "core.safety.precondition_unmet", "Workflow preconditions or authorization are not currently satisfied.")
 }
 
 func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, stepIndex int, definition Definition, capability adapter.Capability) (store.StoredOperation, error) {
@@ -527,7 +541,7 @@ func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, s
 			return e.suspend(current, "core.operation.retry_limit", "The safe retry limit for this step has been reached.")
 		}
 		if err := definition.CheckPreconditions(ctx, current.Record, step); err != nil {
-			return e.suspend(current, "core.safety.precondition_unmet", "Workflow preconditions or authorization are not currently satisfied.")
+			return e.handlePreconditionFailure(ctx, current, step, definition, err, true)
 		}
 		next.Status = protocolstate.OperationRunning
 		next.Steps[stepIndex].Status = protocolstate.StepRunning
@@ -559,6 +573,16 @@ func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, s
 func (e *Engine) finishSuccess(ctx context.Context, current store.StoredOperation, definition Definition) (store.StoredOperation, error) {
 	if !allStepsComplete(current.Record) {
 		return e.suspend(current, "core.workflow.incomplete_steps", "The workflow cannot succeed while any step remains unresolved.")
+	}
+	if validator, ok := definition.(CompletionValidator); ok {
+		if err := validator.ValidateCompletion(ctx, current.Record); err != nil {
+			failure := protocolError("core.workflow.postcondition_unmet", "safety_blocked", "Completed adapter steps did not satisfy the operation's required postconditions.", current.Record.OperationID, false, "inspect_operation", false)
+			failed := current.Record
+			failed.Status = protocolstate.OperationFailed
+			failed.Error = failure
+			failed.CurrentStepID = nil
+			return e.fail(ctx, current, failed, -1, definition, failure)
+		}
 	}
 	result, err := definition.BuildSuccessResult(ctx, current.Record)
 	if err != nil || !validOperationResult(e.schemas, current.Record, result, true) {
