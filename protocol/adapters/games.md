@@ -29,6 +29,8 @@ An adapter advertises `game.migrate` only when it satisfies the requirements in 
 
 A release description MUST identify game adapter ID, game name, opaque game version, platform/architecture constraints, immutable artifact references and checksums, runtime requirements, configuration schema URI and checksum, data-format metadata, and required execution capabilities.
 
+`game.release.describe` MUST return the exact requested release ID and MUST NOT substitute a latest or nearest release. Artifact IDs MUST be unique within the description.
+
 Game versions are opaque to the core unless the game adapter declares comparison and compatibility rules. The core MUST NOT assume semantic versioning for game releases or worlds.
 
 ## 4. Installation and configuration
@@ -36,6 +38,8 @@ Game versions are opaque to the core unless the game adapter declares comparison
 Installation MUST verify every declared artifact checksum before execution; a mismatch MUST prevent installation from starting. Repeating install for the same exact release MUST report an already-installed state or converge idempotently.
 
 Successful install results MUST identify exactly the pinned release artifact IDs and confirm each checksum. Configuration validation MUST use the schema URI and checksum pinned by the release and MUST finish before application begins. The adapter MUST verify these values against the release and MUST NOT dereference an arbitrary schema URI supplied by the caller. Configuration objects MUST NOT contain secret values; secret bindings MUST use authorized secret references.
+
+An unknown install outcome or a contradictory result after installation starts requires reconciliation against the exact target and release before retry. An unknown outcome MUST NOT authorize replay.
 
 ## 5. Readiness and health
 

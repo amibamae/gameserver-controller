@@ -1,0 +1,348 @@
+{
+  "fixture_id": "game.release.describe.integrity-and-identity",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "game.release.describe",
+  "purpose": "Release descriptions bind the exact immutable release and contain unique artifact identities with supported checksums.",
+  "input": {
+    "evaluations": [
+      {
+        "case_id": "exact-release-with-unique-checksummed-artifacts",
+        "request": {
+          "release_id": "paper-1.21.11-build-3"
+        },
+        "response": {
+          "game_adapter_id": "game.minecraft-paper",
+          "game_name": "Minecraft Java Edition",
+          "release_id": "paper-1.21.11-build-3",
+          "game_version": "1.21.11+build.3",
+          "targets": [
+            {
+              "os_family": "linux",
+              "architecture": "x86_64"
+            }
+          ],
+          "artifacts": [
+            {
+              "artifact_id": "paper-server-jar",
+              "artifact_uri": "https://artifacts.example.test/paper-1.21.11-build-3.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            },
+            {
+              "artifact_id": "paper-plugin",
+              "artifact_uri": "https://artifacts.example.test/plugins/example-2.4.0.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          ],
+          "runtime_requirements": [
+            {
+              "runtime_id": "java",
+              "version_requirement": "21"
+            }
+          ],
+          "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+          "configuration_schema_checksum": {
+            "algorithm": "sha256",
+            "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "data_format": {
+            "format_id": "minecraft-java-world",
+            "version": "region-v1"
+          },
+          "required_execution_capabilities": [
+            "execution.unit.inspect",
+            "execution.unit.start",
+            "execution.unit.graceful_stop"
+          ]
+        }
+      },
+      {
+        "case_id": "adapter-must-not-fallback-to-another-release",
+        "request": {
+          "release_id": "paper-1.21.11-build-4"
+        },
+        "response": {
+          "game_adapter_id": "game.minecraft-paper",
+          "game_name": "Minecraft Java Edition",
+          "release_id": "paper-1.21.11-build-3",
+          "game_version": "1.21.11+build.3",
+          "targets": [
+            {
+              "os_family": "linux",
+              "architecture": "x86_64"
+            }
+          ],
+          "artifacts": [
+            {
+              "artifact_id": "paper-server-jar",
+              "artifact_uri": "https://artifacts.example.test/paper-1.21.11-build-3.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            },
+            {
+              "artifact_id": "paper-plugin",
+              "artifact_uri": "https://artifacts.example.test/plugins/example-2.4.0.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          ],
+          "runtime_requirements": [
+            {
+              "runtime_id": "java",
+              "version_requirement": "21"
+            }
+          ],
+          "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+          "configuration_schema_checksum": {
+            "algorithm": "sha256",
+            "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "data_format": {
+            "format_id": "minecraft-java-world",
+            "version": "region-v1"
+          },
+          "required_execution_capabilities": [
+            "execution.unit.inspect",
+            "execution.unit.start",
+            "execution.unit.graceful_stop"
+          ]
+        }
+      },
+      {
+        "case_id": "artifact-identifiers-must-be-unique",
+        "request": {
+          "release_id": "paper-1.21.11-build-3"
+        },
+        "response": {
+          "game_adapter_id": "game.minecraft-paper",
+          "game_name": "Minecraft Java Edition",
+          "release_id": "paper-1.21.11-build-3",
+          "game_version": "1.21.11+build.3",
+          "targets": [
+            {
+              "os_family": "linux",
+              "architecture": "x86_64"
+            }
+          ],
+          "artifacts": [
+            {
+              "artifact_id": "paper-server-jar",
+              "artifact_uri": "https://artifacts.example.test/paper-1.21.11-build-3.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            },
+            {
+              "artifact_id": "paper-server-jar",
+              "artifact_uri": "https://artifacts.example.test/plugins/example-2.4.0.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          ],
+          "runtime_requirements": [
+            {
+              "runtime_id": "java",
+              "version_requirement": "21"
+            }
+          ],
+          "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+          "configuration_schema_checksum": {
+            "algorithm": "sha256",
+            "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "data_format": {
+            "format_id": "minecraft-java-world",
+            "version": "region-v1"
+          },
+          "required_execution_capabilities": [
+            "execution.unit.inspect",
+            "execution.unit.start",
+            "execution.unit.graceful_stop"
+          ]
+        }
+      },
+      {
+        "case_id": "artifact-checksum-must-use-registered-sha256",
+        "request": {
+          "release_id": "paper-1.21.11-build-3"
+        },
+        "response": {
+          "game_adapter_id": "game.minecraft-paper",
+          "game_name": "Minecraft Java Edition",
+          "release_id": "paper-1.21.11-build-3",
+          "game_version": "1.21.11+build.3",
+          "targets": [
+            {
+              "os_family": "linux",
+              "architecture": "x86_64"
+            }
+          ],
+          "artifacts": [
+            {
+              "artifact_id": "paper-server-jar",
+              "artifact_uri": "https://artifacts.example.test/paper-1.21.11-build-3.jar",
+              "checksum": {
+                "algorithm": "sha512",
+                "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+              }
+            },
+            {
+              "artifact_id": "paper-plugin",
+              "artifact_uri": "https://artifacts.example.test/plugins/example-2.4.0.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          ],
+          "runtime_requirements": [
+            {
+              "runtime_id": "java",
+              "version_requirement": "21"
+            }
+          ],
+          "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+          "configuration_schema_checksum": {
+            "algorithm": "sha256",
+            "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "data_format": {
+            "format_id": "minecraft-java-world",
+            "version": "region-v1"
+          },
+          "required_execution_capabilities": [
+            "execution.unit.inspect",
+            "execution.unit.start",
+            "execution.unit.graceful_stop"
+          ]
+        }
+      },
+      {
+        "case_id": "identical-artifact-entries-are-rejected-by-schema",
+        "request": {
+          "release_id": "paper-1.21.11-build-3"
+        },
+        "response": {
+          "game_adapter_id": "game.minecraft-paper",
+          "game_name": "Minecraft Java Edition",
+          "release_id": "paper-1.21.11-build-3",
+          "game_version": "1.21.11+build.3",
+          "targets": [
+            {
+              "os_family": "linux",
+              "architecture": "x86_64"
+            }
+          ],
+          "artifacts": [
+            {
+              "artifact_id": "paper-server-jar",
+              "artifact_uri": "https://artifacts.example.test/paper-1.21.11-build-3.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            },
+            {
+              "artifact_id": "paper-plugin",
+              "artifact_uri": "https://artifacts.example.test/plugins/example-2.4.0.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            },
+            {
+              "artifact_id": "paper-server-jar",
+              "artifact_uri": "https://artifacts.example.test/paper-1.21.11-build-3.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            }
+          ],
+          "runtime_requirements": [
+            {
+              "runtime_id": "java",
+              "version_requirement": "21"
+            }
+          ],
+          "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+          "configuration_schema_checksum": {
+            "algorithm": "sha256",
+            "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "data_format": {
+            "format_id": "minecraft-java-world",
+            "version": "region-v1"
+          },
+          "required_execution_capabilities": [
+            "execution.unit.inspect",
+            "execution.unit.start",
+            "execution.unit.graceful_stop"
+          ]
+        }
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "exact-release-with-unique-checksummed-artifacts",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "release_id_bound": true,
+        "artifact_ids_unique": true,
+        "artifact_checksums_valid": true,
+        "release_description_accepted": true
+      },
+      {
+        "case_id": "adapter-must-not-fallback-to-another-release",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "release_id_bound": false,
+        "artifact_ids_unique": true,
+        "artifact_checksums_valid": true,
+        "release_description_accepted": false
+      },
+      {
+        "case_id": "artifact-identifiers-must-be-unique",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "release_id_bound": true,
+        "artifact_ids_unique": false,
+        "artifact_checksums_valid": true,
+        "release_description_accepted": false
+      },
+      {
+        "case_id": "artifact-checksum-must-use-registered-sha256",
+        "request_schema_valid": true,
+        "response_schema_valid": false,
+        "release_id_bound": true,
+        "artifact_ids_unique": true,
+        "artifact_checksums_valid": false,
+        "release_description_accepted": false
+      },
+      {
+        "case_id": "identical-artifact-entries-are-rejected-by-schema",
+        "request_schema_valid": true,
+        "response_schema_valid": false,
+        "release_id_bound": true,
+        "artifact_ids_unique": false,
+        "artifact_checksums_valid": true,
+        "release_description_accepted": false
+      }
+    ]
+  },
+  "side_effect_expected": "none"
+}
