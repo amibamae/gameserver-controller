@@ -35,11 +35,13 @@ Literal credentials and environment-variable references are rejected. A
 reference names a credential loaded for the controller service; it does not
 contain or encrypt the credential value.
 
-The runtime resolver is not implemented. It must reject missing or
-unauthorized credentials, never print resolved values, resolve credentials
-only when needed, and fail closed. For the initial Debian/systemd deployment,
-store values as encrypted systemd credentials and load only the named values
-needed by the controller service. Keep credentials out of source control,
+The `internal/credential` package provides a bounded accessor for named
+systemd credentials, but the controller runtime and provider adapters do not
+call it yet. Runtime integration must reject missing or unauthorized
+credentials, never print resolved values, load them only when needed, and fail
+closed. For the initial Debian/systemd deployment, store values as encrypted
+systemd credentials and load only the named values needed by the controller
+service. Keep credentials out of source control,
 bootstrap/user-data, command-line arguments, process environment variables,
 release artifacts, operation records, and ordinary logs. Production and
 staging storage must use separate least-privilege credentials, with staging

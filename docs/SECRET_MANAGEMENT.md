@@ -1,8 +1,10 @@
 # Provider credential handling
 
-**Status:** Required design for future provider integrations. The current pilot
-does not call Vultr or Wasabi and does not resolve provider credentials. The
-repository contains only example credential references, never real keys.
+**Status:** Required design for provider integrations. The repository contains
+only example credential references, never real keys. A bounded systemd
+credential accessor exists in `internal/credential`; the controller runtime
+and provider adapters do not use it yet, and the pilot does not call Vultr or
+Wasabi.
 
 ## Initial Debian deployment
 
@@ -19,11 +21,14 @@ through the process environment, and can be encrypted for storage.
 
 Configuration uses references such as
 `systemd-credential://vultr-pilot-api-token`. The reference is only a handle;
-it does not contain or prove authorization to use the value. The runtime
-resolver and provider adapters remain unimplemented, so this repository cannot
-yet read these credentials or make provider calls. A future managed deployment
-may use a dedicated secret manager with workload identity and per-secret access
-policies instead of systemd credentials.
+it does not contain or prove authorization to use the value. The accessor
+opens only a valid name inside the configured credential directory, rejects
+symlinks and non-regular files, bounds reads to 1 MiB, and zeroes the borrowed
+buffer after the callback. It does not guarantee removal of runtime/compiler
+copies or replace service isolation. No controller runtime or provider adapter
+calls it yet. A future managed deployment may use a dedicated secret manager
+with workload identity and per-secret access policies instead of systemd
+credentials.
 
 Provider adapters are trusted executable code. In-process adapters are not a
 security sandbox. Review and pin adapter implementations, keep their

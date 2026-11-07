@@ -40,6 +40,8 @@ This package does not create operation plans, provide the standard
 `server.provision`, `server.start`, `server.stop`, `server.backup`,
 `server.restore`, `server.destroy`, or `server.define` workflow definitions,
 or expose a controller API/worker. Cancellation handling, process or remote
-adapter transports, runtime configuration and secret resolution, and provider
-adapters remain separate work. Tests use only the scripted fake adapter and a
-local temporary bbolt database; they do not contact a provider or server.
+adapter transports, runtime configuration, credential-accessor integration,
+and provider adapters remain separate work. A bounded systemd credential
+accessor exists in `internal/credential`, but the workflow engine does not call
+it. Tests use only scripted fake adapters and a local temporary bbolt database;
+they do not contact a provider or server.

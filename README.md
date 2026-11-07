@@ -4,7 +4,7 @@ Game Server Controller is a Minecraft server lifecycle controller in development
 
 I’m using a real setup to test the design: Debian on Vultr, Paper for Minecraft Java, Velocity as the proxy, and Wasabi for object storage. Those services give the first adapters something concrete to account for. The protocol is meant to support other providers and games too.
 
-> **Current status:** The Phase 1 protocol package is reviewed for draft version `0.21.0-draft`. The repository includes a Go protocol validator, durable operation acceptance and storage, a local schema registry, an in-process adapter boundary, a generic durable workflow engine with reconciliation and restart recovery, and a limited supervised backup pilot. Standard lifecycle workflows, management API runtime, and production adapters are not implemented yet. Go is the first implementation language; contributors can build clients or adapters in other languages, but the project does not require a second implementation for release. See the [roadmap](docs/ROADMAP.md).
+> **Current status:** The Phase 1 protocol package is reviewed for draft version `0.21.0-draft`. The repository includes a Go protocol validator, durable operation acceptance and storage, a local schema registry, an in-process adapter boundary, a generic durable workflow engine with reconciliation and restart recovery, a bounded systemd credential accessor, and a limited supervised backup pilot. Standard lifecycle workflows, management API runtime, and production adapters are not implemented yet. Go is the first implementation language; contributors can build clients or adapters in other languages, but the project does not require a second implementation for release. See the [roadmap](docs/ROADMAP.md).
 
 ## Why I’m building it
 
@@ -20,6 +20,7 @@ If you work on game-server automation, cloud adapters, storage tooling, or opera
 - JSON Schemas, examples, and behavioral conformance fixtures, checked by Go CI.
 - A Go operation store and acceptance service, local schema registry, and in-process adapter registry with scripted fakes.
 - A generic durable workflow engine that persists adapter outcomes and reconciles uncertain steps; standard lifecycle definitions and application wiring remain future work.
+- A bounded accessor for named systemd credentials; runtime and provider-adapter integration remain future work.
 - A configuration validator for the initial local v1 shape. It checks input; it does not load runtime settings or resolve provider credentials.
 - A supervised backup CLI that wraps the server's existing `minecraft-backup.service`. It does not install or replace the service script. Read the [pilot handoff guide](docs/SUPERVISED_PILOT.md).
 - A roadmap that separates working code from planned lifecycle features.

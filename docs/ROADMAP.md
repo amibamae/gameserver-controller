@@ -57,12 +57,13 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - [x] Bundle protocol schemas and add a closed local schema registry.
 - [x] Add the in-process adapter registry and scripted fakes for all five categories.
 - [x] Validate the initial local v1 configuration without side effects; runtime loading and secret resolution remain future work.
+- [x] Add a bounded accessor for systemd credentials; runtime and provider-adapter integration remain future work.
 - [x] Persist immutable adapter-step inputs and schema-validated completed outputs with the exact capability identities.
 - [x] Implement generic durable adapter dispatch, outcome persistence, reconciliation hooks, bounded safe retry, and restart recovery.
 - [ ] Expand language-neutral behavior tests as contracts mature.
 - [ ] Implement and wire the seven standard server lifecycle workflows over the durable engine.
 - [x] Add fake-adapter cases for workflow preconditions, definitive and ambiguous failures, timeout, bounded retry, accepted outcomes, and restart recovery.
-- [ ] Test compatibility, errors, idempotency, timeouts, and recovery without production services.
+- [x] Test compatibility, errors, idempotency, timeouts, and recovery without production services.
 - [ ] Establish build, test, dependency, and release practices that do not require AI.
 
 **Exit criteria:** A minimal controller passes the agreed suite with fake adapters, no production credentials, and no live infrastructure.
@@ -157,6 +158,6 @@ The Phase 1 package on main has met its exit criteria for protocol version `0.21
 
 The schema package covers hosting, storage, execution, game, and integration operations, with typed results for all seven standard server operations. The protocol specification and compatibility rules have been reviewed. Go CI checks schemas, references, examples, OpenAPI 3.2.1 structure, and published conformance fixtures.
 
-Phase 2 now includes Go lifecycle/operation transition rules, a durable bbolt store, atomic acceptance with actor-scoped idempotency and per-server locks, immutable step-input and completed-output snapshots, an embedded local schema registry, an in-process adapter registry with scripted fakes for all five categories, generic durable dispatch/reconciliation with restart recovery, fake workflow tests, and side-effect-free validation for the initial local configuration. Standard lifecycle definitions and application wiring, runtime config loading and secret resolution, process transport, and production adapters remain future work across Phases 2 and 3. The initial credential-reference policy uses systemd credentials, but runtime resolution and provider integrations are not implemented. The pilot capacity policy remains declarative until a Vultr create/adopt path consumes it.
+Phase 2 now includes Go lifecycle/operation transition rules, a durable bbolt store, atomic acceptance with actor-scoped idempotency and per-server locks, immutable step-input and completed-output snapshots, an embedded local schema registry, an in-process adapter registry with scripted fakes for all five categories, generic durable dispatch/reconciliation with restart recovery, fake workflow tests, side-effect-free validation for the initial local configuration, and a bounded systemd credential accessor. Standard lifecycle definitions and application wiring, runtime config loading and credential-accessor integration, process transport, and production adapters remain future work across Phases 2 and 3. The pilot capacity policy remains declarative until a Vultr create/adopt path consumes it.
 
 Phase 1 means the reviewed specification package and Go validator/conformance suite are ready for implementation. Stable protocol 1.0 still requires the initial Go controller to pass the published behavioral suite. Other-language implementations are welcome, but they are not a release requirement.
