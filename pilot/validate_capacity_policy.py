@@ -18,6 +18,13 @@ def read_json(path):
 
 policy = read_json(pilot_dir / "capacity-policy.json")
 cases_document = read_json(pilot_dir / "capacity-policy-cases.json")
+if not isinstance(policy, dict):
+    print("capacity policy must be a JSON object", file=sys.stderr)
+    raise SystemExit(1)
+if not isinstance(cases_document, dict):
+    print("capacity cases must be a JSON object", file=sys.stderr)
+    raise SystemExit(1)
+
 errors = []
 
 
@@ -31,6 +38,9 @@ expect(policy.get("policy_version"), 1, "policy_version")
 expect(policy.get("max_instances_total"), 2, "max_instances_total")
 
 enforcement = policy.get("enforcement", {})
+if not isinstance(enforcement, dict):
+    errors.append("enforcement must be an object")
+    enforcement = {}
 expect(enforcement.get("mode"), "declarative", "enforcement.mode")
 expect(enforcement.get("runtime_enforced"), False, "enforcement.runtime_enforced")
 reason = enforcement.get("reason", "")
@@ -46,24 +56,21 @@ expected_groups = {
     },
 }
 expect(groups, expected_groups, "capacity_groups")
-if isinstance(groups, dict):
-    capacities = [
-        value.get("max_instances")
-        for value in groups.values()
-        if isinstance(value, dict) and type(value.get("max_instances")) is int
-    ]
+if groups == expected_groups:
+    capacities = [group["max_instances"] for group in groups.values()]
     expect(sum(capacities), policy.get("max_instances_total"), "sum of capacity groups")
     environments = [
         environment
-        for value in groups.values()
-        if isinstance(value, dict)
-        and isinstance(value.get("accepted_environments"), list)
-        for environment in value["accepted_environments"]
+        for group in groups.values()
+        for environment in group["accepted_environments"]
     ]
     expect(sorted(environments), ["production", "staging", "testing"], "accepted environments")
     expect(len(environments), len(set(environments)), "environment assignments")
 
 create_policy = policy.get("create_policy", {})
+if not isinstance(create_policy, dict):
+    errors.append("create_policy must be an object")
+    create_policy = {}
 required_create_guards = (
     "reserve_slot_atomically_before_provider_create",
     "reservation_counts_as_capacity",
@@ -75,26 +82,35 @@ for key in required_create_guards:
     expect(create_policy.get(key), True, f"create_policy.{key}")
 
 occupancy = create_policy.get("occupancy", {})
+if not isinstance(occupancy, dict):
+    errors.append("create_policy.occupancy must be an object")
+    occupancy = {}
 for key in (
     "count_every_instance_without_provider_confirmed_absence_or_destruction",
     "count_unresolved_create_outcome",
     "count_unresolved_destroy_outcome",
 ):
     expect(occupancy.get(key), True, f"create_policy.occupancy.{key}")
+release_values = occupancy.get("release_only_after_provider_confirmation")
 expect(
-    occupancy.get("release_only_after_provider_confirmation"),
+    release_values,
     ["absent", "destroyed"],
     "create_policy.occupancy.release_only_after_provider_confirmation",
 )
-expect(cases_document.get("policy_id"), policy.get("policy_id"), "cases.policy_id")
+release_states = (
+    set(release_values)
+    if isinstance(release_values, list)
+    and all(isinstance(value, str) for value in release_values)
+    else set()
+)
 
+expect(cases_document.get("policy_id"), policy.get("policy_id"), "cases.policy_id")
 static_policy_is_valid = not errors
 cases = cases_document.get("cases")
 if not isinstance(cases, list):
     errors.append("cases must be a list")
     cases = []
 
-release_states = set(occupancy.get("release_only_after_provider_confirmation", []))
 seen_case_ids = set()
 
 
@@ -159,7 +175,9 @@ for index, case in enumerate(cases):
         or not isinstance(instance.get("provider_state"), str)
         for instance in instances
     ):
-        errors.append(f"{case_id}.existing_instances entries need environment and provider_state strings")
+        errors.append(
+            f"{case_id}.existing_instances entries need environment and provider_state strings"
+        )
         continue
     if static_policy_is_valid:
         actual = decide(environment, instances)
