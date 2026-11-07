@@ -55,9 +55,10 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Operation record commits before side effect.
 - Same idempotency key and same request returns the same stable operation reference and does not dispatch a second side effect.
 - Same key and changed request is conflict.
+- A matching actor/key with an expired operation record and retained tombstone returns `core.operation.idempotency_key_expired`; the old operation is not replayed and no new operation or side effect is created.
 - Unknown external outcome enters reconciliation.
 - Cancellation does not imply rollback. An undispatched step with no possible external effect can be cancelled without a provider call; a mutating call that may have been dispatched without a definitive response remains `reconciling` or `needs_operator`, is not reported `cancelled`, and is not retried before reconciliation.
-- Controller restart preserves non-terminal operations and resource locks.
+- Controller restart preserves non-terminal operations and resource locks; an unresolved non-terminal operation restores its owned lock before conflicting work can dispatch, and elapsed time alone does not release that lock.
 - Partial effects remain visible.
 
 ### Adapter
@@ -135,6 +136,8 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [backup-verification-blocks-destroy.json](test-vectors/backup-verification-blocks-destroy.json)
 - [idempotency-key-conflict.json](test-vectors/idempotency-key-conflict.json)
 - [idempotency-key-replay-same-request.json](test-vectors/idempotency-key-replay-same-request.json)
+- [idempotency-key-expired-reuse.json](test-vectors/idempotency-key-expired-reuse.json)
+- [operation-lock-survives-restart.json](test-vectors/operation-lock-survives-restart.json)
 - [unknown-provider-outcome.json](test-vectors/unknown-provider-outcome.json)
 - [staging-production-write-denied.json](test-vectors/staging-production-write-denied.json)
 - [backup-stale-generation-blocks-destroy.json](test-vectors/backup-stale-generation-blocks-destroy.json)
