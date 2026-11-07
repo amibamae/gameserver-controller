@@ -359,3 +359,24 @@ func TestBackupRequiresServiceInvocationToBeFinished(t *testing.T) {
 		})
 	}
 }
+
+func TestBackupRejectsUnsafeSSHHostsBeforeInvokingSSH(t *testing.T) {
+	logPath, _ := installFakeSSH(t, false, false)
+
+	for _, host := range []string{
+		"-oProxyCommand=touch /tmp/pilot-host-injection",
+		"server.example; echo injected",
+		"server.example\n--host=attacker.example",
+	} {
+		t.Run(strings.ReplaceAll(host, "/", "_"), func(t *testing.T) {
+			_, err := runBackup(t, "backup", "--host="+host)
+			if err == nil || !strings.Contains(err.Error(), "--host is required") {
+				t.Fatalf("expected unsafe host rejection for %q, got %v", host, err)
+			}
+		})
+	}
+
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Fatalf("unsafe host input invoked SSH; log stat error = %v", err)
+	}
+}
