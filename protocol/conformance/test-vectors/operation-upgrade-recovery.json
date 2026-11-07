@@ -1,0 +1,110 @@
+{
+  "fixture_id": "compatibility.operation-upgrade-recovery",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "protocol.compatibility",
+  "purpose": "An operation keeps its accepted semantics and exact adapter capability versions across upgrades; uncertain work is reconciled and completed work is never replayed.",
+  "input": {
+    "operation": {
+      "operation_id": "op-recover-001",
+      "operation_type": "server.provision",
+      "protocol_version": "0.21.0-draft",
+      "schema_package_revision": "0.21.0-draft@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "target": {
+        "server_id": "server-recover-001",
+        "environment_id": "staging"
+      },
+      "status": "reconciling",
+      "current_step_id": "create-instance",
+      "actor_id": "actor-example",
+      "request_snapshot": {
+        "operation_type": "server.provision",
+        "parameters": {
+          "server_id": "server-recover-001"
+        }
+      },
+      "created_at": "2026-11-06T08:00:00Z",
+      "updated_at": "2026-11-06T09:00:00Z",
+      "idempotency_key": "recover-key-001",
+      "steps": [
+        {
+          "step_id": "create-instance",
+          "step_type": "hosting.instance.create",
+          "status": "succeeded",
+          "attempt": 1,
+          "adapter_id": "hosting.example",
+          "capability_name": "hosting.instance.create",
+          "capability_version": "1",
+          "completed_at": "2026-11-06T08:30:00Z"
+        },
+        {
+          "step_id": "wait-instance",
+          "step_type": "hosting.instance.wait",
+          "status": "outcome_unknown",
+          "attempt": 1,
+          "adapter_id": "hosting.example",
+          "capability_name": "hosting.instance.wait",
+          "capability_version": "1",
+          "started_at": "2026-11-06T08:30:01Z",
+          "external_operation_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "operation",
+            "external_id": "provider-op-001"
+          }
+        }
+      ]
+    },
+    "recovery_cases": [
+      {
+        "case_id": "exact-recorded-capability-available",
+        "available_capabilities": [
+          {
+            "adapter_id": "hosting.example",
+            "capability_name": "hosting.instance.wait",
+            "capability_version": "1"
+          }
+        ],
+        "tested_migration_available": false
+      },
+      {
+        "case_id": "recorded-capability-version-missing",
+        "available_capabilities": [
+          {
+            "adapter_id": "hosting.example",
+            "capability_name": "hosting.instance.wait",
+            "capability_version": "2"
+          }
+        ],
+        "tested_migration_available": false
+      }
+    ]
+  },
+  "expected": {
+    "operation_schema_valid": true,
+    "operation_id_preserved": "op-recover-001",
+    "cases": [
+      {
+        "case_id": "exact-recorded-capability-available",
+        "recorded_protocol_version_preserved": true,
+        "recorded_capability_exactly_supported": true,
+        "recovery_status": "reconciling",
+        "completed_steps_replayed": 0,
+        "unknown_steps_retried_before_reconciliation": false,
+        "completed_step_count": 1,
+        "unknown_step_count": 1,
+        "adapter_dispatches": 0
+      },
+      {
+        "case_id": "recorded-capability-version-missing",
+        "recorded_protocol_version_preserved": true,
+        "recorded_capability_exactly_supported": false,
+        "recovery_status": "needs_operator",
+        "completed_steps_replayed": 0,
+        "unknown_steps_retried_before_reconciliation": false,
+        "completed_step_count": 1,
+        "unknown_step_count": 1,
+        "adapter_dispatches": 0
+      }
+    ]
+  }
+}
