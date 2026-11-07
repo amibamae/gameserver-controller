@@ -112,6 +112,35 @@
       }
     },
     {
+      "case_id": "wrong-check-version",
+      "output": {
+        "server_id": "paper-staging-001",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-paper-001"
+        },
+        "game_release_id": "paper-1.21.11-build-3",
+        "observed_at": "2026-11-06T09:05:00Z",
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "9",
+            "result": "pass",
+            "observed_at": "2026-11-06T09:04:58Z"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "result": "pass",
+            "observed_at": "2026-11-06T09:04:59Z"
+          }
+        ]
+      }
+    },
+    {
       "case_id": "wrong-instance-target",
       "output": {
         "server_id": "paper-staging-001",
@@ -189,6 +218,13 @@
       },
       {
         "case_id": "required-check-duplicated",
+        "ready_transition_permitted": false,
+        "readiness": "not_ready",
+        "block_reason": "required_check_set_mismatch",
+        "error_code": null
+      },
+      {
+        "case_id": "wrong-check-version",
         "ready_transition_permitted": false,
         "readiness": "not_ready",
         "block_reason": "required_check_set_mismatch",

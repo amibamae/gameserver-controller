@@ -47,6 +47,13 @@ accessor exists in `internal/credential`, but the workflow engine does not call
 it. Tests use only scripted fake adapters and a local temporary bbolt database;
 they do not contact a provider or server.
 
+The workflow package can build a short-lived readiness assertion from a
+persisted, successful `game.readiness.check` step and a trusted, versioned
+readiness check set. It binds the assertion to the operation, logical server,
+managed instance, release, and exact check versions, and uses the earliest
+expiry among the individual checks. No standard lifecycle definition consumes
+this helper yet, so it does not by itself make a server ready or route traffic.
+
 The store now creates a durable logical-server record in the same bbolt
 transaction that accepts `server.define`. That record starts as
 `unprovisioned`, keeps the selected profile references and original validated

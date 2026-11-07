@@ -141,13 +141,14 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 				result["block_reason"] = "target_mismatch"
 			} else {
 				observed := make(map[string]int)
+				versionsMatch := true
 				allPassed := true
 				for _, rawResult := range arrayValue(output, "check_results") {
 					check := asObject(rawResult)
 					checkID := stringValue(check, "check_id")
 					observed[checkID]++
 					if check["check_version"] != versions[checkID] {
-						allPassed = false
+						versionsMatch = false
 					}
 					if stringValue(check, "result") != "pass" {
 						allPassed = false
@@ -160,6 +161,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 					}
 				}
 				if !complete {
+					result["block_reason"] = "required_check_set_mismatch"
+				} else if !versionsMatch {
 					result["block_reason"] = "required_check_set_mismatch"
 				} else if !allPassed {
 					result["readiness"] = "unknown"
