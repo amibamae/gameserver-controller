@@ -49,7 +49,7 @@ A live process is not proof of readiness. The controller may route players only 
 
 ## Execution model
 
-The first reference is a provider VM prepared by a versioned bootstrap script, with the game managed by systemd. Containers, Kubernetes, and Agones are not required. The [adapter specifications](../protocol/adapters/README.md) keep hosting, storage, execution, game, and integration behavior separate.
+The first reference is a provider VM prepared by a versioned bootstrap script, with the game managed by systemd. Containers and Kubernetes are not required. The [adapter specifications](../protocol/adapters/README.md) keep hosting, storage, execution, game, and integration behavior separate.
 
 ## Durable operations
 
