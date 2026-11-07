@@ -1,0 +1,88 @@
+{
+  "fixture_id": "management.authentication.actor-spoofing",
+  "protocol_version": "0.21.0-draft",
+  "contract": "management_api.authentication",
+  "purpose": "Client-supplied actor, role, or permission claims cannot replace the trusted authenticated principal.",
+  "input": {
+    "authenticated_principal": {
+      "actor_id": "actor-staging",
+      "permissions": [
+        "server.inspect"
+      ],
+      "environments": [
+        "staging"
+      ]
+    },
+    "attempts": [
+      {
+        "attempt_id": "spoof-production-destroy",
+        "claimed_actor_id": "actor-production-admin",
+        "claimed_roles": [
+          "admin"
+        ],
+        "claimed_permissions": [
+          "server.destroy",
+          "*"
+        ],
+        "required_permission": "server.destroy",
+        "target_environment": "production",
+        "authorized_response_items": [
+          {
+            "server_id": "production-1"
+          }
+        ]
+      },
+      {
+        "attempt_id": "spoofed-inspect-claim",
+        "claimed_actor_id": "actor-production-admin",
+        "claimed_roles": [
+          "superadmin"
+        ],
+        "claimed_permissions": [
+          "server.destroy",
+          "*"
+        ],
+        "required_permission": "server.inspect",
+        "target_environment": "staging",
+        "authorized_response_items": [
+          {
+            "server_id": "staging-1"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "authenticated_actor_id": "actor-staging",
+    "attempts": [
+      {
+        "attempt_id": "spoof-production-destroy",
+        "accepted": false,
+        "error_category": "authorization",
+        "operation_actor_id": null,
+        "request_claims_used_for_auth": false,
+        "resource_items": [],
+        "protected_resource_data_returned": false
+      },
+      {
+        "attempt_id": "spoofed-inspect-claim",
+        "accepted": true,
+        "error_category": null,
+        "operation_actor_id": "actor-staging",
+        "request_claims_used_for_auth": false,
+        "resource_items": [
+          {
+            "server_id": "staging-1"
+          }
+        ],
+        "protected_resource_data_returned": true
+      }
+    ],
+    "credential_material_exposed": false
+  },
+  "notes": {
+    "spoofed_claims": "production admin actor and role/permission claims are request metadata only",
+    "authorization": "uses authenticated-principal permissions and environment scope exclusively",
+    "denial": "no production resource item or metadata is returned"
+  }
+}
