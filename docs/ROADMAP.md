@@ -13,7 +13,7 @@
 
 ## Phase 1: Language-neutral protocol
 
-**Current phase.** Complete and review the protocol package and its Go schema/conformance tooling. The controller engine and fake-adapter harness are Phase 2; production adapters follow in Phase 3.
+**Status: Phase 1 exit criteria met for the current draft package.** The reviewed specification and Go validation suite are complete; the controller engine and fake-adapter harness are Phase 2, and production adapters follow in Phase 3. Stable protocol 1.0 remains gated on implementation evidence.
 
 - [x] Define protocol-first, language-neutral, transport-independent principles.
 - [x] Separate adapter calls from the management API.
@@ -21,27 +21,27 @@
 - [x] Draft common identifiers, resources, timestamps, versions, capabilities, errors, request context, and secret references.
 - [x] Draft durable operation acceptance, status transitions, idempotency, deadlines, retries, cancellation, reconciliation, recovery, progress, and partial outcomes.
 - [x] Publish the initial operation catalog and parameter schemas for server definition, provision, start, stop, backup, restore, and destroy.
-- [ ] Review common types and resolve open decisions.
-- [ ] Review operation semantics, status transitions, cancellation, and recovery.
+- [x] Review common types and resolve open decisions.
+- [x] Review operation semantics, status transitions, cancellation, and recovery.
 - [x] Draft lifecycle states, transitions, preconditions, postconditions, and failure behavior.
-- [ ] Review lifecycle semantics and recovery edge cases.
+- [x] Review lifecycle semantics and recovery edge cases.
 - [x] Draft hosting, storage, execution, game, and integration adapter contracts.
-- [ ] Review adapter contracts and capability behavior.
+- [x] Review adapter contracts and capability behavior.
 - [x] Draft adapter descriptors, capabilities, and protocol negotiation.
-- [ ] Finalize compatibility negotiation, constraints, and permissions.
+- [x] Finalize compatibility negotiation, constraints, and permissions.
 - [x] Publish a draft management API contract and OpenAPI definition; no hosted panel is required.
-- [ ] Review API resources, authentication, pagination, events, and compatibility.
+- [x] Review API resources, authentication, pagination, events, and compatibility.
 - [x] Draft protocol security, authorization, audit, privacy, consent, and environment isolation.
-- [ ] Review threat model, permission scopes, approvals, and audit integrity/retention.
+- [x] Review threat model, permission scopes, approvals, and audit integrity/retention.
 - [x] Select draft standards: JSON, JSON Schema 2020-12, JSON-RPC 2.0, OpenAPI 3.2.1, RFC 3339, and RFC 8785 where required.
-- [ ] Validate standards, generators, and transport in Go; welcome optional implementations in other languages.
+- [x] Validate schemas, references, examples, OpenAPI structure, and conformance vectors in Go; document the optional stdio transport. Runtime controller/transport implementation is Phase 2; optional implementations in other languages are welcome.
 - [x] Publish initial schemas, examples, test vectors, and conformance requirements.
 - [x] Publish operation results for provision, backup, restore, and destroy, plus Velocity transfer request/result schemas.
 - [x] Add CI validation and an executable runner for the behavioral conformance suite.
 - [x] Register input and output schemas for hosting instance creation.
-- [ ] Extend schemas across storage, execution, game, and integration operations; complete hosting coverage and typed results.
+- [x] Extend schemas across storage, execution, game, and integration operations; complete hosting coverage and typed results.
 - [x] Draft compatibility rules for negotiation, schema identity, evolution, and in-flight operations.
-- [ ] Review the full protocol and freeze compatibility rules.
+- [x] Review the full protocol and freeze compatibility rules.
 Other-language implementations are welcome contributions, but they are not part of the Phase 1 exit criteria or release gate.
 - [ ] Release stable protocol 1.0 only after interoperability evidence.
 
@@ -131,8 +131,8 @@ The first end-to-end target is Vultr, Wasabi, Paper, and Velocity on Debian. Exi
 
 ## Current state and next work
 
-The project is in **Phase 1: Protocol design and review**. The package is at 0.21.0-draft and includes Go schema/conformance tooling. The supervised backup CLI is code-complete within its limited wrapper scope; it does not create VMs. The two-VM policy is declarative, and a supervised first run plus artifact/storage verification remains an operator handoff.
+The Phase 1 protocol package has met its exit criteria on main at version 0.21.0-draft. This untagged branch is development source, not an immutable interoperability snapshot. The supervised backup CLI is code-complete within its limited wrapper scope; it does not create VMs. The two-VM policy is declarative, and a supervised first run plus artifact/storage verification remains an operator handoff.
 
-The schema package covers hosting, storage, execution, game, and integration operations, with typed results for all seven standard server operations. Remaining Phase 1 work is to finish contract, compatibility, security, lifecycle, and validation review. The controller engine and production adapters have not been built.
+The schema package covers hosting, storage, execution, game, and integration operations, with typed results for all seven standard server operations. The protocol specification and compatibility rules have been reviewed; Go CI validates schemas, references, examples, OpenAPI 3.2.1 structure, and published conformance vectors. The controller engine and fake-adapter harness, runtime transport, and production adapters remain future work in Phases 2 and 3.
 
-Phase 1 completion means the reviewed specification package and Go validator/conformance suite are ready for implementation. The controller engine and fake-adapter harness are Phase 2 work. Stable protocol 1.0 remains gated on the initial Go controller passing behavioral conformance; optional implementations in other languages are welcome but are not a release requirement.
+Phase 1 means the reviewed specification package and Go validator/conformance suite are ready for implementation. Stable protocol 1.0 remains gated on the initial Go controller passing behavioral conformance; optional implementations in other languages are welcome but are not a release requirement.
