@@ -63,6 +63,25 @@ func TestServerStopReconcilesUnknownGracefulStopByExactUnitInspection(t *testing
 	}
 }
 
+func TestServerStopReconciliationRejectsInspectionForDifferentUnit(t *testing.T) {
+	fixture := newServerStopFixture(t, adapter.OutcomeCompleted, adapter.OutcomeUnknown)
+	operation := fixture.operation.Record
+	for i := range operation.Steps {
+		if operation.Steps[i].StepID == stopInspectUnitStep {
+			operation.Steps[i].Input = json.RawMessage(`{"unit_ref":{"adapter_id":"execution.fake","environment_id":"staging","resource_kind":"systemd-unit","external_id":"other-server"}}`)
+		}
+	}
+	stopStep := operationStep(operation, stopRuntimeStep)
+	callsBeforeReconciliation := len(fixture.base.execution.Calls())
+	resolution, err := fixture.workflow.Reconcile(context.Background(), operation, stopStep)
+	if err != nil || resolution.State != ResolutionNeedsOperator {
+		t.Fatalf("reconciliation = %#v, %v; want needs operator for wrong-unit inspection", resolution, err)
+	}
+	if callsAfterReconciliation := len(fixture.base.execution.Calls()); callsAfterReconciliation != callsBeforeReconciliation {
+		t.Fatalf("reconciliation made an adapter call for the untrusted unit: %d -> %d", callsBeforeReconciliation, callsAfterReconciliation)
+	}
+}
+
 func TestServerStopDoesNotStopWhenGameSaveIsUnknown(t *testing.T) {
 	fixture := newServerStopFixture(t, adapter.OutcomeUnknown, adapter.OutcomeCompleted)
 	completed, err := fixture.engine.Run(context.Background(), fixture.operation.Record.OperationID)
@@ -80,6 +99,34 @@ func TestServerStopDoesNotStopWhenGameSaveIsUnknown(t *testing.T) {
 	server, err := fixture.base.store.GetLogicalServer(startTestEnvID, startTestServerID)
 	if err != nil || server.Record.LifecycleState != protocolstate.ServerStopping {
 		t.Fatalf("unknown save did not retain the stopping state and lock: %s, %v", server.Record.LifecycleState, err)
+	}
+}
+
+func TestServerStopDoesNotSaveWhenProviderInstanceIsInactive(t *testing.T) {
+	fixture := newServerStopFixture(t, adapter.OutcomeCompleted, adapter.OutcomeCompleted)
+	observedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	output := json.RawMessage(fmt.Sprintf(`{"instance_ref":%s,"state":"stopped","observed_at":%q}`, startTestInstance, observedAt))
+	if err := fixture.base.hosting.SetScript("hosting.instance.inspect", fakeadapter.Reply{Outcome: adapter.OutcomeCompleted, Output: output, ObservedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	completed, err := fixture.engine.Run(context.Background(), fixture.operation.Record.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if completed.Record.Status != protocolstate.OperationFailed || completed.Record.Steps[1].Status != protocolstate.StepPending {
+		t.Fatalf("inactive-provider operation/step state = %s/%s, want failed/pending", completed.Record.Status, completed.Record.Steps[1].Status)
+	}
+	if got := len(fixture.base.game.Calls()); got != 1 {
+		t.Fatalf("game adapter calls = %d, want only the earlier server.start readiness call", got)
+	}
+	for _, call := range fixture.base.execution.Calls() {
+		if call.Params.Capability == "execution.unit.graceful_stop" {
+			t.Fatal("runtime stop ran while the exact provider instance was stopped")
+		}
+	}
+	server, err := fixture.base.store.GetLogicalServer(startTestEnvID, startTestServerID)
+	if err != nil || server.Record.LifecycleState != protocolstate.ServerDegraded {
+		t.Fatalf("precondition failure lifecycle state = %s, %v; want degraded", server.Record.LifecycleState, err)
 	}
 }
 
