@@ -36,10 +36,9 @@ DNS records.
 
 Use Cloudflare DNS-only records for this direct-join hostname. Set the TTL to
 60 seconds on the A/AAAA record and any SRV or CNAME records used in the join
-lookup. Set this before enabling DNS handoff and keep it at 60 seconds. On
-Cloudflare's standard plans, 60 seconds is the lowest TTL for DNS-only
-records; proxied records use an automatic 300-second TTL and do not meet this
-target. See [Cloudflare's TTL documentation](https://developers.cloudflare.com/dns/manage-dns-records/reference/ttl/).
+lookup. Set this before enabling DNS handoff and keep it at 60 seconds. On non-Enterprise Cloudflare plans, 60 seconds is the lowest TTL for
+DNS-only records; Enterprise accounts can configure 30 seconds. Proxied
+records use an automatic 300-second TTL and do not meet this target. See [Cloudflare's TTL documentation](https://developers.cloudflare.com/dns/manage-dns-records/reference/ttl/).
 
 Keep the hostname pointed at the lobby while the VM provisions, boots, restores
 the world, and passes readiness checks. Do not point it at the VM as soon as
