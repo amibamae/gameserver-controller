@@ -29,24 +29,31 @@ DNS provider, keep the lobby available during the transition, and report that
 a reconnect may take longer than the boot ETA. See [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035.html)
 and [RFC 8767](https://www.rfc-editor.org/rfc/rfc8767.html).
 
-## Boot-time estimate and optional telemetry
+## Local boot timing and optional shared telemetry
 
-The controller should estimate backend startup time from boot-duration
-measurements for the selected server profile. The displayed rejoin estimate
-must exceed the measured average boot duration by an operator-configured safety
-margin, and should account separately for the DNS TTL transition. When there
-are too few measurements, use a conservative operator-configured fallback.
+For each controller-owned VM, record the local duration from confirmed
+provisioning to Paper's required readiness checks passing. Use prior durations
+for that server/profile to show an estimated wait and an advisory progress bar
+while the backend boots. The display must remain below 100% until Paper is
+actually ready; timing estimates never permit DNS changes or player routing.
+When there are too few measurements, show a conservative configured estimate
+and make progress indeterminate rather than inventing precision.
 
-Boot-duration telemetry is optional and owner-enabled; it starts disabled and
-must not turn on during install, upgrade, or migration. When enabled, record
-only the timestamps needed to measure a controller start request through
-confirmed game readiness and the profile/release needed to choose an estimate.
-Do not record player names, UUIDs, IP addresses, connection history, gameplay
-activity, or credentials. Keep measurements local unless the owner separately
-enables a telemetry destination; explain the fields, purpose, retention,
-access, and withdrawal path as required by [the telemetry policy](../SECURITY.md#optional-telemetry).
-When telemetry is off, wake-up, readiness, and DNS handoff must continue to
-work using the configured fallback estimate.
+Local boot timing supports the owner's estimate and progress display. Sharing
+averaged boot durations with a hosted lobby/DNS service is separate optional
+telemetry: it starts disabled, and the server owner must explicitly opt in to
+that sharing. The service may use the shared average only with an additional
+safety buffer and a separate DNS-TTL allowance when giving players a rejoin
+estimate. Without opt-in or enough shared samples, use a conservative fallback.
+Install, upgrade, and migration must not enable sharing silently.
+
+Shared telemetry contains only boot-duration measurements and the minimum
+server-profile/release grouping needed for a useful average. It must not include
+player names, UUIDs, IP addresses, connection history, gameplay activity, or
+credentials. Explain its fields, purpose, destination, retention, access, and
+withdrawal path as required by [the telemetry policy](../SECURITY.md#optional-telemetry).
+Wake-up, readiness, DNS handoff, and the local progress display must continue
+when sharing is disabled.
 
 ## Safety and DNS ownership
 
@@ -71,8 +78,9 @@ work using the configured fallback estimate.
   them to the lobby or player application.
 
 The future implementation needs a DNS integration contract for record inspect,
-update, and reconciliation; an authenticated wake API; owner-controlled
-boot-duration telemetry with bounded retention; and operation tests for
-duplicate requests, boot failure, readiness failure, telemetry opt-in/opt-out,
-DNS update uncertainty, TTL delay, shutdown handoff, and credential isolation.
-This flow is not implemented by the current pilot or controller.
+update, and reconciliation; an authenticated wake API; local provision-to-Paper
+readiness timing and advisory progress; and separately owner-enabled shared
+boot-duration averages with bounded retention. Tests must cover duplicate
+requests, boot failure, readiness failure, sharing opt-in/opt-out, DNS update
+uncertainty, TTL delay, shutdown handoff, and credential isolation. This flow
+is not implemented by the current pilot or controller.
