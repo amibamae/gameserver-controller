@@ -472,7 +472,7 @@ func TestSuccessfulBootRequiresExactHostingAdapter(t *testing.T) {
 				t.Fatal(err)
 			}
 			err = repository.db.Update(func(tx *bolt.Tx) error {
-				return recordSuccessfulBootTx(tx, OperationRecord{OperationType: "server.start", Status: "succeeded", Result: result}, LogicalServer{ServerID: "adapter-server", EnvironmentID: "staging", InstanceRef: ref, LifecycleState: "ready"})
+				return recordCapacityLifecycleOutcomeTx(tx, OperationRecord{OperationType: "server.start", Status: "succeeded", Result: result}, LogicalServer{ServerID: "adapter-server", EnvironmentID: "staging", InstanceRef: ref, LifecycleState: "ready"})
 			})
 			if err != nil {
 				t.Fatal(err)

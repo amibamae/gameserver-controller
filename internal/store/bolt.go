@@ -503,7 +503,7 @@ func (s *BoltStore) UpdateOperationAndLogicalServer(expectedOperationRevision ui
 		if err := tx.Bucket(logicalServersBucket).Put(serverKey, encodedServer); err != nil {
 			return err
 		}
-		if err := recordSuccessfulBootTx(tx, committed.Record, server); err != nil {
+		if err := recordCapacityLifecycleOutcomeTx(tx, committed.Record, server); err != nil {
 			return err
 		}
 		updatedOperation = committed

@@ -178,9 +178,17 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 	hosting := fakeadapter.New(adapter.Descriptor{
 		AdapterID: "hosting.fake", Category: adapter.CategoryHosting, DisplayName: "fake host", ImplementationVersion: "test-1",
 		ProtocolVersions: []string{version}, ContractVersions: []string{"1"}, RequiredPermissions: []string{},
-		Capabilities: []adapter.Capability{{Name: "hosting.instance.inspect", Version: "1", Mutating: false,
-			InputSchemaURI:  "urn:gameserver-controller:" + version + ":hosting:instance-inspect-input",
-			OutputSchemaURI: "urn:gameserver-controller:" + version + ":hosting:instance-inspect-output", RequiredPermissions: []string{}}},
+		Capabilities: []adapter.Capability{
+			{Name: "hosting.instance.inspect", Version: "1", Mutating: false,
+				InputSchemaURI:  "urn:gameserver-controller:" + version + ":hosting:instance-inspect-input",
+				OutputSchemaURI: "urn:gameserver-controller:" + version + ":hosting:instance-inspect-output", RequiredPermissions: []string{}},
+			{Name: "hosting.instance.destroy", Version: "1", Mutating: true,
+				InputSchemaURI:  "urn:gameserver-controller:" + version + ":hosting:instance-destroy-input",
+				OutputSchemaURI: "urn:gameserver-controller:" + version + ":hosting:instance-destroy-output", RequiredPermissions: []string{}},
+			{Name: "hosting.instance.wait", Version: "1", Mutating: false,
+				InputSchemaURI:  "urn:gameserver-controller:" + version + ":hosting:instance-wait-input",
+				OutputSchemaURI: "urn:gameserver-controller:" + version + ":hosting:instance-wait-output", RequiredPermissions: []string{}},
+		},
 	})
 	execution := fakeadapter.New(adapter.Descriptor{
 		AdapterID: "execution.fake", Category: adapter.CategoryExecution, DisplayName: "fake runtime", ImplementationVersion: "test-1",
