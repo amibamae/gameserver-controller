@@ -1684,12 +1684,12 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			return nil, fmt.Errorf("retry request must match the expired tombstone scope")
 		}
 		return map[string]any{
-			"second_request_accepted":    false,
-			"error_code":                "core.operation.idempotency_key_expired",
-			"new_operation_created":     false,
-			"side_effect_dispatch_count": 0,
+			"second_request_accepted":     false,
+			"error_code":                  "core.operation.idempotency_key_expired",
+			"new_operation_created":       false,
+			"side_effect_dispatch_count":  0,
 			"original_operation_replayed": false,
-			"tombstone_retained":         true,
+			"tombstone_retained":          true,
 		}, nil
 	case "operations.recovery.restart-preserves-lock":
 		preRestart := asObject(fixture["pre_restart"])
@@ -1716,11 +1716,11 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return map[string]any{
 			"operation_status_after_restart": operation["status"],
 			"lock_held_after_restart":        true,
-			"lock_owner_operation_id":         ownerID,
+			"lock_owner_operation_id":        ownerID,
 			"conflicting_request_accepted":   false,
-			"error_code":                      "core.operation.conflict",
+			"error_code":                     "core.operation.conflict",
 			"new_operation_created":          false,
-			"side_effect_dispatch_count":      0,
+			"side_effect_dispatch_count":     0,
 		}, nil
 	case "operations.events.duplicate-delivery":
 		lastSequence, err := integerValue(fixture["last_consumed_sequence"])
