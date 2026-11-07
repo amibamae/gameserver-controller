@@ -91,7 +91,7 @@ func (p *scriptedProvider) counts() (create, get, list int) {
 
 func testPolicy() pilotcapacity.Policy {
 	return pilotcapacity.Policy{
-		PolicyID: "supervised-pilot-vm-capacity", PolicyVersion: 2, MaxInstancesTotal: 1,
+		PolicyID: "supervised-pilot-vm-capacity", PolicyVersion: 2, RuntimeEnforced: true, MaxInstancesTotal: 1,
 		CapacityGroups: map[string]pilotcapacity.Group{
 			"production":           {MaxInstances: 1, AcceptedEnvironments: []string{"production"}},
 			"shared_nonproduction": {MaxInstances: 1, AcceptedEnvironments: []string{"staging", "testing"}},
@@ -346,6 +346,20 @@ func TestInvalidAndUnsupportedRequestsDoNotCallProvider(t *testing.T) {
 	created, fetched, listed := provider.counts()
 	if created != 0 || fetched != 0 || listed != 0 {
 		t.Fatalf("invalid requests reached provider: create/get/list=%d/%d/%d", created, fetched, listed)
+	}
+}
+
+func TestProvisionerRejectsDeclarativePolicy(t *testing.T) {
+	repository, err := store.OpenBolt(t.TempDir() + "/pilot.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	policy := testPolicy()
+	policy.RuntimeEnforced = false
+	credentials := &testCredentials{reference: "systemd-credential://vultr-token", token: []byte("fake-provider-token")}
+	if _, err := NewProvisioner(repository, policy, successfulProvider(), credentials, credentials.reference); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("declarative policy constructor error = %v, want ErrInvalidRequest", err)
 	}
 }
 

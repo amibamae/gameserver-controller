@@ -60,7 +60,7 @@ type Provisioner struct {
 }
 
 func NewProvisioner(repository *store.BoltStore, policy pilotcapacity.Policy, provider Provider, credentials CredentialResolver, credentialRef string) (*Provisioner, error) {
-	if repository == nil || policy.Validate() != nil || provider == nil || credentials == nil || credentialRef == "" {
+	if repository == nil || policy.Validate() != nil || !policy.RuntimeEnforced || provider == nil || credentials == nil || credentialRef == "" {
 		return nil, ErrInvalidRequest
 	}
 	return &Provisioner{

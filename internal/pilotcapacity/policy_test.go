@@ -15,6 +15,9 @@ func TestLoadPolicyReservesByConfiguredEnvironmentAndLimit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !policy.RuntimeEnforced {
+		t.Fatal("capacity policy did not load its runtime enforcement flag")
+	}
 	repository, err := store.OpenBolt(filepath.Join(t.TempDir(), "controller.db"))
 	if err != nil {
 		t.Fatal(err)

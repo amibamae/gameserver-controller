@@ -106,7 +106,7 @@ func run(root string, stdout io.Writer) error {
 	if len(validationErrors) != 0 {
 		return fmt.Errorf("capacity policy validation failed:\n- %s", strings.Join(validationErrors, "\n- "))
 	}
-	fmt.Fprintf(stdout, "capacity policy and %d cases are valid (declarative reference checks; not runtime-enforced)\n", len(cases.Cases))
+	fmt.Fprintf(stdout, "capacity policy is runtime-enforced by gsc-pilot provision; %d policy cases are valid declarative references\n", len(cases.Cases))
 	return nil
 }
 
@@ -147,9 +147,9 @@ func validateDocuments(policy policyDocument, cases casesDocument) []string {
 		errors = append(errors, "enforcement must be an object")
 		staticPolicyErrors++
 	} else {
-		add(policy.Enforcement.Mode == "declarative", "enforcement.mode must be declarative")
-		add(policy.Enforcement.RuntimeEnforced != nil && !*policy.Enforcement.RuntimeEnforced, "enforcement.runtime_enforced must be false")
-		add(strings.Contains(policy.Enforcement.Reason, "no Vultr create or adopt operation"), "enforcement.reason must explain that the CLI has no Vultr create/adopt operation")
+		add(policy.Enforcement.Mode == "runtime", "enforcement.mode must be runtime")
+		add(policy.Enforcement.RuntimeEnforced != nil && *policy.Enforcement.RuntimeEnforced, "enforcement.runtime_enforced must be true")
+		add(strings.Contains(policy.Enforcement.Reason, "gsc-pilot provision"), "enforcement.reason must identify the runtime provision command")
 	}
 	if policy.OwnershipScope == nil {
 		errors = append(errors, "ownership_scope must be an object")

@@ -3,9 +3,8 @@
 **Status:** Required design for provider integrations. The repository contains
 only example credential references, never real keys. A bounded systemd
 credential accessor exists in `internal/credential`. The capacity-backed
-`pilotvultr` service accepts a credential resolver, but no production command
-wires it to the systemd accessor yet. The pilot CLI does not call Vultr or
-Wasabi.
+`pilotvultr` service and `gsc-pilot provision` command use the accessor for
+Vultr creates. No command currently accesses Wasabi.
 
 ## Initial Debian deployment
 
@@ -27,8 +26,11 @@ it does not contain or prove authorization to use the value. The accessor
 opens only a valid name inside the configured credential directory, rejects
 symlinks and non-regular files, bounds reads to 1 MiB, and zeroes the borrowed
 buffer after the callback. It does not guarantee removal of runtime/compiler
-copies or replace service isolation. No controller runtime or provider adapter
-calls it yet. A future managed deployment may use a dedicated secret manager
+copies or replace service isolation. The pilot CLI reads the reference only
+when invoked with `CREDENTIALS_DIRECTORY` provided by systemd. The repository
+does not yet provide a systemd unit or automate loading the encrypted
+credential, so operators must review and set up that host-side service
+boundary before using the billable command. A future managed deployment may use a dedicated secret manager
 with workload identity and per-secret access policies instead of systemd
 credentials.
 
@@ -47,7 +49,7 @@ service-user/API identities and API source-IP controls; API key scope and
 permissions vary by account type, so verify the effective permissions before
 enabling create or destroy.
 
-The controller will use this credential only for controller-owned instances.
+The pilot uses this credential only for controller-owned instances.
 An existing live production VM may remain unmanaged. The pilot capacity rule
 must be checked before create/adopt API calls; the current policy is
 source-controlled in [the capacity file](../pilot/capacity-policy.json).
