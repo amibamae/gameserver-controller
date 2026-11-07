@@ -3,7 +3,7 @@
   "$id": "urn:gameserver-controller:0.21.0-draft:operations:operation",
   "title": "Durable operation",
   "type": "object",
-  "additionalProperties": false,
+  "additionalProperties": true,
   "required": [
     "operation_id",
     "operation_type",
@@ -87,7 +87,8 @@
     "idempotency_key": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 200
+      "maxLength": 128,
+      "pattern": "^[!-~]{1,128}$"
     },
     "request_fingerprint": {
       "type": "string",
@@ -208,8 +209,48 @@
           },
           "error": {
             "$ref": "urn:gameserver-controller:0.21.0-draft:common:protocol-error"
+          },
+          "capability_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[a-z][a-z0-9.]+$"
+          },
+          "capability_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
           }
-        }
+        },
+        "description": "One closed durable step object. Adapter-invoking steps record the exact capability identity and version used.",
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "capability_name"
+              ]
+            },
+            "then": {
+              "required": [
+                "adapter_id",
+                "capability_version"
+              ]
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "capability_version"
+              ]
+            },
+            "then": {
+              "required": [
+                "adapter_id",
+                "capability_name"
+              ]
+            }
+          }
+        ]
       }
     },
     "progress": {
@@ -494,5 +535,6 @@
         }
       }
     }
-  ]
+  ],
+  "description": "Read-only durable operation resource. Unknown optional properties MAY be added at this top level; nested objects remain closed."
 }
