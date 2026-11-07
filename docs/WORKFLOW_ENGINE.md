@@ -3,8 +3,8 @@
 `internal/workflow` advances an accepted operation through its persisted steps
 and the versioned in-process adapter registry. It is a reusable Phase 2
 component; the CLI does not expose it yet. The metadata-only `server.define`
-and fake-adapter `server.start` workflows are implemented. Other standard
-lifecycle definitions are still to be wired.
+and fake-adapter `server.start` and graceful `server.stop` workflows are
+implemented. Other standard lifecycle definitions are still to be wired.
 
 ## `server.start`
 
@@ -32,6 +32,25 @@ passes, and the controller can create a fresh readiness assertion. A failed
 readiness postcondition produces a failed operation and a `degraded` server.
 The workflow is exercised exclusively with scripted fake adapters; it does
 not connect to Vultr, a game server, or an execution host.
+
+## `server.stop`
+
+At acceptance, a trusted `ServerStopProfileResolver` selects the exact game
+release and execution unit for the stored logical server. The workflow pins a
+provider inspection, runtime inspection, game-native `game.save.request`, and
+`execution.unit.graceful_stop` before dispatch. A successful result requires a
+confirmed save bound to the exact server, environment, release, and instance,
+plus a stopped result for the exact execution unit. The lifecycle moves through
+`stopping` and reaches `stopped` only with the typed result committed.
+
+An unknown game-save result stays `needs_operator` because the protocol has no
+read-only save-status capability. An ambiguous graceful stop is reconciled by
+inspecting the exact unit; it is retried only when that inspection confirms the
+unit is still running. Force-stop requests are rejected until exact-target
+approval validation is wired. Proxy drain is also incomplete: a configured
+network profile with the default drain request fails planning rather than
+stopping without a confirmed drain. The fake tests contact no proxy, server,
+or provider.
 
 ## Dispatch and recovery
 
@@ -65,7 +84,7 @@ controllers or remote workers need a different transactional locking design.
 ## Limits
 
 This package does not provide the standard
-`server.provision`, `server.stop`, `server.backup`,
+`server.provision`, `server.backup`,
 `server.restore`, or `server.destroy` workflow definitions, or expose a
 controller API/worker. Cancellation handling, process or remote
 adapter transports, runtime configuration, credential-accessor integration,
