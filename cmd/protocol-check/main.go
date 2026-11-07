@@ -637,15 +637,15 @@ func checkSafeIntegers(value any, source, location string) error {
 	switch typed := value.(type) {
 	case json.Number:
 		raw := typed.String()
-		if strings.ContainsAny(raw, ".eE") {
+		rational, ok := new(big.Rat).SetString(raw)
+		if !ok {
+			return fmt.Errorf("%s%s: invalid JSON number %q", source, location, raw)
+		}
+		if rational.Denom().Cmp(big.NewInt(1)) != 0 {
 			return nil
 		}
-		integer, ok := new(big.Int).SetString(raw, 10)
-		if !ok {
-			return fmt.Errorf("%s%s: invalid integer %q", source, location, raw)
-		}
 		limit, _ := new(big.Int).SetString("9007199254740991", 10)
-		if new(big.Int).Abs(integer).Cmp(limit) > 0 {
+		if new(big.Int).Abs(rational.Num()).Cmp(limit) > 0 {
 			return fmt.Errorf("%s%s: integer exceeds the interoperable JSON safe-integer range", source, location)
 		}
 	case map[string]any:
