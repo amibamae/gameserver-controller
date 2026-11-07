@@ -42,7 +42,7 @@
 - [ ] Extend schemas across storage, execution, game, and integration operations; complete hosting coverage and typed results.
 - [x] Draft compatibility rules for negotiation, schema identity, evolution, and in-flight operations.
 - [ ] Review the full protocol and freeze compatibility rules.
-- [ ] Welcome independent implementations in other languages; they are optional contributions, not a release gate.
+Other-language implementations are welcome contributions, but they are not part of the Phase 1 exit criteria or release gate.
 - [ ] Release stable protocol 1.0 only after interoperability evidence.
 
 **Exit criteria:** The initial Go implementation follows the published contracts without relying on undocumented behavior. Other-language contributions remain welcome.
