@@ -138,6 +138,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [backup-stale-generation-blocks-destroy.json](test-vectors/backup-stale-generation-blocks-destroy.json)
 - [operation-event-sequence.json](test-vectors/operation-event-sequence.json)
 - [operation-event-duplicate-delivery.json](test-vectors/operation-event-duplicate-delivery.json)
+- [management-pagination-cursor-scope.json](test-vectors/management-pagination-cursor-scope.json)
 - [readiness-required-before-transfer.json](test-vectors/readiness-required-before-transfer.json)
 - [game-readiness-unknown-blocks-ready.json](test-vectors/game-readiness-unknown-blocks-ready.json)
 - [game-release-install-configure-fail-closed.json](test-vectors/game-release-install-configure-fail-closed.json)
