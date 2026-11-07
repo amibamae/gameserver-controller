@@ -12,7 +12,7 @@ using one join hostname and that the controller owns the relevant DNS record.
    wake request to the controller API. It never receives Vultr or Wasabi keys.
 3. The controller deduplicates requests, checks the environment and VM cap,
    then starts or provisions the controller-owned server. The lobby displays
-   an estimated wait and disconnects the player with that reason.
+   a conservative rejoin estimate and disconnects the player with that reason.
 4. If the player reconnects before readiness, the lobby reads the operation
    status, repeats the estimate, and disconnects them again. It does not hold
    a player session open while the VM boots.
@@ -28,6 +28,25 @@ record changes are not instantaneous. Use the lowest safe TTL supported by the
 DNS provider, keep the lobby available during the transition, and report that
 a reconnect may take longer than the boot ETA. See [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035.html)
 and [RFC 8767](https://www.rfc-editor.org/rfc/rfc8767.html).
+
+## Boot-time estimate and optional telemetry
+
+The controller should estimate backend startup time from boot-duration
+measurements for the selected server profile. The displayed rejoin estimate
+must exceed the measured average boot duration by an operator-configured safety
+margin, and should account separately for the DNS TTL transition. When there
+are too few measurements, use a conservative operator-configured fallback.
+
+Boot-duration telemetry is optional and owner-enabled; it starts disabled and
+must not turn on during install, upgrade, or migration. When enabled, record
+only the timestamps needed to measure a controller start request through
+confirmed game readiness and the profile/release needed to choose an estimate.
+Do not record player names, UUIDs, IP addresses, connection history, gameplay
+activity, or credentials. Keep measurements local unless the owner separately
+enables a telemetry destination; explain the fields, purpose, retention,
+access, and withdrawal path as required by [the telemetry policy](../SECURITY.md#optional-telemetry).
+When telemetry is off, wake-up, readiness, and DNS handoff must continue to
+work using the configured fallback estimate.
 
 ## Safety and DNS ownership
 
@@ -52,7 +71,8 @@ and [RFC 8767](https://www.rfc-editor.org/rfc/rfc8767.html).
   them to the lobby or player application.
 
 The future implementation needs a DNS integration contract for record inspect,
-update, and reconciliation; an authenticated wake API; and operation tests for
-duplicate requests, boot failure, readiness failure, DNS update uncertainty,
-TTL delay, shutdown handoff, and credential isolation. This flow is not
-implemented by the current pilot or controller.
+update, and reconciliation; an authenticated wake API; owner-controlled
+boot-duration telemetry with bounded retention; and operation tests for
+duplicate requests, boot failure, readiness failure, telemetry opt-in/opt-out,
+DNS update uncertainty, TTL delay, shutdown handoff, and credential isolation.
+This flow is not implemented by the current pilot or controller.
