@@ -1,0 +1,60 @@
+schema_version: 1
+
+controller:
+  mode: local
+  state_store:
+    type: bbolt
+    path: ./var/controller.db
+  defaults:
+    operation_timeout: 15m
+    retry_limit: 2
+  audit:
+    enabled: true
+    destination: local
+
+adapters:
+  - id: hosting.example
+    category: hosting
+  - id: storage.example
+    category: storage
+    secret_refs:
+      backup_writer:
+        secret_ref: env://GAMECTRL_EXAMPLE_STORAGE_TOKEN
+        purpose: example backup storage access
+        permission_scope:
+          - storage.backup.write
+  - id: execution.example
+    category: execution
+  - id: game.paper
+    category: game
+
+environments:
+  - id: production
+    classification: production
+    production_backup_access: read_write
+  - id: staging
+    classification: staging
+    production_backup_access: read_only
+
+servers:
+  - id: production-server
+    environment_id: production
+    adapters:
+      hosting: hosting.example
+      storage: storage.example
+      execution: execution.example
+      game: game.paper
+    lifecycle:
+      require_verified_backup_before_destroy: true
+      require_approval_for_destroy: true
+  - id: staging-server
+    environment_id: staging
+    adapters:
+      hosting: hosting.example
+      storage: storage.example
+      execution: execution.example
+      game: game.paper
+    lifecycle:
+      idle_shutdown: 30m
+      require_verified_backup_before_destroy: true
+      require_approval_for_destroy: true

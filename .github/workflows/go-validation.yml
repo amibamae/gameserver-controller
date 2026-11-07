@@ -1,0 +1,57 @@
+name: Go validation
+
+on:
+  push:
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "configs/**"
+      - "docs/CONFIGURATION.md"
+      - "docs/ROADMAP.md"
+      - ".github/workflows/go-validation.yml"
+  pull_request:
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "configs/**"
+      - "docs/CONFIGURATION.md"
+      - "docs/ROADMAP.md"
+      - ".github/workflows/go-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Test Go implementation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Download Go dependencies
+        run: go mod download
+      - name: Check Go formatting
+        run: |
+          unformatted="$(gofmt -l cmd/config-check internal/config)"
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: Test packages
+        run: go test -count=1 ./...
+      - name: Check for race conditions
+        run: go test -race -count=1 ./...
+      - name: Vet packages
+        run: go vet ./...
+      - name: Validate example configuration
+        run: go run ./cmd/config-check validate configs/controller.example.yaml
+      - name: Validate declarative pilot policy
+        run: go run ./cmd/pilot-capacity-check
