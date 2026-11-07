@@ -150,7 +150,7 @@ func TestSecretReferenceSchemaValidation(t *testing.T) {
 				t.Fatalf("secret reference schema rejected valid opaque reference: %v", err)
 			}
 			if !test.wantValid && err == nil {
-				t.Fatal("secret reference schema accepted raw secret material")
+				t.Fatal("secret reference schema accepted invalid input")
 			}
 		})
 	}
