@@ -11,8 +11,8 @@ using one join hostname and that the controller owns the relevant DNS record.
 2. A player joins the lobby. The lobby sends an authenticated, rate-limited
    wake request to the controller API. It never receives Vultr or Wasabi keys.
 3. The controller deduplicates requests, checks the environment and VM cap,
-   then starts or provisions the controller-owned server. The lobby displays
-   a conservative rejoin estimate and disconnects the player with that reason.
+   then starts or provisions the controller-owned server. The lobby gives the
+   player a conservative rejoin estimate, then kicks them with that message.
 4. If the player reconnects before readiness, the lobby reads the operation
    status, repeats the estimate, and disconnects them again. It does not hold
    a player session open while the VM boots.
