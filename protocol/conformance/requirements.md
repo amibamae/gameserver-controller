@@ -60,6 +60,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Successful standard operations validate their typed result schema and bind result server/environment/instance fields to the durable operation target. Any readiness assertion is bound to that target and valid at operation completion. Successful stop results accept proxy-drain outcomes only when they match the request and configured profile.
 - Go vectors cover result-to-target binding for all seven standard operations, readiness target and freshness checks, and request-consistent stop drain outcomes.
 - Restart requires the exact selected game adapter's `game.save.request` capability version and schema identity, a `succeeded` save step in the same durable operation, and inspection of the expected running incarnation no later than the save's `saved_at` time.
+- The enclosing operation, immutable request snapshot, and any present result use the same `operation_type`, including results that preserve partial effects after failure or cancellation.
 - `server.define` leaves the logical server `unprovisioned` and creates no external resource; `server.start` includes a readiness assertion bound to the exact instance; `server.stop` confirms game save and runtime termination.
 - Operation record commits before side effect.
 - Same idempotency key and same request returns the same stable operation reference and does not dispatch a second side effect.
@@ -158,6 +159,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [idempotency-key-expired-reuse.json](test-vectors/idempotency-key-expired-reuse.json)
 - [operation-lock-survives-restart.json](test-vectors/operation-lock-survives-restart.json)
 - [typed-define-start-stop-results.json](test-vectors/typed-define-start-stop-results.json)
+- [operation-type-binding.json](test-vectors/operation-type-binding.json)
 - [typed-define-start-stop-target-mismatch.json](test-vectors/typed-define-start-stop-target-mismatch.json)
 - [typed-define-start-stop-future-readiness.json](test-vectors/typed-define-start-stop-future-readiness.json)
 - [typed-define-start-stop-no-drain.json](test-vectors/typed-define-start-stop-no-drain.json)
