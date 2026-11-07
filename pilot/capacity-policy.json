@@ -1,0 +1,41 @@
+{
+  "policy_id": "supervised-pilot-vm-capacity",
+  "policy_version": 1,
+  "enforcement": {
+    "mode": "declarative",
+    "runtime_enforced": false,
+    "reason": "The current supervised-pilot CLI has no VM-create operation."
+  },
+  "max_instances_total": 2,
+  "capacity_groups": {
+    "production": {
+      "max_instances": 1,
+      "accepted_environments": [
+        "production"
+      ]
+    },
+    "shared_nonproduction": {
+      "max_instances": 1,
+      "accepted_environments": [
+        "staging",
+        "testing"
+      ]
+    }
+  },
+  "create_policy": {
+    "reserve_slot_before_provider_create": true,
+    "reservation_counts_as_capacity": true,
+    "reject_duplicate_or_occupied_slot": true,
+    "reject_if_total_would_exceed_limit": true,
+    "reject_unsupported_environment": true,
+    "occupancy": {
+      "count_every_instance_without_provider_confirmed_absence_or_destruction": true,
+      "count_unresolved_create_outcome": true,
+      "count_unresolved_destroy_outcome": true,
+      "release_only_after_provider_confirmation": [
+        "absent",
+        "destroyed"
+      ]
+    }
+  }
+}
