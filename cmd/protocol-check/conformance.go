@@ -130,6 +130,32 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			})
 		}
 		return map[string]any{"binding_enforced": true, "attempts": outcomes}, nil
+	case "operations.authentication.client-session-expiry":
+		operation := asObject(input["operation"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation); err != nil {
+			return nil, fmt.Errorf("accepted operation does not match schema: %w", err)
+		}
+		if !boolValue(input, "durably_accepted") || !boolValue(input, "client_session_expired") {
+			return nil, fmt.Errorf("fixture requires an accepted operation and an expired client session")
+		}
+		if stringValue(operation, "status") != "running" {
+			return nil, fmt.Errorf("fixture requires a running accepted operation")
+		}
+		if !boolValue(input, "authorization_context_unchanged") || boolValue(input, "next_sensitive_step_reauthorization_required") {
+			return nil, fmt.Errorf("fixture requires unchanged authorization and no separate sensitive-step reauthorization gate")
+		}
+		return map[string]any{
+			"operation_schema_valid":                          true,
+			"operation_id":                                     stringValue(operation, "operation_id"),
+			"operation_status_after_expiry":                   stringValue(operation, "status"),
+			"operation_remains_durable":                       true,
+			"operation_continues_without_client_session":      true,
+			"operation_cancelled_due_to_session_expiry":       false,
+			"session_expiry_alone_requires_client_token_refresh": false,
+			"authorization_context_unchanged":                 true,
+			"sensitive_step_reauthorization_still_applies":     true,
+			"token_material_exposed":                          false,
+		}, nil
 	case "operations.cancellation.before-dispatch", "operations.cancellation.unknown-after-dispatch":
 		initial := asObject(fixture["initial"])
 		cancellationRequested := boolValue(fixture, "cancellation_requested")
