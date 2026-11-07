@@ -2,19 +2,20 @@
 
 **Status:** Draft, version 0.21.0-draft.
 
-## 1. Error layers
+## 1. Four error layers
 
-The protocol distinguishes:
-1. **Transport errors:** the message could not be delivered or framed.
-2. **JSON-RPC errors:** the request could not be parsed or dispatched according to JSON-RPC 2.0.
-3. **Protocol/application errors:** a valid method call was rejected or failed under a documented contract.
-4. **Operation failures:** a previously accepted durable operation ended in `failed` or `needs_operator`; these are read from the operation record, not inferred from an HTTP/RPC envelope.
+The protocol separates:
 
-A timeout or disconnect after dispatch may leave the operation outcome unknown. It MUST be reconciled.
+1. **Transport errors:** a message could not be delivered or framed.
+2. **JSON-RPC errors:** a request could not be parsed or dispatched under JSON-RPC 2.0.
+3. **Protocol/application errors:** a valid method call was rejected or failed under its documented contract.
+4. **Operation failures:** an accepted durable operation ended as `failed` or `needs_operator`. Read that from the operation record; do not infer it from an HTTP or RPC envelope.
 
-## 2. Protocol error object
+A timeout or disconnect after dispatch may leave the outcome unknown. Reconcile it.
 
-The canonical error is:
+## 2. Error object
+
+Here is a representative protocol error:
 
 ```json
 {
@@ -32,31 +33,32 @@ The canonical error is:
 }
 ```
 
-Required fields are `code`, `category`, `message`, and `retryable`. Optional fields may be absent; an absent field is not the same as explicit null unless the schema says so. `details` MUST contain only documented, safe fields.
+Every error includes `code`, `category`, `message`, and `retryable`. Optional fields may be absent. Absence differs from explicit `null` unless the schema says otherwise. The `details` object contains only documented, safe fields.
 
 ## 3. Categories
 
 | Category | Meaning | Typical retry behavior |
 |---|---|---|
-| `validation` | Invalid input or configuration | No; correct request |
-| `authorization` | Actor or adapter lacks permission | No; authorization must change |
-| `unsupported_capability` | Required capability not advertised | No; choose another adapter/workflow |
-| `not_found` | Target absent in stated scope | Usually no |
-| `conflict` | State/lock/idempotency conflict | Only after conflict resolves |
-| `transient` | Temporary service condition | Bounded retry if side-effect safe |
+| `validation` | Input or configuration is invalid | No; correct the request |
+| `authorization` | Actor or adapter lacks permission | No; change authorization |
+| `unsupported_capability` | Required capability is not advertised | No; choose another adapter or workflow |
+| `not_found` | Target is absent in the stated scope | Usually no |
+| `conflict` | State, lock, or idempotency conflict | Only after the conflict clears |
+| `transient` | Temporary service condition | Bounded retry if safe |
 | `provider_failure` | Provider reports failure | Depends on provider result |
-| `integrity_failure` | Data/manifest/checksum invalid | No automatic destructive continuation |
-| `compatibility_failure` | Release/world/runtime incompatible | No; select compatible release or approved migration |
-| `safety_blocked` | Safety precondition failed | No; resolve and re-authorize |
-| `timeout` | Local wait or request deadline expired | Reconcile before retry if dispatched |
-| `cancelled` | Operation cancelled under its rules | New operation for further work |
-| `internal` | Unexpected implementation fault | Depends; preserve evidence and avoid unsafe retry |
+| `integrity_failure` | Data or manifest/checksum verification failed | Do not continue destructive work automatically |
+| `compatibility_failure` | Versions or formats do not match | Choose a compatible release or approved migration |
+| `safety_blocked` | A safety precondition failed | Resolve it and re-authorize |
+| `timeout` | Local wait or request deadline expired; external outcome may be unknown | Reconcile first if dispatch occurred |
+| `cancelled` | Operation was cancelled under its rules | Use a new operation for further work |
+| `internal` | Unexpected controller or adapter failure | Preserve evidence; avoid unsafe retries |
 
 ## 4. Stable codes
 
-Codes MUST be stable, machine-readable, and namespaced. Core codes are reserved to the protocol and MUST use the `core.*` namespace. Adapter and domain-specific codes MUST use a documented, stable namespace; adapter implementations MUST NOT claim or emit another owner's namespace.
+Codes are stable, namespaced identifiers. The protocol reserves `core.*`; adapters and domains must use their own documented namespaces and must not emit another owner's codes.
 
 Initial codes include:
+
 - `core.validation.invalid_request`
 - `core.authorization.denied`
 - `core.lifecycle.invalid_transition`
@@ -74,21 +76,22 @@ Initial codes include:
 - `game.backup.incompatible`
 - `integration.proxy.backend_not_ready`
 
-A registered code's meaning and category MUST remain stable. Adding a code with its category is a compatible registry addition; removing or changing the meaning of a code requires a breaking protocol revision. Consumers MUST use the category for broad handling, MUST tolerate unknown codes according to their category, and MUST NOT branch on message text.
+Once registered, a code keeps its meaning and category. Adding a code with its category is compatible; changing or removing a code requires a breaking protocol revision. Clients use the category for broad handling, tolerate unknown codes according to category, and never branch on message text.
 
 ## 5. HTTP mapping
 
-The management API uses HTTP status codes for request/transport outcome and RFC 9457 Problem Details with the protocol error fields in extensions for errors that occur before an operation is accepted. Once an operation is accepted, its result/failure is represented by the durable operation resource.
+Before operation acceptance, the management API uses HTTP status codes and RFC 9457 Problem Details with protocol fields in extensions. After acceptance, the durable operation resource carries the result or failure.
 
 Recommended mappings:
-- 400 malformed/invalid request.
-- 401 unauthenticated.
-- 403 authenticated but unauthorized.
-- 404 unknown resource.
-- 409 state, lock, or idempotency conflict.
-- 422 valid JSON but semantically invalid request.
-- 429 rate limited.
-- 500 unexpected controller error.
-- 502/503/504 external dependency or gateway failure, provided uncertain side effects are still reconciled.
 
-A HTTP 5xx response MUST NOT be assumed to mean a dispatched provider action did not occur.
+- 400: malformed or invalid request.
+- 401: unauthenticated.
+- 403: authenticated, but unauthorized.
+- 404: unknown resource.
+- 409: state, lock, or idempotency conflict.
+- 422: valid JSON with semantically invalid content.
+- 429: rate limited.
+- 500: unexpected controller error.
+- 502, 503, or 504: external dependency or gateway failure, provided uncertain side effects are still reconciled.
+
+An HTTP 5xx response does not prove that a dispatched provider action failed to occur.
