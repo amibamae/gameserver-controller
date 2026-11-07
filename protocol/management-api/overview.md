@@ -4,55 +4,64 @@
 
 ## 1. Purpose
 
-The management API exposes authorized controller operations to independent operator clients. It is separate from adapter RPC and is not a web panel.
+The management API gives independent operator clients authorized access to controller operations. It is separate from adapter RPC, and it does not require a web panel.
 
-A local CLI, web panel, desktop application, automation, or another controller can use the same API. The API MUST NOT expose provider credentials, secret values, direct unrestricted adapter methods, or a way to bypass core lifecycle policy.
+A local CLI, web panel, desktop application, automation, or another controller may use the same API. The API must not expose provider credentials or secret values, offer unrestricted adapter calls, or let a client bypass core lifecycle rules.
 
-## 2. Binding
+## 2. HTTP binding
 
-The initial management binding is HTTP with JSON request/response bodies. The machine-readable interface is [openapi.yaml](openapi.yaml), using OpenAPI 3.2.1. That document describes the remote bearer-authenticated profile. A local-only implementation MAY expose the same application operations through an OS-authenticated local socket or in-process API as defined in [authentication.md](authentication.md).
+The first binding uses HTTP with JSON request and response bodies. [openapi.yaml](openapi.yaml) describes OpenAPI 3.2.1 and the remote bearer-authenticated profile. A local deployment may expose the same application operations through an OS-authenticated local socket or in-process API; see [authentication.md](authentication.md).
 
-The base path is `/v1`. Implementations MUST identify supported API versions and MUST NOT silently serve an incompatible request under a different version.
+The base path is `/v1`. Implementations must identify supported API versions and reject incompatible requests rather than silently serving them under another version.
 
-Mutating operations are asynchronous: validate the request; authenticate and authorize; durably record the operation; return HTTP 202 with the operation resource and Location header; then perform work asynchronously. HTTP 202 means accepted and durably recorded, not completed.
+Mutating requests run asynchronously:
+
+1. Validate, authenticate, and authorize the request.
+2. Commit the durable operation.
+3. Return HTTP 202 with the operation resource and a Location header.
+4. Perform the work asynchronously.
+
+HTTP 202 means the controller accepted and durably recorded the request. It does not mean the operation finished.
 
 ## 3. Initial endpoints
 
-- `GET /v1/capabilities`: discover controller and adapter capabilities.
-- `GET /v1/servers`: list authorized logical servers.
-- `POST /v1/servers`: define a logical server using the durable `server.define` operation.
-- `GET /v1/servers/{server_id}`: inspect a logical server and current references/states.
-- `POST /v1/servers/{server_id}/operations`: request a typed operation (provision, start, stop, backup, restore, or destroy).
-- `GET /v1/operations/{operation_id}`: inspect durable operation status and result.
-- `POST /v1/operations/{operation_id}/cancel`: request cancellation under operation-specific rules.
-- `GET /v1/operations/{operation_id}/events?after_sequence={n}`: optional Server-Sent Events stream where supported. Events use the canonical operation event schema; polling the operation resource remains authoritative.
+- `GET /v1/capabilities`: list controller and adapter capabilities.
+- `GET /v1/servers`: list logical servers the caller may inspect.
+- `POST /v1/servers`: define a logical server through durable `server.define`.
+- `GET /v1/servers/{server_id}`: inspect one logical server and its current references/states.
+- `POST /v1/servers/{server_id}/operations`: request provision, start, stop, backup, restore, or destroy.
+- `GET /v1/operations/{operation_id}`: read durable operation status and result.
+- `POST /v1/operations/{operation_id}/cancel`: request cancellation under that operation's rules.
+- `GET /v1/operations/{operation_id}/events?after_sequence={n}`: optional Server-Sent Events stream. Events use the canonical operation-event schema; polling the operation resource remains authoritative.
 
-Implementations MUST enforce per-resource authorization and environment scoping on every endpoint. List endpoints MUST NOT reveal the existence of unauthorized resources.
+Every endpoint enforces authorization and environment scope. A list endpoint must not reveal inaccessible resources.
 
-## 4. Operation request
+## 4. Operation requests and idempotency
 
-The request identifies an operation type and a type-specific parameter object. Every mutating operation-acceptance request MUST include the `Idempotency-Key` HTTP header. Its value is case-sensitive and MUST contain 1–128 visible ASCII characters (U+0021 through U+007E). It is scoped to the authenticated actor and is not an authentication credential. The controller binds it to the actor, operation type, target, environment, and canonical validated parameters. A changed request with the same key returns `core.operation.idempotency_conflict`; an identical retry identifies the original operation while its full record is retained. After the full record has expired, a retained tombstone causes `core.operation.idempotency_key_expired` and prevents a new operation or dispatch. See [operation idempotency rules](../operations.md#7-idempotency-and-duplicate-requests) for retention details.
+Each request names an operation type and its type-specific parameters. Every mutating acceptance request must include the `Idempotency-Key` header. The value is case-sensitive and contains 1–128 visible ASCII characters (U+0021 through U+007E). It is scoped to the authenticated actor and is not a credential.
 
-For server-specific operations, the path server ID MUST match the corresponding target ID in the validated parameters. A restore request MUST identify one immutable backup. A destroy request MUST identify the intended target or bind to the current instance through a plan that is rechecked immediately before execution.
+The controller binds the key to actor, operation type, target, environment, and canonical validated parameters. If the same key arrives with changed parameters, return `core.operation.idempotency_conflict`. If the request is identical and its full record remains, return the original operation. After that record expires, a retained tombstone returns `core.operation.idempotency_key_expired` and prevents a new operation or dispatch. See the [operation idempotency rules](../operations.md#7-idempotency-and-duplicate-requests).
+
+For a server operation, the path's server ID must match the target in the validated parameters. Restore names one immutable backup. Destroy identifies its target or binds to the current instance through a plan that the controller rechecks immediately before execution.
 
 ## 5. Authentication and authorization
 
-A remote deployment MUST use TLS and authenticated requests. Bearer tokens are one supported binding; local installations MAY use operating-system identity. The controller remains authoritative for actor identity, permission checks, approval requirements, environment restrictions, and audit.
+A remote deployment must use TLS and authenticated requests. Bearer tokens are one supported binding; a local installation may use OS identity. The controller remains responsible for actor identity, permission checks, approvals, environment limits, and audit.
 
-The OpenAPI security definition is a placeholder for deployment-specific bearer authentication; it does not mandate a particular identity provider or token issuer.
+The OpenAPI bearer scheme is a placeholder. It does not require a particular identity provider or token issuer.
 
 ## 6. Errors
 
-Errors before operation acceptance use RFC 9457 Problem Details with protocol error extensions. Errors after acceptance are stored in the operation resource. A client MUST read the operation after an ambiguous disconnect or timeout before submitting a new mutating request.
+Before operation acceptance, return RFC 9457 Problem Details with protocol error extensions. After acceptance, store errors in the operation resource. If a disconnect or timeout makes acceptance ambiguous, read the operation before sending another mutating request.
 
 ## 7. Compatibility
 
-API paths carry major version `v1`. Minor additions MUST be backward compatible and define how clients handle unknown fields and enum values. Breaking changes require a new major path. API version and core protocol version are related but not identical.
+API paths carry the major version, `v1`. Minor additions must remain backward-compatible and define how clients handle unknown fields and enum values. Breaking changes require a new major path. The API version and core protocol version are related, but they are not the same version.
 
-## 8. Non-goals
+## 8. Out of scope
 
 - A required browser interface.
-- Direct raw provider API access.
-- Direct adapter invocation by untrusted clients.
-- Synchronous completion of long-running lifecycle operations.
-- Exposing secrets in configuration reads or operation history.
+- Raw provider API access.
+- Direct adapter calls from untrusted clients.
+- Synchronous completion of long-running lifecycle work.
+- Secrets in configuration reads or operation history.

@@ -1,32 +1,33 @@
 # Adapter RPC Methods
 
-**Status:** Draft, version 0.21.0-draft. These methods define the logical adapter RPC surface. The process transport is specified separately in [transport.md](transport.md).
+**Status:** Draft, version 0.21.0-draft. These methods define the adapter RPC surface. The process transport has a separate [specification](transport.md).
 
 ## 1. Method model
 
-The initial binding uses a small stable set of JSON-RPC methods. Adapter-specific work is invoked through capability names defined by the relevant adapter contract. Implementations MUST NOT invent an undocumented method for a standard capability.
+The initial binding uses a small set of stable JSON-RPC methods. Adapter-specific work runs through capabilities named in the relevant contract. Do not invent undocumented methods for standard capabilities.
 
 | Method | Purpose | Side effects |
 |---|---|---|
-| `adapter.initialize` | Negotiate protocol version and establish adapter session | Session only |
-| `adapter.describe` | Return adapter descriptor and capabilities | None |
-| `adapter.health` | Return adapter process/readiness diagnostics | None |
-| `adapter.invoke` | Invoke one declared capability | Depends on capability |
-| `adapter.reconcile` | Inspect/reconcile an earlier call with uncertain outcome | Read-only by default |
+| `adapter.initialize` | Negotiate a protocol version and establish a session | Session only |
+| `adapter.describe` | Return the adapter descriptor and capabilities | None |
+| `adapter.health` | Report process/readiness diagnostics | None |
+| `adapter.invoke` | Call one declared capability | Depends on capability |
+| `adapter.reconcile` | Inspect an earlier call with an uncertain outcome | Read-only by default |
 
 ## 2. Request context
 
-An `adapter.invoke` request contains:
-- `protocol_version`: negotiated protocol version.
-- `capability`: exact capability name declared by the adapter.
-- `request_context`: request ID, correlation ID, operation ID and step ID for mutating work, deadline, environment ID, logical server ID where applicable, and idempotency key when supported.
-- `input`: capability-specific object validated against the capability's declared input schema.
+An `adapter.invoke` request carries:
 
-The controller MUST NOT trust adapter-supplied actor identity or authorization claims. The adapter receives only the scoped operation context and permissions granted by the controller.
+- `protocol_version`: the negotiated version.
+- `capability`: the exact name the adapter declared.
+- `request_context`: request and correlation IDs; operation and step IDs for mutating work; deadline; environment and, where applicable, logical server ID; and an idempotency key when supported.
+- `input`: the capability-specific object, validated against its declared input schema.
+
+The controller must not trust actor identity or authorization claims from an adapter. It gives the adapter only the scoped operation context and permissions required for the work.
 
 ## 3. Initialize
 
-Illustrative request:
+Example request:
 
 ```json
 {
@@ -47,7 +48,7 @@ Illustrative request:
 }
 ```
 
-Illustrative result:
+Example result:
 
 ```json
 {
@@ -61,17 +62,17 @@ Illustrative result:
 }
 ```
 
-The adapter MUST select only a mutually supported version. If no version is compatible, initialization fails with a structured protocol-version error. It MAY omit `selected_stream_transport` when it does not support an offered optional stream profile. A selected stream profile MUST be one offered by the controller.
+The adapter selects only a mutually supported version. If none is compatible, initialization returns a structured protocol-version error. It may omit `selected_stream_transport` when it does not support the optional profile. A selected profile must be one the controller offered.
 
 ## 4. Describe and health
 
-`adapter.describe` returns the descriptor defined in [adapter contracts](../adapters/README.md). The controller MUST validate the descriptor before enabling the adapter.
+`adapter.describe` returns the descriptor defined in [adapter contracts](../adapters/README.md). The controller validates it before enabling the adapter.
 
-`adapter.health` is read-only and returns health status, observation time, and safe diagnostics. It MUST NOT expose credentials, raw environment variables, or unredacted provider responses.
+`adapter.health` is read-only. It returns health, observation time, and safe diagnostics. It must not expose credentials, raw environment variables, or unredacted provider responses.
 
 ## 5. Invoke
 
-Illustrative request:
+Example request:
 
 ```json
 {
@@ -100,14 +101,15 @@ Illustrative request:
 }
 ```
 
-A mutating capability MUST include `operation_id` and `step_id` in request context. If the adapter contract declares provider idempotency support, the controller MAY include a provider-scoped idempotency token in the request context. That token is distinct from the management API's client-supplied `Idempotency-Key`; the client key MUST NOT be treated as proof that an external provider call is idempotent. The adapter contract defines the provider token's scope and semantics.
+Mutating capabilities also include `operation_id` and `step_id`. When the capability contract defines provider idempotency, the controller may include a provider-scoped token. That is separate from the management API's client `Idempotency-Key`; the client key does not prove a provider call is idempotent. The adapter contract defines the provider token's scope and meaning.
 
-The result MUST distinguish:
-- `completed`: capability postcondition is confirmed.
-- `accepted`: external system accepted work, but completion is pending; an external operation reference and reconciliation method are supplied.
-- `outcome_unknown`: effect may have occurred and must be reconciled before retry.
+A result distinguishes:
 
-Illustrative accepted result:
+- `completed`: the capability's postcondition is confirmed.
+- `accepted`: the external system accepted work, but it remains pending; return an external operation reference and a way to reconcile.
+- `outcome_unknown`: the effect may have happened, so reconcile before retrying.
+
+Example accepted result:
 
 ```json
 {
@@ -127,27 +129,28 @@ Illustrative accepted result:
 }
 ```
 
-The exact `output` schema is capability-specific and MUST be linked from the descriptor or protocol specification. A successful JSON-RPC response does not itself mean the capability's external work completed.
+The descriptor or protocol spec links the exact capability output schema. A successful JSON-RPC response alone does not prove the external operation finished.
 
 ## 6. Reconcile
 
-`adapter.reconcile` receives the original operation/step identity, capability name, prior external operation/resource references, and safe original input reference or fingerprint. It MUST use read-only inspection where possible.
+`adapter.reconcile` receives the original operation and step IDs, capability name, prior external references, and a safe input reference or fingerprint. It should inspect state without mutating it.
 
-A reconcile call returns a documented outcome such as `completed`, `not_applied`, `still_pending`, or `indeterminate`. It MUST NOT repeat the original side effect merely to discover its result. If it cannot determine the outcome, the controller suspends the operation for operator intervention.
+It returns a documented result such as `completed`, `not_applied`, `still_pending`, or `indeterminate`. It must not repeat the original side effect just to discover what happened. If the adapter cannot determine the outcome, the controller suspends the operation for operator review.
 
 ## 7. JSON-RPC errors
 
-JSON-RPC envelope errors handle parse/dispatch failures. Application errors use the standard error data object defined in [errors.md](errors.md). Clients MUST branch on stable protocol error codes, not human-readable messages.
+JSON-RPC envelope errors cover parse and dispatch failures. Application errors use the common data object in [errors.md](errors.md). Clients branch on stable protocol error codes, not message text.
 
-Required JSON-RPC standard error codes:
+Required JSON-RPC codes:
+
 - `-32700`: Parse error.
 - `-32600`: Invalid Request.
 - `-32601`: Method not found.
 - `-32602`: Invalid params.
 - `-32603`: Internal error.
 
-Application errors MAY use the JSON-RPC server error range and MUST include a protocol error code in `error.data`.
+Application errors may use the server-error range and must include a protocol error code in `error.data`.
 
-## 8. Notifications and batch calls
+## 8. Notifications and batches
 
-Notifications MUST NOT be used for mutating adapter calls because the caller needs an outcome or uncertainty marker. JSON-RPC batch requests are not part of the initial adapter binding. An implementation MUST reject or explicitly not advertise unsupported JSON-RPC features rather than process them inconsistently.
+Do not use notifications for mutating adapter calls; the caller needs an outcome or an uncertainty marker. Batch calls are outside the initial binding. Reject unsupported JSON-RPC features, or clearly decline to advertise them, rather than processing them inconsistently.

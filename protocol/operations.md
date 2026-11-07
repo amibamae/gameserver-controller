@@ -1,8 +1,8 @@
 # Durable Operation Protocol
 
-**Status:** Draft, version 0.21.0-draft. This document defines language-independent operation semantics. JSON schemas and RPC/management bindings are published separately.
+**Status:** Draft, version 0.21.0-draft. These operation rules remain language-neutral. The Go operation store and durable acceptance path exist; full workflow dispatch and reconciliation are still unimplemented. Schemas and RPC/management bindings are published separately.
 
-The operation protocol is shared by the controller core, adapters, command-line tools, and future management clients. Implementations in different languages MUST preserve the behavior defined here.
+The controller, adapters, CLI, and future management clients share these rules. Implementations in every language MUST preserve the behavior defined here.
 
 ## 1. Purpose and scope
 

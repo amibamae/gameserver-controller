@@ -1,34 +1,36 @@
 # Protocol Security and Privacy Requirements
 
-**Status:** Draft, version 0.21.0-draft. This document specifies protocol-level security requirements; it is not a security certification.
+**Status:** Draft, version 0.21.0-draft. These are protocol requirements, not a security certification.
 
 ## 1. Trust boundaries
 
-The design distinguishes:
-- Operator/client to controller.
-- Controller core to adapter.
-- Adapter to hosting/storage provider.
-- Controller/game adapter to game process and filesystem.
-- Controller to proxy/integration.
-- Production to staging.
-- Source repository/release artifact to privileged bootstrap execution.
-- Optional telemetry destination.
+The design separates:
 
-Adapters, plugins, game files, archives, provider responses, and user-supplied configuration are untrusted inputs until validated.
+- Operator/client and controller.
+- Controller core and adapter.
+- Adapter and hosting/storage provider.
+- Controller/game adapter and game process/filesystem.
+- Controller and proxy/integration.
+- Production and staging.
+- Source/release artifacts and privileged bootstrap execution.
+- Controller and optional telemetry destination.
+
+Treat adapters, plugins, game files, archives, provider responses, and user configuration as untrusted until validated.
 
 ## 2. Authentication and actor identity
 
-The controller MUST establish the trusted actor identity at the client boundary. Clients MUST NOT self-assert roles or permission scopes in ordinary request payloads.
+The controller establishes the caller's identity at the client boundary. A client must not assert its own role or permission scope in an ordinary request.
 
-Authentication mechanism is deployment-specific. The initial local controller MAY use operating-system identity and local access controls. A remote management API MUST use an authenticated channel and MUST document its authentication method and token/session lifecycle. A public network deployment MUST use TLS.
+Deployments choose the authentication mechanism. A local controller may use OS identity and local access controls. A remote management API must use an authenticated channel and document its method and token/session lifecycle. A public network deployment must use TLS.
 
-Adapter process identity is established by the controller's configured executable, operating-system identity, configuration, and validated descriptor. A descriptor is not an authorization grant.
+The controller identifies an adapter process using its configured executable, OS identity, configuration, and validated descriptor. A descriptor describes an adapter; it does not authorize it.
 
 ## 3. Authorization and scopes
 
-Authorization is enforced by the controller core before accepting a mutating operation and again before sensitive/destructive steps where relevant.
+The core checks authorization before accepting a mutating operation and again before a sensitive or destructive step when relevant.
 
-Permission scopes MUST identify action, resource category, and environment. Examples:
+Permission scopes name an action, resource category, and environment. Examples:
+
 - `server.inspect`
 - `server.provision`
 - `server.start`
@@ -43,65 +45,68 @@ Permission scopes MUST identify action, resource category, and environment. Exam
 - `storage.backup.delete`
 - `proxy.backend.manage`
 
-A capability declaration describes what an adapter can do; it does not grant a caller permission to request it. The controller MUST intersect caller authorization, environment policy, adapter capability, and available secret scopes.
+An adapter capability describes what that adapter can do. It does not grant the caller permission. The core intersects caller authorization, environment policy, adapter capability, and available secret scopes.
 
-## 4. Approvals and destructive actions
+## 4. Approvals and destructive work
 
-An approval MUST be bound to an exact action, logical server, environment, provider/adapter, concrete instance/resource reference, plan fingerprint, expiry, and approver identity. The controller MUST evaluate that binding and the expiry against the exact request immediately before each sensitive or destructive step; an approval expires at its `expires_at` timestamp. Any material change invalidates the approval.
+Bind each approval to the exact action, logical server, environment, provider/adapter, concrete instance/resource, plan fingerprint, expiry, and approver. Immediately before each sensitive or destructive step, check that binding and expiry against the exact request. Any material change invalidates approval.
 
-Destroy of an instance containing persistent game data MUST be blocked unless:
-- A verified backup is associated with the current data generation.
-- The exact target identity is confirmed immediately before destruction.
-- No unresolved conflicting operation exists.
-- Authorization and required approval are current.
-- The operation and audit record are durable.
+Before destroying an instance with persistent game data, the core must confirm:
 
-Failure or uncertainty in any precondition MUST fail closed. A generic force/yes flag MUST NOT bypass production safeguards. Permanent deletion of backups is a separate, more restrictive action.
+- A verified backup for the current data generation.
+- The exact target identity, rechecked immediately before destruction.
+- No unresolved conflicting operation.
+- Current authorization and required approval.
+- Durable operation and audit records.
+
+If a precondition fails or remains unclear, fail closed. A generic force/yes flag cannot bypass production safeguards. Permanent backup deletion is a separate, more restrictive action.
 
 ## 5. Secret references and credential flow
 
-Ordinary protocol messages contain references to secrets, not secret values. A secret reference is not permission to resolve the secret.
+Ordinary protocol messages carry secret references, never secret values. A reference does not itself grant permission to resolve a secret.
 
-The controller MUST:
-- Resolve secrets only for the component/step requiring them.
+The controller must:
+
+- Resolve secrets only for the component and step that need them.
 - Use least-privilege scopes and separate production/staging credentials.
-- Minimize secret lifetime in memory and avoid persistence in operation records.
-- Redact secrets from logs, errors, event payloads, process diagnostics, and audit.
+- Minimize how long secrets remain in memory and keep them out of operation records.
+- Redact them from logs, errors, event payloads, process diagnostics, and audit.
 - Reject literal values where a secret reference is required.
-- Support credential rotation without changing protocol object identity.
+- Allow credential rotation without changing protocol object identity.
 
-Bootstrap source, command-line arguments, provider user-data, release archives, source control, and logs MUST NOT contain raw credentials. Short-lived credential delivery MAY use a protected channel separately defined by the implementation.
+Never put raw credentials in bootstrap source, command-line arguments, provider user-data, release archives, source control, or logs. An implementation may define a separate protected channel for short-lived credential delivery.
 
 ## 6. Environment isolation and data protection
 
-Every resource and operation belongs to an environment. Cross-environment operations are denied by default.
+Every resource and operation belongs to an environment. Deny cross-environment actions by default.
 
-Production backup credentials MUST NOT be available to staging for write/delete. Staging may receive narrowly scoped read access to selected production backup objects, and writes only to staging-owned destinations. A staging actor MUST NOT cross this boundary even when a production write/delete scope is mistakenly attached to its credentials; backup writes and deletes require both an exact environment match and the action-specific scope.
+Production backup credentials must not let staging write or delete. Staging may get narrow read access to selected production objects, and writes only to staging-owned destinations. Even if a staging actor mistakenly receives production write/delete credentials, enforce the boundary in policy: backup writes and deletes require both an exact environment match and the action-specific scope.
 
 Restore must reject path traversal, absolute paths, unsafe symbolic links, hard-link escapes, device nodes, and archive entries outside the approved data root. Extraction must not follow attacker-controlled links.
 
 ## 7. Adapter isolation and supply chain
 
-Adapters are executable code and must be reviewed, versioned, and installed from trusted sources. The controller SHOULD isolate adapters by OS user, filesystem, network policy, resource limits, and narrowly scoped credentials. A compromised adapter must not automatically inherit every controller/provider secret.
+Adapters are executable code. Review and version them, and install them from trusted sources. The controller should isolate adapters by OS user, filesystem, network policy, resource limits, and narrowly scoped credentials. A compromised adapter must not inherit every controller or provider secret.
 
-Bootstrap scripts are privileged code. Record exact source revision, digest, non-secret inputs, execution identity, and validation result. Review and test changes on fresh isolated instances before production use.
+Bootstrap scripts are privileged code. Record the exact source revision and digest, non-secret inputs, execution identity, and validation result. Review and test changes on fresh, isolated instances before production.
 
 ## 8. Audit and event privacy
 
-Audit records MUST include actor, action, target, environment, authorization/approval decision, operation ID, timestamp, and outcome for security-relevant operations. Audit records MUST be access controlled and protected from unauthorized modification.
+For each security-relevant action, audit the actor, action, target, environment, authorization/approval decision, operation ID, timestamp, and result. Restrict access to audit records and protect them from unauthorized changes.
 
-Player identifiers and telemetry MUST be minimized. Optional identifiable player telemetry is disabled by default and requires separate informed consent from the server owner and each affected player. Ordinary operational health checks must not silently become gameplay profiling.
+Minimize player identifiers and telemetry. Identifiable optional telemetry starts disabled and requires separate informed consent from the server owner and each affected player. Routine health checks must not silently become gameplay profiling.
 
 ## 9. Security conformance
 
-An implementation MUST pass tests proving:
-- Caller cannot self-elevate permissions.
-- Adapter cannot bypass core policy.
-- Destruction approval is bound to the exact action, server, environment, adapter, instance, plan fingerprint, expiry, and approver; expired or mismatched approvals block provider dispatch.
+Test that:
+
+- A caller cannot grant itself permissions.
+- An adapter cannot bypass core policy.
+- Destruction approval binds the exact action, server, environment, adapter, instance, plan fingerprint, expiry, and approver; stale or mismatched approval blocks the provider call.
 - Failed backup verification blocks destruction.
-- Staging cannot write/delete production backups.
-- Secret values are absent from logs/errors/events.
+- Staging cannot write to or delete production backups.
+- Logs and errors contain no secret values.
 - Unsafe archive paths are rejected.
-- Unknown capabilities fail explicitly.
+- Unsupported capabilities fail explicitly.
 - Adapter crashes do not erase durable operations.
-- Uncertain side effects are reconciled before retry.
+- The controller reconciles uncertain effects before retrying.

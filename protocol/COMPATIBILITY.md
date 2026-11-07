@@ -2,108 +2,113 @@
 
 **Status:** Draft, protocol version 0.21.0-draft.
 
-This document defines how independent controllers, adapters, and clients decide whether they can communicate safely. It is normative where it uses MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY.
+This document tells controllers, adapters, and clients when they can safely communicate. The words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are normative.
 
-## 1. Keep version domains separate
+## 1. Keep version numbers separate
 
-The following versions describe different contracts and MUST NOT be treated as interchangeable:
+These version fields name different contracts. Never substitute one for another:
 
-- `protocol_version` identifies the language-neutral protocol semantics negotiated by a peer.
-- `contract_versions` identifies the adapter-category contract revisions implemented by an adapter.
-- A capability's `version` identifies that capability's input, output, and behavior contract.
-- `implementation_version` identifies a particular controller or adapter build.
-- A schema `$id` identifies one machine-readable schema. Its package path is a distribution location, not its identity.
-- The management API version identifies the client-facing HTTP API. It evolves independently of adapter RPC and protocol versions.
+- `protocol_version` identifies the language-neutral semantics a peer negotiated.
+- `contract_versions` identifies adapter-category contracts.
+- A capability's `version` identifies its input, output, and behavior contract.
+- `implementation_version` identifies a controller or adapter build.
+- A schema `$id` identifies one machine-readable schema. Its file path only tells you where it is distributed.
+- The management API version identifies the client-facing HTTP API. It evolves independently of RPC and protocol versions.
 
-A build number or implementation version MUST NOT be used as a substitute for protocol compatibility.
+A build number or implementation version cannot stand in for protocol compatibility.
 
-## 2. Negotiation is explicit and fail-closed
+## 2. Negotiate explicitly and fail closed
 
-Peers MUST advertise the protocol versions they support and MUST select exactly one version present in both sets. The selected version MUST be recorded in the session and in every durable operation created through that session. A peer MUST NOT retry initialization with a lower version after any failed negotiation response to bypass validation, authorization, or policy checks; the caller must correct the cause or report incompatibility.
+Peers advertise supported protocol versions and select exactly one version present in both sets. Record that version in the session and every durable operation created through it.
 
-A peer MUST NOT silently:
-- Select the newest version without checking the other peer's supported set.
-- Downgrade to an older version after a validation or authorization error.
+After a failed negotiation response, do not retry initialization with an older version to bypass validation, authorization, or policy. Fix the cause or report incompatibility.
+
+A peer must not:
+
+- Pick the newest version without checking the other peer's supported list.
+- Downgrade after a validation or authorization error.
 - Interpret an unknown protocol, lifecycle, operation, or capability version as the nearest known version.
-- Change message meaning based on implementation version.
+- Change message meaning based on software version.
 
-If no mutually supported version exists, initialization MUST fail with a structured protocol-version compatibility error. A deployment MAY require a configured minimum version stricter than the negotiated minimum.
+If no common version exists, initialization fails with a structured protocol-version compatibility error. A deployment may set a stricter minimum than the negotiated minimum.
 
-Capability negotiation is independent. An adapter advertises exact capability names and versions; the controller invokes only a version it has validated and authorized. Missing or incompatible capabilities fail as unsupported rather than being emulated silently.
+Capability negotiation is separate. An adapter advertises exact capability names and versions; the controller invokes only versions it has validated and authorized. Missing or incompatible capabilities return an unsupported result. Do not emulate them silently.
 
-## 3. Draft and stable compatibility policy
+## 3. Draft and stable policy
 
-The current `0.21.0-draft` is an unstable pre-1.0 protocol. It does not provide a stable compatibility guarantee, but `protocol_version` still identifies the wire contract used during negotiation. Peers MUST NOT advertise the same protocol version for different accepted messages or required behavior.
+Version `0.21.0-draft` is unstable and pre-1.0. It provides no stable compatibility guarantee, but `protocol_version` still identifies the negotiated wire contract. Peers must not advertise the same version for different accepted messages or required behavior.
 
-While the protocol is in design, the moving, untagged branch is development source and MUST NOT be used as a compatibility target between independent implementations. Each published draft snapshot MUST be immutable and MUST use a new SemVer-shaped `0.y.0-draft` version; this project increments the minor component for each published pre-1.0 snapshot. A breaking change MUST use a new protocol version and update all version-scoped schema IDs in the same change. For example, an incompatible change after `0.9.0-draft` uses `0.21.0-draft`. Examples, conformance fixtures, and the schema inventory MUST be updated with the snapshot.
+While the protocol is in design, the untagged branch is development source, not a compatibility target for independent implementations. Each published draft snapshot must be immutable and use a new SemVer-shaped `0.y.0-draft` version. The project increments the minor component for each pre-1.0 snapshot. A breaking change uses a new protocol version and updates every version-scoped schema ID in the same change. For example, an incompatible change after `0.9.0-draft` uses `0.21.0-draft`. Update examples, fixtures, and the schema inventory with each snapshot.
 
-A `-draft` prerelease label is used while protocol semantics are being designed and no runnable implementation has demonstrated conformance. The project reserves `-alpha` for a runnable early controller or adapter implementation under evaluation; these labels are project maturity signals, not different compatibility guarantees. Both remain unstable prereleases.
+Use `-draft` while designing protocol semantics and before a runnable implementation demonstrates conformance. The project reserves `-alpha` for an early controller or adapter under evaluation. These are maturity labels, not different compatibility guarantees; both are unstable prereleases.
 
-A development build from an untagged source tree MUST retain its exact commit or source revision in deployment metadata and SHOULD store it with each durable operation. The exact revision or package digest identifies artifact contents for reproducibility; it MUST NOT substitute for the negotiated `protocol_version`. Implementations intended to interoperate MUST pin the same published protocol package or another explicitly agreed immutable snapshot.
+A build from an untagged tree must record its exact commit or source revision in deployment metadata and should store it with each durable operation. The revision or package digest identifies the artifact for reproducibility; it does not replace the negotiated protocol version. Interoperating implementations pin the same published protocol package or another explicitly agreed immutable snapshot.
 
-After protocol 1.0, versions follow SemVer: a major version MUST increment for backward-incompatible changes; a minor version MUST increment for backward-compatible public additions or deprecations; a patch version MUST increment only for backward-compatible fixes or clarifications. A change that causes a previously valid message to be rejected, narrows a safety-critical enum, makes an optional field required, or changes a field's meaning is breaking.
-
+After 1.0, follow SemVer: increment major for incompatible changes, minor for compatible additions or deprecations, and patch for compatible fixes or clarifications. A change is breaking if it rejects a previously valid message, narrows a safety-critical enum, makes an optional field required, or changes a field's meaning.
 
 ## 4. Schema package rules
 
-The schema index is the authoritative list of schemas shipped in a protocol package. Implementations MUST validate against the schema package selected for the negotiated protocol version; they MUST NOT mix schemas from different protocol versions to make a message pass.
+The schema index lists every schema in a protocol package. Implementations validate against the package selected for the negotiated version; do not mix schemas from different protocol versions to make a message pass.
 
-Schema IDs MUST be unique within a package. A schema reference MUST resolve through the package's local registry or an explicitly declared in-package reference. Validators MUST NOT perform arbitrary network retrieval to resolve protocol schema IDs.
+Schema IDs are unique within a package. A schema reference resolves through the package's local registry or an explicitly declared in-package reference. Validators must not make arbitrary network requests to resolve protocol schema IDs.
 
-Once a protocol package is tagged as a release, its schema content and IDs are immutable. A correction creates a new package revision and, where its validation semantics change, a new version-scoped schema ID. A consumer that must reproduce an earlier operation SHOULD retain the package version or schema-package digest used when that operation was accepted.
+Once a package is tagged, its schema content and IDs are immutable. A correction creates a new package revision and, if validation meaning changes, a new version-scoped schema ID. To reproduce an earlier operation, retain the package version or digest used when it was accepted.
 
-Generated language bindings MAY be produced from the schemas, but generated code is not authoritative and MUST NOT introduce semantics absent from the protocol documents.
+Generated bindings may come from schemas, but the schemas and protocol text remain authoritative. Generated code cannot add semantics absent from them.
 
-## 5. Object and enum evolution
+## 5. Evolve objects and enums safely
 
-Each schema MUST state whether an object is closed or extensible and the scope of that extensibility.
+Every schema states whether its object is closed or extensible, and where.
 
-- Request and command objects, including nested request parameters, MUST be closed unless they define a specific namespaced `extensions` map. Unknown fields in those objects are rejected.
-- The read-only `lifecycle:server` and `operations:operation` resource schemas are extensible only at their top level. They MAY add unknown optional top-level properties; their nested targets, steps, observations, progress, and other objects remain closed unless their own schema explicitly says otherwise.
-- Clients MUST ignore unknown optional fields on an extensible response resource when those fields are not needed for a safety decision. Unknown fields MUST NOT change the meaning of known fields or supply a required safety precondition.
-- Lifecycle, operation, instance, runtime, and other safety-critical status/state enums remain closed. An unknown value that affects routing, authorization, destructive actions, or recovery MUST fail safely and SHOULD be reported with `core.compatibility.unknown_state`; it MUST NOT be guessed, coerced, or mapped to a known value.
-- A new required behavior MUST be represented by a new protocol/capability contract version or a new required capability, not inferred from implementation version.
+- Request and command objects, including nested parameters, are closed unless they define a namespaced `extensions` map. Reject unknown fields otherwise.
+- Read-only `lifecycle:server` and `operations:operation` resources are extensible only at the top level. They may gain optional top-level properties; nested targets, steps, observations, progress, and other objects stay closed unless their own schema says otherwise.
+- On an extensible response resource, clients ignore unknown optional fields if those fields are not needed for a safety decision. Unknown fields cannot change known meanings or supply a safety precondition.
+- Keep lifecycle, operation, instance, runtime, and other safety-critical enums closed. An unknown value affecting routing, authorization, destruction, or recovery fails safely and should use `core.compatibility.unknown_state`. Never guess or coerce it.
+- Represent new required behavior with a new protocol/capability version or a new required capability. Do not infer it from implementation version.
 
-## 6. Durable operations across upgrades
+## 6. Recover operations across upgrades
 
-An accepted operation is bound to the protocol version and validated request under which it was created. The controller MUST retain enough version information and request metadata to resume or reconcile it after a process restart or software upgrade.
+An accepted operation stays bound to the protocol version and validated request under which it began. Keep enough version and request metadata to resume or reconcile it after restart or upgrade.
 
-An implementation MUST NOT reinterpret an in-flight operation using newer defaults. Every dispatched adapter step MUST retain the exact adapter identity and capability name and version used when it was accepted. The implementation MUST either:
-- Continue using the recorded operation semantics and that exact capability version;
-- Reconcile the external state and migrate the operation through an explicitly documented, tested migration; or
-- Suspend the operation for operator intervention when the recorded semantics or capability version cannot be honored.
+Every dispatched adapter step retains the exact adapter identity, capability name, and capability version. The implementation must do one of these:
 
-It MUST NOT substitute a newer or older capability version by inference. If no explicit tested migration exists, it MUST suspend rather than replay or reinterpret the step.
+- Continue with the recorded semantics and exact capability version.
+- Reconcile external state and migrate through an explicit, tested migration.
+- Suspend the operation for operator action when the recorded contract cannot be honored.
 
-A migration MUST preserve operation identity, idempotency binding, completed steps, external references, warnings, errors, and audit history. It MUST NOT repeat an external side effect merely because the implementation changed.
+Do not substitute a different capability version by inference. Without an explicit tested migration, suspend rather than replay or reinterpret the step.
+
+A migration preserves operation identity, idempotency binding, completed steps, external references, warnings, errors, and audit history. It must not repeat an external effect because the implementation changed.
 
 ## 7. Management API compatibility
 
-The management API's URL version (currently `/v1`) is independent of the protocol and schema package versions. API responses that expose durable operations MUST preserve the operation's own `protocol_version` and operation identity.
+The management API path version, currently `/v1`, is independent of protocol and schema package versions. API responses exposing durable operations preserve each operation's `protocol_version` and identity.
 
-A client-facing API revision MUST NOT silently change adapter RPC semantics. A controller MAY support multiple management API versions over one protocol implementation, provided authorization and safety policy remain centralized in the controller.
+A management API revision cannot silently change adapter RPC semantics. A controller may support multiple management API versions over one protocol implementation, provided the controller still centralizes authorization and safety policy.
 
-## 8. Deprecation and removal
+## 8. Deprecate and remove deliberately
 
-Before a stable contract is removed, maintainers MUST provide:
-- A deprecation notice identifying the exact field, state, method, or capability.
-- A replacement and migration example.
-- The first version in which deprecation applies and the earliest version in which removal is permitted.
+Before removing a stable contract, maintainers document:
+
+- The exact field, state, method, or capability being deprecated.
+- Its replacement and a migration example.
+- The first deprecated version and earliest version that may remove it.
 - A conformance fixture proving the replacement behavior.
 
-Security fixes and changes needed to prevent data loss or unsafe routing MAY require accelerated removal. Such changes MUST document the risk and migration impact, the affected versions, and the safest available migration path.
+Security fixes and changes needed to prevent data loss or unsafe routing may require faster removal. Document the risk, migration effect, affected versions, and safest available path.
 
-## 9. Compatibility release gate
+## 9. Release gate
 
-Every protocol release MUST validate:
-- Schema index uniqueness, IDs, paths, and local references.
-- All published examples against their declared schemas.
-- Conformance fixture structure and expected safety behavior.
-- Exact protocol negotiation, no-overlap failure, and refusal to downgrade after an error.
-- Tolerance of unknown optional top-level fields on read-only server/operation resources, while requests and nested closed objects reject them.
-- Safe refusal for unknown safety-critical enum/state values.
-- Destroyed-server replacement preserving logical identity while using a distinct infrastructure identity.
-- Required readiness completeness and exact target binding.
-- In-flight operation recovery across controller/adapter upgrades using the recorded protocol and exact capability versions without replaying completed effects.
+For every protocol release, validate:
 
-The initial Go implementation MUST pass the published conformance suite before release. Other-language implementations are welcome community contributions and MAY run the same suite, but a second language is not a release requirement. A schema-valid message alone is not evidence of behavioral interoperability.
+- Schema-index uniqueness, IDs, paths, and local references.
+- Every published example against its declared schema.
+- Fixture structure and expected safety behavior.
+- Exact negotiation, no-overlap failure, and no downgrade after an error.
+- Unknown optional top-level fields on read-only server/operation resources are tolerated; requests and nested closed objects reject them.
+- Unknown safety-critical enum/state values fail safely.
+- Replacing a destroyed instance preserves logical identity while using a distinct infrastructure identity.
+- Required readiness is complete and bound to the exact target.
+- In-flight operations recover across controller/adapter upgrades using recorded protocol and capability versions, without replaying completed effects.
+
+The initial Go implementation must pass the published conformance suite before release. Other-language implementations are welcome and may run the same suite, but a second language is not a release requirement. A schema-valid message alone does not prove behavioral interoperability.

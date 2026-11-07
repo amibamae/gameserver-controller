@@ -1,10 +1,10 @@
 # Lifecycle Protocol
 
-**Status:** Draft specification, version 0.21.0-draft. This document defines proposed lifecycle semantics; it is not yet a stable protocol release or implemented state machine.
+**Status:** Draft specification, version 0.21.0-draft. Go code now validates lifecycle transitions, but the full lifecycle workflow is not implemented and the protocol is not a stable release.
 
 ## 1. Purpose
 
-This specification defines the lifecycle of a logical game server independently of its hosting provider, execution technology, game, programming language, and user interface.
+This specification defines a logical game server's lifecycle without tying it to a hosting provider, runtime, game, programming language, or user interface.
 
 It MUST be possible to implement this model using ordinary virtual machines and system services without Kubernetes, containers, or Agones. Those technologies MAY be used through optional adapters.
 
