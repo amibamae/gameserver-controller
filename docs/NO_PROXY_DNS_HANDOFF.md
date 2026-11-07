@@ -9,11 +9,9 @@ using one join hostname and that the controller owns the relevant DNS record.
 1. While the game server is stopped, the join hostname resolves to an
    always-on lobby.
 2. A player joins the lobby. The lobby sends an authenticated, rate-limited
-   wake request to the controller API, then kicks the player with an estimated
-   boot time and asks them to rejoin after it. A measured estimate requires the
-   server owner to opt in to sharing boot-time telemetry with the lobby/DNS
-   service. Without opt-in or enough samples, the lobby gives a conservative
-   configured wait. It never receives Vultr or Wasabi keys.
+   wake request to the controller API, then kicks the player with a message
+   giving the estimated boot time and asking them to rejoin after it. The lobby
+   never receives Vultr or Wasabi keys.
 3. The controller deduplicates requests, checks the environment and VM cap,
    then starts or provisions the controller-owned server.
 4. If the player reconnects before readiness, the lobby reads the operation
@@ -23,6 +21,11 @@ using one join hostname and that the controller owns the relevant DNS record.
    the controller changes the managed join record to the exact game endpoint.
    The player reconnects; a fresh DNS lookup directs that connection to the
    game server.
+
+> [!NOTE]
+> A measured boot-time estimate requires the server owner to opt in to sharing
+> boot-time telemetry with the lobby/DNS service. Without opt-in or enough
+> samples, the lobby uses a conservative configured wait.
 
 DNS changes do not move an existing connection from the lobby to the game.
 The player must reconnect. DNS resolvers can retain the old record until its
