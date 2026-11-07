@@ -203,7 +203,7 @@ func validateStopProfile(server store.LogicalServer, profile ServerStopProfile) 
 	}
 	if err := json.Unmarshal(profile.UnitRef, &ref); err != nil || !isObject(profile.UnitRef) ||
 		ref.AdapterID != server.ExecutionAdapterID || ref.EnvironmentID != server.EnvironmentID ||
-		ref.ResourceKind == "" || ref.ExternalID == "" {
+		ref.ResourceKind != "systemd-unit" || ref.ExternalID == "" {
 		return errors.New("trusted stop profile unit reference does not bind the configured execution adapter and environment")
 	}
 	return nil
@@ -280,7 +280,8 @@ func (w *ServerStopWorkflow) Reconcile(ctx context.Context, operation store.Oper
 
 func (w *ServerStopWorkflow) reconcileRuntimeStop(ctx context.Context, operation store.OperationRecord, step store.OperationStep) (Resolution, error) {
 	inspect := operationStep(operation, stopInspectUnitStep)
-	if inspect.StepID == "" || inspect.CapabilityName != "execution.unit.inspect" || inspect.AdapterID != step.AdapterID || inspect.CapabilityVersion == "" {
+	if inspect.StepID == "" || inspect.CapabilityName != "execution.unit.inspect" || inspect.AdapterID != step.AdapterID ||
+		inspect.CapabilityVersion == "" || !stepBindsRef(inspect.Input, "unit_ref", stopUnitRef(operation)) {
 		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
 	}
 	capability, err := exactCapability(w.adapters, inspect.AdapterID, adapter.CategoryExecution, inspect.CapabilityName,
@@ -541,7 +542,7 @@ func stopUnitInspectOutput(operation store.OperationRecord, id string) (stopUnit
 }
 
 func stopUnitRef(operation store.OperationRecord) json.RawMessage {
-	return stepField(operationStep(operation, stopInspectUnitStep).Input, "unit_ref")
+	return stepField(operationStep(operation, stopRuntimeStep).Input, "unit_ref")
 }
 
 func sameStopStepReference(operation store.OperationRecord, first, second, field string) bool {
