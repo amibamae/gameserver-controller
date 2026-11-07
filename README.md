@@ -29,7 +29,7 @@ The full controller, management API runtime, durable step dispatch, workflow rec
 
 The core should own lifecycle rules, permissions, approvals, audit records, and production/staging boundaries. Adapters report what they support and what happened; they do not make safety decisions for the core.
 
-- **Hosting** creates and inspects provider instances.
+- **Hosting** creates, inspects, starts, stops, reboots, and destroys provider instances.
 - **Storage** uploads, restores, and verifies world backups and release artifacts.
 - **Execution** runs services on an allocated host.
 - **Game** installs Paper or another runtime, checks readiness, and defines safe save and migration behavior.
