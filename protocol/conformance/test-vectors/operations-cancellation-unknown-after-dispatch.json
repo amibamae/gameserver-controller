@@ -1,0 +1,34 @@
+{
+  "fixture_id": "operations.cancellation.unknown-after-dispatch",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "operations.cancellation",
+  "purpose": "Cancellation after a mutating call may have been dispatched remains non-terminal until reconciliation.",
+  "cancellation_requested": true,
+  "initial": {
+    "operation_status": "running",
+    "step_status": "running",
+    "dispatch_recorded": true,
+    "external_effect_possible": true,
+    "provider_response_received": false,
+    "completed_step_ids": [
+      "validate-request",
+      "provider-create-intent"
+    ],
+    "resource_lock_held": true
+  },
+  "expected": {
+    "cancellation_request_recorded": true,
+    "cancellation_applied": false,
+    "cancelled": false,
+    "operation_status": "reconciling",
+    "step_status": "outcome_unknown",
+    "reconciliation_required": true,
+    "retry_without_reconciliation": false,
+    "additional_provider_calls": 0,
+    "resource_lock_retained": true,
+    "completed_step_ids_preserved": [
+      "validate-request",
+      "provider-create-intent"
+    ]
+  }
+}

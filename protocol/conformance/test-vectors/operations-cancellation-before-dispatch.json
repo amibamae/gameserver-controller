@@ -1,0 +1,32 @@
+{
+  "fixture_id": "operations.cancellation.before-dispatch",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "operations.cancellation",
+  "purpose": "A cancellation before any provider dispatch ends the operation without side effects.",
+  "cancellation_requested": true,
+  "initial": {
+    "operation_status": "running",
+    "step_status": "pending",
+    "dispatch_recorded": false,
+    "external_effect_possible": false,
+    "provider_response_received": false,
+    "completed_step_ids": [
+      "validate-request"
+    ],
+    "resource_lock_held": false
+  },
+  "expected": {
+    "cancellation_request_recorded": true,
+    "cancellation_applied": true,
+    "cancelled": true,
+    "operation_status": "cancelled",
+    "step_status": "cancelled",
+    "reconciliation_required": false,
+    "retry_without_reconciliation": false,
+    "additional_provider_calls": 0,
+    "resource_lock_retained": false,
+    "completed_step_ids_preserved": [
+      "validate-request"
+    ]
+  }
+}
