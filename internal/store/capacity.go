@@ -172,71 +172,118 @@ func (s *BoltStore) MarkCapacityDestroySent(operationID string) (CapacityReserva
 // provider resource reserved by the controller. Absent/destroyed observations
 // are the only states that release capacity.
 func (s *BoltStore) ObserveCapacity(operationID string, observation CapacityProviderObservation) (CapacityReservation, error) {
+	if err := validateCapacityObservation(observation); err != nil {
+		return CapacityReservation{}, err
+	}
+	return s.updateCapacity(operationID, func(current CapacityReservation) (CapacityReservation, error) {
+		return applyCapacityObservation(current, observation)
+	})
+}
+
+func validateCapacityObservation(observation CapacityProviderObservation) error {
 	if !validCapacityIdentifier(observation.Provider, 100) || !validCapacityIdentifier(observation.ResourceKey, 240) ||
 		observation.ObservedAt.IsZero() || observation.ObservedAt.After(time.Now().UTC().Add(5*time.Minute)) {
-		return CapacityReservation{}, fmt.Errorf("%w: invalid provider observation", ErrInvalidRecord)
+		return fmt.Errorf("%w: invalid provider observation", ErrInvalidRecord)
 	}
 	switch observation.State {
 	case "present", "absent", "destroyed":
 	default:
-		return CapacityReservation{}, fmt.Errorf("%w: unsupported provider observation state", ErrInvalidRecord)
+		return fmt.Errorf("%w: unsupported provider observation state", ErrInvalidRecord)
 	}
 	if observation.State == "present" && !validCapacityIdentifier(observation.ProviderInstanceID, 240) {
-		return CapacityReservation{}, fmt.Errorf("%w: present observation requires provider_instance_id", ErrInvalidRecord)
+		return fmt.Errorf("%w: present observation requires provider_instance_id", ErrInvalidRecord)
 	}
 	if !observation.ProvisionedAt.IsZero() && (observation.State != "present" || observation.ProvisionedAt.After(observation.ObservedAt)) {
-		return CapacityReservation{}, fmt.Errorf("%w: invalid provider provisioning timestamp", ErrInvalidRecord)
+		return fmt.Errorf("%w: invalid provider provisioning timestamp", ErrInvalidRecord)
 	}
 	if observation.ProviderInstanceID != "" && !validCapacityIdentifier(observation.ProviderInstanceID, 240) {
-		return CapacityReservation{}, fmt.Errorf("%w: invalid provider_instance_id", ErrInvalidRecord)
+		return fmt.Errorf("%w: invalid provider_instance_id", ErrInvalidRecord)
 	}
-	return s.updateCapacity(operationID, func(current CapacityReservation) (CapacityReservation, error) {
-		if current.Provider != observation.Provider || current.ResourceKey != observation.ResourceKey {
+	return nil
+}
+
+func applyCapacityObservation(current CapacityReservation, observation CapacityProviderObservation) (CapacityReservation, error) {
+	if current.Provider != observation.Provider || current.ResourceKey != observation.ResourceKey {
+		return CapacityReservation{}, ErrCapacityConflict
+	}
+	if observation.ObservedAt.Before(current.CreatedAt) {
+		return CapacityReservation{}, ErrCapacityConflict
+	}
+	if !observation.ProvisionedAt.IsZero() && observation.ProvisionedAt.Before(current.CreatedAt) {
+		return CapacityReservation{}, fmt.Errorf("%w: provider provisioning time precedes reservation", ErrInvalidRecord)
+	}
+	if current.LastObservation != nil {
+		if observation.ObservedAt.Before(current.LastObservation.ObservedAt) {
 			return CapacityReservation{}, ErrCapacityConflict
 		}
-		if observation.ObservedAt.Before(current.CreatedAt) {
+		if observation.ObservedAt.Equal(current.LastObservation.ObservedAt) {
+			if sameCapacityObservation(*current.LastObservation, observation) {
+				return current, nil
+			}
 			return CapacityReservation{}, ErrCapacityConflict
 		}
-		if !observation.ProvisionedAt.IsZero() && observation.ProvisionedAt.Before(current.CreatedAt) {
-			return CapacityReservation{}, fmt.Errorf("%w: provider provisioning time precedes reservation", ErrInvalidRecord)
+	}
+	if current.ProviderInstanceID != "" && observation.ProviderInstanceID != "" && current.ProviderInstanceID != observation.ProviderInstanceID {
+		return CapacityReservation{}, ErrCapacityConflict
+	}
+	if current.State == CapacityAbsent || current.State == CapacityDestroyed {
+		if observation.State != "present" && observation.State != string(current.State) {
+			return CapacityReservation{}, ErrCapacityTransition
 		}
-		if current.LastObservation != nil {
-			if observation.ObservedAt.Before(current.LastObservation.ObservedAt) {
-				return CapacityReservation{}, ErrCapacityConflict
-			}
-			if observation.ObservedAt.Equal(current.LastObservation.ObservedAt) {
-				if sameCapacityObservation(*current.LastObservation, observation) {
-					return current, nil
-				}
-				return CapacityReservation{}, ErrCapacityConflict
-			}
+	}
+	switch observation.State {
+	case "present":
+		current.State = CapacityActive
+		if current.ProvisionedAt.IsZero() {
+			current.ProvisionedAt = observation.ProvisionedAt
 		}
-		if current.ProviderInstanceID != "" && observation.ProviderInstanceID != "" && current.ProviderInstanceID != observation.ProviderInstanceID {
-			return CapacityReservation{}, ErrCapacityConflict
-		}
-		if current.State == CapacityAbsent || current.State == CapacityDestroyed {
-			if observation.State != "present" && observation.State != string(current.State) {
-				return CapacityReservation{}, ErrCapacityTransition
-			}
-		}
-		switch observation.State {
-		case "present":
-			current.State = CapacityActive
-			if current.ProvisionedAt.IsZero() {
-				current.ProvisionedAt = observation.ProvisionedAt
-			}
-		case "absent":
-			current.State = CapacityAbsent
-		case "destroyed":
-			current.State = CapacityDestroyed
-		}
-		if observation.ProviderInstanceID != "" {
-			current.ProviderInstanceID = observation.ProviderInstanceID
-		}
-		copyObservation := observation
-		current.LastObservation = &copyObservation
-		return current, nil
-	})
+	case "absent":
+		current.State = CapacityAbsent
+	case "destroyed":
+		current.State = CapacityDestroyed
+	}
+	if observation.ProviderInstanceID != "" {
+		current.ProviderInstanceID = observation.ProviderInstanceID
+	}
+	copyObservation := observation
+	current.LastObservation = &copyObservation
+	return current, nil
+}
+
+func observeCapacityTx(tx *bolt.Tx, operationID string, observation CapacityProviderObservation) error {
+	if err := validateCapacityObservation(observation); err != nil {
+		return err
+	}
+	key := []byte(operationID)
+	bucket := tx.Bucket(capacityReservationsBucket)
+	value := bucket.Get(key)
+	if value == nil {
+		return ErrCapacityNotFound
+	}
+	current, err := decodeCapacityReservation(value)
+	if err != nil {
+		return err
+	}
+	next, err := applyCapacityObservation(current, observation)
+	if err != nil {
+		return err
+	}
+	if next.LastObservation == current.LastObservation && next.State == current.State && next.ProviderInstanceID == current.ProviderInstanceID &&
+		next.ProvisionedAt.Equal(current.ProvisionedAt) && next.ReadyAt.Equal(current.ReadyAt) {
+		return nil
+	}
+	next.UpdatedAt = time.Now().UTC()
+	if next.UpdatedAt.Before(observation.ObservedAt) {
+		next.UpdatedAt = observation.ObservedAt
+	}
+	if err := validatePersistedCapacityReservation(next); err != nil {
+		return fmt.Errorf("%w: invalid updated capacity reservation: %v", ErrInvalidRecord, err)
+	}
+	encoded, err := json.Marshal(next)
+	if err != nil {
+		return fmt.Errorf("encode capacity reservation: %w", err)
+	}
+	return bucket.Put(key, encoded)
 }
 
 // RecordCapacityReady records the first exact Paper readiness timestamp for a
@@ -316,10 +363,14 @@ func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanc
 	return result, err
 }
 
-// recordSuccessfulBootTx ties the advisory sample to the committed start result.
-// Missing reservations and already-recorded first boots are normal: unmanaged
-// servers and subsequent starts do not create a new provision-to-ready sample.
-func recordSuccessfulBootTx(tx *bolt.Tx, operation OperationRecord, server LogicalServer) error {
+// recordCapacityLifecycleOutcomeTx ties boot samples and confirmed destruction
+// releases to the corresponding committed lifecycle result. Missing
+// reservations and already-recorded first boots are normal for unmanaged
+// servers and subsequent starts.
+func recordCapacityLifecycleOutcomeTx(tx *bolt.Tx, operation OperationRecord, server LogicalServer) error {
+	if operation.OperationType == "server.destroy" && operation.Status == "succeeded" && server.LifecycleState == "destroyed" {
+		return recordDestroyedCapacityTx(tx, operation, server)
+	}
 	if operation.OperationType != "server.start" || operation.Status != "succeeded" || server.LifecycleState != "ready" {
 		return nil
 	}
@@ -353,6 +404,92 @@ func recordSuccessfulBootTx(tx *bolt.Tx, operation OperationRecord, server Logic
 		return nil
 	}
 	return err
+}
+
+// recordDestroyedCapacityTx releases a managed VM slot in the same Bolt
+// transaction that commits the successful server.destroy result and logical
+// server transition. The provider's exact final absence step is the evidence
+// used for the capacity observation; accepted or ambiguous destroys never
+// reach this path.
+func recordDestroyedCapacityTx(tx *bolt.Tx, operation OperationRecord, server LogicalServer) error {
+	var result struct {
+		OperationType string `json:"operation_type"`
+		OperationData struct {
+			InstanceRef         json.RawMessage `json:"instance_ref"`
+			VerifiedBackupID    string          `json:"verified_backup_id"`
+			DataGenerationID    string          `json:"data_generation_id"`
+			ProviderAbsence     bool            `json:"provider_absence_confirmed"`
+			FinalLifecycleState string          `json:"final_lifecycle_state"`
+		} `json:"operation_data"`
+	}
+	if json.Unmarshal(operation.Result, &result) != nil || result.OperationType != "server.destroy" ||
+		!equalCanonicalJSON(result.OperationData.InstanceRef, operation.Target.InstanceRef) ||
+		result.OperationData.VerifiedBackupID == "" || result.OperationData.DataGenerationID != server.DataGenerationID ||
+		!result.OperationData.ProviderAbsence || result.OperationData.FinalLifecycleState != "destroyed" {
+		return fmt.Errorf("%w: server.destroy success lacks exact absence and backup evidence", ErrInvalidRecord)
+	}
+	var absence struct {
+		InstanceRef json.RawMessage `json:"instance_ref"`
+		State       string          `json:"state"`
+		ObservedAt  time.Time       `json:"observed_at"`
+	}
+	var absenceStep *OperationStep
+	for i := range operation.Steps {
+		if operation.Steps[i].StepID == "verify-instance-absence" {
+			absenceStep = &operation.Steps[i]
+			break
+		}
+	}
+	if absenceStep == nil || absenceStep.Status != "succeeded" || json.Unmarshal(absenceStep.Output, &absence) != nil ||
+		!equalCanonicalJSON(absence.InstanceRef, operation.Target.InstanceRef) || absence.State != "destroyed" || absence.ObservedAt.IsZero() {
+		return fmt.Errorf("%w: server.destroy success lacks exact provider absence observation", ErrInvalidRecord)
+	}
+	var instance struct {
+		AdapterID    string `json:"adapter_id"`
+		ResourceKind string `json:"resource_kind"`
+		ExternalID   string `json:"external_id"`
+	}
+	if json.Unmarshal(operation.Target.InstanceRef, &instance) != nil || instance.AdapterID == "" || instance.ResourceKind != "instance" || instance.ExternalID == "" {
+		return fmt.Errorf("%w: server.destroy target is not an exact provider instance", ErrInvalidRecord)
+	}
+	if absence.ObservedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return fmt.Errorf("%w: provider absence observation is too far in the future", ErrInvalidRecord)
+	}
+	var match *CapacityReservation
+	cursor := tx.Bucket(capacityReservationsBucket).Cursor()
+	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+		reservation, err := decodeCapacityReservation(value)
+		if err != nil {
+			return err
+		}
+		if string(key) != reservation.OperationID {
+			return fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
+		}
+		if reservation.ServerID != server.ServerID || reservation.EnvironmentID != server.EnvironmentID {
+			continue
+		}
+		if reservation.State == CapacityAbsent || reservation.State == CapacityDestroyed {
+			continue
+		}
+		if (reservation.ProviderAdapterID != "" && reservation.ProviderAdapterID != instance.AdapterID) || reservation.ProviderInstanceID != instance.ExternalID {
+			return fmt.Errorf("%w: managed VM reservation does not match the destroyed instance", ErrCapacityConflict)
+		}
+		if match != nil {
+			return fmt.Errorf("%w: multiple active managed VM reservations match one destroyed server", ErrCapacityConflict)
+		}
+		copyReservation := reservation
+		match = &copyReservation
+	}
+	if match == nil {
+		return nil
+	}
+	if match.State != CapacityActive && match.State != CapacityDestroyOutcomeUnknown {
+		return fmt.Errorf("%w: cannot release managed VM capacity from state %q", ErrCapacityTransition, match.State)
+	}
+	return observeCapacityTx(tx, match.OperationID, CapacityProviderObservation{
+		Provider: match.Provider, ResourceKey: match.ResourceKey, ProviderInstanceID: instance.ExternalID,
+		State: "destroyed", ObservedAt: absence.ObservedAt,
+	})
 }
 
 func (s *BoltStore) GetCapacityReservation(operationID string) (CapacityReservation, error) {
