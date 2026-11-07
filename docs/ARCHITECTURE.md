@@ -38,7 +38,7 @@ The core owns workflow policy and state transitions. It does not call vendor API
 
 ## Adapter boundaries
 
-The protocol works with ordinary VMs and service managers. Docker, Kubernetes, and Agones are optional integrations, not prerequisites. See [ADR 0003](decisions/0003-execution-agnostic-runtime.md).
+The protocol works with ordinary VMs and service managers. Docker and Kubernetes are optional integrations, not prerequisites. See [ADR 0003](decisions/0003-execution-agnostic-runtime.md).
 
 ### Hosting
 
@@ -56,7 +56,7 @@ A game adapter defines installation, configuration, runtime needs, startup and s
 
 ### Execution
 
-An execution adapter runs and inspects a unit on an already provisioned environment. The first reference is systemd on a Linux VM. Optional adapters may target containers, Kubernetes, or Agones.
+An execution adapter runs and inspects a unit on an already provisioned environment. The first reference is systemd on a Linux VM. Optional adapters may target containers or Kubernetes.
 
 Keep game behavior separate from process management. The execution adapter starts a unit. The game adapter says what to install, how to save it safely, when it is ready, and which versions can open its data.
 

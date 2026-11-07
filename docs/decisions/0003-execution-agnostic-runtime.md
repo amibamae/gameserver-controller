@@ -6,15 +6,15 @@
 
 ## Context
 
-Small deployments need ordinary virtual machines and service managers. The architecture should also leave room for containers and cluster schedulers. Requiring Kubernetes or Agones would impose extra infrastructure on operators who run only a few persistent game servers.
+Small deployments need ordinary virtual machines and service managers. The architecture should also leave room for containers and cluster schedulers. Requiring Kubernetes would impose extra infrastructure on operators who run only a few persistent game servers.
 
 The reference deployment uses provider-created Debian VMs, versioned bootstrap scripts, Paper managed by systemd, Wasabi-compatible object storage, and Velocity.
 
 ## Decision
 
-The protocol MUST remain execution-agnostic. It MUST NOT require Kubernetes, Docker, containers, or Agones.
+The protocol MUST remain execution-agnostic. It MUST NOT require Kubernetes, Docker, or containers.
 
-The first reference execution adapter is execution.systemd on a conventional Linux VM. Future adapters MAY support containers, Kubernetes, Agones, or other execution and orchestration systems.
+The first reference execution adapter is execution.systemd on a conventional Linux VM. Future adapters MAY support containers, Kubernetes, or other execution and orchestration systems.
 
 Keep these responsibilities separate:
 
@@ -39,7 +39,7 @@ A logical server and its persistent data MUST survive replacement of an infrastr
 - Execution has its own protocol contract.
 - The system keeps logical lifecycle, provider instance, execution unit, and operation status distinct.
 - The first complete implementation should use a conventional VM and systemd.
-- Kubernetes and Agones remain optional and must pass the same adapter conformance requirements.
+- Kubernetes remains optional and must pass the same adapter conformance requirements.
 - The initial project does not need to build a fleet scheduler.
 
 ## When to reconsider

@@ -35,7 +35,7 @@ The core should own lifecycle rules, permissions, approvals, audit records, and 
 - **Game** installs Paper or another runtime, checks readiness, and defines safe save and migration behavior.
 - **Integration** connects a proxy such as Velocity and routes players to a backend the core has confirmed ready.
 
-The first reference path uses a regular VM and systemd. Containers, Kubernetes, and Agones can fit as optional adapters; none is a prerequisite.
+The first reference path uses a regular VM and systemd. Container and Kubernetes adapters are optional.
 
 The draft requires the controller to save an operation record before it makes a mutating provider call. If the provider's answer disappears, the controller must inspect the actual resource before it retries. An upload acknowledgment does not prove a backup. A running Java process does not prove Paper is ready. A failed or uncertain backup blocks destruction.
 

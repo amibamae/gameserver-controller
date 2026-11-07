@@ -6,7 +6,7 @@
 
 The execution adapter manages the unit that runs game software on an already provisioned execution environment. It separates process/workload management from hosting-provider VM lifecycle and game-specific installation/save semantics.
 
-An execution environment may be a conventional VM, bare-metal host, container runtime, or an orchestration platform. No container engine, Kubernetes cluster, or Agones installation is mandatory.
+An execution environment may be a conventional VM, bare-metal host, container runtime, or an orchestration platform. No container engine or Kubernetes cluster is mandatory.
 
 ## 2. Reference and optional implementations
 
@@ -15,7 +15,6 @@ The initial reference implementation is `execution.systemd`, managing a dedicate
 Optional future implementations may include:
 - `execution.container`: a container runtime on an existing host.
 - `execution.kubernetes`: workloads scheduled by Kubernetes.
-- `execution.agones`: Agones GameServer lifecycle/allocation integration.
 
 These are examples, not required dependencies or predefined guarantees. Each must satisfy the same contract and declare its additional constraints.
 
@@ -73,7 +72,7 @@ The execution adapter knows how to run and stop a unit. The game adapter knows w
 
 For example, a systemd execution adapter can start a Paper service, while the Paper game adapter checks the expected Minecraft version, startup completion, required plugins, and world-save semantics.
 
-For Agones, the execution/orchestration adapter manages GameServer allocation and lifecycle, while a game-specific bridge reports readiness/health to the Agones SDK. The controller still owns backup verification and safe-destroy policy.
+An orchestration adapter manages workload allocation and lifecycle. A game-specific bridge reports readiness and health through the platform’s supported interface. The controller still owns backup verification and safe-destroy policy.
 
 ## 7. Conformance cases
 

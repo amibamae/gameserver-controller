@@ -6,7 +6,7 @@
 
 This specification defines a logical game server's lifecycle without tying it to a hosting provider, runtime, game, programming language, or user interface.
 
-It MUST be possible to implement this model using ordinary virtual machines and system services without Kubernetes, containers, or Agones. Those technologies MAY be used through optional adapters.
+It MUST be possible to implement this model using ordinary virtual machines and system services without Kubernetes or containers. Implementations MAY use optional adapters for either.
 
 The lifecycle protocol is authoritative for legal server-state transitions and safety preconditions. An implementation MUST NOT invent additional successful transitions or silently weaken a precondition.
 
