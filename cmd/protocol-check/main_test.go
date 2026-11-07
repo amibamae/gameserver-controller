@@ -94,7 +94,7 @@ func TestParseTimeRequiresUTCZuluTimestamp(t *testing.T) {
 	}
 }
 
-func TestSecretReferenceRejectsSecretMaterial(t *testing.T) {
+func TestSecretReferenceSchemaValidation(t *testing.T) {
 	pkg, err := loadPackage("../..")
 	if err != nil {
 		t.Fatalf("load protocol package: %v", err)
@@ -113,6 +113,18 @@ func TestSecretReferenceRejectsSecretMaterial(t *testing.T) {
 				"purpose":    "backup.authentication",
 			},
 			wantValid: true,
+		},
+		{
+			name: "missing required purpose",
+			value: map[string]any{
+				"secret_ref": "vault://minecraft/production/backup",
+			},
+		},
+		{
+			name: "missing required reference",
+			value: map[string]any{
+				"purpose": "backup.authentication",
+			},
 		},
 		{
 			name: "literal secret is not a reference",
