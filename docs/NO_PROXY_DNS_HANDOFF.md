@@ -10,13 +10,14 @@ DNS records.
 1. While the game server is stopped, the join hostname resolves to an
    always-on lobby.
 2. A player joins the lobby. The lobby kicks them with a message giving the
-   estimated wait time and asking them to rejoin once it has passed. It then
+   estimated wait time and telling them to rejoin once that time has passed.
+   It then
    sends an authenticated, rate-limited wake request to the controller API.
    The lobby never receives Vultr or Wasabi keys.
 3. The controller deduplicates requests, checks the environment and VM cap,
    then starts or provisions the controller-owned server.
 4. If the player reconnects before readiness, the lobby reads the operation
-   status, gives them an updated wait estimate, and disconnects them again.
+   status, repeats the wait-time estimate, and disconnects them again.
    It does not hold a player session open while the VM boots.
 5. The controller waits for provisioning, world restore, process startup, and
    game-specific readiness checks to pass. A successful VM create call does
@@ -64,9 +65,9 @@ handle a cache-delayed retry after the controller marks the server ready.
 ## Local boot timing and optional shared telemetry
 
 For each controller-owned VM, record the local duration from confirmed
-provisioning to the required game readiness checks passing. Use prior durations
+provisioning to Paper's required readiness checks passing. Use prior durations
 for that server/profile to show an estimated wait and an advisory progress bar
-while the backend boots. The display must remain below 100% until the game is
+while the backend boots. The display must remain below 100% until Paper is
 actually ready; timing estimates never permit DNS changes or player routing.
 When there are too few measurements, show a conservative configured estimate
 and make progress indeterminate rather than inventing precision.
@@ -110,7 +111,7 @@ when sharing is disabled.
   them to the lobby or player application.
 
 The future implementation needs a DNS integration contract for record inspect,
-update, and reconciliation; an authenticated wake API; local provision-to-game
+update, and reconciliation; an authenticated wake API; local provision-to-Paper
 readiness timing and advisory progress; and separately owner-enabled shared
 boot-duration averages with bounded retention. Tests must cover duplicate
 requests, boot failure, readiness failure, sharing opt-in/opt-out, DNS update
