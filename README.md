@@ -19,6 +19,7 @@ If you build game-server automation, cloud adapters, storage tooling, or operato
 - Draft language-neutral contracts for lifecycle operations and adapters.
 - JSON Schemas, examples, and a growing behavioral conformance suite validated in Go CI.
 - A validation workflow for the schema package and fixture runner.
+- A limited supervised backup pilot that wraps the existing `minecraft-backup.service` without installing or replacing its script; see the [pilot handoff guide](docs/SUPERVISED_PILOT.md).
 - An initial design for hosting, storage, execution, game, and proxy integrations.
 - A roadmap that separates documented goals from implemented software.
 
