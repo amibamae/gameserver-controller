@@ -1,7 +1,3 @@
-Warning: truncated output (original token count: 32267)
-Total output lines: 2542
-
-/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 package main
 
 import (
