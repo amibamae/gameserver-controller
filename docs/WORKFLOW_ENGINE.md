@@ -60,3 +60,9 @@ cannot supply adapter steps, and authorization runs against the planner's
 result before the operation is persisted. The metadata-only definition planner
 is covered; profile-resolving plans for provision, start, stop, backup, restore,
 and destroy have not been implemented.
+
+`SchemaRequestValidator` checks the standard operation request against the
+compiled protocol schemas, binds `server.define` and `server.provision` targets
+to their parameters, and validates separate secret-reference metadata. The
+acceptance package exposes this validator, but there is not yet a production
+controller/API composition that wires it into a running service.
