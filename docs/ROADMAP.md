@@ -90,7 +90,7 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - Add Velocity readiness and routing.
 - Route lobby players only after the backend passes readiness checks.
 - For games without a proxy, add the optional lobby wake and managed DNS handoff described in [the design](NO_PROXY_DNS_HANDOFF.md); players reconnect after readiness.
-- Add owner-enabled, off-by-default boot-duration telemetry to inform conservative rejoin estimates; keep the wake flow functional with telemetry disabled.
+- Record provision-to-Paper-ready duration locally for estimates and an advisory progress bar; offer separate owner-enabled sharing of boot-time averages to the hosted lobby/DNS service, with extra rejoin buffer and no provider credentials exposed.
 - Detect when the backend is idle.
 - Stop Paper, back up and verify the world, then destroy the VM.
 - Fail closed if save, upload, verification, authorization, or cleanup checks fail.
