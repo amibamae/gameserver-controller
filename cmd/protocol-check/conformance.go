@@ -1528,6 +1528,19 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"accepted": allowed, "error_category": category,
 			"side_effect_permitted": allowed, "adapter_delete_calls": calls,
 		}, nil
+	case "operations.idempotency.same-key-same-request":
+		first, second := asObject(fixture["first_request"]), asObject(fixture["second_request"])
+		sameBinding := first["actor_id"] == second["actor_id"] && first["idempotency_key"] == second["idempotency_key"]
+		reused := sameBinding && reflect.DeepEqual(first, second)
+		operationCount, dispatchCount := 2, 2
+		if reused {
+			operationCount, dispatchCount = 1, 1
+		}
+		return map[string]any{
+			"same_operation_reused": reused,
+			"operation_count": operationCount,
+			"side_effect_dispatch_count": dispatchCount,
+		}, nil
 	case "operations.idempotency.same-key-different-request":
 		first, second := asObject(fixture["first_request"]), asObject(fixture["second_request"])
 		sameBinding := first["actor_id"] == second["actor_id"] && first["idempotency_key"] == second["idempotency_key"]
