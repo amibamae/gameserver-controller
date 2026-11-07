@@ -183,7 +183,7 @@ func validateRecord(record OperationRecord) error {
 	}
 	seenSteps := make(map[string]struct{}, len(record.Steps))
 	for i, step := range record.Steps {
-		if !validIdentifier(step.StepID, 200) || !validQualifiedName(step.StepType, 160) || !knownStepStatus(step.Status) || step.Attempt < 0 {
+		if !validIdentifier(step.StepID, 200) || !validCapabilityName(step.StepType, 160) || !knownStepStatus(step.Status) || step.Attempt < 0 {
 			return invalidField(fmt.Sprintf("steps[%d]", i))
 		}
 		if (step.Status == protocolstate.StepPending && step.Attempt != 0) ||
@@ -194,7 +194,7 @@ func validateRecord(record OperationRecord) error {
 			return invalidField("duplicate step_id")
 		}
 		seenSteps[step.StepID] = struct{}{}
-		if step.CapabilityName != "" && (!validQualifiedName(step.CapabilityName, 160) || step.AdapterID == "" || step.CapabilityVersion == "") {
+		if step.CapabilityName != "" && (!validCapabilityName(step.CapabilityName, 160) || step.AdapterID == "" || step.CapabilityVersion == "") {
 			return invalidField(fmt.Sprintf("steps[%d].capability", i))
 		}
 		if step.CapabilityVersion != "" && (step.AdapterID == "" || step.CapabilityName == "") {
@@ -278,6 +278,18 @@ func validQualifiedName(value string, max int) bool {
 	}
 	for _, ch := range value[1:] {
 		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+func validCapabilityName(value string, max int) bool {
+	if len(value) < 2 || len(value) > max || value[0] < 'a' || value[0] > 'z' {
+		return false
+	}
+	for _, ch := range value[1:] {
+		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' && ch != '_' && ch != '-' {
 			return false
 		}
 	}
