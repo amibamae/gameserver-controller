@@ -1,0 +1,29 @@
+{
+  "fixture_id": "operations.idempotency.expired-key-reuse",
+  "protocol_version": "0.21.0-draft",
+  "contract": "operation.accept",
+  "expired_tombstone": {
+    "actor_id": "operator-test",
+    "idempotency_key": "expired-key-001",
+    "tombstone_present": true,
+    "full_operation_record_retained": false
+  },
+  "retry_request": {
+    "actor_id": "operator-test",
+    "idempotency_key": "expired-key-001",
+    "operation_type": "server.provision",
+    "server_id": "minecraft-test",
+    "environment_id": "production",
+    "parameters": {
+      "plan_id": "plan-small"
+    }
+  },
+  "expected": {
+    "second_request_accepted": false,
+    "error_code": "core.operation.idempotency_key_expired",
+    "new_operation_created": false,
+    "side_effect_dispatch_count": 0,
+    "original_operation_replayed": false,
+    "tombstone_retained": true
+  }
+}
