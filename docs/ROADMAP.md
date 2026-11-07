@@ -13,7 +13,7 @@
 
 ## Phase 1: Language-neutral protocol
 
-**Current phase.** Continue reviewing protocol contracts while building the initial controller in Go.
+**Current phase.** Complete and review the protocol package and its Go schema/conformance tooling. The controller engine and fake-adapter harness are Phase 2; production adapters follow in Phase 3.
 
 - [x] Define protocol-first, language-neutral, transport-independent principles.
 - [x] Separate adapter calls from the management API.
@@ -45,7 +45,7 @@
 Other-language implementations are welcome contributions, but they are not part of the Phase 1 exit criteria or release gate.
 - [ ] Release stable protocol 1.0 only after interoperability evidence.
 
-**Exit criteria:** The initial Go implementation follows the published contracts without relying on undocumented behavior. Other-language contributions remain welcome.
+**Exit criteria:** The protocol package has reviewed semantics and compatibility rules; every remaining design choice is resolved or explicitly out of scope; schemas, examples, OpenAPI, and behavioral conformance validation pass in Go. Phase 1 does not require the controller engine or alternate-language implementations. A stable 1.0 release remains subject to its interoperability gate below.
 
 ## Phase 2: Implement the Go controller and build a fake-adapter harness
 
@@ -131,8 +131,8 @@ The first end-to-end target is Vultr, Wasabi, Paper, and Velocity on Debian. Exi
 
 ## Current state and next work
 
-The project is in **Phase 1: Protocol design and review**, with initial Go validation tooling and a supervised backup pilot. The current schema snapshot is 0.21.0-draft. The full controller engine, management API, and production adapters are not yet implemented. CI validates schemas, examples, OpenAPI metadata, and the behavioral conformance suite.
+The project is in **Phase 1: Protocol design and review**. The package is at 0.21.0-draft and includes Go schema/conformance tooling. The supervised backup CLI is code-complete within its limited wrapper scope; it does not create VMs. The two-VM policy is declarative, and a supervised first run plus artifact/storage verification remains an operator handoff.
 
-Hosting instance creation has registered input and output schemas. Typed result schemas cover provision, backup, restore, and destroy. Storage and game capability schemas, other operation results, and additional edge-case vectors remain work. The drafts have not all been independently validated or reviewed. No controller engine or production adapter has been built.
+The schema package covers hosting, storage, execution, game, and integration operations, with typed results for all seven standard server operations. Remaining Phase 1 work is to finish contract, compatibility, security, lifecycle, and validation review. The controller engine and production adapters have not been built.
 
-Next, finish reviewing the contracts, add edge cases, and run the complete conformance suite in Go. Contributors may test optional implementations in other languages.
+Phase 1 completion means the reviewed specification package and Go validator/conformance suite are ready for implementation. The controller engine and fake-adapter harness are Phase 2 work. Stable protocol 1.0 remains gated on the initial Go controller passing behavioral conformance; optional implementations in other languages are welcome but are not a release requirement.
