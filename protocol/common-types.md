@@ -1,8 +1,8 @@
-# Common Protocol Types
+# Shared Protocol Types
 
-**Status:** Draft, version 0.21.0-draft. These definitions establish shared meanings and constraints for the JSON-based protocol profile.
+**Status:** Draft, version 0.21.0-draft. This document defines the shared terms and constraints for the JSON protocol profile.
 
-This document is the common vocabulary used by adapter contracts, lifecycle operations, and the future management API. Language-specific implementations MUST preserve these meanings.
+Adapter contracts, lifecycle operations, and the management API use these terms. Implementations in every language MUST preserve their meaning.
 
 ## 1. General rules
 
