@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"math/big"
@@ -167,7 +168,9 @@ type protocolPackage struct {
 }
 
 func main() {
-	if err := run("."); err != nil {
+	manifest := flag.Bool("manifest", false, "print the validated protocol package manifest as JSON")
+	flag.Parse()
+	if err := runWithManifest(".", *manifest); err != nil {
 		fmt.Fprintln(os.Stderr, "Protocol validation failed:")
 		fmt.Fprintln(os.Stderr, " -", err)
 		os.Exit(1)
@@ -175,6 +178,10 @@ func main() {
 }
 
 func run(root string) error {
+	return runWithManifest(root, false)
+}
+
+func runWithManifest(root string, printManifest bool) error {
 	pkg, err := loadPackage(root)
 	if err != nil {
 		return err
@@ -182,11 +189,20 @@ func run(root string) error {
 	if err := pkg.validatePackage(); err != nil {
 		return err
 	}
-	fmt.Printf("Protocol validation passed: %d schemas, %d examples, %d conformance fixtures, protocol %s.\n",
-		len(pkg.entries), len(exampleSchemaIDs), pkg.fixtureCount(), pkg.version)
 	if err := pkg.runConformance(); err != nil {
 		return err
 	}
+	if printManifest {
+		manifest, err := pkg.packageManifest()
+		if err != nil {
+			return err
+		}
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(manifest)
+	}
+	fmt.Printf("Protocol validation passed: %d schemas, %d examples, %d conformance fixtures, protocol %s.\n",
+		len(pkg.entries), len(exampleSchemaIDs), pkg.fixtureCount(), pkg.version)
 	fmt.Printf("Conformance passed: %d fixtures.\n", pkg.fixtureCount())
 	return nil
 }

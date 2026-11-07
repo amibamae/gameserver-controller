@@ -46,3 +46,5 @@ jobs:
         run: go test ./...
       - name: Validate schemas, references, examples, OpenAPI metadata, and conformance vectors
         run: go run ./cmd/protocol-check
+      - name: Print conformance package manifest
+        run: go run ./cmd/protocol-check -manifest
