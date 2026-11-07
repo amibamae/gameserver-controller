@@ -70,12 +70,34 @@ bucket-policy guardrail when broader identity policies could otherwise grant
 access. Require HTTPS for storage requests. Wasabi documents sub-user keys,
 IAM and bucket policies, key rotation, and explicit-deny behavior.
 
+For the existing `minecraft-backup.service`, keep SSH as the authenticated
+operator path for setup and rotation, but do not put a key in a remote command,
+environment variable, bootstrap script, or plaintext service configuration.
+Store the role-specific key as an encrypted systemd credential on the host and
+expose it only to the backup service with `LoadCredentialEncrypted=`. The
+service should read the named credential from `$CREDENTIALS_DIRECTORY` under
+its dedicated service account. The repository does not install or configure
+this host-side credential; this is the target handling model for the current
+manual backup service.
+
+This is a transitional exception for the existing service that uploads from
+its host. Keep permanent Wasabi keys out of new game-server VMs. In the
+controller-owned design, only the storage adapter should hold the permanent
+service credential. If a future worker has to access Wasabi directly, use a
+short-lived, role-scoped credential from `AssumeRole` with an inline policy
+narrowing the bucket/prefix; protect the sub-user key used to request that
+session as a controller credential. Wasabi's `GetSessionToken` preserves the
+caller's original permissions, so it is not a least-privilege replacement for
+`AssumeRole`.
+
 ## Handling, rotation, and incident response
 
 - Keep resolved values out of operation records, configuration output, audit
   events, errors, logs, command arguments, and child-process environments.
-- Resolve a key only for the adapter call that needs it. Do not pass provider
-  keys to game-server VMs, bootstrap code, lobby software, or customer apps.
+- Resolve a key only for the adapter call that needs it. Keep permanent
+  storage keys out of new game-server VMs, bootstrap code, lobby software, and
+  customer apps; the existing `minecraft-backup.service` is the transitional
+  host-side exception.
 - Name each reference by provider, environment, and purpose; do not reuse a
   storage key between production and staging. The config validator rejects a
   shared storage credential reference across those environments.
@@ -93,4 +115,5 @@ and the [systemd Credentials documentation](https://systemd.io/CREDENTIALS/).
 Provider guidance: [Vultr service-user API access](https://docs.vultr.com/support/platform/iam/what-is-a-user-in-vultr-iam),
 [Vultr API access controls](https://docs.vultr.com/platform/other/api/manage-api-access-control),
 [Wasabi user security practices](https://docs.wasabi.com/docs/what-are-wasabis-recommended-general-user-security-best-practices),
-and [Wasabi bucket access policies](https://docs.wasabi.com/docs/how-do-i-restrict-bucket-access-with-resource-based-policies).
+[Wasabi bucket access policies](https://docs.wasabi.com/docs/how-do-i-restrict-bucket-access-with-resource-based-policies),
+and [Wasabi STS temporary credentials](https://docs.wasabi.com/docs/aws-sts-with-wasabi).
