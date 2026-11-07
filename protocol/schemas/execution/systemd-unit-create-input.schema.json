@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-create-input",
+  "title": "Systemd execution unit create input",
+  "description": "Define a unit on an existing host from an approved immutable non-secret artifact. Verify its checksum before changing the unit; never start it as part of creation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "unit_ref",
+    "target",
+    "release_id",
+    "unit_definition",
+    "start"
+  ],
+  "properties": {
+    "unit_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
+    "target": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "unit_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_uri",
+        "checksum"
+      ],
+      "properties": {
+        "artifact_uri": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 2048
+        },
+        "checksum": {
+          "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum"
+        }
+      }
+    },
+    "start": {
+      "const": false
+    }
+  }
+}

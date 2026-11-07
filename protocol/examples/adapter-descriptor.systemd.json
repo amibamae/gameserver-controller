@@ -10,12 +10,23 @@
     "execution.v1-draft"
   ],
   "required_permissions": [
+    "runtime.create",
     "runtime.delete",
     "runtime.inspect",
     "runtime.start",
     "runtime.stop"
   ],
   "capabilities": [
+    {
+      "name": "execution.unit.create",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-create-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-create-output",
+      "required_permissions": [
+        "runtime.create"
+      ]
+    },
     {
       "name": "execution.unit.delete",
       "version": "1",

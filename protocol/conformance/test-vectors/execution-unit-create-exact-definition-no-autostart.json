@@ -1,0 +1,1483 @@
+{
+  "fixture_id": "execution.unit.create.exact-definition-no-autostart",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "execution.unit.create",
+  "purpose": "Define only an approved checksummed unit on an existing exact host, preserve data, never autostart, and inspect uncertain or mismatched results before retry.",
+  "evaluations": [
+    {
+      "case_id": "created-stopped",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "repeat-same-definition-running",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "unchanged",
+        "state": "running",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      },
+      "existing_unit": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "running",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      }
+    },
+    {
+      "case_id": "existing-definition-conflict",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      },
+      "existing_unit": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      }
+    },
+    {
+      "case_id": "existing-state-unknown",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      },
+      "existing_unit": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "unknown",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      }
+    },
+    {
+      "case_id": "artifact-checksum-mismatch",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\ntampered",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "host-not-provisioned",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": false,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "unapproved-definition",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": false
+      }
+    },
+    {
+      "case_id": "request-cannot-autostart",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": true
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "result-cannot-autostart",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": true,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "created-cannot-be-running",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "running",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "cross-environment-unit",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "production",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "production",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "wrong-result-unit",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "different-unit"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "wrong-result-host",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "different-host"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "wrong-result-definition",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        },
+        "outcome": "created",
+        "state": "stopped",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "accepted-is-not-created",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "accepted",
+        "state": "unknown",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z",
+        "external_operation_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "unit-operation",
+          "external_id": "create-test-001"
+        }
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "unknown-requires-inspection",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "outcome_unknown",
+        "state": "unknown",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z",
+        "external_operation_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "unit-operation",
+          "external_id": "create-test-001"
+        }
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "operation-reference-wrong-environment",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "accepted",
+        "state": "unknown",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z",
+        "external_operation_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "production",
+          "resource_kind": "unit-operation",
+          "external_id": "create-test-001"
+        }
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    },
+    {
+      "case_id": "unknown-without-reference",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "unit_definition": {
+          "artifact_uri": "https://artifacts.example.test/units/paper.service",
+          "checksum": {
+            "algorithm": "sha256",
+            "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+          }
+        },
+        "start": false
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "definition_checksum": {
+          "algorithm": "sha256",
+          "digest": "e60d856a4702104ded06244a7ff06f71e2cc2aacc378e7fbba20762a507d56fd"
+        },
+        "outcome": "outcome_unknown",
+        "state": "unknown",
+        "started_by_request": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:00Z"
+      },
+      "artifact_bytes": "[Service]\nExecStart=/usr/bin/true\n",
+      "core_preconditions": {
+        "host_exists": true,
+        "definition_approved": true
+      }
+    }
+  ],
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "created-stopped",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": true,
+        "result_bound": true,
+        "definition_confirmed": true,
+        "must_inspect_before_retry": false,
+        "readiness_established": false
+      },
+      {
+        "case_id": "repeat-same-definition-running",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": true,
+        "result_bound": true,
+        "definition_confirmed": true,
+        "must_inspect_before_retry": false,
+        "readiness_established": false
+      },
+      {
+        "case_id": "existing-definition-conflict",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": false,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": false,
+        "readiness_established": false
+      },
+      {
+        "case_id": "existing-state-unknown",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": false,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": true,
+        "readiness_established": false
+      },
+      {
+        "case_id": "artifact-checksum-mismatch",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": false,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": false,
+        "readiness_established": false
+      },
+      {
+        "case_id": "host-not-provisioned",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": false,
+        "readiness_established": false
+      },
+      {
+        "case_id": "unapproved-definition",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": false,
+        "readiness_established": false
+      },
+      {
+        "case_id": "request-cannot-autostart",
+        "request_schema_valid": false,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": false,
+        "readiness_established": false
+      },
+      {
+        "case_id": "result-cannot-autostart",
+        "request_schema_valid": true,
+        "result_schema_valid": false,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": true,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": true,
+        "readiness_established": false
+      },
+      {
+        "case_id": "created-cannot-be-running",
+        "request_schema_valid": true,
+        "result_schema_valid": false,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": true,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": true,
+        "readiness_established": false
+      },
+      {
+        "case_id": "cross-environment-unit",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": false,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": false,
+        "readiness_established": false
+      },
+      {
+        "case_id": "wrong-result-unit",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": true,
+        "result_bound": false,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": true,
+        "readiness_established": false
+      },
+      {
+        "case_id": "wrong-result-host",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": true,
+        "result_bound": false,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": true,
+        "readiness_established": false
+      },
+      {
+        "case_id": "wrong-result-definition",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": true,
+        "result_bound": false,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": true,
+        "readiness_established": false
+      },
+      {
+        "case_id": "accepted-is-not-created",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": true,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": true,
+        "readiness_established": false
+      },
+      {
+        "case_id": "unknown-requires-inspection",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": true,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": true,
+        "readiness_established": false
+      },
+      {
+        "case_id": "operation-reference-wrong-environment",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": true,
+        "result_bound": false,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": true,
+        "readiness_established": false
+      },
+      {
+        "case_id": "unknown-without-reference",
+        "request_schema_valid": true,
+        "result_schema_valid": false,
+        "definition_verified": true,
+        "target_consistent": true,
+        "existing_unit_compatible": true,
+        "dispatch_allowed": true,
+        "result_bound": true,
+        "definition_confirmed": false,
+        "must_inspect_before_retry": true,
+        "readiness_established": false
+      }
+    ]
+  },
+  "side_effect_expected": "none"
+}
