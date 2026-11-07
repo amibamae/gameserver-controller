@@ -3,8 +3,35 @@
 `internal/workflow` advances an accepted operation through its persisted steps
 and the versioned in-process adapter registry. It is a reusable Phase 2
 component; the CLI does not expose it yet. The metadata-only `server.define`
-workflow is implemented, while the other standard lifecycle definitions are
-still to be wired.
+and fake-adapter `server.start` workflows are implemented. Other standard
+lifecycle definitions are still to be wired.
+
+## `server.start`
+
+At acceptance, a trusted `ServerStartProfileResolver` selects the game release,
+execution unit, readiness set, and exact check versions for the stored logical
+server. The workflow verifies that the selected check set is declared by the
+game adapter and persists a four-step plan: inspect the exact provider
+instance, start the exact execution unit, inspect that unit, and evaluate the
+versioned game readiness checks. Adapter IDs, capability versions, resource
+references, and readiness requirements are immutable before dispatch.
+
+The workflow starts only a stopped logical server whose managed provider
+instance and optional `expected_instance_ref` still match. It dispatches the
+runtime start only after the provider reports `active`. If a start result is
+ambiguous, the workflow invokes the read-only unit inspection capability pinned
+in its plan. It retries only after inspection confirms `absent` or `stopped`;
+`starting` remains pending and unclear states require operator review. A
+provider or runtime inspection that definitively blocks the next step fails the
+operation without issuing that step.
+
+The lifecycle is projected through `starting` and `validating`. The operation
+becomes `succeeded` and the logical server becomes `ready` atomically only
+after the runtime is confirmed running, every exact versioned readiness check
+passes, and the controller can create a fresh readiness assertion. A failed
+readiness postcondition produces a failed operation and a `degraded` server.
+The workflow is exercised exclusively with scripted fake adapters; it does
+not connect to Vultr, a game server, or an execution host.
 
 ## Dispatch and recovery
 
@@ -37,8 +64,8 @@ controllers or remote workers need a different transactional locking design.
 
 ## Limits
 
-This package does not create operation plans, provide the standard
-`server.provision`, `server.start`, `server.stop`, `server.backup`,
+This package does not provide the standard
+`server.provision`, `server.stop`, `server.backup`,
 `server.restore`, or `server.destroy` workflow definitions, or expose a
 controller API/worker. Cancellation handling, process or remote
 adapter transports, runtime configuration, credential-accessor integration,
@@ -51,8 +78,9 @@ The workflow package can build a short-lived readiness assertion from a
 persisted, successful `game.readiness.check` step and a trusted, versioned
 readiness check set. It binds the assertion to the operation, logical server,
 managed instance, release, and exact check versions, and uses the earliest
-expiry among the individual checks. No standard lifecycle definition consumes
-this helper yet, so it does not by itself make a server ready or route traffic.
+expiry among the individual checks. `server.start` validates and returns this
+assertion before its atomic transition to `ready`; other workflows do not yet
+consume it for restore or provision postconditions.
 
 The store now creates a durable logical-server record in the same bbolt
 transaction that accepts `server.define`. That record starts as
