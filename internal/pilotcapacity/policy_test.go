@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -11,7 +12,7 @@ import (
 )
 
 func TestLoadPolicyReservesByConfiguredEnvironmentAndLimit(t *testing.T) {
-	policy, err := LoadPolicy(filepath.Join("..", "..", "pilot", "capacity-policy.json"))
+	policy, err := LoadPolicy("capacity-policy.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +43,7 @@ func TestLoadPolicyReservesByConfiguredEnvironmentAndLimit(t *testing.T) {
 }
 
 func TestReserveCapacityRejectsUnsupportedEnvironmentAndMismatchedGroup(t *testing.T) {
-	policy, err := LoadPolicy(filepath.Join("..", "..", "pilot", "capacity-policy.json"))
+	policy, err := LoadPolicy("capacity-policy.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +68,7 @@ func TestReserveCapacityRejectsUnsupportedEnvironmentAndMismatchedGroup(t *testi
 }
 
 func TestDecodePolicyRejectsUnknownFieldsAndTrailingValues(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "pilot", "capacity-policy.json"))
+	data, err := os.ReadFile("capacity-policy.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,5 +79,19 @@ func TestDecodePolicyRejectsUnknownFieldsAndTrailingValues(t *testing.T) {
 	}
 	if _, err := DecodePolicy(strings.NewReader(string(data) + `{}`)); !errors.Is(err, ErrInvalidPolicy) {
 		t.Fatalf("trailing JSON object: got %v, want ErrInvalidPolicy", err)
+	}
+}
+
+func TestEmbeddedPolicyMatchesEditableSourceFile(t *testing.T) {
+	source, err := LoadPolicy("capacity-policy.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	embedded, err := LoadEmbeddedPolicy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(embedded, source) {
+		t.Fatalf("embedded policy differs from source policy: embedded=%+v source=%+v", embedded, source)
 	}
 }

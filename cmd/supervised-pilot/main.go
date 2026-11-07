@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -40,10 +41,12 @@ var safeCredentialRef = regexp.MustCompile(`^systemd-credential://[A-Za-z0-9][A-
 var safePilotTarget = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}@(production|staging|testing)$`)
 
 const (
-	defaultCapacityPolicy  = "pilot/capacity-policy.json"
-	defaultPilotStateDB    = "var/pilot.db"
 	defaultVultrCredential = credential.SystemdReferenceScheme + "vultr-pilot-api-token"
 )
+
+type runtimeSettings struct {
+	stateDBPath string
+}
 
 type stringListFlag []string
 
@@ -61,6 +64,10 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) error {
+	return runWithSettings(args, stdout, stderr, runtimeSettings{})
+}
+
+func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSettings) error {
 	if len(args) == 0 {
 		return usage(stderr)
 	}
@@ -77,8 +84,6 @@ func run(args []string, stdout, stderr io.Writer) error {
 	confirmHost := flags.String("confirm-host", "", "repeat the exact SSH target to approve a backup run")
 	confirmCreate := flags.String("confirm-create", "", "repeat <server-id>@<environment> to approve billable Vultr VM creation")
 	timeout := flags.Duration("timeout", time.Hour, "maximum time to wait for the selected operation")
-	capacityPolicyPath := flags.String("capacity-policy", defaultCapacityPolicy, "source-controlled pilot VM capacity policy")
-	stateDBPath := flags.String("state-db", defaultPilotStateDB, "local bbolt database for managed VM capacity")
 	serverID := flags.String("server-id", "", "stable logical server ID for Vultr provisioning")
 	environmentID := flags.String("environment", "", "configured environment ID: production, staging, or testing")
 	region := flags.String("region", "", "Vultr region ID")
@@ -129,18 +134,60 @@ func run(args []string, stdout, stderr io.Writer) error {
 		}
 		return backup(*host, *execute, *confirmHost, *timeout, stdout, stderr)
 	case "provision":
-		if err := allowOnlyFlags(flags, "execute", "confirm-create", "timeout", "capacity-policy", "state-db", "server-id", "environment", "region", "plan", "os-id", "hostname", "credential-ref", "operation-id", "ssh-key-id"); err != nil {
+		if err := allowOnlyFlags(flags, "execute", "confirm-create", "timeout", "server-id", "environment", "region", "plan", "os-id", "hostname", "credential-ref", "operation-id", "ssh-key-id"); err != nil {
 			return err
 		}
-		return provisionVultr(*execute, *confirmCreate, *timeout, *capacityPolicyPath, *stateDBPath, *serverID, *environmentID, *region, *plan, *osID, *hostname, sshKeyIDs, *credentialRef, *operationID, stdout, stderr)
+		policy, err := pilotcapacity.LoadEmbeddedPolicy()
+		if err != nil {
+			return fmt.Errorf("load embedded capacity policy: %w", err)
+		}
+		statePath, err := settings.capacityStatePath()
+		if err != nil {
+			return fmt.Errorf("resolve capacity state path: %w", err)
+		}
+		return provisionVultr(*execute, *confirmCreate, *timeout, policy, statePath, *serverID, *environmentID, *region, *plan, *osID, *hostname, sshKeyIDs, *credentialRef, *operationID, stdout, stderr)
 	case "capacity":
-		if err := allowOnlyFlags(flags, "capacity-policy", "state-db"); err != nil {
-			return err
+		if flags.NFlag() != 0 {
+			return errors.New("capacity reads the fixed local policy and state database; remove all flags")
 		}
-		return showCapacity(*capacityPolicyPath, *stateDBPath, stdout)
+		policy, err := pilotcapacity.LoadEmbeddedPolicy()
+		if err != nil {
+			return fmt.Errorf("load embedded capacity policy: %w", err)
+		}
+		statePath, err := settings.capacityStatePath()
+		if err != nil {
+			return fmt.Errorf("resolve capacity state path: %w", err)
+		}
+		return showCapacity(policy, statePath, stdout)
 	default:
 		return usage(stderr)
 	}
+}
+
+func (settings runtimeSettings) capacityStatePath() (string, error) {
+	if settings.stateDBPath != "" {
+		return settings.stateDBPath, nil
+	}
+	currentUser, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+	workingDirectory, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("resolve current directory for pilot-state migration check: %w", err)
+	}
+	return resolveCapacityStatePath(currentUser.HomeDir, workingDirectory)
+}
+
+func resolveCapacityStatePath(accountHome, workingDirectory string) (string, error) {
+	statePath := filepath.Join(accountHome, ".local", "state", "gsc-pilot", "pilot.db")
+	legacyPath := filepath.Join(workingDirectory, "var", "pilot.db")
+	if _, err := os.Lstat(legacyPath); err == nil {
+		return "", fmt.Errorf("legacy pilot database found at %s; stop pilot processes and move its capacity state to %s before using provision or capacity", legacyPath, statePath)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("check legacy pilot database %s: %w", legacyPath, err)
+	}
+	return statePath, nil
 }
 
 func allowOnlyFlags(flags *flag.FlagSet, allowed ...string) error {
@@ -170,7 +217,7 @@ func usage(w io.Writer) error {
 	return errors.New("an action is required")
 }
 
-func provisionVultr(execute bool, confirmation string, timeout time.Duration, policyPath, statePath, serverID, environment, region, plan, osID, hostname string, sshKeyIDs []string, credentialRef, operationID string, stdout, stderr io.Writer) error {
+func provisionVultr(execute bool, confirmation string, timeout time.Duration, policy pilotcapacity.Policy, statePath, serverID, environment, region, plan, osID, hostname string, sshKeyIDs []string, credentialRef, operationID string, stdout, stderr io.Writer) error {
 	if timeout <= 0 || timeout > 24*time.Hour {
 		return errors.New("--timeout must be greater than zero and no more than 24h")
 	}
@@ -182,10 +229,6 @@ func provisionVultr(execute bool, confirmation string, timeout time.Duration, po
 	}
 	if !safeCredentialRef.MatchString(credentialRef) {
 		return errors.New("--credential-ref must use systemd-credential://NAME")
-	}
-	policy, err := pilotcapacity.LoadPolicy(policyPath)
-	if err != nil {
-		return err
 	}
 	if !policy.RuntimeEnforced {
 		return errors.New("capacity policy is not marked for runtime enforcement")
@@ -299,11 +342,7 @@ func provisionVultr(execute bool, confirmation string, timeout time.Duration, po
 	return nil
 }
 
-func showCapacity(policyPath, statePath string, stdout io.Writer) error {
-	policy, err := pilotcapacity.LoadPolicy(policyPath)
-	if err != nil {
-		return err
-	}
+func showCapacity(policy pilotcapacity.Policy, statePath string, stdout io.Writer) error {
 	if !policy.RuntimeEnforced {
 		return errors.New("capacity policy is not marked for runtime enforcement")
 	}

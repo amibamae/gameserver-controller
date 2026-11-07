@@ -10,7 +10,7 @@ import (
 func loadPolicyFixtures(t *testing.T) (policyDocument, casesDocument) {
 	t.Helper()
 	var policy policyDocument
-	if err := readJSON(filepath.Join("..", "..", "pilot", "capacity-policy.json"), &policy); err != nil {
+	if err := readJSON(filepath.Join("..", "..", "internal", "pilotcapacity", "capacity-policy.json"), &policy); err != nil {
 		t.Fatalf("read policy fixture: %v", err)
 	}
 	var cases casesDocument

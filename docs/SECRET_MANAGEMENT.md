@@ -52,7 +52,7 @@ enabling create or destroy.
 The pilot uses this credential only for controller-owned instances.
 An existing live production VM may remain unmanaged. The pilot capacity rule
 must be checked before create/adopt API calls; the current policy is
-source-controlled in [the capacity file](../pilot/capacity-policy.json).
+source-controlled in [the embedded capacity file](../internal/pilotcapacity/capacity-policy.json).
 
 ## Wasabi
 
