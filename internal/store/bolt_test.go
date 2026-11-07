@@ -439,11 +439,55 @@ func TestOpenMigratesSchemaV2ToLogicalServerCatalog(t *testing.T) {
 	}
 	defer store.Close()
 	if err := store.db.View(func(tx *bolt.Tx) error {
-		if got := string(tx.Bucket(metadataBucket).Get(schemaKey)); got != "3" {
-			t.Fatalf("schema version was not advanced: got %q, want 3", got)
+		if got := string(tx.Bucket(metadataBucket).Get(schemaKey)); got != "4" {
+			t.Fatalf("schema version was not advanced: got %q, want 4", got)
 		}
 		if tx.Bucket(logicalServersBucket) == nil {
 			t.Fatal("logical server bucket was not created")
+		}
+		if tx.Bucket(capacityReservationsBucket) == nil {
+			t.Fatal("capacity reservation bucket was not created")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOpenMigratesSchemaV3ToCapacityReservations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "schema-v3.db")
+	db, err := bolt.Open(path, 0o600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Update(func(tx *bolt.Tx) error {
+		meta, err := tx.CreateBucket(metadataBucket)
+		if err != nil {
+			return err
+		}
+		if err := meta.Put(schemaKey, []byte("3")); err != nil {
+			return err
+		}
+		_, err = tx.CreateBucket(logicalServersBucket)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := OpenBolt(path)
+	if err != nil {
+		t.Fatalf("open schema v3 database: %v", err)
+	}
+	defer store.Close()
+	if err := store.db.View(func(tx *bolt.Tx) error {
+		if got := string(tx.Bucket(metadataBucket).Get(schemaKey)); got != "4" {
+			t.Fatalf("schema version was not advanced: got %q, want 4", got)
+		}
+		if tx.Bucket(capacityReservationsBucket) == nil {
+			t.Fatal("capacity reservation bucket was not created")
 		}
 		return nil
 	}); err != nil {

@@ -66,6 +66,11 @@ Vultr create/adopt path. Editing the file and rebuilding the current CLI does
 not change runtime behavior yet. The future provider workflow must read the
 checked-in policy before it calls the API.
 
+The shared bbolt store now has a durable reservation primitive that atomically
+checks the policy's total and group limits and keeps unresolved provider
+outcomes counted. The pilot CLI and Vultr workflow do not call it yet, so this
+is a reusable foundation rather than runtime enforcement.
+
 **The policy is declarative only today.** The current `cmd/supervised-pilot` CLI supports backup, status, and local history. It cannot create or adopt Vultr instances.
 
 ## What the success event proves

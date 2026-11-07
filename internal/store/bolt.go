@@ -16,25 +16,27 @@ import (
 )
 
 const (
-	operationsBucketName     = "operations"
-	metadataBucketName       = "metadata"
-	idempotencyBucketName    = "idempotency"
-	locksBucketName          = "resource_locks"
-	operationLocksBucketName = "operation_locks"
-	keyVersionsBucketName    = "idempotency_key_versions"
-	logicalServersBucketName = "logical_servers"
-	databaseSchema           = "3"
+	operationsBucketName           = "operations"
+	metadataBucketName             = "metadata"
+	idempotencyBucketName          = "idempotency"
+	locksBucketName                = "resource_locks"
+	operationLocksBucketName       = "operation_locks"
+	keyVersionsBucketName          = "idempotency_key_versions"
+	logicalServersBucketName       = "logical_servers"
+	capacityReservationsBucketName = "capacity_reservations"
+	databaseSchema                 = "4"
 )
 
 var (
-	operationsBucket     = []byte(operationsBucketName)
-	metadataBucket       = []byte(metadataBucketName)
-	idempotencyBucket    = []byte(idempotencyBucketName)
-	locksBucket          = []byte(locksBucketName)
-	operationLocksBucket = []byte(operationLocksBucketName)
-	keyVersionsBucket    = []byte(keyVersionsBucketName)
-	logicalServersBucket = []byte(logicalServersBucketName)
-	schemaKey            = []byte("schema_version")
+	operationsBucket           = []byte(operationsBucketName)
+	metadataBucket             = []byte(metadataBucketName)
+	idempotencyBucket          = []byte(idempotencyBucketName)
+	locksBucket                = []byte(locksBucketName)
+	operationLocksBucket       = []byte(operationLocksBucketName)
+	keyVersionsBucket          = []byte(keyVersionsBucketName)
+	logicalServersBucket       = []byte(logicalServersBucketName)
+	capacityReservationsBucket = []byte(capacityReservationsBucketName)
+	schemaKey                  = []byte("schema_version")
 )
 
 // BoltStore is a single-controller-process, durable operation store. bbolt
@@ -74,14 +76,14 @@ func OpenBolt(path string) (*BoltStore, error) {
 		if _, err := tx.CreateBucketIfNotExists(operationsBucket); err != nil {
 			return err
 		}
-		for _, name := range [][]byte{idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket} {
+		for _, name := range [][]byte{idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket, capacityReservationsBucket} {
 			if _, err := tx.CreateBucketIfNotExists(name); err != nil {
 				return err
 			}
 		}
 		version := meta.Get(schemaKey)
 		if version == nil {
-			for _, name := range [][]byte{operationsBucket, idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket} {
+			for _, name := range [][]byte{operationsBucket, idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket, capacityReservationsBucket} {
 				cursor := tx.Bucket(name).Cursor()
 				if key, _ := cursor.First(); key != nil {
 					return ErrStoreNeedsMigration
@@ -97,6 +99,9 @@ func OpenBolt(path string) (*BoltStore, error) {
 			return meta.Put(schemaKey, []byte(databaseSchema))
 		}
 		if bytes.Equal(version, []byte("2")) {
+			return meta.Put(schemaKey, []byte(databaseSchema))
+		}
+		if bytes.Equal(version, []byte("3")) {
 			return meta.Put(schemaKey, []byte(databaseSchema))
 		}
 		if !bytes.Equal(version, []byte(databaseSchema)) {
