@@ -110,22 +110,22 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			sameScope := actorID == cursorActor && reflect.DeepEqual(filters, cursorFilters)
 			if !sameScope {
 				outcomes = append(outcomes, map[string]any{
-					"attempt_id":                    attemptID,
-					"accepted":                      false,
-					"error_code":                    "core.validation.invalid_request",
-					"items":                         []any{},
-					"cursor_advanced":               false,
-					"resource_metadata_returned":     false,
+					"attempt_id":                 attemptID,
+					"accepted":                   false,
+					"error_code":                 "core.validation.invalid_request",
+					"items":                      []any{},
+					"cursor_advanced":            false,
+					"resource_metadata_returned": false,
 				})
 				continue
 			}
 			items := arrayValue(attempt, "page_items")
 			outcomes = append(outcomes, map[string]any{
-				"attempt_id":                attemptID,
-				"accepted":                  true,
-				"error_code":                nil,
-				"items":                     items,
-				"cursor_advanced":           true,
+				"attempt_id":                 attemptID,
+				"accepted":                   true,
+				"error_code":                 nil,
+				"items":                      items,
+				"cursor_advanced":            true,
 				"resource_metadata_returned": len(items) > 0,
 			})
 		}
