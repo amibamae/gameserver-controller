@@ -1,0 +1,97 @@
+{
+  "fixture_id": "velocity-transfer-count-mismatch",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.velocity.players.transfer",
+  "purpose": "Aggregate result counts must equal the individual session outcomes.",
+  "input": {
+    "transfer_request": {
+      "server_id": "minecraft-test",
+      "environment_id": "test",
+      "source_backend_id": "velocity-lobby",
+      "destination_backend_id": "paper-main",
+      "waiting_cohort_id": "waiting-cohort-001",
+      "expected_instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "test",
+        "resource_kind": "instance",
+        "external_id": "instance-test-001"
+      },
+      "readiness_assertion": {
+        "assertion_id": "readiness-001",
+        "server_id": "minecraft-test",
+        "environment_id": "test",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "test",
+          "resource_kind": "instance",
+          "external_id": "instance-test-001"
+        },
+        "readiness_check_set_id": "paper-ready-v1",
+        "observed_at": "2026-11-07T09:59:00Z",
+        "expires_at": "2026-11-07T10:01:00Z"
+      },
+      "player_session_ids": [
+        "proxy-session-001",
+        "proxy-session-002",
+        "proxy-session-003"
+      ]
+    },
+    "transfer_result": {
+      "waiting_cohort_id": "waiting-cohort-001",
+      "source_backend_id": "velocity-lobby",
+      "destination_backend_id": "paper-main",
+      "target_instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "test",
+        "resource_kind": "instance",
+        "external_id": "instance-test-001"
+      },
+      "requested_count": 3,
+      "outcome_counts": {
+        "transferred": 2,
+        "already_at_destination": 0,
+        "disconnected": 1,
+        "rejected": 0,
+        "failed": 0,
+        "outcome_unknown": 1
+      },
+      "results": [
+        {
+          "proxy_session_id": "proxy-session-003",
+          "outcome": "outcome_unknown"
+        },
+        {
+          "proxy_session_id": "proxy-session-001",
+          "outcome": "transferred"
+        },
+        {
+          "proxy_session_id": "proxy-session-002",
+          "outcome": "disconnected"
+        }
+      ]
+    },
+    "validation_time": "2026-11-07T10:00:00Z"
+  },
+  "expected": {
+    "request_schema_valid": true,
+    "result_schema_valid": true,
+    "requested_count": 3,
+    "outcome_counts": {
+      "transferred": 1,
+      "already_at_destination": 0,
+      "disconnected": 1,
+      "rejected": 0,
+      "failed": 0,
+      "outcome_unknown": 1
+    },
+    "target_bound": true,
+    "readiness_current": true,
+    "session_set_complete": true,
+    "aggregate_counts_match": false,
+    "result_accepted": false,
+    "retry_unknown_without_reconciliation": false,
+    "request_result_bound": true
+  },
+  "side_effect_expectation": "simulated",
+  "notes": "The request and individual results are valid, but the reported transferred count is inconsistent."
+}

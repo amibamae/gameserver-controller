@@ -1863,70 +1863,139 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"required_checks_complete": true, "all_required_checks_passed": allPassed,
 			"readiness": readiness, "ready_transition_permitted": allPassed,
 		}, nil
-	case "readiness-required-before-transfer":
-		assertion := asObject(input["readiness_assertion"])
+	case "readiness-required-before-transfer", "readiness-target-mismatch-before-transfer":
+		request := asObject(input["transfer_request"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-request", request); err != nil {
+			return nil, fmt.Errorf("transfer request does not match schema: %w", err)
+		}
+		assertion := asObject(request["readiness_assertion"])
+		requestTarget := asObject(request["expected_instance_ref"])
+		assertedTarget := asObject(assertion["instance_ref"])
+		bound := stringValue(request, "server_id") == stringValue(assertion, "server_id") &&
+			stringValue(request, "environment_id") == stringValue(assertion, "environment_id") &&
+			stringValue(request, "environment_id") == stringValue(requestTarget, "environment_id") &&
+			stringValue(assertion, "environment_id") == stringValue(assertedTarget, "environment_id") &&
+			reflect.DeepEqual(requestTarget, assertedTarget)
 		current, err := parseTime(stringValue(input, "validation_time"))
 		if err != nil {
 			return nil, err
 		}
-		expires, err := parseTime(stringValue(assertion, "expires_at"))
+		observedAt, err := parseTime(stringValue(assertion, "observed_at"))
 		if err != nil {
 			return nil, err
 		}
-		expired := !current.Before(expires)
+		expiresAt, err := parseTime(stringValue(assertion, "expires_at"))
+		if err != nil {
+			return nil, err
+		}
+		readinessCurrent := bound && !current.Before(observedAt) && current.Before(expiresAt)
 		outcome, code := "accepted", any(nil)
-		if expired {
+		if !bound {
+			outcome, code = "rejected", "readiness_assertion_target_mismatch"
+		} else if current.Before(observedAt) {
+			outcome, code = "rejected", "readiness_assertion_not_current"
+		} else if !current.Before(expiresAt) {
 			outcome, code = "rejected", "readiness_assertion_expired"
 		}
-		calls := len(arrayValue(input, "player_session_ids"))
-		if expired {
+		calls := len(arrayValue(request, "player_session_ids"))
+		if !readinessCurrent {
 			calls = 0
 		}
-		return map[string]any{"outcome": outcome, "error_code": code, "proxy_transfer_calls": calls}, nil
-	case "velocity-transfer-partial-results":
-		sessions := arrayValue(input, "player_session_ids")
-		results := arrayValue(input, "session_outcomes")
-		if !uniqueStrings(sessions) {
-			return nil, fmt.Errorf("requested session IDs must be unique")
+		return map[string]any{
+			"request_schema_valid": true,
+			"target_bound":         bound,
+			"readiness_current":    readinessCurrent,
+			"outcome":              outcome,
+			"error_code":           code,
+			"proxy_transfer_calls": calls,
+		}, nil
+	case "velocity-transfer-partial-results", "velocity-transfer-count-mismatch", "velocity-transfer-duplicate-session-result", "velocity-transfer-target-mismatch":
+		request := asObject(input["transfer_request"])
+		result := asObject(input["transfer_result"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-request", request); err != nil {
+			return nil, fmt.Errorf("transfer request does not match schema: %w", err)
 		}
-		if len(results) != len(sessions) {
-			return nil, fmt.Errorf("one session outcome is required for every requested session")
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-result", result); err != nil {
+			return nil, fmt.Errorf("transfer result does not match schema: %w", err)
 		}
-		requested := make(map[string]bool)
-		for _, id := range sessions {
-			requested[id.(string)] = true
+		sessions := arrayValue(request, "player_session_ids")
+		results := arrayValue(result, "results")
+		requestTarget := asObject(request["expected_instance_ref"])
+		assertion := asObject(request["readiness_assertion"])
+		assertedTarget := asObject(assertion["instance_ref"])
+		readinessBound := stringValue(request, "server_id") == stringValue(assertion, "server_id") &&
+			stringValue(request, "environment_id") == stringValue(assertion, "environment_id") &&
+			stringValue(request, "environment_id") == stringValue(requestTarget, "environment_id") &&
+			stringValue(assertion, "environment_id") == stringValue(assertedTarget, "environment_id") &&
+			reflect.DeepEqual(requestTarget, assertedTarget)
+		targetBound := reflect.DeepEqual(requestTarget, asObject(result["target_instance_ref"]))
+		requestResultBound := targetBound &&
+			stringValue(request, "waiting_cohort_id") == stringValue(result, "waiting_cohort_id") &&
+			stringValue(request, "source_backend_id") == stringValue(result, "source_backend_id") &&
+			stringValue(request, "destination_backend_id") == stringValue(result, "destination_backend_id")
+		current, err := parseTime(stringValue(input, "validation_time"))
+		if err != nil {
+			return nil, err
 		}
+		observedAt, err := parseTime(stringValue(assertion, "observed_at"))
+		if err != nil {
+			return nil, err
+		}
+		expiresAt, err := parseTime(stringValue(assertion, "expires_at"))
+		if err != nil {
+			return nil, err
+		}
+		readinessCurrent := readinessBound && !current.Before(observedAt) && current.Before(expiresAt)
 		resultIDs := make([]any, 0, len(results))
-		counts := map[string]int{"transferred": 0, "already_at_destination": 0, "disconnected": 0, "rejected": 0, "failed": 0, "outcome_unknown": 0}
-		for _, result := range results {
-			item := asObject(result)
-			id := item["proxy_session_id"]
-			outcome := stringValue(item, "outcome")
-			resultIDs = append(resultIDs, id)
+		counts := map[string]int{
+			"transferred":            0,
+			"already_at_destination": 0,
+			"disconnected":           0,
+			"rejected":               0,
+			"failed":                 0,
+			"outcome_unknown":        0,
+		}
+		for _, raw := range results {
+			item := asObject(raw)
+			id, outcome := item["proxy_session_id"], stringValue(item, "outcome")
 			if _, ok := counts[outcome]; !ok {
 				return nil, fmt.Errorf("unknown transfer outcome: %q", outcome)
 			}
+			resultIDs = append(resultIDs, id)
 			counts[outcome]++
 		}
-		if !uniqueStrings(resultIDs) {
-			return nil, fmt.Errorf("session outcomes must not contain duplicate IDs")
+		sessionSetComplete := uniqueStrings(sessions) && uniqueStrings(resultIDs) &&
+			len(results) == len(sessions) && sameStringSet(sessions, resultIDs)
+		countsMatch := len(results) == len(sessions)
+		requestedCount, err := integerValue(result["requested_count"])
+		if err != nil {
+			return nil, err
 		}
-		for _, id := range resultIDs {
-			if str, ok := id.(string); !ok || !requested[str] {
-				return nil, fmt.Errorf("session outcomes must contain exactly the requested sessions")
+		countsMatch = countsMatch && requestedCount == int64(len(sessions))
+		reportedCounts := asObject(result["outcome_counts"])
+		for outcome, count := range counts {
+			reported, err := integerValue(reportedCounts[outcome])
+			if err != nil || reported != int64(count) {
+				countsMatch = false
 			}
-		}
-		if len(requested) != len(resultIDs) {
-			return nil, fmt.Errorf("session outcomes must contain exactly the requested sessions")
 		}
 		normalizedCounts := make(map[string]any, len(counts))
 		hasUnknown := counts["outcome_unknown"] > 0
 		for outcome, count := range counts {
 			normalizedCounts[outcome] = count
 		}
+		accepted := readinessCurrent && requestResultBound && sessionSetComplete && countsMatch
 		return map[string]any{
+			"request_schema_valid":                 true,
+			"result_schema_valid":                  true,
 			"requested_count":                      len(sessions),
 			"outcome_counts":                       normalizedCounts,
+			"target_bound":                         targetBound,
+			"request_result_bound":                 requestResultBound,
+			"readiness_current":                    readinessCurrent,
+			"session_set_complete":                 sessionSetComplete,
+			"aggregate_counts_match":               countsMatch,
+			"result_accepted":                      accepted,
 			"retry_unknown_without_reconciliation": !hasUnknown,
 		}, nil
 	case "storage.backup.partial-upload-not-verified":
