@@ -109,6 +109,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Client treats unknown status values safely.
 - Client never assumes request timeout means operation failure.
 - Authentication and authorization failures do not disclose protected resource details.
+- A list cursor is bound to the authenticated actor and canonical filter scope; reuse under another actor or filter is rejected with a generic invalid-request error and returns no resource items or metadata.
 
 ## 5. Optional implementations in other languages
 
