@@ -100,7 +100,7 @@ Illustrative request:
 }
 ```
 
-A mutating capability MUST include `operation_id` and `step_id` in request context. It SHOULD include an idempotency key when supported.
+A mutating capability MUST include `operation_id` and `step_id` in request context. If the adapter contract declares provider idempotency support, the controller MAY include a provider-scoped idempotency token in the request context. That token is distinct from the management API's client-supplied `Idempotency-Key`; the client key MUST NOT be treated as proof that an external provider call is idempotent. The adapter contract defines the provider token's scope and semantics.
 
 The result MUST distinguish:
 - `completed`: capability postcondition is confirmed.

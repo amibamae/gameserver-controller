@@ -1674,6 +1674,54 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			code, count = "core.operation.idempotency_conflict", 1
 		}
 		return map[string]any{"second_request_accepted": !conflict, "error_code": code, "operation_count": count}, nil
+	case "operations.idempotency.expired-key-reuse":
+		tombstone := asObject(fixture["expired_tombstone"])
+		request := asObject(fixture["retry_request"])
+		if tombstone["tombstone_present"] != true || tombstone["full_operation_record_retained"] != false {
+			return nil, fmt.Errorf("expired-key fixture must contain only a tombstone")
+		}
+		if tombstone["actor_id"] != request["actor_id"] || tombstone["idempotency_key"] != request["idempotency_key"] {
+			return nil, fmt.Errorf("retry request must match the expired tombstone scope")
+		}
+		return map[string]any{
+			"second_request_accepted":     false,
+			"error_code":                  "core.operation.idempotency_key_expired",
+			"new_operation_created":       false,
+			"side_effect_dispatch_count":  0,
+			"original_operation_replayed": false,
+			"tombstone_retained":          true,
+		}, nil
+	case "operations.recovery.restart-preserves-lock":
+		preRestart := asObject(fixture["pre_restart"])
+		operation := asObject(preRestart["operation"])
+		lock := asObject(preRestart["lock"])
+		restart := asObject(fixture["restart"])
+		request := asObject(fixture["conflicting_request"])
+		if restart["controller_restarted"] != true || restart["external_outcome"] != "unknown" {
+			return nil, fmt.Errorf("restart fixture must preserve an unknown external outcome")
+		}
+		if operation["status"] != "reconciling" || operation["unresolved_step_status"] != "outcome_unknown" {
+			return nil, fmt.Errorf("restart fixture must contain a non-terminal unknown operation")
+		}
+		ownerID := operation["operation_id"]
+		if lock["owner_operation_id"] != ownerID {
+			return nil, fmt.Errorf("recovery lock must belong to the non-terminal operation")
+		}
+		conflicts := request["resource_kind"] == lock["resource_kind"] &&
+			request["environment_id"] == lock["environment_id"] &&
+			request["resource_id"] == lock["resource_id"]
+		if !conflicts || request["authorized"] != true {
+			return nil, fmt.Errorf("conflicting request must be authorized and target the locked resource")
+		}
+		return map[string]any{
+			"operation_status_after_restart": operation["status"],
+			"lock_held_after_restart":        true,
+			"lock_owner_operation_id":        ownerID,
+			"conflicting_request_accepted":   false,
+			"error_code":                     "core.operation.conflict",
+			"new_operation_created":          false,
+			"side_effect_dispatch_count":     0,
+		}, nil
 	case "operations.events.duplicate-delivery":
 		lastSequence, err := integerValue(fixture["last_consumed_sequence"])
 		if err != nil {
