@@ -341,6 +341,88 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			})
 		}
 		return map[string]any{"binding_enforced": true, "attempts": outcomes}, nil
+	case "management.authentication.credential-profiles":
+		remote := asObject(input["remote_profile"])
+		expectedAudience := stringValue(remote, "expected_audience")
+		remoteAttempts := arrayValue(remote, "attempts")
+		if expectedAudience == "" || len(remoteAttempts) == 0 {
+			return nil, fmt.Errorf("remote authentication fixture must include an expected audience and attempts")
+		}
+		remoteResults := make([]any, 0, len(remoteAttempts))
+		for index, rawAttempt := range remoteAttempts {
+			attempt := asObject(rawAttempt)
+			attemptID := stringValue(attempt, "case_id")
+			actorID := stringValue(attempt, "authenticated_actor_id")
+			if attemptID == "" {
+				return nil, fmt.Errorf("remote authentication attempt %d must have a case_id", index)
+			}
+			authenticated := boolValue(attempt, "tls") &&
+				boolValue(attempt, "signature_valid") &&
+				boolValue(attempt, "not_expired") &&
+				stringValue(attempt, "audience") == expectedAudience &&
+				!boolValue(attempt, "revoked") &&
+				actorID != ""
+			httpStatus := 401
+			var trustedActor any
+			if authenticated {
+				httpStatus = 200
+				trustedActor = actorID
+			}
+			remoteResults = append(remoteResults, map[string]any{
+				"case_id": attemptID, "authenticated": authenticated, "http_status": httpStatus,
+				"actor_id": trustedActor, "request_claims_used_for_auth": false,
+				"protected_resource_data_returned": false, "operation_created": false,
+				"adapter_dispatch_count": 0,
+			})
+		}
+		local := asObject(input["local_profile"])
+		localAttempts := arrayValue(local, "attempts")
+		if len(localAttempts) == 0 {
+			return nil, fmt.Errorf("local authentication fixture must include attempts")
+		}
+		localResults := make([]any, 0, len(localAttempts))
+		for index, rawAttempt := range localAttempts {
+			attempt := asObject(rawAttempt)
+			attemptID := stringValue(attempt, "case_id")
+			if attemptID == "" {
+				return nil, fmt.Errorf("local authentication attempt %d must have a case_id", index)
+			}
+			actorID := stringValue(attempt, "peer_actor_id")
+			authenticated := boolValue(attempt, "peer_identity_verified") && actorID != ""
+			httpStatus := 401
+			var trustedActor any
+			if authenticated {
+				httpStatus = 200
+				trustedActor = actorID
+			}
+			localResults = append(localResults, map[string]any{
+				"case_id": attemptID, "authenticated": authenticated, "http_status": httpStatus,
+				"actor_id": trustedActor, "request_claims_used_for_auth": false,
+				"protected_resource_data_returned": false, "operation_created": false,
+				"adapter_dispatch_count": 0,
+			})
+		}
+		redaction := asObject(input["token_redaction"])
+		token := stringValue(redaction, "synthetic_token")
+		surfaces := asObject(redaction["surfaces"])
+		if token == "" || len(surfaces) == 0 {
+			return nil, fmt.Errorf("token redaction fixture must include a synthetic token and observed surfaces")
+		}
+		leakedSurfaces := make([]string, 0)
+		for surface, rawValue := range surfaces {
+			if strings.Contains(fmt.Sprint(rawValue), token) {
+				leakedSurfaces = append(leakedSurfaces, surface)
+			}
+		}
+		sort.Strings(leakedSurfaces)
+		return map[string]any{
+			"remote_attempts": remoteResults,
+			"local_attempts": localResults,
+			"token_redaction": map[string]any{
+				"token_absent_from_observed_surfaces": len(leakedSurfaces) == 0,
+				"leaked_surfaces": leakedSurfaces,
+			},
+		}, nil
 	case "management.authentication.actor-spoofing":
 		principal := asObject(input["authenticated_principal"])
 		authenticatedActor := stringValue(principal, "actor_id")
