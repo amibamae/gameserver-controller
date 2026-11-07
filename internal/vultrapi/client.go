@@ -83,12 +83,16 @@ type instanceEnvelope struct {
 }
 
 type instanceListEnvelope struct {
-	Instances []Instance `json:"instances"`
-	Meta      struct {
-		Links struct {
-			Next string `json:"next"`
-		} `json:"links"`
-	} `json:"meta"`
+	Instances []Instance        `json:"instances"`
+	Meta      *instanceListMeta `json:"meta"`
+}
+
+type instanceListMeta struct {
+	Links *instanceListLinks `json:"links"`
+}
+
+type instanceListLinks struct {
+	Next string `json:"next"`
 }
 
 // NewClient creates a client for the production Vultr API. It accepts an
@@ -189,6 +193,9 @@ func (c *Client) ListInstancesByLabel(ctx context.Context, token []byte, label s
 		}
 		var envelope instanceListEnvelope
 		if err := decodeJSON(response, &envelope); err != nil {
+			return nil, ErrInvalidResponse
+		}
+		if envelope.Meta == nil || envelope.Meta.Links == nil {
 			return nil, ErrInvalidResponse
 		}
 		for _, instance := range envelope.Instances {

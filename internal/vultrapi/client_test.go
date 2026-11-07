@@ -248,6 +248,16 @@ func TestListInstancesByLabelRejectsRepeatedCursor(t *testing.T) {
 	}
 }
 
+func TestListInstancesByLabelRequiresPaginationMetadata(t *testing.T) {
+	client := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, `{"instances":[]}`)
+	})
+	_, err := client.ListInstancesByLabel(context.Background(), []byte(testToken), "gsc-managed-42")
+	if !errors.Is(err, ErrInvalidResponse) {
+		t.Fatalf("error = %v, want ErrInvalidResponse", err)
+	}
+}
+
 func TestGetInstanceUsesExactIDAndValidatesResponse(t *testing.T) {
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet || r.URL.Path != "/v2/instances/inst-123" {
