@@ -17,14 +17,29 @@
       "step_type": "hosting.instance.create",
       "status": "pending",
       "attempt": 0,
-      "adapter_id": "hosting.example"
+      "adapter_id": "hosting.example",
+      "capability_name": "hosting.instance.create",
+      "capability_version": "1",
+      "input": {
+        "server_id": "minecraft-test",
+        "environment_id": "test",
+        "region_id": "region-test",
+        "plan_id": "plan-test"
+      }
     },
     {
       "step_id": "prepare-host",
       "step_type": "hosting.bootstrap.deliver",
       "status": "pending",
       "attempt": 0,
-      "adapter_id": "hosting.example"
+      "adapter_id": "hosting.example",
+      "capability_name": "hosting.bootstrap.deliver",
+      "capability_version": "1",
+      "input": {
+        "server_id": "minecraft-test",
+        "environment_id": "test",
+        "bootstrap_revision": "git:0123456789abcdef"
+      }
     }
   ],
   "request_snapshot": {

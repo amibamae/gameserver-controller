@@ -100,12 +100,12 @@ An operation MUST NOT transition from a terminal state back to an active state. 
 
 A multi-step operation is represented as ordered, individually identifiable steps. A step record SHOULD include:
 - Stable step identifier and step type.
-- Intent/parameters with secret references only.
+- Immutable, schema-validated adapter input with secret references only (never resolved secret values).
 - Step status and timestamps.
 - Attempt count and applicable deadline.
 - Adapter identity and capability used.
 - External operation/resource references.
-- Observed result, structured error, and recovery information.
+- Schema-validated output after a definitive completed outcome, structured error, and recovery information.
 
 Before an external side effect, the controller MUST durably record the step intent and attempt context. After the call, it MUST durably record the observed outcome before proceeding to dependent steps.
 
