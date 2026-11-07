@@ -216,16 +216,16 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			providerCalls = 1
 		}
 		return map[string]any{
-			"schemas_valid": true,
-			"request_binding_matches": requestBindingMatches,
-			"approval_scope_matches": approvalScopeMatches,
-			"approval_current": approvalCurrent,
+			"schemas_valid":             true,
+			"request_binding_matches":   requestBindingMatches,
+			"approval_scope_matches":    approvalScopeMatches,
+			"approval_current":          approvalCurrent,
 			"approval_approver_present": approvalApproverPresent,
-			"approval_bound": approvalBound,
-			"destroy_dispatch_allowed": allowed,
-			"provider_destroy_calls": providerCalls,
-			"target_bound": targetBound,
-			"destruction_confirmed": confirmed,
+			"approval_bound":            approvalBound,
+			"destroy_dispatch_allowed":  allowed,
+			"provider_destroy_calls":    providerCalls,
+			"target_bound":              targetBound,
+			"destruction_confirmed":     confirmed,
 		}, nil
 	case "hosting.instance.destroy.authorization-required", "hosting.instance.destroy.verified-backup-required", "hosting.instance.destroy.current-generation-backup-required", "hosting.instance.destroy.stopped-required", "hosting.instance.destroy.completed-destroyed", "hosting.instance.destroy.accepted-not-destroyed", "hosting.instance.destroy.unknown-requires-inspection", "hosting.instance.destroy.target-mismatch":
 		destroyInput := asObject(input["destroy_input"])
