@@ -92,6 +92,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 ### Proxy routing and player transfer
 - Backend registration requires a current readiness assertion bound to the exact server, environment, and instance.
 - Confirmation requires a schema-valid result bound to the requested backend and instance, with `request_outcome` set to `confirmed` and the exact postcondition. Before retrying an unconfirmed drain or unregister, inspect the exact requested backend.
+- Routing requires a schema-valid inspection for the exact backend and instance and a matching environment; only `registered` and `routable` permits routing, and contradictory state pairs are schema-invalid.
 - An expired or mismatched readiness assertion causes rejection before any transfer side effect.
 - A transfer request names one source, one destination, one waiting cohort, and an explicit session list.
 - A session that has left the cohort or source backend is not transferred.
@@ -197,6 +198,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [execution-logs-health-delete-safety.json](test-vectors/execution-logs-health-delete-safety.json)
 - [proxy-register-expired-readiness.json](test-vectors/proxy-register-expired-readiness.json)
 - [proxy-backend-drain-unregister-state-confirmation.json](test-vectors/proxy-backend-drain-unregister-state-confirmation.json)
+- [proxy-backend-inspect-target-state-and-routability.json](test-vectors/proxy-backend-inspect-target-state-and-routability.json)
 - [proxy-register-accepted-not-routable.json](test-vectors/proxy-register-accepted-not-routable.json)
 - [proxy-unknown-drain-unregister-requires-inspection.json](test-vectors/proxy-unknown-drain-unregister-requires-inspection.json)
 - [velocity-transfer-partial-results.json](test-vectors/velocity-transfer-partial-results.json)
