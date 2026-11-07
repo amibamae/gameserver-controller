@@ -1,0 +1,62 @@
+{
+  "fixture_id": "operations.authentication.client-session-expiry",
+  "protocol_version": "0.21.0-draft",
+  "contract": "management_api.authentication",
+  "purpose": "An expired client session does not cancel an already accepted durable operation; unchanged authorization permits the accepted operation to continue without a client token refresh.",
+  "input": {
+    "client_session_expired": true,
+    "durably_accepted": true,
+    "authorization_context_unchanged": true,
+    "next_sensitive_step_reauthorization_required": false,
+    "operation": {
+      "operation_id": "operation-session-expiry-1",
+      "operation_type": "server.backup",
+      "protocol_version": "0.21.0-draft",
+      "target": {
+        "server_id": "server-staging",
+        "environment_id": "staging"
+      },
+      "status": "running",
+      "current_step_id": "upload",
+      "actor_id": "actor-staging",
+      "created_at": "2026-11-07T01:40:00Z",
+      "updated_at": "2026-11-07T01:40:05Z",
+      "started_at": "2026-11-07T01:40:01Z",
+      "steps": [
+        {
+          "step_id": "upload",
+          "step_type": "storage.object.put",
+          "status": "running",
+          "attempt": 1,
+          "adapter_id": "storage.example",
+          "started_at": "2026-11-07T01:40:01Z"
+        }
+      ],
+      "request_snapshot": {
+        "operation_type": "server.backup",
+        "parameters": {
+          "server_id": "server-staging",
+          "backup_id": "backup-2026-11-07"
+        }
+      }
+    }
+  },
+  "expected": {
+    "operation_schema_valid": true,
+    "operation_id": "operation-session-expiry-1",
+    "operation_status_after_expiry": "running",
+    "operation_remains_durable": true,
+    "operation_continues_without_client_session": true,
+    "operation_cancelled_due_to_session_expiry": false,
+    "session_expiry_alone_requires_client_token_refresh": false,
+    "authorization_context_unchanged": true,
+    "sensitive_step_reauthorization_still_applies": true,
+    "token_material_exposed": false
+  },
+  "notes": {
+    "session_expiry_effect": "does-not-cancel-an-already-accepted-operation",
+    "continuation_precondition": "authorization-context-unchanged-and-no-independent-sensitive-step-reauthorization-required",
+    "reauthorization": "changed-permissions-approval-target-or-policy-remains-subject-to-current-core-policy",
+    "token_material": "no-bearer-token-value-is-included-in-the-operation-or-fixture"
+  }
+}

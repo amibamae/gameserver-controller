@@ -109,6 +109,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Client treats unknown status values safely.
 - Client never assumes request timeout means operation failure.
 - Authentication and authorization failures do not disclose protected resource details.
+- Client session expiry alone does not cancel or pause an already accepted durable operation or require a client token refresh; independent reauthorization for sensitive steps still evaluates current permissions, approvals, target, and policy.
 - A list cursor is bound to the authenticated actor and canonical filter scope; reuse under another actor or filter is rejected with a generic invalid-request error and returns no resource items or metadata.
 
 ## 5. Optional implementations in other languages
@@ -138,6 +139,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [backup-stale-generation-blocks-destroy.json](test-vectors/backup-stale-generation-blocks-destroy.json)
 - [operation-event-sequence.json](test-vectors/operation-event-sequence.json)
 - [operation-event-duplicate-delivery.json](test-vectors/operation-event-duplicate-delivery.json)
+- [operation-survives-client-session-expiry.json](test-vectors/operation-survives-client-session-expiry.json)
 - [management-pagination-cursor-scope.json](test-vectors/management-pagination-cursor-scope.json)
 - [readiness-required-before-transfer.json](test-vectors/readiness-required-before-transfer.json)
 - [game-readiness-unknown-blocks-ready.json](test-vectors/game-readiness-unknown-blocks-ready.json)
