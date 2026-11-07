@@ -54,12 +54,17 @@ Required fields are `code`, `category`, `message`, and `retryable`. Optional fie
 
 ## 4. Stable codes
 
-Codes MUST be stable, machine-readable, and namespaced. Examples:
+Codes MUST be stable, machine-readable, and namespaced. Core codes are reserved to the protocol and MUST use the `core.*` namespace. Adapter and domain-specific codes MUST use a documented, stable namespace; adapter implementations MUST NOT claim or emit another owner's namespace.
+
+Initial codes include:
 - `core.validation.invalid_request`
 - `core.authorization.denied`
 - `core.lifecycle.invalid_transition`
 - `core.operation.idempotency_conflict`
+- `core.operation.idempotency_key_expired` (category `conflict`)
 - `core.operation.outcome_unknown`
+- `core.compatibility.unsupported_version` (category `compatibility_failure`)
+- `core.compatibility.unknown_state` (category `compatibility_failure`)
 - `core.safety.backup_not_verified`
 - `core.safety.backup_generation_mismatch`
 - `hosting.instance.not_found`
@@ -68,7 +73,7 @@ Codes MUST be stable, machine-readable, and namespaced. Examples:
 - `game.backup.incompatible`
 - `integration.proxy.backend_not_ready`
 
-Messages MAY change and MAY be localized. Clients MUST NOT parse message text.
+A registered code's meaning and category MUST remain stable. Adding a code with its category is a compatible registry addition; removing or changing the meaning of a code requires a breaking protocol revision. Consumers MUST use the category for broad handling, MUST tolerate unknown codes according to their category, and MUST NOT branch on message text.
 
 ## 5. HTTP mapping
 
