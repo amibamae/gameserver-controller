@@ -1456,7 +1456,103 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"reconciliation_reference_present":       unknown && hasReference && targetBound,
 			"retry_permitted_without_reconciliation": !unknown || !hasReference,
 		}, nil
-	case "operations.typed-define-start-stop-results":
+	case "operations.typed-provision-backup-restore-destroy-results", "operations.typed-provision-backup-restore-destroy-target-mismatch":
+		provisionOperation := asObject(input["provision_operation"])
+		backupOperation := asObject(input["backup_operation"])
+		restoreOperation := asObject(input["restore_operation"])
+		destroyOperation := asObject(input["destroy_operation"])
+		for _, operation := range []struct {
+			name  string
+			value map[string]any
+		}{
+			{"server.provision", provisionOperation},
+			{"server.backup", backupOperation},
+			{"server.restore", restoreOperation},
+			{"server.destroy", destroyOperation},
+		} {
+			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation.value); err != nil {
+				return nil, fmt.Errorf("%s operation does not match schema: %w", operation.name, err)
+			}
+		}
+		provisionTarget := asObject(provisionOperation["target"])
+		provisionData := asObject(asObject(provisionOperation["result"])["operation_data"])
+		provisionAssertion := asObject(provisionData["readiness_assertion"])
+		provisionInstance := asObject(provisionData["instance_ref"])
+		assertedInstance := asObject(provisionAssertion["instance_ref"])
+		provisionCompletedAt, err := parseTime(stringValue(provisionOperation, "completed_at"))
+		if err != nil {
+			return nil, err
+		}
+		readinessObservedAt, err := parseTime(stringValue(provisionAssertion, "observed_at"))
+		if err != nil {
+			return nil, err
+		}
+		readinessExpiresAt, err := parseTime(stringValue(provisionAssertion, "expires_at"))
+		if err != nil {
+			return nil, err
+		}
+		provisionResultBound := stringValue(provisionData, "server_id") == stringValue(provisionTarget, "server_id") &&
+			stringValue(provisionData, "environment_id") == stringValue(provisionTarget, "environment_id") &&
+			stringValue(provisionAssertion, "server_id") == stringValue(provisionData, "server_id") &&
+			stringValue(provisionAssertion, "environment_id") == stringValue(provisionData, "environment_id") &&
+			stringValue(provisionInstance, "environment_id") == stringValue(provisionData, "environment_id") &&
+			stringValue(assertedInstance, "environment_id") == stringValue(provisionAssertion, "environment_id") &&
+			reflect.DeepEqual(provisionData["instance_ref"], provisionAssertion["instance_ref"]) &&
+			stringValue(provisionData, "lifecycle_state") == "ready" &&
+			!provisionCompletedAt.Before(readinessObservedAt) && provisionCompletedAt.Before(readinessExpiresAt)
+
+		backupTarget := asObject(backupOperation["target"])
+		backupParameters := asObject(asObject(backupOperation["request_snapshot"])["parameters"])
+		backupData := asObject(asObject(backupOperation["result"])["operation_data"])
+		backupManifest := asObject(backupData["manifest"])
+		backupInstance := asObject(backupTarget["instance_ref"])
+		manifestInstance := asObject(backupManifest["source_instance_ref"])
+		backupExpectedInstance := asObject(backupParameters["expected_instance_ref"])
+		backupResultBound := stringValue(backupTarget, "server_id") == stringValue(backupManifest, "server_id") &&
+			stringValue(backupTarget, "environment_id") == stringValue(backupData, "environment_id") &&
+			stringValue(backupData, "environment_id") == stringValue(backupManifest, "environment_id") &&
+			stringValue(backupData, "backup_id") == stringValue(backupManifest, "backup_id") &&
+			stringValue(backupData, "data_generation_id") == stringValue(backupManifest, "data_generation_id") &&
+			stringValue(backupInstance, "environment_id") == stringValue(backupTarget, "environment_id") &&
+			reflect.DeepEqual(backupTarget["instance_ref"], backupManifest["source_instance_ref"]) &&
+			(backupParameters["expected_instance_ref"] == nil || reflect.DeepEqual(backupExpectedInstance, manifestInstance))
+
+		restoreTarget := asObject(restoreOperation["target"])
+		restoreParameters := asObject(asObject(restoreOperation["request_snapshot"])["parameters"])
+		restoreData := asObject(asObject(restoreOperation["result"])["operation_data"])
+		restoreInstance := asObject(restoreTarget["instance_ref"])
+		restoreResultInstance := asObject(restoreData["target_instance_ref"])
+		restoreRequestedInstance := asObject(restoreParameters["target_instance_ref"])
+		restoreResultBound := stringValue(restoreTarget, "environment_id") == stringValue(restoreInstance, "environment_id") &&
+			stringValue(restoreParameters, "backup_id") == stringValue(restoreData, "backup_id") &&
+			reflect.DeepEqual(restoreTarget["instance_ref"], restoreData["target_instance_ref"]) &&
+			(restoreParameters["target_instance_ref"] == nil || reflect.DeepEqual(restoreRequestedInstance, restoreResultInstance))
+
+		destroyTarget := asObject(destroyOperation["target"])
+		destroyParameters := asObject(asObject(destroyOperation["request_snapshot"])["parameters"])
+		destroyData := asObject(asObject(destroyOperation["result"])["operation_data"])
+		destroyInstance := asObject(destroyTarget["instance_ref"])
+		destroyResultInstance := asObject(destroyData["instance_ref"])
+		destroyRequestedInstance := asObject(destroyParameters["expected_instance_ref"])
+		destroyBackupBound := destroyParameters["verified_backup_id"] == nil ||
+			stringValue(destroyParameters, "verified_backup_id") == stringValue(destroyData, "verified_backup_id")
+		destroyResultBound := stringValue(destroyTarget, "environment_id") == stringValue(destroyInstance, "environment_id") &&
+			reflect.DeepEqual(destroyTarget["instance_ref"], destroyData["instance_ref"]) &&
+			reflect.DeepEqual(destroyTarget["instance_ref"], destroyParameters["expected_instance_ref"]) &&
+			stringValue(destroyData, "final_lifecycle_state") == "destroyed" &&
+			boolValue(destroyData, "provider_absence_confirmed") && destroyBackupBound &&
+			(destroyParameters["expected_instance_ref"] == nil || reflect.DeepEqual(destroyRequestedInstance, destroyInstance))
+
+		allResultsBound := provisionResultBound && backupResultBound && restoreResultBound && destroyResultBound
+		return map[string]any{
+			"schemas_valid":          true,
+			"provision_result_bound": provisionResultBound,
+			"backup_result_bound":    backupResultBound,
+			"restore_result_bound":   restoreResultBound,
+			"destroy_result_bound":   destroyResultBound,
+			"all_results_bound":      allResultsBound,
+		}, nil
+	case "operations.typed-define-start-stop-results", "operations.typed-define-start-stop-target-mismatch":
 		defineOperation := asObject(input["define_operation"])
 		startOperation := asObject(input["start_operation"])
 		stopOperation := asObject(input["stop_operation"])
@@ -1478,6 +1574,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		defineData := asObject(defineResult["operation_data"])
 		startData := asObject(startResult["operation_data"])
 		stopData := asObject(stopResult["operation_data"])
+		defineTarget := asObject(defineOperation["target"])
 		startTarget, stopTarget := asObject(startOperation["target"]), asObject(stopOperation["target"])
 		startAssertion := asObject(startData["readiness_assertion"])
 		startInstance := asObject(startTarget["instance_ref"])
@@ -1490,6 +1587,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		if err != nil {
 			return nil, err
 		}
+		defineResultBound := stringValue(defineData, "server_id") == stringValue(defineTarget, "server_id") &&
+			stringValue(defineData, "environment_id") == stringValue(defineTarget, "environment_id")
 		serverIdentityConsistent := stringValue(defineData, "server_id") == stringValue(startData, "server_id") &&
 			stringValue(startData, "server_id") == stringValue(stopData, "server_id") &&
 			stringValue(defineData, "environment_id") == stringValue(startData, "environment_id") &&
@@ -1516,6 +1615,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return map[string]any{
 			"schemas_valid":                     true,
 			"server_identity_consistent":        serverIdentityConsistent,
+			"define_result_bound":               defineResultBound,
 			"define_has_no_infrastructure":      defineNoInfrastructure,
 			"start_readiness_bound_and_current": startReadinessCurrent,
 			"stop_postconditions_confirmed":     stopPostconditions,

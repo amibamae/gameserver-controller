@@ -58,6 +58,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 ### Operations
 - Event sequence numbers increase monotonically per operation; consumers ignore identical duplicate deliveries without reapplying them or regressing their cursor, detect gaps, and recover by reading the operation resource.
 - Successful standard operations validate their typed result schema and bind result server/environment/instance fields to the durable operation target.
+- Go vectors cover result-to-target binding for all seven standard operations.
 - `server.define` leaves the logical server `unprovisioned` and creates no external resource; `server.start` includes a readiness assertion bound to the exact instance; `server.stop` confirms game save and runtime termination.
 - Operation record commits before side effect.
 - Same idempotency key and same request returns the same stable operation reference and does not dispatch a second side effect.
@@ -154,6 +155,10 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [idempotency-key-replay-same-request.json](test-vectors/idempotency-key-replay-same-request.json)
 - [idempotency-key-expired-reuse.json](test-vectors/idempotency-key-expired-reuse.json)
 - [operation-lock-survives-restart.json](test-vectors/operation-lock-survives-restart.json)
+- [typed-define-start-stop-results.json](test-vectors/typed-define-start-stop-results.json)
+- [typed-define-start-stop-target-mismatch.json](test-vectors/typed-define-start-stop-target-mismatch.json)
+- [typed-provision-backup-restore-destroy-results.json](test-vectors/typed-provision-backup-restore-destroy-results.json)
+- [typed-provision-backup-restore-destroy-target-mismatch.json](test-vectors/typed-provision-backup-restore-destroy-target-mismatch.json)
 - [unknown-provider-outcome.json](test-vectors/unknown-provider-outcome.json)
 - [staging-production-write-denied.json](test-vectors/staging-production-write-denied.json)
 - [backup-stale-generation-blocks-destroy.json](test-vectors/backup-stale-generation-blocks-destroy.json)
