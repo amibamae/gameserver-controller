@@ -165,7 +165,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 				}
 				operationResource = map[string]any{
 					"operation_id": operationID,
-					"actor_id":    authenticatedActor,
+					"actor_id":     authenticatedActor,
 				}
 				protectedResourceDataReturned = true
 				errorCategory = nil
@@ -175,7 +175,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 				"accepted":                         allowed,
 				"error_category":                   errorCategory,
 				"operation_resource":               operationResource,
-				"request_claims_used_for_auth":      false,
+				"request_claims_used_for_auth":     false,
 				"protected_resource_data_returned": protectedResourceDataReturned,
 			})
 		}
