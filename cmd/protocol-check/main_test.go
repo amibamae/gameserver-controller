@@ -93,3 +93,53 @@ func TestParseTimeRequiresUTCZuluTimestamp(t *testing.T) {
 		})
 	}
 }
+
+func TestSecretReferenceRejectsSecretMaterial(t *testing.T) {
+	pkg, err := loadPackage("../..")
+	if err != nil {
+		t.Fatalf("load protocol package: %v", err)
+	}
+
+	const schemaID = "urn:gameserver-controller:0.21.0-draft:common:secret-reference"
+	tests := []struct {
+		name      string
+		value     map[string]any
+		wantValid bool
+	}{
+		{
+			name: "opaque reference",
+			value: map[string]any{
+				"secret_ref": "vault://minecraft/production/backup",
+				"purpose":    "backup.authentication",
+			},
+			wantValid: true,
+		},
+		{
+			name: "literal secret is not a reference",
+			value: map[string]any{
+				"secret_ref": "plaintext-password",
+				"purpose":    "backup.authentication",
+			},
+		},
+		{
+			name: "raw secret property is rejected",
+			value: map[string]any{
+				"secret_ref": "vault://minecraft/production/backup",
+				"purpose":    "backup.authentication",
+				"secret":     "plaintext-password",
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := pkg.validateSchema(schemaID, test.value)
+			if test.wantValid && err != nil {
+				t.Fatalf("secret reference schema rejected valid opaque reference: %v", err)
+			}
+			if !test.wantValid && err == nil {
+				t.Fatal("secret reference schema accepted raw secret material")
+			}
+		})
+	}
+}
