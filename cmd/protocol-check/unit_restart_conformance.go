@@ -1,6 +1,10 @@
 package main
 
-import "reflect"
+import (
+	"fmt"
+	"path/filepath"
+	"reflect"
+)
 
 func evaluateUnitRestart(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
 	results := make([]any, 0, len(arrayValue(fixture, "evaluations")))
@@ -12,8 +16,29 @@ func evaluateUnitRestart(pkg *protocolPackage, fixture map[string]any) (map[stri
 		unit, target := asObject(request["unit_ref"]), asObject(request["target"])
 		instance, save := asObject(target["instance_ref"]), asObject(request["save_confirmation"])
 		saveStep := asObject(core["completed_save_step"])
-		saveStepBound := stringValue(core, "operation_id") != "" && saveStep["operation_id"] == core["operation_id"] &&
-			saveStep["step_id"] == request["save_step_id"] && stringValue(saveStep, "status") == "completed" && reflect.DeepEqual(save, saveStep["output"])
+		selectedAdapterID := stringValue(core, "selected_game_adapter_id")
+		selectedCapability := asObject(c["selected_game_capability"])
+		if selectedCapability == nil {
+			selectedCapability = asObject(fixture["selected_game_capability"])
+		}
+		advertisedCapability, capabilityErr := findAdapterCapability(pkg, selectedAdapterID, "game.save.request")
+		capabilityIdentityBound := capabilityErr == nil &&
+			selectedCapability["adapter_id"] == selectedAdapterID &&
+			selectedCapability["name"] == "game.save.request" &&
+			selectedCapability["name"] == advertisedCapability["name"] &&
+			selectedCapability["version"] == advertisedCapability["version"] &&
+			selectedCapability["input_schema_uri"] == advertisedCapability["input_schema_uri"] &&
+			selectedCapability["output_schema_uri"] == advertisedCapability["output_schema_uri"]
+		stepInput := asObject(saveStep["input"])
+		stepInputSchema := pkg.validateSchema(stringValue(selectedCapability, "input_schema_uri"), stepInput) == nil
+		stepOutputSchema := pkg.validateSchema(stringValue(selectedCapability, "output_schema_uri"), saveStep["output"]) == nil
+		stepInputBound := stepInputSchema && reflect.DeepEqual(target, stepInput["target"]) &&
+			request["release_id"] == stepInput["release_id"] && stringValue(stepInput, "reason") == "operator_request"
+		saveStepBound := capabilityIdentityBound && stepInputBound && stepOutputSchema &&
+			stringValue(core, "operation_id") != "" && saveStep["operation_id"] == core["operation_id"] &&
+			saveStep["step_id"] == request["save_step_id"] && stringValue(saveStep, "status") == "succeeded" &&
+			saveStep["adapter_id"] == selectedAdapterID && saveStep["capability_name"] == "game.save.request" &&
+			saveStep["capability_version"] == selectedCapability["version"] && reflect.DeepEqual(save, saveStep["output"])
 		adapterBound := stringValue(core, "execution_adapter_id") != "" && unit["adapter_id"] == core["execution_adapter_id"]
 		targetConsistent := unit["environment_id"] == target["environment_id"] && target["environment_id"] == instance["environment_id"] &&
 			stringValue(unit, "resource_kind") == "systemd-unit"
@@ -28,10 +53,14 @@ func evaluateUnitRestart(pkg *protocolPackage, fixture map[string]any) (map[stri
 		saved, savedErr := parseTime(stringValue(save, "saved_at"))
 		saveObserved, saveObservedErr := parseTime(stringValue(save, "observed_at"))
 		unitObserved, unitObservedErr := parseTime(stringValue(before, "observed_at"))
+		stepCompleted, stepCompletedErr := parseTime(stringValue(saveStep, "completed_at"))
 		timesValid := acceptedErr == nil && dispatchErr == nil && evaluateErr == nil && !dispatched.Before(accepted) && !evaluated.Before(dispatched)
-		saveBound := saveStepBound && timesValid && savedErr == nil && saveObservedErr == nil && !saved.Before(accepted) && !saveObserved.Before(saved) &&
-			!dispatched.Before(saveObserved) && stringValue(save, "outcome") == "confirmed" && reflect.DeepEqual(target, save["target"]) && request["release_id"] == save["release_id"]
 		unitCurrent = unitCurrent && timesValid && unitObservedErr == nil && !unitObserved.Before(accepted) && !dispatched.Before(unitObserved)
+		unitInspectionPrecedesSave := unitCurrent && savedErr == nil && !saved.Before(unitObserved)
+		saveBound := saveStepBound && timesValid && savedErr == nil && saveObservedErr == nil && !saved.Before(accepted) && !saveObserved.Before(saved) &&
+			!dispatched.Before(saveObserved) && unitInspectionPrecedesSave && stepCompletedErr == nil && !stepCompleted.Before(saveObserved) &&
+			!dispatched.Before(stepCompleted) && stringValue(save, "outcome") == "confirmed" && reflect.DeepEqual(target, save["target"]) &&
+			request["release_id"] == save["release_id"]
 		dispatchAllowed := requestValid && adapterBound && targetConsistent && unitBound && unitCurrent && saveBound
 		operationRef, hasOperationRef := output["external_operation_ref"]
 		resolved := asObject(c["resolved_operation"])
@@ -64,11 +93,40 @@ func evaluateUnitRestart(pkg *protocolPackage, fixture map[string]any) (map[stri
 		results = append(results, map[string]any{
 			"case_id": stringValue(c, "case_id"), "request_schema_valid": requestValid, "result_schema_valid": outputValid,
 			"adapter_bound": adapterBound, "target_consistent": targetConsistent, "unit_bound": unitBound, "unit_current": unitCurrent,
-			"save_confirmation_bound": saveBound, "dispatch_allowed": dispatchAllowed, "result_bound": bound,
+			"save_step_bound": saveStepBound, "unit_inspection_precedes_save": unitInspectionPrecedesSave, "save_confirmation_bound": saveBound,
+			"dispatch_allowed": dispatchAllowed, "result_bound": bound,
 			"restart_confirmed": confirmed || reconciled, "reconciliation_confirmed": reconciled,
 			"must_inspect_before_retry": dispatchAllowed && (!resultValid || (uncertain && !reconciled)),
 			"retry_permitted":           false, "operator_required": operatorRequired, "readiness_established": false,
 		})
 	}
 	return map[string]any{"evaluations": results}, nil
+}
+
+func findAdapterCapability(pkg *protocolPackage, adapterID, capabilityName string) (map[string]any, error) {
+	paths, err := filepath.Glob(filepath.Join(pkg.root, "protocol", "examples", "adapter-descriptor.*.json"))
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range paths {
+		value, err := parseJSONFile(path)
+		if err != nil {
+			return nil, err
+		}
+		descriptor := asObject(value)
+		if stringValue(descriptor, "adapter_id") != adapterID {
+			continue
+		}
+		if stringValue(descriptor, "category") != "game" {
+			return nil, fmt.Errorf("selected adapter %q is not a game adapter", adapterID)
+		}
+		for _, rawCapability := range arrayValue(descriptor, "capabilities") {
+			capability := asObject(rawCapability)
+			if stringValue(capability, "name") == capabilityName {
+				return capability, nil
+			}
+		}
+		return nil, fmt.Errorf("adapter %q does not advertise %q", adapterID, capabilityName)
+	}
+	return nil, fmt.Errorf("selected adapter descriptor %q is missing", adapterID)
 }

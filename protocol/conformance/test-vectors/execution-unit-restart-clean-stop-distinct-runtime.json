@@ -113,7 +113,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -122,7 +122,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -138,8 +138,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -257,7 +277,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -266,7 +286,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -282,8 +302,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -395,7 +435,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -404,7 +444,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -420,8 +460,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -533,7 +593,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -542,7 +602,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -558,8 +618,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -671,7 +751,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -680,7 +760,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -696,8 +776,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:05Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -809,7 +909,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -818,7 +918,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -834,8 +934,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -947,7 +1067,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -956,7 +1076,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -972,8 +1092,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "production",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -1085,7 +1225,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-intervening",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -1094,7 +1234,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -1110,8 +1250,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -1223,7 +1383,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -1232,7 +1392,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -1248,8 +1408,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -1361,7 +1541,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -1370,7 +1550,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -1386,8 +1566,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -1499,7 +1699,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -1508,7 +1708,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -1524,8 +1724,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -1637,7 +1857,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -1646,7 +1866,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -1662,8 +1882,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -1775,7 +2015,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -1784,7 +2024,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -1800,8 +2040,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -1913,7 +2173,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -1922,7 +2182,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -1938,8 +2198,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -2056,7 +2336,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -2065,7 +2345,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -2081,8 +2361,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       },
       "resolved_operation": {
         "external_operation_ref": {
@@ -2226,7 +2526,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -2235,7 +2535,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -2251,8 +2551,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       },
       "resolved_operation": {
         "external_operation_ref": {
@@ -2396,7 +2716,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -2405,7 +2725,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -2421,8 +2741,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       },
       "resolved_operation": {
         "external_operation_ref": {
@@ -2566,7 +2906,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -2575,7 +2915,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -2591,8 +2931,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       },
       "resolved_operation": {
         "external_operation_ref": {
@@ -2761,7 +3121,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -2770,7 +3130,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -2786,8 +3146,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       },
       "resolved_operation": {
         "external_operation_ref": {
@@ -2956,7 +3336,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -2965,7 +3345,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -2981,8 +3361,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       },
       "resolved_operation": {
         "external_operation_ref": {
@@ -3151,7 +3551,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -3160,7 +3560,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -3176,8 +3576,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       },
       "resolved_operation": {
         "external_operation_ref": {
@@ -3346,7 +3766,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -3355,7 +3775,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -3371,8 +3791,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       },
       "resolved_operation": {
         "external_operation_ref": {
@@ -3540,7 +3980,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -3549,7 +3989,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -3565,8 +4005,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       },
       "resolved_operation": {
         "external_operation_ref": {
@@ -3730,7 +4190,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -3739,7 +4199,7 @@
         "completed_save_step": {
           "operation_id": "unrelated-operation",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -3755,8 +4215,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -3868,7 +4348,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -3878,7 +4358,11 @@
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
           "status": "running",
-          "output": {
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
             "target": {
               "server_id": "minecraft-test",
               "environment_id": "staging",
@@ -3890,11 +4374,10 @@
               }
             },
             "release_id": "paper-test-release",
-            "outcome": "confirmed",
-            "observed_at": "2026-11-07T12:00:02Z",
-            "saved_at": "2026-11-07T12:00:01Z"
+            "reason": "operator_request"
           }
-        }
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       }
     },
     {
@@ -4011,7 +4494,7 @@
           "release_ref": "paper-test-release",
           "state": "running",
           "runtime_id": "runtime-before-001",
-          "observed_at": "2026-11-07T12:00:02Z"
+          "observed_at": "2026-11-07T12:00:00Z"
         },
         "operation_accepted_at": "2026-11-07T12:00:00Z",
         "dispatch_at": "2026-11-07T12:00:03Z",
@@ -4020,7 +4503,7 @@
         "completed_save_step": {
           "operation_id": "operation-restart-test",
           "step_id": "save-before-restart",
-          "status": "completed",
+          "status": "succeeded",
           "output": {
             "target": {
               "server_id": "minecraft-test",
@@ -4036,8 +4519,28 @@
             "outcome": "confirmed",
             "observed_at": "2026-11-07T12:00:02Z",
             "saved_at": "2026-11-07T12:00:01Z"
-          }
-        }
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
       },
       "resolved_operation": {
         "external_operation_ref": {
@@ -4091,6 +4594,961 @@
         "state": "running",
         "observed_at": "2026-11-07T12:00:05Z"
       }
+    },
+    {
+      "case_id": "save-step-wrong-capability-name",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "expected_runtime_id": "runtime-before-001",
+        "save_confirmation": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release",
+          "outcome": "confirmed",
+          "observed_at": "2026-11-07T12:00:02Z",
+          "saved_at": "2026-11-07T12:00:01Z"
+        },
+        "grace_period_seconds": 60,
+        "force": false,
+        "save_step_id": "save-before-restart"
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "previous_runtime_id": "runtime-before-001",
+        "runtime_id": "runtime-after-002",
+        "outcome": "completed",
+        "state": "running",
+        "clean_stop_confirmed": true,
+        "force_used": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:10Z"
+      },
+      "core_preconditions": {
+        "execution_adapter_id": "execution.systemd",
+        "unit_binding": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release"
+        },
+        "unit_inspection": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_ref": "paper-test-release",
+          "state": "running",
+          "runtime_id": "runtime-before-001",
+          "observed_at": "2026-11-07T12:00:00Z"
+        },
+        "operation_accepted_at": "2026-11-07T12:00:00Z",
+        "dispatch_at": "2026-11-07T12:00:03Z",
+        "evaluated_at": "2026-11-07T12:00:30Z",
+        "operation_id": "operation-restart-test",
+        "completed_save_step": {
+          "operation_id": "operation-restart-test",
+          "step_id": "save-before-restart",
+          "status": "succeeded",
+          "output": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "outcome": "confirmed",
+            "observed_at": "2026-11-07T12:00:02Z",
+            "saved_at": "2026-11-07T12:00:01Z"
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.backup.prepare",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
+      }
+    },
+    {
+      "case_id": "save-step-wrong-adapter",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "expected_runtime_id": "runtime-before-001",
+        "save_confirmation": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release",
+          "outcome": "confirmed",
+          "observed_at": "2026-11-07T12:00:02Z",
+          "saved_at": "2026-11-07T12:00:01Z"
+        },
+        "grace_period_seconds": 60,
+        "force": false,
+        "save_step_id": "save-before-restart"
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "previous_runtime_id": "runtime-before-001",
+        "runtime_id": "runtime-after-002",
+        "outcome": "completed",
+        "state": "running",
+        "clean_stop_confirmed": true,
+        "force_used": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:10Z"
+      },
+      "core_preconditions": {
+        "execution_adapter_id": "execution.systemd",
+        "unit_binding": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release"
+        },
+        "unit_inspection": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_ref": "paper-test-release",
+          "state": "running",
+          "runtime_id": "runtime-before-001",
+          "observed_at": "2026-11-07T12:00:00Z"
+        },
+        "operation_accepted_at": "2026-11-07T12:00:00Z",
+        "dispatch_at": "2026-11-07T12:00:03Z",
+        "evaluated_at": "2026-11-07T12:00:30Z",
+        "operation_id": "operation-restart-test",
+        "completed_save_step": {
+          "operation_id": "operation-restart-test",
+          "step_id": "save-before-restart",
+          "status": "succeeded",
+          "output": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "outcome": "confirmed",
+            "observed_at": "2026-11-07T12:00:02Z",
+            "saved_at": "2026-11-07T12:00:01Z"
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-other",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
+      }
+    },
+    {
+      "case_id": "save-step-wrong-capability-version",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "expected_runtime_id": "runtime-before-001",
+        "save_confirmation": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release",
+          "outcome": "confirmed",
+          "observed_at": "2026-11-07T12:00:02Z",
+          "saved_at": "2026-11-07T12:00:01Z"
+        },
+        "grace_period_seconds": 60,
+        "force": false,
+        "save_step_id": "save-before-restart"
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "previous_runtime_id": "runtime-before-001",
+        "runtime_id": "runtime-after-002",
+        "outcome": "completed",
+        "state": "running",
+        "clean_stop_confirmed": true,
+        "force_used": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:10Z"
+      },
+      "core_preconditions": {
+        "execution_adapter_id": "execution.systemd",
+        "unit_binding": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release"
+        },
+        "unit_inspection": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_ref": "paper-test-release",
+          "state": "running",
+          "runtime_id": "runtime-before-001",
+          "observed_at": "2026-11-07T12:00:00Z"
+        },
+        "operation_accepted_at": "2026-11-07T12:00:00Z",
+        "dispatch_at": "2026-11-07T12:00:03Z",
+        "evaluated_at": "2026-11-07T12:00:30Z",
+        "operation_id": "operation-restart-test",
+        "completed_save_step": {
+          "operation_id": "operation-restart-test",
+          "step_id": "save-before-restart",
+          "status": "succeeded",
+          "output": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "outcome": "confirmed",
+            "observed_at": "2026-11-07T12:00:02Z",
+            "saved_at": "2026-11-07T12:00:01Z"
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "2",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
+      }
+    },
+    {
+      "case_id": "save-step-wrong-output-schema-identity",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "expected_runtime_id": "runtime-before-001",
+        "save_confirmation": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release",
+          "outcome": "confirmed",
+          "observed_at": "2026-11-07T12:00:02Z",
+          "saved_at": "2026-11-07T12:00:01Z"
+        },
+        "grace_period_seconds": 60,
+        "force": false,
+        "save_step_id": "save-before-restart"
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "previous_runtime_id": "runtime-before-001",
+        "runtime_id": "runtime-after-002",
+        "outcome": "completed",
+        "state": "running",
+        "clean_stop_confirmed": true,
+        "force_used": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:10Z"
+      },
+      "core_preconditions": {
+        "execution_adapter_id": "execution.systemd",
+        "unit_binding": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release"
+        },
+        "unit_inspection": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_ref": "paper-test-release",
+          "state": "running",
+          "runtime_id": "runtime-before-001",
+          "observed_at": "2026-11-07T12:00:00Z"
+        },
+        "operation_accepted_at": "2026-11-07T12:00:00Z",
+        "dispatch_at": "2026-11-07T12:00:03Z",
+        "evaluated_at": "2026-11-07T12:00:30Z",
+        "operation_id": "operation-restart-test",
+        "completed_save_step": {
+          "operation_id": "operation-restart-test",
+          "step_id": "save-before-restart",
+          "status": "succeeded",
+          "output": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "outcome": "confirmed",
+            "observed_at": "2026-11-07T12:00:02Z",
+            "saved_at": "2026-11-07T12:00:01Z"
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
+      },
+      "selected_game_capability": {
+        "adapter_id": "game.minecraft-paper",
+        "name": "game.save.request",
+        "version": "1",
+        "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:save-request-input",
+        "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:readiness-check-output"
+      }
+    },
+    {
+      "case_id": "save-step-legacy-completed-status",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "expected_runtime_id": "runtime-before-001",
+        "save_confirmation": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release",
+          "outcome": "confirmed",
+          "observed_at": "2026-11-07T12:00:02Z",
+          "saved_at": "2026-11-07T12:00:01Z"
+        },
+        "grace_period_seconds": 60,
+        "force": false,
+        "save_step_id": "save-before-restart"
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "previous_runtime_id": "runtime-before-001",
+        "runtime_id": "runtime-after-002",
+        "outcome": "completed",
+        "state": "running",
+        "clean_stop_confirmed": true,
+        "force_used": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:10Z"
+      },
+      "core_preconditions": {
+        "execution_adapter_id": "execution.systemd",
+        "unit_binding": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release"
+        },
+        "unit_inspection": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_ref": "paper-test-release",
+          "state": "running",
+          "runtime_id": "runtime-before-001",
+          "observed_at": "2026-11-07T12:00:00Z"
+        },
+        "operation_accepted_at": "2026-11-07T12:00:00Z",
+        "dispatch_at": "2026-11-07T12:00:03Z",
+        "evaluated_at": "2026-11-07T12:00:30Z",
+        "operation_id": "operation-restart-test",
+        "completed_save_step": {
+          "operation_id": "operation-restart-test",
+          "step_id": "save-before-restart",
+          "status": "completed",
+          "output": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "outcome": "confirmed",
+            "observed_at": "2026-11-07T12:00:02Z",
+            "saved_at": "2026-11-07T12:00:01Z"
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
+      }
+    },
+    {
+      "case_id": "save-before-runtime-inspection",
+      "request": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "expected_runtime_id": "runtime-intervening",
+        "save_confirmation": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release",
+          "outcome": "confirmed",
+          "observed_at": "2026-11-07T12:00:02Z",
+          "saved_at": "2026-11-07T12:00:01Z"
+        },
+        "grace_period_seconds": 60,
+        "force": false,
+        "save_step_id": "save-before-restart"
+      },
+      "output": {
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper-staging"
+        },
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "release_id": "paper-test-release",
+        "previous_runtime_id": "runtime-intervening",
+        "runtime_id": "runtime-after-002",
+        "outcome": "completed",
+        "state": "running",
+        "clean_stop_confirmed": true,
+        "force_used": false,
+        "persistent_data_preserved": true,
+        "observed_at": "2026-11-07T12:00:10Z"
+      },
+      "core_preconditions": {
+        "execution_adapter_id": "execution.systemd",
+        "unit_binding": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_id": "paper-test-release"
+        },
+        "unit_inspection": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-staging"
+          },
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "release_ref": "paper-test-release",
+          "state": "running",
+          "runtime_id": "runtime-intervening",
+          "observed_at": "2026-11-07T12:00:02Z"
+        },
+        "operation_accepted_at": "2026-11-07T12:00:00Z",
+        "dispatch_at": "2026-11-07T12:00:03Z",
+        "evaluated_at": "2026-11-07T12:00:30Z",
+        "operation_id": "operation-restart-test",
+        "completed_save_step": {
+          "operation_id": "operation-restart-test",
+          "step_id": "save-before-restart",
+          "status": "succeeded",
+          "output": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "outcome": "confirmed",
+            "observed_at": "2026-11-07T12:00:02Z",
+            "saved_at": "2026-11-07T12:00:01Z"
+          },
+          "step_type": "game.save.request",
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.save.request",
+          "capability_version": "1",
+          "input": {
+            "target": {
+              "server_id": "minecraft-test",
+              "environment_id": "staging",
+              "instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "staging",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              }
+            },
+            "release_id": "paper-test-release",
+            "reason": "operator_request"
+          },
+          "completed_at": "2026-11-07T12:00:02Z"
+        },
+        "selected_game_adapter_id": "game.minecraft-paper"
+      }
     }
   ],
   "expected": {
@@ -4111,7 +5569,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "save-unknown-cannot-dispatch",
@@ -4129,7 +5589,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": false,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "save-wrong-instance",
@@ -4147,7 +5609,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": false,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "save-before-operation",
@@ -4165,7 +5629,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": false,
+        "unit_inspection_precedes_save": false
       },
       {
         "case_id": "save-observed-after-dispatch",
@@ -4183,7 +5649,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": false,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "wrong-selected-adapter",
@@ -4193,7 +5661,7 @@
         "target_consistent": true,
         "unit_bound": false,
         "unit_current": false,
-        "save_confirmation_bound": true,
+        "save_confirmation_bound": false,
         "dispatch_allowed": false,
         "result_bound": true,
         "restart_confirmed": false,
@@ -4201,7 +5669,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": false
       },
       {
         "case_id": "cross-environment-host",
@@ -4219,7 +5689,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": false
       },
       {
         "case_id": "old-runtime-already-replaced",
@@ -4229,7 +5701,7 @@
         "target_consistent": true,
         "unit_bound": true,
         "unit_current": false,
-        "save_confirmation_bound": true,
+        "save_confirmation_bound": false,
         "dispatch_allowed": false,
         "result_bound": true,
         "restart_confirmed": false,
@@ -4237,7 +5709,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": false
       },
       {
         "case_id": "inspection-for-another-host",
@@ -4247,7 +5721,7 @@
         "target_consistent": true,
         "unit_bound": true,
         "unit_current": false,
-        "save_confirmation_bound": true,
+        "save_confirmation_bound": false,
         "dispatch_allowed": false,
         "result_bound": true,
         "restart_confirmed": false,
@@ -4255,7 +5729,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": false
       },
       {
         "case_id": "force-request-rejected",
@@ -4273,7 +5749,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "force-fallback-rejected",
@@ -4291,7 +5769,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "same-runtime-does-not-prove-restart",
@@ -4309,7 +5789,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "result-for-another-unit",
@@ -4327,7 +5809,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "completed-without-clean-stop",
@@ -4345,7 +5829,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "accepted-is-not-completed",
@@ -4363,7 +5849,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "unknown-requires-inspection",
@@ -4381,7 +5869,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "uncertain-operation-wrong-id",
@@ -4399,7 +5889,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": true,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "reconcile-completed-new-runtime",
@@ -4417,7 +5909,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "reconcile-old-runtime-not-success",
@@ -4435,7 +5929,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": true,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "reconcile-unknown-stays-unresolved",
@@ -4453,7 +5949,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": true,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "reconcile-other-host-blocked",
@@ -4471,7 +5969,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": true,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "matching-runtime-while-operation-pending-not-final",
@@ -4489,7 +5989,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "stopped-after-uncertain-restart-needs-recovery",
@@ -4507,7 +6009,9 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": true,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "save-step-from-another-operation",
@@ -4525,7 +6029,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": false,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "save-step-still-pending",
@@ -4543,7 +6049,9 @@
         "must_inspect_before_retry": false,
         "retry_permitted": false,
         "operator_required": false,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": false,
+        "unit_inspection_precedes_save": true
       },
       {
         "case_id": "inspection-before-operation-completion",
@@ -4561,9 +6069,138 @@
         "must_inspect_before_retry": true,
         "retry_permitted": false,
         "operator_required": true,
-        "readiness_established": false
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": true
+      },
+      {
+        "case_id": "save-step-wrong-capability-name",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "adapter_bound": true,
+        "target_consistent": true,
+        "unit_bound": true,
+        "unit_current": true,
+        "save_confirmation_bound": false,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "restart_confirmed": false,
+        "reconciliation_confirmed": false,
+        "must_inspect_before_retry": false,
+        "retry_permitted": false,
+        "operator_required": false,
+        "readiness_established": false,
+        "save_step_bound": false,
+        "unit_inspection_precedes_save": true
+      },
+      {
+        "case_id": "save-step-wrong-adapter",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "adapter_bound": true,
+        "target_consistent": true,
+        "unit_bound": true,
+        "unit_current": true,
+        "save_confirmation_bound": false,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "restart_confirmed": false,
+        "reconciliation_confirmed": false,
+        "must_inspect_before_retry": false,
+        "retry_permitted": false,
+        "operator_required": false,
+        "readiness_established": false,
+        "save_step_bound": false,
+        "unit_inspection_precedes_save": true
+      },
+      {
+        "case_id": "save-step-wrong-capability-version",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "adapter_bound": true,
+        "target_consistent": true,
+        "unit_bound": true,
+        "unit_current": true,
+        "save_confirmation_bound": false,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "restart_confirmed": false,
+        "reconciliation_confirmed": false,
+        "must_inspect_before_retry": false,
+        "retry_permitted": false,
+        "operator_required": false,
+        "readiness_established": false,
+        "save_step_bound": false,
+        "unit_inspection_precedes_save": true
+      },
+      {
+        "case_id": "save-step-wrong-output-schema-identity",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "adapter_bound": true,
+        "target_consistent": true,
+        "unit_bound": true,
+        "unit_current": true,
+        "save_confirmation_bound": false,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "restart_confirmed": false,
+        "reconciliation_confirmed": false,
+        "must_inspect_before_retry": false,
+        "retry_permitted": false,
+        "operator_required": false,
+        "readiness_established": false,
+        "save_step_bound": false,
+        "unit_inspection_precedes_save": true
+      },
+      {
+        "case_id": "save-step-legacy-completed-status",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "adapter_bound": true,
+        "target_consistent": true,
+        "unit_bound": true,
+        "unit_current": true,
+        "save_confirmation_bound": false,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "restart_confirmed": false,
+        "reconciliation_confirmed": false,
+        "must_inspect_before_retry": false,
+        "retry_permitted": false,
+        "operator_required": false,
+        "readiness_established": false,
+        "save_step_bound": false,
+        "unit_inspection_precedes_save": true
+      },
+      {
+        "case_id": "save-before-runtime-inspection",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "adapter_bound": true,
+        "target_consistent": true,
+        "unit_bound": true,
+        "unit_current": true,
+        "save_confirmation_bound": false,
+        "dispatch_allowed": false,
+        "result_bound": true,
+        "restart_confirmed": false,
+        "reconciliation_confirmed": false,
+        "must_inspect_before_retry": false,
+        "retry_permitted": false,
+        "operator_required": false,
+        "readiness_established": false,
+        "save_step_bound": true,
+        "unit_inspection_precedes_save": false
       }
     ]
   },
-  "side_effect_expected": "none"
+  "side_effect_expected": "none",
+  "selected_game_capability": {
+    "adapter_id": "game.minecraft-paper",
+    "name": "game.save.request",
+    "version": "1",
+    "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:save-request-input",
+    "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:save-request-output"
+  }
 }

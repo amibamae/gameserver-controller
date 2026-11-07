@@ -59,6 +59,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Event sequence numbers increase monotonically per operation; consumers ignore identical duplicate deliveries without reapplying them or regressing their cursor, detect gaps, and recover by reading the operation resource.
 - Successful standard operations validate their typed result schema and bind result server/environment/instance fields to the durable operation target. Any readiness assertion is bound to that target and valid at operation completion. Successful stop results accept proxy-drain outcomes only when they match the request and configured profile.
 - Go vectors cover result-to-target binding for all seven standard operations, readiness target and freshness checks, and request-consistent stop drain outcomes.
+- Restart requires the exact selected game adapter's `game.save.request` capability version and schema identity, a `succeeded` save step in the same durable operation, and inspection of the expected running incarnation no later than the save's `saved_at` time.
 - `server.define` leaves the logical server `unprovisioned` and creates no external resource; `server.start` includes a readiness assertion bound to the exact instance; `server.stop` confirms game save and runtime termination.
 - Operation record commits before side effect.
 - Same idempotency key and same request returns the same stable operation reference and does not dispatch a second side effect.
