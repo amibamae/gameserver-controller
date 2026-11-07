@@ -91,6 +91,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - A transfer request names one source, one destination, one waiting cohort, and an explicit session list.
 - A session that has left the cohort or source backend is not transferred.
 - Every requested session receives exactly one outcome; aggregate counts equal the per-session results.
+- Go conformance validates both schemas, request/result target, cohort, and backend binding, the exact unique session set, and aggregate counts.
 - A partial transfer remains visible as a partial result rather than being reported as full success.
 - An `outcome_unknown` session is inspected at the proxy before a retry is attempted.
 - Transfer messages and logs do not require or expose player UUIDs, account names, IP addresses, or chat.
@@ -163,6 +164,8 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [management-authentication-credential-profiles.json](test-vectors/management-authentication-credential-profiles.json)
 - [management-pagination-cursor-scope.json](test-vectors/management-pagination-cursor-scope.json)
 - [readiness-required-before-transfer.json](test-vectors/readiness-required-before-transfer.json)
+- [readiness-target-mismatch-before-transfer.json](test-vectors/readiness-target-mismatch-before-transfer.json)
+- [readiness-server-mismatch-before-transfer.json](test-vectors/readiness-server-mismatch-before-transfer.json)
 - [game-readiness-unknown-blocks-ready.json](test-vectors/game-readiness-unknown-blocks-ready.json)
 - [game-release-install-configure-fail-closed.json](test-vectors/game-release-install-configure-fail-closed.json)
 - [game-install-repeat-same-release.json](test-vectors/game-install-repeat-same-release.json)
@@ -178,6 +181,10 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [proxy-register-accepted-not-routable.json](test-vectors/proxy-register-accepted-not-routable.json)
 - [proxy-unknown-drain-unregister-requires-inspection.json](test-vectors/proxy-unknown-drain-unregister-requires-inspection.json)
 - [velocity-transfer-partial-results.json](test-vectors/velocity-transfer-partial-results.json)
+- [velocity-transfer-count-mismatch.json](test-vectors/velocity-transfer-count-mismatch.json)
+- [velocity-transfer-context-mismatch.json](test-vectors/velocity-transfer-context-mismatch.json)
+- [velocity-transfer-duplicate-session-result.json](test-vectors/velocity-transfer-duplicate-session-result.json)
+- [velocity-transfer-target-mismatch.json](test-vectors/velocity-transfer-target-mismatch.json)
 - [storage-partial-upload-not-verified.json](test-vectors/storage-partial-upload-not-verified.json)
 - [storage-checksum-mismatch-blocks-restore.json](test-vectors/storage-checksum-mismatch-blocks-restore.json)
 - [storage-etag-is-not-checksum.json](test-vectors/storage-etag-is-not-checksum.json)
