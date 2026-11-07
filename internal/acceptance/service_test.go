@@ -25,9 +25,24 @@ func (allowAuthorizer) AuthorizeOperation(context.Context, string, store.Operati
 	return nil
 }
 
+type authorizerFunc func(context.Context, string, store.OperationRecord) error
+
+func (f authorizerFunc) AuthorizeOperation(ctx context.Context, actorID string, record store.OperationRecord) error {
+	return f(ctx, actorID, record)
+}
+
+func testPlanner() OperationPlanner {
+	return OperationPlanFunc(func(_ context.Context, record store.OperationRecord) ([]store.OperationStep, error) {
+		if record.OperationType == "server.define" {
+			return nil, nil
+		}
+		return []store.OperationStep{{StepID: "planned-step", StepType: "hosting.instance.create"}}, nil
+	})
+}
+
 func newTestService(t *testing.T, operationStore *store.BoltStore, ring *Keyring) *Service {
 	t.Helper()
-	service, err := NewService(operationStore, allowValidator{}, allowAuthorizer{}, LogicalServerLockPolicy{}, ring)
+	service, err := NewService(operationStore, allowValidator{}, allowAuthorizer{}, LogicalServerLockPolicy{}, testPlanner(), ring)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,11 +78,6 @@ func testOperation() store.OperationRecord {
 			OperationType: "server.provision",
 			Parameters:    json.RawMessage(`{"plan":"small","count":1.0}`),
 		},
-		Steps: []store.OperationStep{{
-			StepID:   "create-instance",
-			StepType: "hosting.instance.create",
-			Status:   protocolstate.StepPending,
-		}},
 	}
 }
 
@@ -118,6 +128,9 @@ func TestAcceptReplaysCanonicalSameRequestAndBindsActor(t *testing.T) {
 	}
 	if first.Record.ActorID != "trusted-actor" || len(first.Record.OperationID) != 32 || first.Record.RequestFingerprint == "" {
 		t.Fatalf("acceptance did not assign trusted identity and fingerprint: %#v", first.Record)
+	}
+	if len(first.Record.Steps) != 1 || first.Record.Steps[0].StepID != "planned-step" {
+		t.Fatalf("acceptance did not persist the trusted planner output: %#v", first.Record.Steps)
 	}
 
 	retry := testOperation()
@@ -203,8 +216,8 @@ func TestDefineRejectsCallerWorkflowStepsWithoutPartialCreate(t *testing.T) {
 		},
 		Steps: []store.OperationStep{{StepID: "untrusted", StepType: "hosting.instance.create", Status: protocolstate.StepPending}},
 	}
-	if _, _, err := service.Accept(context.Background(), "trusted-actor", "define-key", definition); !errors.Is(err, store.ErrInvalidRecord) {
-		t.Fatalf("define with caller-supplied steps: got %v, want ErrInvalidRecord", err)
+	if _, _, err := service.Accept(context.Background(), "trusted-actor", "define-key", definition); !errors.Is(err, ErrCallerSuppliedPlan) {
+		t.Fatalf("define with caller-supplied steps: got %v, want ErrCallerSuppliedPlan", err)
 	}
 	if _, err := operationStore.GetLogicalServer("staging", "server-new"); !errors.Is(err, store.ErrLogicalServerNotFound) {
 		t.Fatalf("rejected definition created a logical server: got %v", err)
@@ -212,6 +225,65 @@ func TestDefineRejectsCallerWorkflowStepsWithoutPartialCreate(t *testing.T) {
 	operations, err := operationStore.ListRecoverableOperations()
 	if err != nil || len(operations) != 0 {
 		t.Fatalf("rejected definition created an operation: operations=%#v err=%v", operations, err)
+	}
+}
+
+func TestAcceptRejectsCallerSuppliedStepsForLifecycleOperation(t *testing.T) {
+	operationStore, _ := openStore(t)
+	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	request := testOperation()
+	request.Steps = []store.OperationStep{{StepID: "caller-step", StepType: "hosting.instance.destroy", Status: protocolstate.StepPending}}
+	if _, _, err := service.Accept(context.Background(), "actor", "key", request); !errors.Is(err, ErrCallerSuppliedPlan) {
+		t.Fatalf("caller-supplied lifecycle plan: got %v, want ErrCallerSuppliedPlan", err)
+	}
+	operations, err := operationStore.ListRecoverableOperations()
+	if err != nil || len(operations) != 0 {
+		t.Fatalf("rejected caller plan was persisted: operations=%#v err=%v", operations, err)
+	}
+}
+
+func TestAcceptRejectsMissingTrustedLifecyclePlan(t *testing.T) {
+	operationStore, _ := openStore(t)
+	planner := OperationPlanFunc(func(context.Context, store.OperationRecord) ([]store.OperationStep, error) { return nil, nil })
+	service, err := NewService(operationStore, allowValidator{}, allowAuthorizer{}, LogicalServerLockPolicy{}, planner, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := service.Accept(context.Background(), "actor", "key", testOperation()); !errors.Is(err, ErrInvalidPlan) {
+		t.Fatalf("empty server.provision plan: got %v, want ErrInvalidPlan", err)
+	}
+	operations, err := operationStore.ListRecoverableOperations()
+	if err != nil || len(operations) != 0 {
+		t.Fatalf("request without a plan was persisted: operations=%#v err=%v", operations, err)
+	}
+}
+
+func TestAuthorizationReceivesTrustedPlanAndAuthenticatedActor(t *testing.T) {
+	operationStore, _ := openStore(t)
+	planner := OperationPlanFunc(func(_ context.Context, record store.OperationRecord) ([]store.OperationStep, error) {
+		if record.ActorID != "verified-actor" || record.OperationID == "" {
+			return nil, errors.New("planner did not receive trusted operation identity")
+		}
+		return []store.OperationStep{{StepID: "safe-plan", StepType: "hosting.instance.inspect"}}, nil
+	})
+	authorizer := authorizerFunc(func(_ context.Context, actorID string, record store.OperationRecord) error {
+		if actorID != "verified-actor" || record.ActorID != actorID || len(record.Steps) != 1 || record.Steps[0].StepID != "safe-plan" {
+			return errors.New("authorizer did not receive the trusted plan and actor")
+		}
+		return nil
+	})
+	service, err := NewService(operationStore, allowValidator{}, authorizer, LogicalServerLockPolicy{}, planner, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := testOperation()
+	request.ActorID = "spoofed-body-actor"
+	accepted, _, err := service.Accept(context.Background(), "verified-actor", "key", request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accepted.Record.ActorID != "verified-actor" || accepted.Record.Steps[0].StepID != "safe-plan" {
+		t.Fatalf("accepted record does not bind trusted actor and plan: %#v", accepted.Record)
 	}
 }
 
@@ -251,7 +323,7 @@ func (a rejectingAuthorizer) AuthorizeOperation(context.Context, string, store.O
 func TestAuthorizationFailureDoesNotPersistOperationOrLock(t *testing.T) {
 	operationStore, _ := openStore(t)
 	authorizationErr := errors.New("approval required")
-	service, err := NewService(operationStore, allowValidator{}, rejectingAuthorizer{err: authorizationErr}, LogicalServerLockPolicy{}, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	service, err := NewService(operationStore, allowValidator{}, rejectingAuthorizer{err: authorizationErr}, LogicalServerLockPolicy{}, testPlanner(), testKeyring(t, "v1", map[string]byte{"v1": 1}))
 	if err != nil {
 		t.Fatal(err)
 	}

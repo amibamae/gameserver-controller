@@ -54,3 +54,9 @@ definition, and is keyed by environment and server ID. Definition requests
 cannot contain adapter steps, secret references, or an external instance
 reference. This is a persistence primitive; standard lifecycle transitions
 and typed operation results are not yet wired to update the server record.
+
+Operation acceptance also requires an injected trusted planner. A request
+cannot supply adapter steps, and authorization runs against the planner's
+result before the operation is persisted. The metadata-only definition planner
+is covered; profile-resolving plans for provision, start, stop, backup, restore,
+and destroy have not been implemented.
