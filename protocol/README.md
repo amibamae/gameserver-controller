@@ -1,6 +1,6 @@
 # Protocol Specification
 
-**Status:** Draft specification, version 0.21.0-draft. The repository contains normative draft prose, JSON Schemas, RPC and management API bindings, examples, and conformance vectors. Go is the initial implementation language and is used for protocol tooling. The full controller and production adapters are not yet implemented.
+**Status:** Reviewed Phase 1 draft specification, version 0.21.0-draft. The repository contains normative draft prose, JSON Schemas, RPC and management API bindings, examples, and conformance vectors. Go is the initial implementation language and is used for protocol tooling. Go CI validates schema structure, references, examples, OpenAPI structure, and conformance vectors. The full controller and production adapters are not yet implemented.
 
 ## Purpose
 
@@ -163,7 +163,7 @@ The tree reflects the initial draft package. The schema inventory is indexed in 
 9. Publish and validate language-neutral schemas, examples, and conformance vectors.
 10. Validate the initial Go implementation against the published schemas and conformance vectors; welcome optional implementations in other languages.
 
-This draft snapshot is version 0.21.0-draft. It remains a draft while its semantics, schemas, compatibility rules, security requirements, and conformance tests are under review. Phase 1 completion means the specification package and Go validator/conformance suite are reviewed; it does not include a controller engine. Stable protocol 1.0 remains gated on the initial Go controller and fake-adapter implementation passing the published behavioral suite. Contributions in other languages are welcome but are not a release requirement.
+The current untagged development branch carries protocol version 0.21.0-draft and has completed the Phase 1 package review. It is development source, not an immutable compatibility target; any published draft snapshot must be immutable and use a new minor pre-1.0 version. The specification remains a draft. Phase 1 completion means the specification package and Go validator/conformance suite are reviewed; it does not include a controller engine. Stable protocol 1.0 remains gated on the initial Go controller and fake-adapter implementation passing the published behavioral suite. Contributions in other languages are welcome but are not a release requirement.
 
 ## Core design decisions
 
