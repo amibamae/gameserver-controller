@@ -178,6 +178,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [readiness-server-mismatch-before-transfer.json](test-vectors/readiness-server-mismatch-before-transfer.json)
 - [game-readiness-unknown-blocks-ready.json](test-vectors/game-readiness-unknown-blocks-ready.json)
 - [game-release-install-configure-fail-closed.json](test-vectors/game-release-install-configure-fail-closed.json)
+- [game-configure-pinned-schema-and-result-binding.json](test-vectors/game-configure-pinned-schema-and-result-binding.json)
 - [game-install-repeat-same-release.json](test-vectors/game-install-repeat-same-release.json)
 - [game-install-completed-verifies-exact-artifacts.json](test-vectors/game-install-completed-verifies-exact-artifacts.json)
 - [game-install-incomplete-artifact-set-requires-reconciliation.json](test-vectors/game-install-incomplete-artifact-set-requires-reconciliation.json)
