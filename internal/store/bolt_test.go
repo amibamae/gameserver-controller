@@ -1,11 +1,15 @@
 package store
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	bolt "go.etcd.io/bbolt"
 
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 )
@@ -16,7 +20,7 @@ func TestCreateOperationPersistsAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := store.CreateOperation(testOperation("persist-me"))
+	created, err := store.createOperation(testOperation("persist-me"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +30,7 @@ func TestCreateOperationPersistsAcrossRestart(t *testing.T) {
 	if created.Record.CreatedAt.IsZero() || !created.Record.CreatedAt.Equal(created.Record.UpdatedAt) {
 		t.Fatalf("store did not assign consistent acceptance timestamps: %#v", created.Record)
 	}
-	if _, err := store.CreateOperation(testOperation("persist-me")); !errors.Is(err, ErrAlreadyExists) {
+	if _, err := store.createOperation(testOperation("persist-me")); !errors.Is(err, ErrAlreadyExists) {
 		t.Fatalf("duplicate create: got %v, want ErrAlreadyExists", err)
 	}
 	if err := store.Close(); err != nil {
@@ -60,7 +64,7 @@ func TestCreateOperationPersistsAcrossRestart(t *testing.T) {
 
 func TestUpdateUsesRevisionAndProtocolTransitions(t *testing.T) {
 	store := openTestStore(t)
-	created, err := store.CreateOperation(testOperation("update-me"))
+	created, err := store.createOperation(testOperation("update-me"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +105,7 @@ func TestUpdateUsesRevisionAndProtocolTransitions(t *testing.T) {
 
 func TestTerminalOperationRequiresResolvedStepsAndOutcome(t *testing.T) {
 	store := openTestStore(t)
-	created, err := store.CreateOperation(testOperation("terminal-me"))
+	created, err := store.createOperation(testOperation("terminal-me"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,15 +137,15 @@ func TestTerminalOperationRequiresResolvedStepsAndOutcome(t *testing.T) {
 
 func TestListRecoverableKeepsSuspendedOperations(t *testing.T) {
 	store := openTestStore(t)
-	first, err := store.CreateOperation(testOperation("first"))
+	first, err := store.createOperation(testOperation("first"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := store.CreateOperation(testOperation("second"))
+	second, err := store.createOperation(testOperation("second"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	terminal, err := store.CreateOperation(testOperation("terminal"))
+	terminal, err := store.createOperation(testOperation("terminal"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,13 +194,13 @@ func TestCreateRejectsInvalidSnapshotAndKey(t *testing.T) {
 	store := openTestStore(t)
 	badSnapshot := testOperation("bad-secret-shape")
 	badSnapshot.RequestSnapshot.Parameters = json.RawMessage(`[]`)
-	if _, err := store.CreateOperation(badSnapshot); !errors.Is(err, ErrInvalidRecord) {
+	if _, err := store.createOperation(badSnapshot); !errors.Is(err, ErrInvalidRecord) {
 		t.Fatalf("array parameters: got %v, want ErrInvalidRecord", err)
 	}
 
 	badKey := testOperation("bad-key")
 	badKey.IdempotencyKey = "line\nbreak"
-	if _, err := store.CreateOperation(badKey); !errors.Is(err, ErrInvalidRecord) {
+	if _, err := store.createOperation(badKey); !errors.Is(err, ErrInvalidRecord) {
 		t.Fatalf("invalid idempotency key: got %v, want ErrInvalidRecord", err)
 	}
 }
@@ -206,14 +210,14 @@ func TestCreateRejectsMissingCurrentStep(t *testing.T) {
 	operation := testOperation("missing-current-step")
 	missing := "not-in-plan"
 	operation.CurrentStepID = &missing
-	if _, err := store.CreateOperation(operation); !errors.Is(err, ErrInvalidRecord) {
+	if _, err := store.createOperation(operation); !errors.Is(err, ErrInvalidRecord) {
 		t.Fatalf("missing current step: got %v, want ErrInvalidRecord", err)
 	}
 }
 
 func TestStepCannotStartBeforeOperationRuns(t *testing.T) {
 	store := openTestStore(t)
-	created, err := store.CreateOperation(testOperation("untracked-dispatch"))
+	created, err := store.createOperation(testOperation("untracked-dispatch"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +235,7 @@ func TestRecordedCapabilityIdentityCannotChange(t *testing.T) {
 	operation.Steps[0].AdapterID = "hosting.example"
 	operation.Steps[0].CapabilityName = "hosting.instance.create"
 	operation.Steps[0].CapabilityVersion = "1"
-	created, err := store.CreateOperation(operation)
+	created, err := store.createOperation(operation)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,6 +251,124 @@ func TestRecordedCapabilityIdentityCannotChange(t *testing.T) {
 	changed.Steps[0].CapabilityVersion = "2"
 	if _, err := store.UpdateOperation(runningStored.Revision, changed); !errors.Is(err, ErrImmutableFields) {
 		t.Fatalf("changed dispatched capability version: got %v, want ErrImmutableFields", err)
+	}
+}
+
+func TestIdempotencyAssociationWithMissingOperationFailsClosed(t *testing.T) {
+	store := openTestStore(t)
+	record := testOperation("will-expire")
+	record.RequestFingerprint = "sha256:" + strings.Repeat("a", 64)
+	proof := IdempotencyProof{
+		ActiveKeyVersion: "v1",
+		Candidates:       []IdempotencyVerifier{{KeyVersion: "v1", Digest: bytes.Repeat([]byte{1}, 32), BindingDigest: bytes.Repeat([]byte{2}, 32)}},
+	}
+	scopes := []string{LogicalServerLockScope(record.Target.EnvironmentID, record.Target.ServerID)}
+	accepted, replayed, err := store.AcceptOperation(record, proof, scopes)
+	if err != nil || replayed {
+		t.Fatalf("initial accept: replayed=%t err=%v", replayed, err)
+	}
+	if err := store.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(operationsBucket).Delete([]byte(accepted.Record.OperationID))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := store.AcceptOperation(record, proof, scopes); !errors.Is(err, ErrIdempotencyExpired) {
+		t.Fatalf("missing operation record must not create a new operation: got %v", err)
+	}
+}
+
+func TestLegacyNonemptyStoreRequiresExplicitMigration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	db, err := bolt.Open(path, 0o600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Update(func(tx *bolt.Tx) error {
+		meta, err := tx.CreateBucket(metadataBucket)
+		if err != nil {
+			return err
+		}
+		operations, err := tx.CreateBucket(operationsBucket)
+		if err != nil {
+			return err
+		}
+		if err := meta.Put(schemaKey, []byte("1")); err != nil {
+			return err
+		}
+		return operations.Put([]byte("legacy-operation"), []byte("preserved"))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := OpenBolt(path); !errors.Is(err, ErrStoreNeedsMigration) {
+		t.Fatalf("nonempty schema v1 database: got %v, want ErrStoreNeedsMigration", err)
+	}
+	db, err = bolt.Open(path, 0o600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := db.View(func(tx *bolt.Tx) error {
+		if got := string(tx.Bucket(metadataBucket).Get(schemaKey)); got != "1" {
+			t.Fatalf("failed migration changed schema version: got %q", got)
+		}
+		if got := tx.Bucket(operationsBucket).Get([]byte("legacy-operation")); string(got) != "preserved" {
+			t.Fatalf("failed migration changed legacy operation: got %q", got)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOpenRejectsMissingResourceLockIndexes(t *testing.T) {
+	for _, remove := range []string{"forward", "reverse"} {
+		t.Run(remove, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "controller.db")
+			store, err := OpenBolt(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			record := testOperation("recovery-index-check")
+			record.OperationType = "server.backup"
+			record.RequestSnapshot.OperationType = record.OperationType
+			record.RequestFingerprint = "sha256:" + strings.Repeat("b", 64)
+			scope := LogicalServerLockScope(record.Target.EnvironmentID, record.Target.ServerID)
+			proof := IdempotencyProof{
+				ActiveKeyVersion: "v1",
+				Candidates: []IdempotencyVerifier{{
+					KeyVersion: "v1", Digest: bytes.Repeat([]byte{1}, 32), BindingDigest: bytes.Repeat([]byte{2}, 32),
+				}},
+			}
+			if _, _, err := store.AcceptOperation(record, proof, []string{scope}); err != nil {
+				t.Fatal(err)
+			}
+			if err := store.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			db, err := bolt.Open(path, 0o600, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Update(func(tx *bolt.Tx) error {
+				if remove == "forward" {
+					return tx.Bucket(locksBucket).Delete([]byte(scope))
+				}
+				return tx.Bucket(operationLocksBucket).Delete([]byte(record.OperationID))
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := OpenBolt(path); !errors.Is(err, ErrCorruptStore) {
+				t.Fatalf("reopen with missing %s index: got %v, want ErrCorruptStore", remove, err)
+			}
+		})
 	}
 }
 
@@ -267,7 +389,7 @@ func openTestStore(t *testing.T) *BoltStore {
 func testOperation(id string) OperationRecord {
 	return OperationRecord{
 		OperationID:           id,
-		OperationType:         "server.provision",
+		OperationType:         "test.operation",
 		ProtocolVersion:       "0.21.0-draft",
 		SchemaPackageRevision: "0.21.0-draft",
 		Target: OperationTarget{
@@ -278,7 +400,7 @@ func testOperation(id string) OperationRecord {
 		ActorID:        "operator-1",
 		IdempotencyKey: "create-server-one",
 		RequestSnapshot: RequestSnapshot{
-			OperationType: "server.provision",
+			OperationType: "test.operation",
 			Parameters:    json.RawMessage(`{"plan":"small"}`),
 		},
 		Steps: []OperationStep{{

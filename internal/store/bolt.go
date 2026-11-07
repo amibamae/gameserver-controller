@@ -16,15 +16,23 @@ import (
 )
 
 const (
-	operationsBucketName = "operations"
-	metadataBucketName   = "metadata"
-	databaseSchema       = "1"
+	operationsBucketName     = "operations"
+	metadataBucketName       = "metadata"
+	idempotencyBucketName    = "idempotency"
+	locksBucketName          = "resource_locks"
+	operationLocksBucketName = "operation_locks"
+	keyVersionsBucketName    = "idempotency_key_versions"
+	databaseSchema           = "2"
 )
 
 var (
-	operationsBucket = []byte(operationsBucketName)
-	metadataBucket   = []byte(metadataBucketName)
-	schemaKey        = []byte("schema_version")
+	operationsBucket     = []byte(operationsBucketName)
+	metadataBucket       = []byte(metadataBucketName)
+	idempotencyBucket    = []byte(idempotencyBucketName)
+	locksBucket          = []byte(locksBucketName)
+	operationLocksBucket = []byte(operationLocksBucketName)
+	keyVersionsBucket    = []byte(keyVersionsBucketName)
+	schemaKey            = []byte("schema_version")
 )
 
 // BoltStore is a single-controller-process, durable operation store. bbolt
@@ -64,8 +72,26 @@ func OpenBolt(path string) (*BoltStore, error) {
 		if _, err := tx.CreateBucketIfNotExists(operationsBucket); err != nil {
 			return err
 		}
+		for _, name := range [][]byte{idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket} {
+			if _, err := tx.CreateBucketIfNotExists(name); err != nil {
+				return err
+			}
+		}
 		version := meta.Get(schemaKey)
 		if version == nil {
+			for _, name := range [][]byte{operationsBucket, idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket} {
+				cursor := tx.Bucket(name).Cursor()
+				if key, _ := cursor.First(); key != nil {
+					return ErrStoreNeedsMigration
+				}
+			}
+			return meta.Put(schemaKey, []byte(databaseSchema))
+		}
+		if bytes.Equal(version, []byte("1")) {
+			cursor := tx.Bucket(operationsBucket).Cursor()
+			if key, _ := cursor.First(); key != nil {
+				return ErrStoreNeedsMigration
+			}
 			return meta.Put(schemaKey, []byte(databaseSchema))
 		}
 		if !bytes.Equal(version, []byte(databaseSchema)) {
@@ -75,6 +101,10 @@ func OpenBolt(path string) (*BoltStore, error) {
 	}); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize operation store: %w", err)
+	}
+	if err := db.View(verifyRecoveryIndexes); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("verify operation recovery indexes: %w", err)
 	}
 	return &BoltStore{db: db}, nil
 }
@@ -86,10 +116,9 @@ func (s *BoltStore) Close() error {
 	return s.db.Close()
 }
 
-// CreateOperation commits a pending operation and its initial recovery state.
-// A successful return means the operation record is durable and can be read
-// after a process restart.
-func (s *BoltStore) CreateOperation(record OperationRecord) (StoredOperation, error) {
+// createOperation is a low-level store primitive for package tests. Controller
+// code must use AcceptOperation so idempotency and resource locks are atomic.
+func (s *BoltStore) createOperation(record OperationRecord) (StoredOperation, error) {
 	record, err := prepareNewRecord(record, time.Now().UTC())
 	if err != nil {
 		return StoredOperation{}, err
@@ -109,6 +138,182 @@ func (s *BoltStore) CreateOperation(record OperationRecord) (StoredOperation, er
 		return StoredOperation{}, err
 	}
 	return StoredOperation{Record: record, Revision: envelope.Revision}, nil
+}
+
+// AcceptOperation atomically deduplicates an accepted request, reserves its
+// resource locks, and persists its initial operation record. The verifier
+// proof must be derived from the authenticated actor and client key by the
+// acceptance service.
+func (s *BoltStore) AcceptOperation(record OperationRecord, proof IdempotencyProof, lockScopes []string) (StoredOperation, bool, error) {
+	if record.IdempotencyKey == "" || !validFingerprint(record.RequestFingerprint) {
+		return StoredOperation{}, false, fmt.Errorf("%w: acceptance requires an idempotency key and request fingerprint", ErrInvalidRecord)
+	}
+	if err := validateIdempotencyProof(proof); err != nil {
+		return StoredOperation{}, false, err
+	}
+	scopes, err := validateLockScopes(lockScopes)
+	if err != nil {
+		return StoredOperation{}, false, err
+	}
+	if requiredScope, required := requiredLogicalServerLock(record); required && !containsString(scopes, requiredScope) {
+		return StoredOperation{}, false, fmt.Errorf("%w: standard server operation requires lock %q", ErrInvalidRecord, requiredScope)
+	}
+	prepared, err := prepareNewRecord(record, time.Now().UTC())
+	if err != nil {
+		return StoredOperation{}, false, err
+	}
+	var accepted StoredOperation
+	replayed := false
+	err = s.db.Update(func(tx *bolt.Tx) error {
+		operations := tx.Bucket(operationsBucket)
+		idempotency := tx.Bucket(idempotencyBucket)
+		keyVersions := tx.Bucket(keyVersionsBucket)
+		cursor := keyVersions.Cursor()
+		for version, _ := cursor.First(); version != nil; version, _ = cursor.Next() {
+			if _, ok := findVerifier(proof, string(version)); !ok {
+				return fmt.Errorf("%w: %s", ErrKeyVersionMissing, version)
+			}
+		}
+		var existing *StoredOperation
+		for _, candidate := range proof.Candidates {
+			value := idempotency.Get(verifierIndex(candidate))
+			if value == nil {
+				continue
+			}
+			entry, err := decodeIdempotencyEntry(value)
+			if err != nil {
+				return err
+			}
+			if entry.KeyVersion != candidate.KeyVersion || keyVersions.Get([]byte(entry.KeyVersion)) == nil {
+				return fmt.Errorf("%w: idempotency entry key version mismatch", ErrCorruptStore)
+			}
+			if !requestMatches(entry, candidate) {
+				return ErrIdempotencyConflict
+			}
+			value = operations.Get([]byte(entry.OperationID))
+			if value == nil {
+				return ErrIdempotencyExpired
+			}
+			stored, err := decodeEnvelope(value)
+			if err != nil {
+				return err
+			}
+			if stored.Record.ActorID != prepared.ActorID {
+				return fmt.Errorf("%w: idempotency verifier actor mismatch", ErrCorruptStore)
+			}
+			if existing != nil && existing.Record.OperationID != stored.Record.OperationID {
+				return fmt.Errorf("%w: verifier candidates identify multiple operations", ErrCorruptStore)
+			}
+			existing = &stored
+		}
+		if existing != nil {
+			accepted = *existing
+			replayed = true
+			return nil
+		}
+		if operations.Get([]byte(prepared.OperationID)) != nil {
+			return ErrAlreadyExists
+		}
+		for _, scope := range scopes {
+			value := tx.Bucket(locksBucket).Get([]byte(scope))
+			if value == nil {
+				continue
+			}
+			lock, err := decodeResourceLock(value)
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("%w: scope %q owned by operation %q", ErrResourceConflict, lock.Scope, lock.OperationID)
+		}
+		encoded, err := json.Marshal(operationEnvelope{Revision: 1, Record: prepared})
+		if err != nil {
+			return fmt.Errorf("encode operation record: %w", err)
+		}
+		if err := operations.Put([]byte(prepared.OperationID), encoded); err != nil {
+			return err
+		}
+		activeVerifier, _ := findVerifier(proof, proof.ActiveKeyVersion)
+		entry := idempotencyEntry{
+			OperationID:   prepared.OperationID,
+			BindingDigest: activeVerifier.BindingDigest,
+			KeyVersion:    proof.ActiveKeyVersion,
+			RecordedAt:    prepared.CreatedAt,
+		}
+		entryJSON, err := json.Marshal(entry)
+		if err != nil {
+			return fmt.Errorf("encode idempotency entry: %w", err)
+		}
+		if err := idempotency.Put(verifierIndex(activeVerifier), entryJSON); err != nil {
+			return err
+		}
+		if err := keyVersions.Put([]byte(proof.ActiveKeyVersion), []byte{1}); err != nil {
+			return err
+		}
+		if len(scopes) > 0 {
+			locks := tx.Bucket(locksBucket)
+			for _, scope := range scopes {
+				lockJSON, err := json.Marshal(ResourceLock{Scope: scope, OperationID: prepared.OperationID, AcquiredAt: prepared.CreatedAt})
+				if err != nil {
+					return err
+				}
+				if err := locks.Put([]byte(scope), lockJSON); err != nil {
+					return err
+				}
+			}
+			scopesJSON, err := json.Marshal(scopes)
+			if err != nil {
+				return err
+			}
+			if err := tx.Bucket(operationLocksBucket).Put([]byte(prepared.OperationID), scopesJSON); err != nil {
+				return err
+			}
+		}
+		accepted = StoredOperation{Record: prepared, Revision: 1}
+		return nil
+	})
+	if err != nil {
+		return StoredOperation{}, false, err
+	}
+	return accepted, replayed, nil
+}
+
+func (s *BoltStore) GetResourceLock(scope string) (ResourceLock, error) {
+	var lock ResourceLock
+	err := s.db.View(func(tx *bolt.Tx) error {
+		value := tx.Bucket(locksBucket).Get([]byte(scope))
+		if value == nil {
+			return ErrNotFound
+		}
+		var err error
+		lock, err = decodeResourceLock(value)
+		if err == nil && lock.Scope != scope {
+			return fmt.Errorf("%w: resource lock scope mismatch", ErrCorruptStore)
+		}
+		return err
+	})
+	return lock, err
+}
+
+func (s *BoltStore) ListResourceLocks() ([]ResourceLock, error) {
+	var result []ResourceLock
+	err := s.db.View(func(tx *bolt.Tx) error {
+		cursor := tx.Bucket(locksBucket).Cursor()
+		for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+			lock, err := decodeResourceLock(value)
+			if err != nil {
+				return err
+			}
+			if lock.Scope != string(key) {
+				return fmt.Errorf("%w: resource lock scope mismatch", ErrCorruptStore)
+			}
+			result = append(result, lock)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (s *BoltStore) GetOperation(operationID string) (StoredOperation, error) {
@@ -190,6 +395,11 @@ func (s *BoltStore) UpdateOperation(expectedRevision uint64, next OperationRecor
 		if err := validateTerminalOutcome(next); err != nil {
 			return err
 		}
+		if protocolstate.IsTerminalOperation(next.Status) {
+			if err := releaseOperationLocks(tx, next.OperationID); err != nil {
+				return err
+			}
+		}
 		if current.Revision == ^uint64(0) {
 			return fmt.Errorf("%w: revision exhausted", ErrInvalidRecord)
 		}
@@ -204,6 +414,40 @@ func (s *BoltStore) UpdateOperation(expectedRevision uint64, next OperationRecor
 		return StoredOperation{}, err
 	}
 	return updated, nil
+}
+
+func releaseOperationLocks(tx *bolt.Tx, operationID string) error {
+	operationLocks := tx.Bucket(operationLocksBucket)
+	value := operationLocks.Get([]byte(operationID))
+	if value == nil {
+		return nil
+	}
+	var scopes []string
+	if err := json.Unmarshal(value, &scopes); err != nil {
+		return fmt.Errorf("%w: decode operation lock scopes: %v", ErrCorruptStore, err)
+	}
+	validated, err := validateLockScopes(scopes)
+	if err != nil || len(validated) != len(scopes) {
+		return fmt.Errorf("%w: invalid operation lock scopes", ErrCorruptStore)
+	}
+	locks := tx.Bucket(locksBucket)
+	for _, scope := range validated {
+		value := locks.Get([]byte(scope))
+		if value == nil {
+			return fmt.Errorf("%w: operation lock %q is missing", ErrCorruptStore, scope)
+		}
+		lock, err := decodeResourceLock(value)
+		if err != nil {
+			return err
+		}
+		if lock.Scope != scope || lock.OperationID != operationID {
+			return fmt.Errorf("%w: operation does not own lock %q", ErrCorruptStore, scope)
+		}
+		if err := locks.Delete([]byte(scope)); err != nil {
+			return err
+		}
+	}
+	return operationLocks.Delete([]byte(operationID))
 }
 
 // ListRecoverableOperations returns every non-terminal operation, including
