@@ -155,22 +155,28 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			}
 			allowed := contains(principalPermissions, requiredPermission) &&
 				contains(principalEnvironments, targetEnvironment)
-			items := []any{}
+			operationResource := any(nil)
+			protectedResourceDataReturned := false
 			errorCategory := any("authorization")
-			operationActorID := any(nil)
 			if allowed {
-				items = arrayValue(attempt, "authorized_response_items")
+				operationID := stringValue(attempt, "operation_id")
+				if operationID == "" {
+					return nil, fmt.Errorf("accepted actor-spoofing attempt %d must identify its durable operation", index)
+				}
+				operationResource = map[string]any{
+					"operation_id": operationID,
+					"actor_id":    authenticatedActor,
+				}
+				protectedResourceDataReturned = true
 				errorCategory = nil
-				operationActorID = authenticatedActor
 			}
 			outcomes = append(outcomes, map[string]any{
-				"attempt_id":                      attemptID,
-				"accepted":                        allowed,
-				"error_category":                  errorCategory,
-				"operation_actor_id":              operationActorID,
+				"attempt_id":                       attemptID,
+				"accepted":                         allowed,
+				"error_category":                   errorCategory,
+				"operation_resource":               operationResource,
 				"request_claims_used_for_auth":      false,
-				"resource_items":                   items,
-				"protected_resource_data_returned": len(items) > 0,
+				"protected_resource_data_returned": protectedResourceDataReturned,
 			})
 		}
 		return map[string]any{
