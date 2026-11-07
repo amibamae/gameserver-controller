@@ -2,170 +2,114 @@
   "policy_id": "supervised-pilot-vm-capacity",
   "cases": [
     {
-      "id": "production-slot-available",
+      "id": "production-slot-available-for-explicit-management",
+      "request_action": "adopt",
       "request_environment": "production",
       "existing_instances": [],
-      "expected": {
-        "allowed": true,
-        "reason": "slot_available"
-      }
+      "expected": {"allowed": true, "reason": "slot_available"}
     },
     {
       "id": "staging-slot-available",
+      "request_action": "create",
       "request_environment": "staging",
       "existing_instances": [],
-      "expected": {
-        "allowed": true,
-        "reason": "slot_available"
-      }
+      "expected": {"allowed": true, "reason": "slot_available"}
     },
     {
       "id": "testing-slot-available",
+      "request_action": "create",
       "request_environment": "testing",
       "existing_instances": [],
-      "expected": {
-        "allowed": true,
-        "reason": "slot_available"
-      }
+      "expected": {"allowed": true, "reason": "slot_available"}
     },
     {
-      "id": "duplicate-production-denied",
+      "id": "unmanaged-live-production-does-not-use-managed-slot",
+      "request_action": "create",
+      "request_environment": "staging",
+      "existing_instances": [
+        {"environment": "production", "provider_state": "running", "managed": false}
+      ],
+      "expected": {"allowed": true, "reason": "slot_available"}
+    },
+    {
+      "id": "duplicate-managed-production-denied",
+      "request_action": "adopt",
       "request_environment": "production",
       "existing_instances": [
-        {
-          "environment": "production",
-          "provider_state": "running"
-        }
+        {"environment": "production", "provider_state": "running", "managed": true}
       ],
-      "expected": {
-        "allowed": false,
-        "reason": "slot_occupied"
-      }
+      "expected": {"allowed": false, "reason": "capacity_reached"}
     },
     {
-      "id": "staging-and-testing-share-one-slot",
+      "id": "staging-and-testing-share-one-managed-slot",
+      "request_action": "adopt",
       "request_environment": "testing",
       "existing_instances": [
-        {
-          "environment": "staging",
-          "provider_state": "running"
-        }
+        {"environment": "staging", "provider_state": "running", "managed": true}
       ],
-      "expected": {
-        "allowed": false,
-        "reason": "slot_occupied"
-      }
+      "expected": {"allowed": false, "reason": "capacity_reached"}
     },
     {
-      "id": "pending-reservation-counts-as-capacity",
+      "id": "pending-managed-reservation-counts-as-capacity",
+      "request_action": "create",
       "request_environment": "production",
       "existing_instances": [
-        {
-          "environment": "production",
-          "provider_state": "reserved"
-        }
+        {"environment": "production", "provider_state": "reserved", "managed": true}
       ],
-      "expected": {
-        "allowed": false,
-        "reason": "slot_occupied"
-      }
+      "expected": {"allowed": false, "reason": "capacity_reached"}
     },
     {
-      "id": "unresolved-create-reserves-production-slot",
-      "request_environment": "production",
-      "existing_instances": [
-        {
-          "environment": "production",
-          "provider_state": "create_outcome_unknown"
-        }
-      ],
-      "expected": {
-        "allowed": false,
-        "reason": "slot_occupied"
-      }
-    },
-    {
-      "id": "unresolved-create-reserves-shared-slot",
+      "id": "unresolved-managed-create-keeps-capacity",
+      "request_action": "create",
       "request_environment": "testing",
       "existing_instances": [
-        {
-          "environment": "staging",
-          "provider_state": "create_outcome_unknown"
-        }
+        {"environment": "staging", "provider_state": "create_outcome_unknown", "managed": true}
       ],
-      "expected": {
-        "allowed": false,
-        "reason": "slot_occupied"
-      }
+      "expected": {"allowed": false, "reason": "capacity_reached"}
     },
     {
-      "id": "unresolved-destroy-keeps-slot-occupied",
+      "id": "unresolved-managed-destroy-keeps-capacity",
+      "request_action": "create",
       "request_environment": "production",
       "existing_instances": [
-        {
-          "environment": "production",
-          "provider_state": "destroy_outcome_unknown"
-        }
+        {"environment": "production", "provider_state": "destroy_outcome_unknown", "managed": true}
       ],
-      "expected": {
-        "allowed": false,
-        "reason": "slot_occupied"
-      }
+      "expected": {"allowed": false, "reason": "capacity_reached"}
     },
     {
-      "id": "third-create-denied-at-total-limit",
+      "id": "already-over-limit-denies-another-managed-vm",
+      "request_action": "create",
       "request_environment": "testing",
       "existing_instances": [
-        {
-          "environment": "production",
-          "provider_state": "running"
-        },
-        {
-          "environment": "staging",
-          "provider_state": "running"
-        }
+        {"environment": "production", "provider_state": "running", "managed": true},
+        {"environment": "staging", "provider_state": "running", "managed": true}
       ],
-      "expected": {
-        "allowed": false,
-        "reason": "total_limit_reached"
-      }
+      "expected": {"allowed": false, "reason": "capacity_reached"}
     },
     {
-      "id": "provider-confirmed-absence-releases-slot",
+      "id": "provider-confirmed-absence-releases-managed-capacity",
+      "request_action": "create",
       "request_environment": "production",
       "existing_instances": [
-        {
-          "environment": "production",
-          "provider_state": "absent"
-        }
+        {"environment": "production", "provider_state": "absent", "managed": true}
       ],
-      "expected": {
-        "allowed": true,
-        "reason": "slot_available"
-      }
+      "expected": {"allowed": true, "reason": "slot_available"}
     },
     {
-      "id": "provider-confirmed-destruction-releases-slot",
-      "request_environment": "production",
+      "id": "provider-confirmed-destruction-releases-managed-capacity",
+      "request_action": "create",
+      "request_environment": "testing",
       "existing_instances": [
-        {
-          "environment": "production",
-          "provider_state": "destroyed"
-        }
+        {"environment": "staging", "provider_state": "destroyed", "managed": true}
       ],
-      "expected": {
-        "allowed": true,
-        "reason": "slot_available"
-      }
+      "expected": {"allowed": true, "reason": "slot_available"}
     },
     {
       "id": "unsupported-environment-denied",
+      "request_action": "create",
       "request_environment": "development",
       "existing_instances": [],
-      "expected": {
-        "allowed": false,
-        "reason": "unsupported_environment"
-      }
+      "expected": {"allowed": false, "reason": "unsupported_environment"}
     }
   ]
 }

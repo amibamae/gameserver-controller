@@ -68,6 +68,7 @@ Other-language implementations are welcome contributions, but they are not part 
 - Implement the core and application services against the protocol.
 - Build a local CLI for inspection, config validation, plan/preview, and operation monitoring.
 - Implement the Vultr hosting adapter and standard OS selection.
+- Add Vultr API create/adopt through an atomic source-controlled capacity policy, initially capped at one controller-owned VM; the live production server may remain unmanaged.
 - Apply versioned bootstrap scripts to new instances.
 - Implement Wasabi’s S3-compatible storage adapter.
 - Implement the Minecraft Paper adapter.
@@ -136,7 +137,7 @@ The first end-to-end target is Vultr, Wasabi, Paper, and Velocity on Debian. Exi
 
 ## Current state and next work
 
-The Phase 1 protocol package has met its exit criteria on main at version 0.21.0-draft. This untagged branch is development source, not an immutable interoperability snapshot. The supervised backup CLI is code-complete within its limited wrapper scope; it does not create VMs. The two-VM policy is declarative, and a supervised first run plus artifact/storage verification remains an operator handoff.
+The Phase 1 protocol package has met its exit criteria on main at version 0.21.0-draft. This untagged branch is development source, not an immutable interoperability snapshot. The supervised backup CLI is code-complete within its limited wrapper scope; it does not create VMs. The pilot capacity policy starts at one controller-owned VM and is changeable in the source-controlled policy file before the Vultr create/adopt path is rebuilt; it remains declarative until that path exists. The live production server can remain unmanaged. A supervised backup against an isolated test server plus artifact/storage verification remains an operator handoff.
 
 The schema package covers hosting, storage, execution, game, and integration operations, with typed results for all seven standard server operations. The protocol specification and compatibility rules have been reviewed; Go CI validates schemas, references, examples, OpenAPI 3.2.1 structure, and published conformance vectors. Phase 2 now includes Go lifecycle/operation transition rules, a durable bbolt operation store, atomic acceptance with actor-scoped idempotency and per-server locks, an embedded local schema registry, an in-process adapter registry with scripted fakes for all five categories, and side-effect-free validation for the initial local configuration shape. Durable step dispatch, workflow orchestration/reconciliation, runtime config loading and secret resolution, process transport, and production adapters remain future work in Phases 2 and 3.
 

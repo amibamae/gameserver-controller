@@ -37,18 +37,18 @@ func TestDecisionKeepsUnresolvedInstancesOccupied(t *testing.T) {
 		{
 			name:        "unknown production create",
 			environment: "production",
-			instance:    existingInstance{Environment: "production", ProviderState: "create_outcome_unknown"},
+			instance:    existingInstance{Environment: "production", ProviderState: "create_outcome_unknown", Managed: boolPointer(true)},
 		},
 		{
 			name:        "unknown shared-slot destroy",
 			environment: "testing",
-			instance:    existingInstance{Environment: "staging", ProviderState: "destroy_outcome_unknown"},
+			instance:    existingInstance{Environment: "staging", ProviderState: "destroy_outcome_unknown", Managed: boolPointer(true)},
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got := decide(policy, test.environment, []existingInstance{test.instance})
-			if got != (decision{Allowed: false, Reason: "slot_occupied"}) {
+			if got.Allowed || !matchesExpectedReason(got.Reason, "capacity_reached") {
 				t.Fatalf("decide() = %+v; want occupied slot denial", got)
 			}
 		})
@@ -58,12 +58,48 @@ func TestDecisionKeepsUnresolvedInstancesOccupied(t *testing.T) {
 func TestConfirmedProviderAbsenceReleasesCapacity(t *testing.T) {
 	policy, _ := loadPolicyFixtures(t)
 	got := decide(policy, "production", []existingInstance{
-		{Environment: "production", ProviderState: "absent"},
+		{Environment: "production", ProviderState: "absent", Managed: boolPointer(true)},
 	})
 	if got != (decision{Allowed: true, Reason: "slot_available"}) {
 		t.Fatalf("decide() = %+v; want available slot", got)
 	}
 }
+
+func TestUnmanagedProductionDoesNotConsumePilotSlot(t *testing.T) {
+	policy, _ := loadPolicyFixtures(t)
+	got := decide(policy, "staging", []existingInstance{
+		{Environment: "production", ProviderState: "running", Managed: boolPointer(false)},
+	})
+	if got != (decision{Allowed: true, Reason: "slot_available"}) {
+		t.Fatalf("decide() = %+v; unmanaged production should remain outside managed capacity", got)
+	}
+}
+
+func TestConfiguredLimitCanBeChangedInPolicyFile(t *testing.T) {
+	policy, cases := loadPolicyFixtures(t)
+	policy.MaxInstancesTotal = 2
+	policy.PolicyVersion++
+	if validationErrors := validateDocuments(policy, cases); len(validationErrors) != 0 {
+		t.Fatalf("changing the configured limit to two should remain valid: %s", strings.Join(validationErrors, "; "))
+	}
+	got := decide(policy, "staging", []existingInstance{
+		{Environment: "production", ProviderState: "running", Managed: boolPointer(true)},
+	})
+	if got != (decision{Allowed: true, Reason: "slot_available"}) {
+		t.Fatalf("decision with a two-VM policy = %+v; want the second managed slot available", got)
+	}
+}
+
+func TestConfiguredLimitCannotExceedDeclaredGroupSlots(t *testing.T) {
+	policy, cases := loadPolicyFixtures(t)
+	policy.MaxInstancesTotal = 3
+	policy.PolicyVersion++
+	if validationErrors := validateDocuments(policy, cases); len(validationErrors) == 0 {
+		t.Fatal("limit greater than declared capacity groups passed validation")
+	}
+}
+
+func boolPointer(value bool) *bool { return &value }
 
 func TestReadJSONRejectsUnknownFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "policy.json")

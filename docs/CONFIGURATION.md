@@ -14,7 +14,9 @@ The command accepts one YAML document, rejects unknown fields, checks
 references and safety rules, and prints only a validation summary. It does not
 resolve secrets, open the configured state-store path, contact providers, or
 start operations. The example uses fictional adapter profiles and a placeholder
-environment-variable reference; it contains no credentials.
+environment-variable reference; it contains no credentials. It declares the
+production boundary but includes only a staging test-server profile, so a live
+production server does not have to be adopted into controller-managed inventory.
 
 ## Version 1 shape
 
