@@ -48,4 +48,8 @@ Authentication errors MUST NOT reveal secret material, token validity internals,
 
 ## 6. Conformance
 
-Test invalid/expired credentials, wrong audience, revoked credentials, token leakage in logs/URLs, actor spoofing, local peer identity behavior, and operation continuation after client session expiry.
+Test remote requests with invalid signatures, expired credentials, wrong audiences, and revoked credentials; each is unauthenticated, returns 401, establishes no actor, returns no protected data, creates no operation, and dispatches no adapter call. Include a valid credential control and verify that the trusted actor comes from the authenticated principal.
+
+For the local profile, test a verified operating-system peer identity, unavailable peer identity, and loopback TCP without authenticated peer identity. Only the verified peer identity establishes the actor; a client-supplied actor claim is never authoritative.
+
+Inject a synthetic bearer token and verify it appears only in the Authorization header over TLS. It MUST NOT appear in URLs, query parameters, request bodies, operation records, logs, errors, events, or audit records. Also test actor spoofing and operation continuation after client session expiry using the shared conformance vectors.
