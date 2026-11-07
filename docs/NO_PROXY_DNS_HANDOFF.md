@@ -11,9 +11,8 @@ DNS records.
    always-on lobby.
 2. A player joins the lobby. The lobby kicks them with a message giving the
    estimated wait time and telling them to rejoin once that time has passed.
-   It then
-   sends an authenticated, rate-limited wake request to the controller API.
-   The lobby never receives Vultr or Wasabi keys.
+   The lobby then sends an authenticated, rate-limited wake request to the
+   controller API. It never receives Vultr or Wasabi keys.
 3. The controller deduplicates requests, checks the environment and VM cap,
    then starts or provisions the controller-owned server.
 4. If the player reconnects before readiness, the lobby reads the operation
