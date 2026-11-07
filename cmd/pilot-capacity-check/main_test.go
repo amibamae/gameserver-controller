@@ -27,6 +27,15 @@ func TestPublishedCapacityPolicyCases(t *testing.T) {
 	}
 }
 
+func TestPolicyMustDeclareRuntimeEnforcement(t *testing.T) {
+	policy, cases := loadPolicyFixtures(t)
+	policy.Enforcement.Mode = "declarative"
+	policy.Enforcement.RuntimeEnforced = boolPointer(false)
+	if validationErrors := validateDocuments(policy, cases); len(validationErrors) == 0 {
+		t.Fatal("declarative policy passed after the runtime CLI was added")
+	}
+}
+
 func TestDecisionKeepsUnresolvedInstancesOccupied(t *testing.T) {
 	policy, _ := loadPolicyFixtures(t)
 	tests := []struct {

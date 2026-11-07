@@ -19,6 +19,7 @@ var (
 type Policy struct {
 	PolicyID          string
 	PolicyVersion     int
+	RuntimeEnforced   bool
 	MaxInstancesTotal int
 	CapacityGroups    map[string]Group
 	ReleasedStates    map[string]bool
@@ -149,6 +150,7 @@ func policyFromDocument(document policyDocument) (Policy, error) {
 	}
 	return Policy{
 		PolicyID: document.PolicyID, PolicyVersion: document.PolicyVersion,
+		RuntimeEnforced:   document.Enforcement.RuntimeEnforced != nil && *document.Enforcement.RuntimeEnforced,
 		MaxInstancesTotal: document.MaxInstancesTotal,
 		CapacityGroups:    cloneGroups(document.CapacityGroups),
 		ReleasedStates:    map[string]bool{"absent": true, "destroyed": true},

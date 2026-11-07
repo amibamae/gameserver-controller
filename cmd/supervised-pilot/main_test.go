@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
 func installFakeSSH(t *testing.T, failPreflight, failStart bool, sameInvocation ...bool) (string, string) {
@@ -74,6 +76,141 @@ func runBackup(t *testing.T, args ...string) (string, error) {
 	var stdout, stderr bytes.Buffer
 	err := run(args, &stdout, &stderr)
 	return stdout.String() + stderr.String(), err
+}
+
+func pilotPolicyPath() string {
+	return filepath.Join("..", "..", "pilot", "capacity-policy.json")
+}
+
+func provisionArgs(policyPath, statePath string) []string {
+	return []string{
+		"provision", "--capacity-policy", policyPath, "--state-db", statePath,
+		"--server-id", "pilot-test", "--environment", "staging",
+		"--region", "ewr", "--plan", "vc2-1c-2gb", "--os-id", "362",
+		"--hostname", "pilot-test.example.invalid", "--ssh-key-id", "sshkey-123",
+	}
+}
+
+func TestVultrProvisionDefaultsToDryRunWithoutCredentialOrDatabase(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state", "pilot.db")
+	t.Setenv("CREDENTIALS_DIRECTORY", "")
+	args := provisionArgs(pilotPolicyPath(), statePath)
+	output, err := runBackup(t, args...)
+	if err != nil {
+		t.Fatalf("provision dry run failed: %v\n%s", err, output)
+	}
+	if !strings.Contains(output, "Dry run: no provider API call, credential read, or capacity reservation") ||
+		!strings.Contains(output, "Configured hard limit: 1 controller-owned VM") {
+		t.Fatalf("missing dry-run or capacity information: %q", output)
+	}
+	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
+		t.Fatalf("dry run created the state database: %v", err)
+	}
+}
+
+func TestVultrProvisionRequiresExactConfirmationBeforeCredentialAccess(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state", "pilot.db")
+	t.Setenv("CREDENTIALS_DIRECTORY", "")
+	args := append(provisionArgs(pilotPolicyPath(), statePath), "--execute", "--confirm-create", "wrong@staging")
+	output, err := runBackup(t, args...)
+	if err == nil || !strings.Contains(err.Error(), "must exactly match") {
+		t.Fatalf("expected exact-create confirmation error, got %v (%s)", err, output)
+	}
+	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
+		t.Fatalf("mismatched confirmation created the state database: %v", err)
+	}
+}
+
+func TestVultrProvisionDryRunRejectsOperationID(t *testing.T) {
+	args := append(provisionArgs(pilotPolicyPath(), filepath.Join(t.TempDir(), "pilot.db")),
+		"--operation-id", "0123456789abcdef0123456789abcdef")
+	output, err := runBackup(t, args...)
+	if err == nil || !strings.Contains(err.Error(), "--operation-id requires --execute") {
+		t.Fatalf("expected dry-run operation ID rejection, got %v (%s)", err, output)
+	}
+}
+
+func TestVultrProvisionUsesSystemdCredentialDirectory(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state", "pilot.db")
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CREDENTIALS_DIRECTORY", "")
+	args := append(provisionArgs(pilotPolicyPath(), statePath), "--execute", "--confirm-create", "pilot-test@staging")
+	output, err := runBackup(t, args...)
+	if err == nil || !strings.Contains(err.Error(), "systemd credential directory") {
+		t.Fatalf("expected missing systemd credential error, got %v (%s)", err, output)
+	}
+	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
+		t.Fatalf("missing credential directory created the state database: %v", err)
+	}
+}
+
+func TestCapacityCommandShowsPersistedReservations(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "pilot.db")
+	repository, err := store.OpenBolt(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = repository.ReserveCapacity(store.CapacityReservation{
+		OperationID: "0123456789abcdef0123456789abcdef", ServerID: "pilot-test",
+		EnvironmentID: "staging", CapacityGroup: "shared_nonproduction",
+		Provider: "vultr", ResourceKey: "gsc-managed-test",
+	}, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+	output, err := runBackup(t, "capacity", "--capacity-policy", pilotPolicyPath(), "--state-db", statePath)
+	if err != nil {
+		t.Fatalf("capacity command failed: %v\n%s", err, output)
+	}
+	for _, expected := range []string{"Managed VM capacity: 1/1", "pilot-test", "staging", "reserved", "gsc-managed-test"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("capacity output %q does not include %q", output, expected)
+		}
+	}
+}
+
+func TestHistoryShowsBackupAndProvisionAuditEvents(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	auditPath, err := defaultAuditPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := appendAuditRecord(auditPath, "0123456789abcdef0123456789abcdef", "started", "test-host", "preflight passed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendAuditEvent(auditPath, "fedcba9876543210fedcba9876543210", "provision_confirmed", "provision", "pilot-test@staging", "vultr.instance.create", "instance confirmed"); err != nil {
+		t.Fatal(err)
+	}
+	output, err := runBackup(t, "history")
+	if err != nil {
+		t.Fatalf("history failed: %v\n%s", err, output)
+	}
+	for _, expected := range []string{"ACTION\tEVENT", "backup\tstarted", "provision\tprovision_confirmed", "pilot-test@staging", "vultr.instance.create"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("history output %q does not include %q", output, expected)
+		}
+	}
+}
+
+func TestValidAuditRecordRequiresActionSpecificTargetAndService(t *testing.T) {
+	base := auditRecord{
+		OperationID: "0123456789abcdef0123456789abcdef", Event: "provision_requested",
+		Action: "provision", Target: "pilot-test@staging", Service: "vultr.instance.create",
+	}
+	if !validAuditRecord(base) {
+		t.Fatal("expected valid provisioning audit record")
+	}
+	base.Target = "pilot-test@production@staging"
+	if validAuditRecord(base) {
+		t.Fatal("accepted malformed provisioning target")
+	}
+	base.Action, base.Target, base.Service, base.Event = "backup", "test-host", backupUnit, "provision_requested"
+	if validAuditRecord(base) {
+		t.Fatal("accepted provisioning event as backup audit record")
+	}
 }
 
 func TestBackupDefaultsToDryRunWithoutSSH(t *testing.T) {

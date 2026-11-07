@@ -74,7 +74,8 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - Implement the core and application services against the protocol.
 - Build a local CLI for inspection, config validation, plan/preview, and operation monitoring.
 - Implement Vultr hosting and standard OS selection.
-- Add Vultr create/adopt through an atomic, source-controlled capacity policy, initially limited to one controller-owned VM. The live production server may remain unmanaged.
+- [x] Add explicitly confirmed Vultr VM creation through an atomic, source-controlled capacity policy, initially limited to one controller-owned VM.
+- Add production adoption through the same policy; the live production server may remain unmanaged.
 - Apply versioned bootstrap scripts to new instances.
 - Implement Wasabi's S3-compatible storage adapter.
 - Implement the Minecraft Paper adapter.
@@ -155,7 +156,7 @@ The first end-to-end target is Vultr, Wasabi, Paper, and Velocity on Debian. Kee
 
 ## Current state and next work
 
-The Phase 1 package on main has met its exit criteria for protocol version `0.21.0-draft`. This untagged branch is development source, not an immutable interoperability snapshot. The supervised backup CLI is complete within its limited wrapper scope; it does not create VMs. A Vultr API client and capacity-backed create/reconciliation service now exist, with fake-provider tests. The service is not wired into the CLI, so the one-controller-owned-VM policy remains declarative in the shipped command. The live production server may remain unmanaged. Production adoption, destroy, and the CLI wiring are still future work. Running a supervised backup on an isolated test server and checking its artifacts/storage still needs an operator handoff.
+The Phase 1 package on main has met its exit criteria for protocol version `0.21.0-draft`. This untagged branch is development source, not an immutable interoperability snapshot. The pilot CLI can run the existing supervised backup and explicitly confirmed, capacity-backed Vultr VM creation under the source-controlled one-VM limit. The live production server may remain unmanaged. Production adoption, destroy, bootstrap, game readiness, Wasabi integration, and an isolated backup run are still future work. Running a supervised backup on an isolated test server and checking its artifacts/storage still needs an operator handoff.
 
 The schema package covers hosting, storage, execution, game, and integration operations, with typed results for all seven standard server operations. The protocol specification and compatibility rules have been reviewed. Go CI checks schemas, references, examples, OpenAPI 3.2.1 structure, and published conformance fixtures.
 

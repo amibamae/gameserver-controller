@@ -1,6 +1,6 @@
-# Supervised backup pilot
+# Supervised server pilot
 
-The pilot is a local CLI wrapper around the server's existing `minecraft-backup.service`. It does not install or replace the unit or the script that unit runs. Neither is stored in this repository; the server setup remains the source of truth.
+The pilot is a local CLI for inspecting the existing server, running its backup service, and creating a controller-owned Vultr VM under a hard capacity limit. It does not install or replace the existing `minecraft-backup.service` or the script it runs. Neither is stored in this repository; the server setup remains the source of truth.
 
 ## Commands and remote effects
 
@@ -10,6 +10,8 @@ The pilot is a local CLI wrapper around the server's existing `minecraft-backup.
 - Before and after an executed backup, the pilot runs read-only `sudo -n systemctl show --property=ActiveState,SubState,Result,ExecMainStatus,InvocationID minecraft-backup.service`.
 - The pilot sends no script path, script body, or custom unit arguments.
 - `gsc-pilot history` reads the local audit log and makes no SSH connection.
+- `gsc-pilot provision ...` defaults to a dry run. With explicit confirmation and a systemd credential, it reserves capacity and creates one Vultr VM; it does not install a game or claim readiness.
+- `gsc-pilot capacity` reports the policy limit and durable local reservations.
 
 The SSH account needs non-interactive sudo permission for the pilot's `systemctl show` and `systemctl start --wait` commands.
 
@@ -27,9 +29,28 @@ The pilot records an unknown outcome and will not retry if the post-run invocati
 
 The pilot does not stop Paper, restore a world, destroy a server, or install or change the backup service.
 
+## Vultr provisioning
+
+The [capacity policy](../pilot/capacity-policy.json) sets a source-controlled hard limit of **one controller-owned VM total**. The one slot can be production or the shared staging/testing slot. An existing live production server may remain unmanaged and does not consume this limit. Changing the cap requires editing the policy file, incrementing its version, validating it, and rebuilding the pilot.
+
+Provisioning is dry-run by default. For example:
+
+```sh
+gsc-pilot provision \
+  --server-id pilot-test --environment staging \
+  --region <vultr-region-id> --plan <vultr-plan-id> --os-id <vultr-os-id> \
+  --ssh-key-id <vultr-ssh-key-id>
+```
+
+Only after reviewing the dry run, an operator may add `--execute --confirm-create pilot-test@staging`. The command checks the source-controlled policy, durably reserves capacity before provider dispatch, and verifies the returned instance by exact ID and managed label. A confirmed create occupies the slot. An uncertain outcome also occupies it; rerun with the printed `--operation-id` and identical parameters to reconcile. The pilot never resends an uncertain create. A definitively rejected create releases its reservation.
+
+The provider key is read only through the configured systemd credential reference, defaulting to `systemd-credential://vultr-pilot-api-token`. Execute the command from a systemd-managed process that receives this named credential through `LoadCredentialEncrypted`; do not pass the key in arguments, environment variables, config, or logs. See [secret management](SECRET_MANAGEMENT.md). The repository does not yet include an operator unit or automate credential provisioning, so do not run the billable command until the host-side systemd credential setup has been reviewed.
+
+`gsc-pilot capacity` displays durable reservation state. The bbolt database is local state and must be backed up and protected like other controller state. Do not delete it to clear an occupied slot; reconcile the provider outcome first. This pilot does not yet adopt an existing VM, destroy an instance, install Paper, restore a world, configure DNS, or check game readiness.
+
 ## Operator handoff
 
-The repository's automated checks and this checklist do not claim that a live backup has been run. This is a supervised handoff, not a live-server validation report. The one-managed-VM policy below is declarative; the pilot CLI does not enforce it.
+The repository's automated checks and this checklist do not claim that a live backup has been run or that a Vultr VM has been created. This is a supervised handoff, not a live-resource validation report. Provisioning tests use fake providers.
 
 Before you execute:
 
@@ -46,39 +67,8 @@ Before you execute:
 6. Review the result and run `gsc-pilot history` as the same local user. If the result is `outcome_unknown`, do not retry; inspect service state and logs through the server's existing process first.
 7. After systemd reports success, verify that the expected backup artifacts exist. Then use the existing backup process to check storage and integrity. The `service_succeeded` event confirms the systemd invocation only.
 
-## Declarative VM capacity policy
-
-The [capacity policy file](../pilot/capacity-policy.json) sets an initial hard limit of **one controller-owned VM**. That single slot can serve production or one shared `staging`/`testing` VM. A live production VM may remain unmanaged and does not consume controller-owned capacity; production adoption is optional. A Vultr instance created by the controller counts as managed. Staging and testing share the one slot, so the controller cannot manage both at once.
-
-A Vultr create path must reserve a slot atomically before calling the provider. The reservation consumes capacity. Each controller-owned instance continues to count until Vultr confirms it is absent or destroyed. An unresolved create or destroy also consumes the slot. For an unknown create result, do not free capacity just because a list is empty. Reject unsupported environments, duplicate or occupied slot requests, and requests that exceed the limit. Production adoption remains optional and is not implemented yet.
-
-The intended hard-coded cap lives in source-controlled
-`pilot/capacity-policy.json`; it is not a runtime CLI flag or Go constant.
-Once the Vultr create/adopt path consumes this policy, maintainers can change
-the integer `max_instances_total`, increment `policy_version`, validate it
-with `go run ./cmd/pilot-capacity-check` from the repository root, and rebuild
-the pilot with the new cap. The total cannot exceed the sum of the declared
-per-environment slots. The checker covers free slots, unmanaged production,
-conflicts, unresolved outcomes, and confirmed release.
-
-The checker validates the policy file. The new internal `pilotvultr` service
-uses a supplied policy with the Vultr client, but the backup/status CLI does
-not call that service yet. Editing the file and rebuilding the current CLI does
-not change runtime behavior. The CLI still needs to load the checked-in policy
-before it can call the provider.
-
-The shared bbolt store has a durable reservation primitive that atomically
-checks the policy's total and group limits and keeps unresolved provider
-outcomes counted. The `pilotvultr` service calls it before a create, claims the
-dispatch once, and confirms the exact instance before marking it active. An
-unknown result is checked by its unique label and never resent; an empty list
-keeps the slot reserved. The service has fake-provider tests, but no CLI calls
-it yet, so the policy remains declarative in the shipped pilot command.
-
-**The policy is declarative only today.** The current `cmd/supervised-pilot` CLI supports backup, status, and local history. It cannot create or adopt Vultr instances.
-
 ## What the success event proves
 
 The `service_succeeded` audit event records a successful systemd invocation. It does not inspect the backup script, files, object storage, checksums, or world contents. Use the server's existing backup process to verify that a usable backup exists.
 
-The local audit log is `~/.local/state/gsc-pilot/operations.jsonl` with owner-only file permissions. Pilot tests use fake SSH; they do not run the service or connect to a live server.
+The local audit log is `~/.local/state/gsc-pilot/operations.jsonl` with owner-only file permissions. Pilot tests use fake SSH and fake Vultr APIs; they do not run the backup service, create a VM, or connect to a live server.
