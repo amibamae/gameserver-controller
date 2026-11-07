@@ -1,4 +1,3 @@
-/opt/homebrew/Library/Homebrew/cmd/shellenv.sh: line 18: /bin/ps: Operation not permitted
 # Release process
 
 Releases must be reproducible from reviewed source and must not depend on AI,
