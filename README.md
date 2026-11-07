@@ -4,7 +4,7 @@ Game Server Controller is a protocol-first design for automating disposable Mine
 
 I’m shaping the project around a real reference setup: Debian on Vultr, Minecraft Java with Paper, a Velocity proxy, and Wasabi object storage. Those tools are the first test of the design, not a limit on which providers or games the protocol can support.
 
-> **Current status: protocol design.** This repository contains draft specifications, JSON Schemas, examples, and conformance fixtures. It does not yet contain a full controller, management API implementation, or production adapters. It does include a Go protocol validator and a limited supervised backup pilot; neither is a general-purpose controller for a live server. The current schema snapshot is 0.21.0-draft. The initial implementation is in Go. Contributions in other languages are welcome, but alternate-language implementations are not a release requirement. See the [roadmap](docs/ROADMAP.md).
+> **Current status: Phase 1 protocol package complete for the current draft.** This repository contains reviewed draft specifications, JSON Schemas, examples, and conformance fixtures. It does not yet contain a full controller, management API implementation, or production adapters. It includes a Go protocol validator and a limited supervised backup pilot; neither is a general-purpose controller for a live server. The untagged development branch uses protocol version 0.21.0-draft. Go is the initial implementation language, and contributions in other languages are welcome but optional. See the [roadmap](docs/ROADMAP.md).
 
 ## Why I’m building it
 
