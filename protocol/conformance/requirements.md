@@ -49,7 +49,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Failed backup verification blocks destruction.
 
 ### Operations
-- Event sequence numbers increase monotonically per operation; consumers detect gaps and recover by reading the operation resource.
+- Event sequence numbers increase monotonically per operation; consumers ignore identical duplicate deliveries without reapplying them or regressing their cursor, detect gaps, and recover by reading the operation resource.
 - Successful standard operations validate their typed result schema and bind result server/environment/instance fields to the durable operation target.
 - `server.define` leaves the logical server `unprovisioned` and creates no external resource; `server.start` includes a readiness assertion bound to the exact instance; `server.stop` confirms game save and runtime termination.
 - Operation record commits before side effect.
@@ -136,6 +136,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [staging-production-write-denied.json](test-vectors/staging-production-write-denied.json)
 - [backup-stale-generation-blocks-destroy.json](test-vectors/backup-stale-generation-blocks-destroy.json)
 - [operation-event-sequence.json](test-vectors/operation-event-sequence.json)
+- [operation-event-duplicate-delivery.json](test-vectors/operation-event-duplicate-delivery.json)
 - [readiness-required-before-transfer.json](test-vectors/readiness-required-before-transfer.json)
 - [game-readiness-unknown-blocks-ready.json](test-vectors/game-readiness-unknown-blocks-ready.json)
 - [game-release-install-configure-fail-closed.json](test-vectors/game-release-install-configure-fail-closed.json)
