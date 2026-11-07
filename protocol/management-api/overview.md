@@ -31,7 +31,7 @@ Implementations MUST enforce per-resource authorization and environment scoping 
 
 ## 4. Operation request
 
-The request identifies an operation type and a type-specific parameter object. It includes an idempotency key in a documented header or request field. The server binds that key to actor, operation type, target, environment, and canonical validated parameters. A changed request with the same key returns conflict. An identical retry returns the original operation.
+The request identifies an operation type and a type-specific parameter object. Every mutating operation-acceptance request MUST include the `Idempotency-Key` HTTP header. Its value is case-sensitive and MUST contain 1–128 visible ASCII characters (U+0021 through U+007E). It is scoped to the authenticated actor and is not an authentication credential. The controller binds it to the actor, operation type, target, environment, and canonical validated parameters. A changed request with the same key returns `core.operation.idempotency_conflict`; an identical retry identifies the original operation while its full record is retained. After the full record has expired, a retained tombstone causes `core.operation.idempotency_key_expired` and prevents a new operation or dispatch. See [operation idempotency rules](../operations.md#7-idempotency-and-duplicate-requests) for retention details.
 
 For server-specific operations, the path server ID MUST match the corresponding target ID in the validated parameters. A restore request MUST identify one immutable backup. A destroy request MUST identify the intended target or bind to the current instance through a plan that is rechecked immediately before execution.
 
