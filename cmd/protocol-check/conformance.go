@@ -1537,7 +1537,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		destroyBackupBound := destroyParameters["verified_backup_id"] == nil ||
 			stringValue(destroyParameters, "verified_backup_id") == stringValue(destroyData, "verified_backup_id")
 		destroyResultBound := stringValue(destroyTarget, "environment_id") == stringValue(destroyInstance, "environment_id") &&
-			reflect.DeepEqual(destroyTarget["instance_ref"], destroyData["instance_ref"]) &&
+			reflect.DeepEqual(destroyInstance, destroyResultInstance) &&
 			reflect.DeepEqual(destroyTarget["instance_ref"], destroyParameters["expected_instance_ref"]) &&
 			stringValue(destroyData, "final_lifecycle_state") == "destroyed" &&
 			boolValue(destroyData, "provider_absence_confirmed") && destroyBackupBound &&
