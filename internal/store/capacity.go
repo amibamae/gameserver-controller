@@ -34,6 +34,7 @@ const (
 // OperationID is the idempotency identity; ResourceKey is assigned by the
 // controller before create/adopt so an ambiguous create can be reconciled.
 type CapacityReservation struct {
+	ProviderAdapterID  string                       `json:"provider_adapter_id,omitempty"`
 	OperationID        string                       `json:"operation_id"`
 	ServerID           string                       `json:"server_id"`
 	EnvironmentID      string                       `json:"environment_id"`
@@ -44,6 +45,8 @@ type CapacityReservation struct {
 	State              CapacityState                `json:"state"`
 	CreatedAt          time.Time                    `json:"created_at"`
 	UpdatedAt          time.Time                    `json:"updated_at"`
+	ProvisionedAt      time.Time                    `json:"provisioned_at,omitempty"`
+	ReadyAt            time.Time                    `json:"ready_at,omitempty"`
 	LastObservation    *CapacityProviderObservation `json:"last_observation,omitempty"`
 }
 
@@ -57,6 +60,7 @@ type CapacityProviderObservation struct {
 	ProviderInstanceID string    `json:"provider_instance_id,omitempty"`
 	State              string    `json:"state"`
 	ObservedAt         time.Time `json:"observed_at"`
+	ProvisionedAt      time.Time `json:"provisioned_at,omitempty"`
 }
 
 // ReserveCapacity atomically enforces the total and capacity-group limits.
@@ -180,6 +184,9 @@ func (s *BoltStore) ObserveCapacity(operationID string, observation CapacityProv
 	if observation.State == "present" && !validCapacityIdentifier(observation.ProviderInstanceID, 240) {
 		return CapacityReservation{}, fmt.Errorf("%w: present observation requires provider_instance_id", ErrInvalidRecord)
 	}
+	if !observation.ProvisionedAt.IsZero() && (observation.State != "present" || observation.ProvisionedAt.After(observation.ObservedAt)) {
+		return CapacityReservation{}, fmt.Errorf("%w: invalid provider provisioning timestamp", ErrInvalidRecord)
+	}
 	if observation.ProviderInstanceID != "" && !validCapacityIdentifier(observation.ProviderInstanceID, 240) {
 		return CapacityReservation{}, fmt.Errorf("%w: invalid provider_instance_id", ErrInvalidRecord)
 	}
@@ -189,6 +196,9 @@ func (s *BoltStore) ObserveCapacity(operationID string, observation CapacityProv
 		}
 		if observation.ObservedAt.Before(current.CreatedAt) {
 			return CapacityReservation{}, ErrCapacityConflict
+		}
+		if !observation.ProvisionedAt.IsZero() && observation.ProvisionedAt.Before(current.CreatedAt) {
+			return CapacityReservation{}, fmt.Errorf("%w: provider provisioning time precedes reservation", ErrInvalidRecord)
 		}
 		if current.LastObservation != nil {
 			if observation.ObservedAt.Before(current.LastObservation.ObservedAt) {
@@ -212,6 +222,9 @@ func (s *BoltStore) ObserveCapacity(operationID string, observation CapacityProv
 		switch observation.State {
 		case "present":
 			current.State = CapacityActive
+			if current.ProvisionedAt.IsZero() {
+				current.ProvisionedAt = observation.ProvisionedAt
+			}
 		case "absent":
 			current.State = CapacityAbsent
 		case "destroyed":
@@ -224,6 +237,122 @@ func (s *BoltStore) ObserveCapacity(operationID string, observation CapacityProv
 		current.LastObservation = &copyObservation
 		return current, nil
 	})
+}
+
+// RecordCapacityReady records the first exact Paper readiness timestamp for a
+// controller-owned provider instance. Adopted or unmanaged instances have no
+// capacity reservation and therefore do not create local boot samples.
+func (s *BoltStore) RecordCapacityReady(serverID, environmentID, providerInstanceID string, readyAt time.Time) (CapacityReservation, error) {
+	if !validCapacityIdentifier(serverID, 200) || !validCapacityIdentifier(environmentID, 200) ||
+		!validCapacityIdentifier(providerInstanceID, 240) || readyAt.IsZero() || readyAt.After(time.Now().UTC().Add(5*time.Minute)) {
+		return CapacityReservation{}, fmt.Errorf("%w: invalid readiness measurement", ErrInvalidRecord)
+	}
+	var result CapacityReservation
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		var err error
+		result, err = recordCapacityReadyTx(tx, serverID, environmentID, providerInstanceID, "", readyAt)
+		return err
+	})
+	return result, err
+}
+
+func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanceID, adapterID string, readyAt time.Time) (CapacityReservation, error) {
+	var result CapacityReservation
+	err := func() error {
+		bucket := tx.Bucket(capacityReservationsBucket)
+		cursor := bucket.Cursor()
+		found := false
+		var matchedKey []byte
+		for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+			current, err := decodeCapacityReservation(value)
+			if err != nil {
+				return err
+			}
+			if string(key) != current.OperationID {
+				return fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
+			}
+			if current.ServerID != serverID || current.EnvironmentID != environmentID || current.ProviderInstanceID != providerInstanceID || (adapterID != "" && current.ProviderAdapterID != adapterID) {
+				continue
+			}
+			if found {
+				return ErrCapacityConflict
+			}
+			found = true
+			matchedKey = append([]byte(nil), key...)
+			result = current
+		}
+		if !found {
+			return ErrCapacityNotFound
+		}
+		if result.State != CapacityActive || result.LastObservation == nil || result.LastObservation.State != "present" {
+			return ErrCapacityTransition
+		}
+		if readyAt.Before(result.CreatedAt) || (!result.ProvisionedAt.IsZero() && readyAt.Before(result.ProvisionedAt)) {
+			return ErrCapacityTransition
+		}
+		if !result.ReadyAt.IsZero() {
+			if !result.ReadyAt.Equal(readyAt) {
+				return ErrCapacityConflict
+			}
+			return nil
+		}
+		result.ReadyAt = readyAt.UTC()
+		result.UpdatedAt = time.Now().UTC()
+		if result.UpdatedAt.Before(result.ReadyAt) {
+			result.UpdatedAt = result.ReadyAt
+		}
+		if err := validatePersistedCapacityReservation(result); err != nil {
+			return fmt.Errorf("%w: invalid readiness measurement: %v", ErrInvalidRecord, err)
+		}
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			return fmt.Errorf("encode capacity readiness measurement: %w", err)
+		}
+		if err := bucket.Put(matchedKey, encoded); err != nil {
+			return err
+		}
+		return nil
+	}()
+	return result, err
+}
+
+// recordSuccessfulBootTx ties the advisory sample to the committed start result.
+// Missing reservations and already-recorded first boots are normal: unmanaged
+// servers and subsequent starts do not create a new provision-to-ready sample.
+func recordSuccessfulBootTx(tx *bolt.Tx, operation OperationRecord, server LogicalServer) error {
+	if operation.OperationType != "server.start" || operation.Status != "succeeded" || server.LifecycleState != "ready" {
+		return nil
+	}
+	var result struct {
+		Data struct {
+			Assertion struct {
+				ServerID      string          `json:"server_id"`
+				EnvironmentID string          `json:"environment_id"`
+				InstanceRef   json.RawMessage `json:"instance_ref"`
+				ObservedAt    time.Time       `json:"observed_at"`
+			} `json:"readiness_assertion"`
+		} `json:"operation_data"`
+	}
+	if json.Unmarshal(operation.Result, &result) != nil {
+		return nil
+	}
+	assertion := result.Data.Assertion
+	if assertion.ServerID != server.ServerID || assertion.EnvironmentID != server.EnvironmentID ||
+		!equalCanonicalJSON(assertion.InstanceRef, server.InstanceRef) || assertion.ObservedAt.IsZero() {
+		return nil
+	}
+	var instance struct {
+		ExternalID string `json:"external_id"`
+		AdapterID  string `json:"adapter_id"`
+	}
+	if json.Unmarshal(server.InstanceRef, &instance) != nil || instance.ExternalID == "" || instance.AdapterID == "" {
+		return nil
+	}
+	_, err := recordCapacityReadyTx(tx, server.ServerID, server.EnvironmentID, instance.ExternalID, instance.AdapterID, assertion.ObservedAt)
+	if errors.Is(err, ErrCapacityNotFound) || errors.Is(err, ErrCapacityConflict) || errors.Is(err, ErrCapacityTransition) {
+		return nil
+	}
+	return err
 }
 
 func (s *BoltStore) GetCapacityReservation(operationID string) (CapacityReservation, error) {
@@ -294,11 +423,26 @@ func (s *BoltStore) updateCapacity(operationID string, transition func(CapacityR
 		if err != nil {
 			return err
 		}
-		if next.OperationID != current.OperationID || next.CreatedAt != current.CreatedAt {
+		if next.OperationID != current.OperationID || next.CreatedAt != current.CreatedAt || next.ProviderAdapterID != current.ProviderAdapterID ||
+			(!current.ProvisionedAt.IsZero() && !next.ProvisionedAt.Equal(current.ProvisionedAt)) ||
+			(!current.ReadyAt.IsZero() && !next.ReadyAt.Equal(current.ReadyAt)) {
 			return fmt.Errorf("%w: immutable capacity reservation fields changed", ErrCorruptStore)
 		}
-		if next.State != current.State || next.ProviderInstanceID != current.ProviderInstanceID || next.LastObservation != current.LastObservation {
+		if next.State != current.State || next.ProviderInstanceID != current.ProviderInstanceID || next.LastObservation != current.LastObservation ||
+			!next.ProvisionedAt.Equal(current.ProvisionedAt) || !next.ReadyAt.Equal(current.ReadyAt) {
 			next.UpdatedAt = time.Now().UTC()
+			if next.LastObservation != nil && next.UpdatedAt.Before(next.LastObservation.ObservedAt) {
+				next.UpdatedAt = next.LastObservation.ObservedAt
+			}
+			if next.UpdatedAt.Before(next.ProvisionedAt) {
+				next.UpdatedAt = next.ProvisionedAt
+			}
+			if next.UpdatedAt.Before(next.ReadyAt) {
+				next.UpdatedAt = next.ReadyAt
+			}
+			if err := validatePersistedCapacityReservation(next); err != nil {
+				return fmt.Errorf("%w: invalid updated capacity reservation: %v", ErrInvalidRecord, err)
+			}
 			encoded, err := json.Marshal(next)
 			if err != nil {
 				return fmt.Errorf("encode capacity reservation: %w", err)
@@ -328,16 +472,23 @@ func decodeCapacityReservation(value []byte) (CapacityReservation, error) {
 }
 
 func validateCapacityReservationRequest(reservation CapacityReservation) error {
+	if reservation.ProviderAdapterID != "" && !validCapacityIdentifier(reservation.ProviderAdapterID, 160) {
+		return ErrInvalidRecord
+	}
 	if !validCapacityIdentifier(reservation.OperationID, 200) || !validCapacityIdentifier(reservation.ServerID, 200) ||
 		!validCapacityIdentifier(reservation.EnvironmentID, 200) || !validCapacityIdentifier(reservation.CapacityGroup, 100) ||
 		!validCapacityIdentifier(reservation.Provider, 100) || !validCapacityIdentifier(reservation.ResourceKey, 240) ||
-		reservation.ProviderInstanceID != "" || reservation.State != "" || !reservation.CreatedAt.IsZero() || !reservation.UpdatedAt.IsZero() || reservation.LastObservation != nil {
+		reservation.ProviderInstanceID != "" || reservation.State != "" || !reservation.CreatedAt.IsZero() || !reservation.UpdatedAt.IsZero() ||
+		!reservation.ProvisionedAt.IsZero() || !reservation.ReadyAt.IsZero() || reservation.LastObservation != nil {
 		return fmt.Errorf("%w: invalid capacity reservation request", ErrInvalidRecord)
 	}
 	return nil
 }
 
 func validatePersistedCapacityReservation(reservation CapacityReservation) error {
+	if reservation.ProviderAdapterID != "" && !validCapacityIdentifier(reservation.ProviderAdapterID, 160) {
+		return ErrInvalidRecord
+	}
 	if !validCapacityIdentifier(reservation.OperationID, 200) || !validCapacityIdentifier(reservation.ServerID, 200) ||
 		!validCapacityIdentifier(reservation.EnvironmentID, 200) || !validCapacityIdentifier(reservation.CapacityGroup, 100) ||
 		!validCapacityIdentifier(reservation.Provider, 100) || !validCapacityIdentifier(reservation.ResourceKey, 240) ||
@@ -352,6 +503,13 @@ func validatePersistedCapacityReservation(reservation CapacityReservation) error
 	if reservation.State == CapacityActive && !validCapacityIdentifier(reservation.ProviderInstanceID, 240) {
 		return ErrInvalidRecord
 	}
+	if !reservation.ProvisionedAt.IsZero() && (reservation.ProvisionedAt.Before(reservation.CreatedAt) || reservation.ProvisionedAt.After(reservation.UpdatedAt)) {
+		return ErrInvalidRecord
+	}
+	if !reservation.ReadyAt.IsZero() && (reservation.ReadyAt.Before(reservation.CreatedAt) ||
+		(!reservation.ProvisionedAt.IsZero() && reservation.ReadyAt.Before(reservation.ProvisionedAt)) || reservation.ReadyAt.After(reservation.UpdatedAt)) {
+		return ErrInvalidRecord
+	}
 	if reservation.LastObservation != nil {
 		observation := reservation.LastObservation
 		if observation.Provider != reservation.Provider || observation.ResourceKey != reservation.ResourceKey || observation.ObservedAt.Before(reservation.CreatedAt) ||
@@ -360,6 +518,9 @@ func validatePersistedCapacityReservation(reservation CapacityReservation) error
 		}
 		if observation.ProviderInstanceID != "" && (!validCapacityIdentifier(observation.ProviderInstanceID, 240) ||
 			(reservation.ProviderInstanceID != "" && reservation.ProviderInstanceID != observation.ProviderInstanceID)) {
+			return ErrInvalidRecord
+		}
+		if !observation.ProvisionedAt.IsZero() && (observation.State != "present" || observation.ProvisionedAt.After(observation.ObservedAt)) {
 			return ErrInvalidRecord
 		}
 		switch observation.State {
@@ -378,7 +539,7 @@ func validatePersistedCapacityReservation(reservation CapacityReservation) error
 func sameCapacityRequest(existing, requested CapacityReservation) bool {
 	return existing.OperationID == requested.OperationID && existing.ServerID == requested.ServerID &&
 		existing.EnvironmentID == requested.EnvironmentID && existing.CapacityGroup == requested.CapacityGroup &&
-		existing.Provider == requested.Provider && existing.ResourceKey == requested.ResourceKey
+		existing.Provider == requested.Provider && existing.ProviderAdapterID == requested.ProviderAdapterID && existing.ResourceKey == requested.ResourceKey
 }
 
 func capacityStateReleased(state CapacityState) bool {
@@ -388,7 +549,7 @@ func capacityStateReleased(state CapacityState) bool {
 func sameCapacityObservation(left, right CapacityProviderObservation) bool {
 	return left.Provider == right.Provider && left.ResourceKey == right.ResourceKey &&
 		left.ProviderInstanceID == right.ProviderInstanceID && left.State == right.State &&
-		left.ObservedAt.Equal(right.ObservedAt)
+		left.ObservedAt.Equal(right.ObservedAt) && left.ProvisionedAt.Equal(right.ProvisionedAt)
 }
 
 func validCapacityIdentifier(value string, max int) bool {

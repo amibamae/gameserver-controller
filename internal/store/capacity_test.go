@@ -1,11 +1,14 @@
 package store
 
 import (
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
+
+	bolt "go.etcd.io/bbolt"
 )
 
 func TestReserveCapacityIsAtomicAcrossConcurrentCreates(t *testing.T) {
@@ -264,6 +267,142 @@ func TestObserveCapacityRequiresMatchingFreshProviderEvidence(t *testing.T) {
 	}
 }
 
+func TestCapacityRecordsExactProvisionAndPaperReadinessTimes(t *testing.T) {
+	repository := openTestStore(t)
+	reservation, _, err := repository.ReserveCapacity(capacityRequest("op-boot", "server-boot", "staging", "shared_nonproduction"), 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provisionedAt := time.Now().UTC()
+	observedAt := time.Now().UTC()
+	if observedAt.Before(provisionedAt) {
+		observedAt = provisionedAt
+	}
+	reservation, err = repository.ObserveCapacity(reservation.OperationID, CapacityProviderObservation{
+		Provider: reservation.Provider, ResourceKey: reservation.ResourceKey,
+		ProviderInstanceID: "vm-boot", State: "present", ObservedAt: observedAt, ProvisionedAt: provisionedAt,
+	})
+	if err != nil || !reservation.ProvisionedAt.Equal(provisionedAt) {
+		t.Fatalf("provisioning timestamp = %s, err=%v", reservation.ProvisionedAt, err)
+	}
+	readyAt := time.Now().UTC()
+	if readyAt.Before(provisionedAt) {
+		t.Fatal("test clock moved backwards")
+	}
+	reservation, err = repository.RecordCapacityReady("server-boot", "staging", "vm-boot", readyAt)
+	if err != nil || !reservation.ReadyAt.Equal(readyAt) {
+		t.Fatalf("Paper readiness timestamp = %s, err=%v", reservation.ReadyAt, err)
+	}
+	loaded, err := repository.GetCapacityReservation("op-boot")
+	if err != nil || !loaded.ProvisionedAt.Equal(provisionedAt) || !loaded.ReadyAt.Equal(readyAt) {
+		t.Fatalf("persisted boot interval = %s..%s, err=%v", loaded.ProvisionedAt, loaded.ReadyAt, err)
+	}
+	if replay, err := repository.RecordCapacityReady("server-boot", "staging", "vm-boot", readyAt); err != nil || !replay.ReadyAt.Equal(readyAt) {
+		t.Fatalf("idempotent readiness record = %s, err=%v", replay.ReadyAt, err)
+	}
+	if _, err := repository.RecordCapacityReady("server-boot", "staging", "vm-boot", readyAt.Add(time.Second)); !errors.Is(err, ErrCapacityConflict) {
+		t.Fatalf("changed readiness timestamp returned %v, want conflict", err)
+	}
+}
+
+func TestCapacityKeepsUnknownProvisioningTimeAndStillRecordsReadiness(t *testing.T) {
+	repository := openTestStore(t)
+	reservation, _, err := repository.ReserveCapacity(capacityRequest("op-unknown-boot", "server-unknown-boot", "staging", "shared_nonproduction"), 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observedAt := time.Now().UTC().Add(time.Second)
+	reservation, err = repository.ObserveCapacity(reservation.OperationID, CapacityProviderObservation{
+		Provider: reservation.Provider, ResourceKey: reservation.ResourceKey,
+		ProviderInstanceID: "vm-unknown-boot", State: "present", ObservedAt: observedAt,
+	})
+	if err != nil || reservation.State != CapacityActive || !reservation.ProvisionedAt.IsZero() {
+		t.Fatalf("active reservation with unknown provision time = (%+v, %v)", reservation, err)
+	}
+	readyAt := observedAt.Add(time.Second)
+	reservation, err = repository.RecordCapacityReady("server-unknown-boot", "staging", "vm-unknown-boot", readyAt)
+	if err != nil || !reservation.ReadyAt.Equal(readyAt) || !reservation.ProvisionedAt.IsZero() {
+		t.Fatalf("readiness with unknown provision time = (%+v, %v)", reservation, err)
+	}
+	loaded, err := repository.GetCapacityReservation("op-unknown-boot")
+	if err != nil || loaded.State != CapacityActive || !loaded.ProvisionedAt.IsZero() || !loaded.ReadyAt.Equal(readyAt) {
+		t.Fatalf("reloaded reservation with unknown provision time = (%+v, %v)", loaded, err)
+	}
+}
+
+func TestObserveCapacityRejectsProvisionTimeBeforeReservation(t *testing.T) {
+	repository := openTestStore(t)
+	reservation, _, err := repository.ReserveCapacity(capacityRequest("op-early-boot", "server-early-boot", "staging", "shared_nonproduction"), 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	observation := CapacityProviderObservation{
+		Provider: reservation.Provider, ResourceKey: reservation.ResourceKey,
+		ProviderInstanceID: "vm-early-boot", State: "present",
+		ObservedAt:    reservation.CreatedAt.Add(time.Second),
+		ProvisionedAt: reservation.CreatedAt.Add(-time.Second),
+	}
+	if _, err := repository.ObserveCapacity(reservation.OperationID, observation); !errors.Is(err, ErrInvalidRecord) {
+		t.Fatalf("pre-reservation provider timestamp returned %v, want ErrInvalidRecord", err)
+	}
+	loaded, err := repository.GetCapacityReservation(reservation.OperationID)
+	if err != nil || loaded.State != CapacityReserved || !loaded.ProvisionedAt.IsZero() {
+		t.Fatalf("reservation after rejected observation = (%+v, %v)", loaded, err)
+	}
+}
+
+func TestRecordCapacityReadyRejectsNonActiveReservations(t *testing.T) {
+	for _, providerState := range []string{"absent", "destroyed"} {
+		t.Run(providerState, func(t *testing.T) {
+			repository := openTestStore(t)
+			operationID := "op-ready-after-" + providerState
+			reservation, _, err := repository.ReserveCapacity(capacityRequest(operationID, "server-ready-after-"+providerState, "staging", "shared_nonproduction"), 1, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			presentAt := time.Now().UTC().Add(time.Second)
+			reservation, err = repository.ObserveCapacity(operationID, CapacityProviderObservation{
+				Provider: reservation.Provider, ResourceKey: reservation.ResourceKey,
+				ProviderInstanceID: "vm-ready-after-" + providerState, State: "present",
+				ObservedAt: presentAt, ProvisionedAt: reservation.CreatedAt,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if providerState == "destroyed" {
+				if _, err := repository.MarkCapacityDestroySent(operationID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			observedAt := presentAt.Add(time.Second)
+			reservation, err = repository.ObserveCapacity(operationID, CapacityProviderObservation{
+				Provider: reservation.Provider, ResourceKey: reservation.ResourceKey,
+				ProviderInstanceID: reservation.ProviderInstanceID, State: providerState, ObservedAt: observedAt,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := repository.RecordCapacityReady(reservation.ServerID, reservation.EnvironmentID, reservation.ProviderInstanceID, observedAt.Add(time.Second)); !errors.Is(err, ErrCapacityTransition) {
+				t.Fatalf("readiness after %s provider observation returned %v, want ErrCapacityTransition", providerState, err)
+			}
+		})
+	}
+}
+
+func TestCapacityRejectsReadinessForUntrackedOrPrematureInstances(t *testing.T) {
+	repository := openTestStore(t)
+	if _, err := repository.RecordCapacityReady("server-boot", "staging", "untracked", time.Now().UTC()); !errors.Is(err, ErrCapacityNotFound) {
+		t.Fatalf("unmanaged instance readiness returned %v, want not found", err)
+	}
+	reservation, _, err := repository.ReserveCapacity(capacityRequest("op-premature", "server-boot", "staging", "shared_nonproduction"), 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.RecordCapacityReady(reservation.ServerID, reservation.EnvironmentID, "vm-premature", time.Now().UTC()); !errors.Is(err, ErrCapacityNotFound) {
+		t.Fatalf("unprovisioned reservation readiness returned %v, want not found", err)
+	}
+}
+
 func capacityRequest(operationID, serverID, environmentID, group string) CapacityReservation {
 	return CapacityReservation{
 		OperationID: operationID, ServerID: serverID, EnvironmentID: environmentID,
@@ -282,5 +421,66 @@ func assertCapacityBlocked(t *testing.T, store *BoltStore, operationID, serverID
 	t.Helper()
 	if _, _, err := store.ReserveCapacity(capacityRequest(operationID, serverID, environmentID, group), totalLimit, groupLimit); !errors.Is(err, ErrCapacityReached) {
 		t.Fatalf("reservation while unresolved state occupies capacity: got %v, want ErrCapacityReached", err)
+	}
+}
+
+func TestCapacityReadinessRollsBackWithLifecycleTransaction(t *testing.T) {
+	repository := openTestStore(t)
+	reservation, _, err := repository.ReserveCapacity(capacityRequest("atomic-boot", "atomic-server", "staging", "staging"), 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	_, err = repository.ObserveCapacity(reservation.OperationID, CapacityProviderObservation{Provider: reservation.Provider, ResourceKey: reservation.ResourceKey, ProviderInstanceID: "atomic-vm", State: "present", ObservedAt: now, ProvisionedAt: now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	abort := errors.New("lifecycle transaction failed")
+	err = repository.db.Update(func(tx *bolt.Tx) error {
+		if _, err := recordCapacityReadyTx(tx, "atomic-server", "staging", "atomic-vm", "", now.Add(time.Second)); err != nil {
+			return err
+		}
+		return abort
+	})
+	if !errors.Is(err, abort) {
+		t.Fatal(err)
+	}
+	loaded, err := repository.GetCapacityReservation(reservation.OperationID)
+	if err != nil || !loaded.ReadyAt.IsZero() {
+		t.Fatalf("rolled-back lifecycle published readiness: %+v, %v", loaded, err)
+	}
+}
+
+func TestSuccessfulBootRequiresExactHostingAdapter(t *testing.T) {
+	for _, adapterID := range []string{"hosting.vultr", "hosting.other", ""} {
+		t.Run(adapterID, func(t *testing.T) {
+			repository := openTestStore(t)
+			request := capacityRequest("adapter-boot", "adapter-server", "staging", "staging")
+			request.ProviderAdapterID = adapterID
+			reservation, _, err := repository.ReserveCapacity(request, 1, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			now := time.Now().UTC()
+			_, err = repository.ObserveCapacity(reservation.OperationID, CapacityProviderObservation{Provider: request.Provider, ResourceKey: request.ResourceKey, ProviderInstanceID: "shared-id", State: "present", ObservedAt: now, ProvisionedAt: now})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ref := json.RawMessage(`{"adapter_id":"hosting.vultr","environment_id":"staging","resource_kind":"instance","external_id":"shared-id"}`)
+			result, err := json.Marshal(map[string]any{"operation_data": map[string]any{"readiness_assertion": map[string]any{"server_id": "adapter-server", "environment_id": "staging", "instance_ref": ref, "observed_at": now.Add(time.Second)}}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = repository.db.Update(func(tx *bolt.Tx) error {
+				return recordSuccessfulBootTx(tx, OperationRecord{OperationType: "server.start", Status: "succeeded", Result: result}, LogicalServer{ServerID: "adapter-server", EnvironmentID: "staging", InstanceRef: ref, LifecycleState: "ready"})
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := repository.GetCapacityReservation(reservation.OperationID)
+			if err != nil || (!loaded.ReadyAt.IsZero()) != (adapterID == "hosting.vultr") {
+				t.Fatalf("adapter %q timing = %+v, err=%v", adapterID, loaded, err)
+			}
+		})
 	}
 }

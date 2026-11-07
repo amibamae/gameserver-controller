@@ -264,10 +264,10 @@ func TestGetInstanceUsesExactIDAndValidatesResponse(t *testing.T) {
 		if r.Method != http.MethodGet || r.URL.Path != "/v2/instances/inst-123" {
 			t.Errorf("unexpected get request: %s %s", r.Method, r.URL.Path)
 		}
-		_, _ = fmt.Fprint(w, `{"instance":{"id":"inst-123","label":"gsc-managed-42"}}`)
+		_, _ = fmt.Fprint(w, `{"instance":{"id":"inst-123","label":"gsc-managed-42","date_created":"2026-11-07T10:00:00+00:00"}}`)
 	})
 	instance, err := client.GetInstance(context.Background(), []byte(testToken), "inst-123")
-	if err != nil || instance.ID != "inst-123" {
+	if err != nil || instance.ID != "inst-123" || instance.DateCreated != "2026-11-07T10:00:00+00:00" {
 		t.Fatalf("GetInstance = %#v, %v", instance, err)
 	}
 }

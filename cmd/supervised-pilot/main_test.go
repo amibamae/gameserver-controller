@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
@@ -233,6 +235,146 @@ func TestCapacityCommandShowsPersistedReservations(t *testing.T) {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("capacity output %q does not include %q", output, expected)
 		}
+	}
+}
+
+func TestBootStatusKeepsProgressIndeterminateUntilEnoughLocalSamples(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "pilot.db")
+	repository, err := store.OpenBolt(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reservation, _, err := repository.ReserveCapacity(store.CapacityReservation{
+		OperationID: "0123456789abcdef0123456789abcdef", ServerID: "pilot-test",
+		EnvironmentID: "staging", CapacityGroup: "shared_nonproduction",
+		Provider: "vultr", ResourceKey: "gsc-boot-status",
+	}, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provisionedAt := time.Now().UTC()
+	if _, err := repository.ObserveCapacity(reservation.OperationID, store.CapacityProviderObservation{
+		Provider: reservation.Provider, ResourceKey: reservation.ResourceKey, ProviderInstanceID: "vm-boot-status",
+		State: "present", ObservedAt: provisionedAt, ProvisionedAt: provisionedAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var output bytes.Buffer
+	if err := showBootStatus("pilot-test", "staging", statePath, provisionedAt.Add(5*time.Minute), &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "Paper readiness is pending") || !strings.Contains(output.String(), "Estimate and progress are indeterminate (0 completed boot sample(s); 3 required)") {
+		t.Fatalf("boot-status output = %q", output.String())
+	}
+
+	repository, err = store.OpenBolt(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readyAt := provisionedAt.Add(time.Second)
+	if _, err := repository.RecordCapacityReady("pilot-test", "staging", "vm-boot-status", readyAt); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+	output.Reset()
+	if err := showBootStatus("pilot-test", "staging", statePath, readyAt, &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "Paper readiness was confirmed") || !strings.Contains(output.String(), "100% (initial boot completed)") {
+		t.Fatalf("ready boot-status output = %q", output.String())
+	}
+
+	repository, err = store.OpenBolt(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.MarkCapacityDestroySent("0123456789abcdef0123456789abcdef"); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+	output.Reset()
+	if err := showBootStatus("pilot-test", "staging", statePath, readyAt.Add(time.Second), &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "previously confirmed") || !strings.Contains(output.String(), "destroy_outcome_unknown") ||
+		strings.Contains(output.String(), "100% (initial boot completed)") {
+		t.Fatalf("destroying boot-status output = %q", output.String())
+	}
+}
+
+func TestBootStatusUsesLocalBootSamplesForCappedProgress(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "pilot.db")
+	repository, err := store.OpenBolt(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, duration := range []time.Duration{time.Second, 2 * time.Second, 3 * time.Second} {
+		operationID := fmt.Sprintf("%032x", i+1)
+		instanceID := fmt.Sprintf("vm-history-%d", i+1)
+		reservation, _, err := repository.ReserveCapacity(store.CapacityReservation{
+			OperationID: operationID, ServerID: "pilot-test", EnvironmentID: "staging",
+			CapacityGroup: "shared_nonproduction", Provider: "vultr", ResourceKey: "gsc-history-" + instanceID,
+		}, 1, 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		provisionedAt := time.Now().UTC()
+		observedAt := time.Now().UTC()
+		if _, err := repository.ObserveCapacity(reservation.OperationID, store.CapacityProviderObservation{
+			Provider: reservation.Provider, ResourceKey: reservation.ResourceKey, ProviderInstanceID: instanceID,
+			State: "present", ObservedAt: observedAt, ProvisionedAt: provisionedAt,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repository.RecordCapacityReady("pilot-test", "staging", instanceID, provisionedAt.Add(duration)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := repository.MarkCapacityDestroySent(operationID); err != nil {
+			t.Fatal(err)
+		}
+		destroyedAt := time.Now().UTC()
+		if destroyedAt.Before(observedAt) {
+			destroyedAt = observedAt
+		}
+		if _, err := repository.ObserveCapacity(operationID, store.CapacityProviderObservation{
+			Provider: reservation.Provider, ResourceKey: reservation.ResourceKey,
+			ProviderInstanceID: instanceID, State: "destroyed", ObservedAt: destroyedAt,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	current, _, err := repository.ReserveCapacity(store.CapacityReservation{
+		OperationID: "fedcba9876543210fedcba9876543210", ServerID: "pilot-test", EnvironmentID: "staging",
+		CapacityGroup: "shared_nonproduction", Provider: "vultr", ResourceKey: "gsc-current-boot",
+	}, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provisionedAt := time.Now().UTC()
+	if _, err := repository.ObserveCapacity(current.OperationID, store.CapacityProviderObservation{
+		Provider: current.Provider, ResourceKey: current.ResourceKey, ProviderInstanceID: "vm-current",
+		State: "present", ObservedAt: provisionedAt, ProvisionedAt: provisionedAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	var output bytes.Buffer
+	if err := showBootStatus("pilot-test", "staging", statePath, provisionedAt.Add(time.Second), &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), "Estimated total: 4s") || !strings.Contains(output.String(), "Progress: [") || strings.Contains(output.String(), "Progress: [####################] 100%") {
+		t.Fatalf("boot-status did not show the buffered local estimate below ready: %q", output.String())
 	}
 }
 

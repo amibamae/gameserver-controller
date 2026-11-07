@@ -126,7 +126,7 @@ func successfulProvider() *scriptedProvider {
 		return vultrapi.Instance{ID: "instance-1", Label: request.Label, Status: "pending"}, nil
 	}
 	provider.get = func(_ context.Context, _ []byte, id string) (vultrapi.Instance, error) {
-		return vultrapi.Instance{ID: id, Label: label, Status: "pending"}, nil
+		return vultrapi.Instance{ID: id, Label: label, Status: "pending", DateCreated: time.Now().UTC().Format(time.RFC3339Nano)}, nil
 	}
 	provider.list = func(context.Context, []byte, string) ([]vultrapi.Instance, error) { return nil, nil }
 	return provider
@@ -151,6 +151,9 @@ func TestProvisionReservesBeforeCreateAndIsIdempotent(t *testing.T) {
 	}
 	if reservation.State != store.CapacityActive || reservation.ProviderInstanceID != "instance-1" {
 		t.Fatalf("unexpected reservation: %+v", reservation)
+	}
+	if reservation.ProvisionedAt.IsZero() || reservation.ProvisionedAt.Before(reservation.CreatedAt) || reservation.ProvisionedAt.After(reservation.UpdatedAt) {
+		t.Fatalf("provider creation time was not persisted: %+v", reservation)
 	}
 	if !strings.HasPrefix(reservation.ResourceKey, "gsc-managed-"+input.OperationID+"-") {
 		t.Fatalf("unexpected reconciliation label: %q", reservation.ResourceKey)
@@ -195,6 +198,29 @@ func TestProvisionEnforcesTotalCapacityBeforeProviderCall(t *testing.T) {
 	created, _, _ := provider.counts()
 	if created != 1 {
 		t.Fatalf("provider create calls = %d, want 1", created)
+	}
+}
+
+func TestProvisionLeavesUnknownWhenProviderCreationTimestampIsInvalid(t *testing.T) {
+	provider := successfulProvider()
+	get := provider.get
+	provider.get = func(ctx context.Context, token []byte, id string) (vultrapi.Instance, error) {
+		instance, err := get(ctx, token, id)
+		instance.DateCreated = "invalid-provider-timestamp"
+		return instance, err
+	}
+	provisioner, repository, _ := newTestProvisioner(t, provider)
+	reservation, err := provisioner.Provision(context.Background(), request("abcdef0123456789abcdef0123456789", "pilot-timestamp", "staging"))
+	if err != nil {
+		t.Fatalf("Provision: %v", err)
+	}
+	if reservation.State != store.CapacityActive || !reservation.ProvisionedAt.IsZero() || reservation.LastObservation == nil ||
+		!reservation.LastObservation.ProvisionedAt.IsZero() {
+		t.Fatalf("invalid provider timestamp was not preserved as unknown: %+v", reservation)
+	}
+	loaded, err := repository.GetCapacityReservation(reservation.OperationID)
+	if err != nil || loaded.State != store.CapacityActive || !loaded.ProvisionedAt.IsZero() {
+		t.Fatalf("reservation with unknown provider time cannot be reloaded: %+v, %v", loaded, err)
 	}
 }
 

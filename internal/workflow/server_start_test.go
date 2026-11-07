@@ -43,6 +43,10 @@ func TestServerStartRunsDurablePlanAndProjectsReady(t *testing.T) {
 	if err != nil || server.Record.LifecycleState != protocolstate.ServerReady || server.Record.DesiredState != "running" {
 		t.Fatalf("logical server state = %#v, err=%v; want ready/running", server.Record, err)
 	}
+	reservations, err := fixture.store.ListCapacityReservations()
+	if err != nil || len(reservations) != 1 || reservations[0].ReadyAt.IsZero() || reservations[0].ReadyAt.Before(reservations[0].ProvisionedAt) {
+		t.Fatalf("local provision-to-Paper-ready interval = %#v, err=%v", reservations, err)
+	}
 	if len(server.Record.LifecycleEvents) < 3 || server.Record.LifecycleEvents[len(server.Record.LifecycleEvents)-1].ToState != protocolstate.ServerReady ||
 		server.Record.LifecycleEvents[len(server.Record.LifecycleEvents)-2].ToState != protocolstate.ServerValidating ||
 		server.Record.LifecycleEvents[len(server.Record.LifecycleEvents)-3].ToState != protocolstate.ServerStarting {
@@ -126,6 +130,10 @@ func TestServerStartFailsClosedWhenReadinessIsUnknown(t *testing.T) {
 	}
 	if err := json.Unmarshal(completed.Record.Result, &result); err != nil || !result.Partial {
 		t.Fatalf("failed start result should report a partial effect: %s, %v", completed.Record.Result, err)
+	}
+	reservations, err := fixture.store.ListCapacityReservations()
+	if err != nil || len(reservations) != 1 || !reservations[0].ReadyAt.IsZero() {
+		t.Fatalf("failed readiness recorded a completed boot sample: %#v, err=%v", reservations, err)
 	}
 }
 
@@ -234,6 +242,22 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 		t.Fatal(err)
 	}
 	if err := seedStoppedStartTestServer(operationStore, schemas.ProtocolVersion()); err != nil {
+		t.Fatal(err)
+	}
+	capacity, _, err := operationStore.ReserveCapacity(store.CapacityReservation{
+		OperationID: "start-test-capacity", ServerID: startTestServerID, EnvironmentID: startTestEnvID,
+		CapacityGroup: "shared_nonproduction", Provider: "vultr", ProviderAdapterID: "hosting.fake", ResourceKey: "gsc-start-test",
+	}, 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provisionedAt := time.Now().UTC()
+	providerObservedAt := time.Now().UTC()
+	capacity, err = operationStore.ObserveCapacity(capacity.OperationID, store.CapacityProviderObservation{
+		Provider: capacity.Provider, ResourceKey: capacity.ResourceKey, ProviderInstanceID: "vm-start-test",
+		State: "present", ObservedAt: providerObservedAt, ProvisionedAt: provisionedAt,
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	parameters := json.RawMessage(`{}`)

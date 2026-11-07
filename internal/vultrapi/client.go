@@ -45,6 +45,7 @@ type Client struct {
 // fields returned by Vultr are intentionally ignored for forward compatibility.
 type Instance struct {
 	ID          string   `json:"id"`
+	DateCreated string   `json:"date_created,omitempty"`
 	Region      string   `json:"region"`
 	Plan        string   `json:"plan"`
 	OSID        int      `json:"os_id"`
