@@ -324,6 +324,15 @@
       "minLength": 1,
       "maxLength": 200,
       "description": "Optional immutable identifier for the exact schema/specification package used to accept this operation, such as a release tag or content digest."
+    },
+    "backup_initial_lifecycle_state": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "degraded",
+        "stopped"
+      ],
+      "description": "Core-owned immutable lifecycle state captured for server.backup immediately before its first backup-related lifecycle transition or adapter dispatch. It is not request or adapter data."
     }
   },
   "allOf": [
@@ -675,6 +684,291 @@
                 "properties": {
                   "final_lifecycle_state": {
                     "const": "stopped"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          },
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation_type",
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "backup_initial_lifecycle_state"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          },
+          "status": {
+            "const": "succeeded"
+          },
+          "backup_initial_lifecycle_state": {
+            "const": "stopped"
+          },
+          "request_snapshot": {
+            "properties": {
+              "parameters": {
+                "properties": {
+                  "resume_after_backup": {
+                    "not": {
+                      "const": true
+                    }
+                  }
+                }
+              }
+            },
+            "required": [
+              "parameters"
+            ]
+          }
+        },
+        "required": [
+          "operation_type",
+          "status",
+          "backup_initial_lifecycle_state",
+          "request_snapshot"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_data": {
+                "properties": {
+                  "final_lifecycle_state": {
+                    "const": "stopped"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          },
+          "status": {
+            "const": "succeeded"
+          },
+          "backup_initial_lifecycle_state": {
+            "const": "ready"
+          },
+          "request_snapshot": {
+            "properties": {
+              "parameters": {
+                "properties": {
+                  "resume_after_backup": {
+                    "const": false
+                  }
+                },
+                "required": [
+                  "resume_after_backup"
+                ]
+              }
+            },
+            "required": [
+              "parameters"
+            ]
+          }
+        },
+        "required": [
+          "operation_type",
+          "status",
+          "backup_initial_lifecycle_state",
+          "request_snapshot"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_data": {
+                "properties": {
+                  "final_lifecycle_state": {
+                    "const": "stopped"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          },
+          "status": {
+            "const": "succeeded"
+          },
+          "backup_initial_lifecycle_state": {
+            "const": "ready"
+          },
+          "request_snapshot": {
+            "properties": {
+              "parameters": {
+                "properties": {
+                  "resume_after_backup": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "resume_after_backup"
+                ]
+              }
+            },
+            "required": [
+              "parameters"
+            ]
+          }
+        },
+        "required": [
+          "operation_type",
+          "status",
+          "backup_initial_lifecycle_state",
+          "request_snapshot"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_data": {
+                "properties": {
+                  "final_lifecycle_state": {
+                    "const": "ready"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          },
+          "status": {
+            "const": "succeeded"
+          },
+          "backup_initial_lifecycle_state": {
+            "const": "degraded"
+          },
+          "request_snapshot": {
+            "properties": {
+              "parameters": {
+                "properties": {
+                  "resume_after_backup": {
+                    "const": false
+                  }
+                },
+                "required": [
+                  "resume_after_backup"
+                ]
+              }
+            },
+            "required": [
+              "parameters"
+            ]
+          }
+        },
+        "required": [
+          "operation_type",
+          "status",
+          "backup_initial_lifecycle_state",
+          "request_snapshot"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_data": {
+                "properties": {
+                  "final_lifecycle_state": {
+                    "const": "stopped"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          },
+          "status": {
+            "const": "succeeded"
+          },
+          "backup_initial_lifecycle_state": {
+            "const": "degraded"
+          },
+          "request_snapshot": {
+            "properties": {
+              "parameters": {
+                "properties": {
+                  "resume_after_backup": {
+                    "const": true
+                  }
+                },
+                "required": [
+                  "resume_after_backup"
+                ]
+              }
+            },
+            "required": [
+              "parameters"
+            ]
+          }
+        },
+        "required": [
+          "operation_type",
+          "status",
+          "backup_initial_lifecycle_state",
+          "request_snapshot"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_data": {
+                "properties": {
+                  "final_lifecycle_state": {
+                    "const": "ready"
                   }
                 }
               }
