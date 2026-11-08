@@ -40,6 +40,7 @@ Use every case and expected assertion in each fixture below. The fixture's `expe
 
 | Fixture ID | Required evidence |
 |---|---|
+| `protocol.json.raw-wire-interoperability` | Decode exact hexadecimal bytes; reject invalid Unicode, duplicate members, unsafe integers, and invalid numbers; preserve accepted string values |
 | `game.release.describe.integrity-and-identity` | Exact release identity, unique artifacts, and supported checksum representation |
 | `game.configure.pinned-schema-and-result-binding` | All configuration cases, including digest mismatch, secret references, RFC 8785 serialization, and permuted member order |
 | `game.install.release-binding-and-reconciliation` | Exact artifact set, release-pinned expected/observed checksums, and uncertain outcomes |
@@ -58,9 +59,9 @@ Use every case and expected assertion in each fixture below. The fixture's `expe
 
 Resolve these IDs by reading the fixture files in the selected package, not by guessing filenames. Before a run, record the exact fixture paths and case counts from that snapshot. Some listed fixtures are currently proposed in separate drafts. A snapshot missing a required fixture cannot claim this profile; report it as not runnable, or name a narrower exploratory subset with its omissions.
 
-This selection does not yet name a shared raw-byte parsing corpus. Before claiming the full initial profile, select or publish messages and expected acceptance for duplicate member names, safe-integer boundaries in ordinary/decimal/exponent notation, invalid UTF-8, lone escaped surrogates, and valid surrogate pairs. Preserve invalid wire bytes using an unambiguous encoding such as hexadecimal; parsing the test corpus itself must not normalize them. Go unit tests alone do not establish cross-language agreement on those inputs.
+The raw-wire fixture supplies 30 parsing cases as `wire_hex` with expected acceptance and, for accepted strings, exact `parsed_string` values. Decode the hexadecimal bytes directly into the parser under test. Do not parse and reserialize those bytes first: a decoder could replace invalid Unicode or collapse duplicate members before the implementation sees them. The fixture is proposed in a separate draft and must exist in the selected immutable snapshot.
 
-Backup automatic resume from its starting lifecycle state is excluded until the proposed durable context and degraded-state policy are resolved. The no-resume fixture above proves only the explicit false rule.
+Backup automatic resume from its starting lifecycle state is excluded until the proposed durable context contract and conformance are available. The selected degraded policy defaults to stopped and allows explicitly requested resume only under current policy and fresh readiness checks. The no-resume fixture above proves only the explicit false rule.
 
 ## Independent implementation
 
