@@ -24,8 +24,8 @@ func evaluateBackupInitialStatePolicy(pkg *protocolPackage, fixture map[string]a
 			expectedFinal = "stopped"
 		}
 		result := map[string]any{
-			"case_id": stringValue(evaluation, "case_id"),
-			"operation_schema_valid": pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation) == nil,
+			"case_id":                    stringValue(evaluation, "case_id"),
+			"operation_schema_valid":     pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation) == nil,
 			"final_state_matches_policy": expectedFinal != "" && final == expectedFinal,
 		}
 		results = append(results, result)
