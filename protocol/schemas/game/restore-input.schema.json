@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:game:restore-input",
+  "title": "Verified game backup restore input",
+  "description": "Restore one compatible, previously verified backup to an exact fresh target. Object bytes arrive through ordered, one-use controller-to-adapter stream transfers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["source_backup", "compatibility_result", "target", "target_release_id", "target_data_generation_id", "required_check_ids", "object_streams"],
+  "properties": {
+    "source_backup": {"$ref": "urn:gameserver-controller:0.21.0-draft:operations:server-backup-result"},
+    "compatibility_result": {"$ref": "urn:gameserver-controller:0.21.0-draft:game:compatibility-check-output"},
+    "target": {"$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target"},
+    "target_release_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "target_data_generation_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "required_check_ids": {"type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9._-]*$"}},
+    "object_streams": {
+      "type": "array", "minItems": 1, "maxItems": 64,
+      "description": "Ordered exact references from the verified manifest. Matching one-use controller_to_adapter streams are supplied transiently in request_context.stream_transfers.",
+      "items": {"type": "object", "additionalProperties": false, "required": ["object_ref"], "properties": {"object_ref": {"$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-object-reference"}}}
+    }
+  }
+}
