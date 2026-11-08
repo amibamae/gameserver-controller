@@ -65,6 +65,14 @@ type PreconditionFailureHandler interface {
 	HandlePreconditionFailure(context.Context, store.OperationRecord, store.OperationStep, error) (Resolution, error)
 }
 
+// DispatchGuard runs after a step is durably marked running and immediately
+// before the adapter call. It is for controller-owned claims that must precede
+// an external side effect, such as consuming a managed-capacity create token.
+// An error prevents the adapter call and fails the operation.
+type DispatchGuard interface {
+	BeforeAdapterDispatch(context.Context, store.OperationRecord, store.OperationStep) error
+}
+
 // LifecycleProjector derives a logical-server record from durable operation
 // progress. It is called for every persisted operation update; when it reports
 // a state change, the engine commits the operation and state event atomically.

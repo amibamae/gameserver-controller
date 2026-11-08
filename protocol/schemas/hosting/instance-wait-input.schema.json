@@ -2,12 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-input",
   "title": "Hosting instance wait input",
-  "description": "Wait for one provider operation on one exact instance. The wait deadline bounds this request and does not cancel the provider operation.",
+  "description": "Wait for one exact instance to reach the expected state. A provider operation reference may be supplied when available. The wait deadline bounds this request and does not cancel provider work.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "instance_ref",
-    "provider_operation_ref",
     "expected_state",
     "wait_timeout_seconds"
   ],

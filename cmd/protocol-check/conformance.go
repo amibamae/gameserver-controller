@@ -634,7 +634,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			category = "authorization"
 		}
 		return map[string]any{"accepted": allowed, "side_effect_permitted": allowed, "error_category": category}, nil
-	case "hosting.instance.wait.pending-remains-pending", "hosting.instance.wait.succeeded-postcondition-confirmed", "hosting.instance.wait.succeeded-state-mismatch", "hosting.instance.wait.unknown-requires-inspection", "hosting.instance.wait.operation-reference-mismatch", "hosting.instance.wait.failed-terminal-requires-inspection":
+	case "hosting.instance.wait.pending-remains-pending", "hosting.instance.wait.succeeded-postcondition-confirmed", "hosting.instance.wait.succeeded-state-mismatch", "hosting.instance.wait.unknown-requires-inspection", "hosting.instance.wait.operation-reference-mismatch", "hosting.instance.wait.failed-terminal-requires-inspection", "hosting.instance.wait.without-operation-reference":
 		waitInput, waitOutput := asObject(input["wait_input"]), asObject(input["wait_output"])
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-input", waitInput); err != nil {
 			return nil, fmt.Errorf("hosting wait input does not match schema: %w", err)
@@ -643,11 +643,19 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			return nil, fmt.Errorf("hosting wait output does not match schema: %w", err)
 		}
 		targetBound := reflect.DeepEqual(asObject(waitInput["instance_ref"]), asObject(waitOutput["instance_ref"]))
-		operationBound := reflect.DeepEqual(asObject(waitInput["provider_operation_ref"]), asObject(waitOutput["provider_operation_ref"]))
 		requestedTarget := asObject(waitInput["instance_ref"])
 		operationRef := asObject(waitInput["provider_operation_ref"])
-		operationScopeMatches := stringValue(operationRef, "adapter_id") == stringValue(requestedTarget, "adapter_id") &&
-			stringValue(operationRef, "environment_id") == stringValue(requestedTarget, "environment_id")
+		observedOperationRef := asObject(waitOutput["provider_operation_ref"])
+		operationBound, operationScopeMatches := true, true
+		if len(operationRef) > 0 {
+			operationBound = reflect.DeepEqual(operationRef, observedOperationRef)
+			operationScopeMatches = stringValue(operationRef, "adapter_id") == stringValue(requestedTarget, "adapter_id") &&
+				stringValue(operationRef, "environment_id") == stringValue(requestedTarget, "environment_id")
+		} else if len(observedOperationRef) > 0 {
+			operationScopeMatches = stringValue(observedOperationRef, "adapter_id") == stringValue(requestedTarget, "adapter_id") &&
+				stringValue(observedOperationRef, "environment_id") == stringValue(requestedTarget, "environment_id") &&
+				stringValue(observedOperationRef, "resource_kind") == "operation"
+		}
 		status := stringValue(waitOutput, "operation_status")
 		state := stringValue(waitOutput, "instance_state")
 		referencesBound := targetBound && operationBound && operationScopeMatches
