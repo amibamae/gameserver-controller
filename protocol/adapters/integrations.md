@@ -34,6 +34,8 @@ The core determines which server may be routed. The proxy adapter performs the r
 
 An inspect result permits routing only when it matches the requested backend and instance, the instance belongs to the requested environment, and the result says `registered` and `routable`. A draining or unregistered backend cannot be routable; unknown state never permits routing.
 
+The `integration.proxy.backend.players.inspect` capability reports only a count for the exact requested backend and instance. The request sets `maximum_age_seconds`. An `observed` result includes both `active_session_count` and `observed_at`; an `unknown` result includes neither. The core may use a count only when the response target matches the request, the timestamp is not in the future, and the timestamp is no older than the requested maximum age at evaluation time. Unknown, stale, future-dated, incomplete, or mismatched observations cannot prove zero sessions or confirm drain completion. Counts and diagnostics MUST NOT include player identities or session identifiers.
+
 ## 4. Velocity player transfer
 
 The initial Velocity transfer capability is `integration.velocity.players.transfer`. Its input and output contracts are defined by [velocity-player-transfer-request.schema.json](../schemas/integrations/velocity-player-transfer-request.schema.json) and [velocity-player-transfer-result.schema.json](../schemas/integrations/velocity-player-transfer-result.schema.json). The illustrative [Velocity adapter descriptor](../examples/adapter-descriptor.velocity.json) advertises the capability with those registered schema IDs.

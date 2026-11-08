@@ -1,0 +1,372 @@
+{
+  "fixture_id": "integration.proxy.players.inspect.fresh-count-and-target-binding",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.proxy.backend.players.inspect",
+  "purpose": "A proxy session count is usable only when the observation is fresh for the configured age and bound to the exact backend target; unknown, stale, future-dated, and incomplete observations cannot prove zero sessions.",
+  "input": {
+    "evaluations": [
+      {
+        "case_id": "fresh-exact-target-count",
+        "evaluation_time": "2026-11-07T18:30:20Z",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "maximum_age_seconds": 30
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "observation_state": "observed",
+          "active_session_count": 3,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      },
+      {
+        "case_id": "stale-count-is-unusable",
+        "evaluation_time": "2026-11-07T18:30:20Z",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "maximum_age_seconds": 30
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "observation_state": "observed",
+          "active_session_count": 3,
+          "observed_at": "2026-11-07T18:29:49Z"
+        }
+      },
+      {
+        "case_id": "maximum-age-boundary-is-inclusive",
+        "evaluation_time": "2026-11-07T18:30:20Z",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "maximum_age_seconds": 30
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "observation_state": "observed",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:29:50Z"
+        }
+      },
+      {
+        "case_id": "future-dated-count-is-unusable",
+        "evaluation_time": "2026-11-07T18:30:20Z",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "maximum_age_seconds": 30
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "observation_state": "observed",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:30:21Z"
+        }
+      },
+      {
+        "case_id": "unknown-count-cannot-prove-zero",
+        "evaluation_time": "2026-11-07T18:30:20Z",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "maximum_age_seconds": 30
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "observation_state": "unknown"
+        }
+      },
+      {
+        "case_id": "fresh-count-for-different-backend-is-unusable",
+        "evaluation_time": "2026-11-07T18:30:20Z",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "maximum_age_seconds": 30
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-02",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "observation_state": "observed",
+          "active_session_count": 0,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      },
+      {
+        "case_id": "target-instance-environment-mismatch-is-unusable",
+        "evaluation_time": "2026-11-07T18:30:20Z",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "production",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "maximum_age_seconds": 30
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "production",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "observation_state": "observed",
+          "active_session_count": 3,
+          "observed_at": "2026-11-07T18:30:00Z"
+        }
+      },
+      {
+        "case_id": "observed-count-without-timestamp-is-schema-invalid",
+        "evaluation_time": "2026-11-07T18:30:20Z",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "maximum_age_seconds": 30
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "backend_id": "paper-staging-01",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "observation_state": "observed",
+          "active_session_count": 0
+        }
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "fresh-exact-target-count",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "count_fresh": true,
+        "count_usable": true,
+        "target_environment_consistent": true
+      },
+      {
+        "case_id": "stale-count-is-unusable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "count_fresh": false,
+        "count_usable": false,
+        "target_environment_consistent": true
+      },
+      {
+        "case_id": "maximum-age-boundary-is-inclusive",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "count_fresh": true,
+        "count_usable": true,
+        "target_environment_consistent": true
+      },
+      {
+        "case_id": "future-dated-count-is-unusable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": false,
+        "count_fresh": false,
+        "count_usable": false,
+        "target_environment_consistent": true
+      },
+      {
+        "case_id": "unknown-count-cannot-prove-zero",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "unknown",
+        "observation_time_valid": false,
+        "count_fresh": false,
+        "count_usable": false,
+        "target_environment_consistent": true
+      },
+      {
+        "case_id": "fresh-count-for-different-backend-is-unusable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": false,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "count_fresh": true,
+        "count_usable": false,
+        "target_environment_consistent": true
+      },
+      {
+        "case_id": "target-instance-environment-mismatch-is-unusable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "target_environment_consistent": false,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "count_fresh": true,
+        "count_usable": false
+      },
+      {
+        "case_id": "observed-count-without-timestamp-is-schema-invalid",
+        "request_schema_valid": true,
+        "response_schema_valid": false,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": false,
+        "count_fresh": false,
+        "count_usable": false,
+        "target_environment_consistent": true
+      }
+    ]
+  },
+  "side_effect_expectation": "none"
+}

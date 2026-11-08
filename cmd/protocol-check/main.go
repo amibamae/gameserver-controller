@@ -100,6 +100,8 @@ var exampleSchemaIDs = map[string]string{
 	"proxy-backend-drain-output.json":               "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-drain-output",
 	"proxy-backend-inspect-input.json":              "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-inspect-input",
 	"proxy-backend-inspect-output.json":             "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-inspect-output",
+	"proxy-backend-players-inspect-input.json":       "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-players-inspect-input",
+	"proxy-backend-players-inspect-output.json":      "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-players-inspect-output",
 	"proxy-backend-register-input.json":             "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input",
 	"proxy-backend-register-output.json":            "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-output",
 	"proxy-backend-unregister-input.json":           "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-input",

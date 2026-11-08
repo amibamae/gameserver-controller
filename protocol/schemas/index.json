@@ -347,6 +347,14 @@
       "id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-inspect-output"
     },
     {
+      "path": "integrations/proxy-backend-players-inspect-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-players-inspect-input"
+    },
+    {
+      "path": "integrations/proxy-backend-players-inspect-output.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-players-inspect-output"
+    },
+    {
       "path": "integrations/proxy-backend-register-input.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input"
     },

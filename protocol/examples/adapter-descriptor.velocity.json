@@ -34,6 +34,16 @@
       ]
     },
     {
+      "name": "integration.proxy.backend.players.inspect",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-players-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-players-inspect-output",
+      "required_permissions": [
+        "proxy.backend.manage"
+      ]
+    },
+    {
       "name": "integration.proxy.backend.register",
       "version": "1",
       "mutating": true,
