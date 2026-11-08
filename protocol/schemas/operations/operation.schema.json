@@ -724,29 +724,12 @@
           },
           "backup_initial_lifecycle_state": {
             "const": "stopped"
-          },
-          "request_snapshot": {
-            "properties": {
-              "parameters": {
-                "properties": {
-                  "resume_after_backup": {
-                    "not": {
-                      "const": true
-                    }
-                  }
-                }
-              }
-            },
-            "required": [
-              "parameters"
-            ]
           }
         },
         "required": [
           "operation_type",
           "status",
-          "backup_initial_lifecycle_state",
-          "request_snapshot"
+          "backup_initial_lifecycle_state"
         ]
       },
       "then": {
