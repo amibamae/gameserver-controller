@@ -1,6 +1,6 @@
 # Third-party notices
 
-For source or binary distributions that include a component below, include this file and its linked license and attribution material with the distribution. Go module versions match [go.mod](go.mod). Test-only modules recorded only in go.sum are omitted because their source is not vendored or linked into project binaries.
+For source or binary distributions that include a component below, include this file and its linked license and attribution material with the distribution. Go module versions match [go.mod](go.mod). Test-only modules recorded only in go.sum are omitted because their source is not vendored or linked into project binaries. The repository's AGPL-3.0 license does not replace the separate terms attached to these components.
 
 ## OpenAPI Initiative OAS 3.2 schema resources
 
