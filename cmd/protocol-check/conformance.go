@@ -960,7 +960,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"safe_to_treat_as_active": targetBound && state == "active",
 			"inspection_read_only":    true,
 		}, nil
-	case "execution.unit.start.accepted-not-ready", "execution.unit.start.unknown-requires-inspection", "execution.unit.start.target-mismatch", "execution.unit.graceful-stop.completed-stopped":
+	case "execution.unit.start.accepted-not-ready", "execution.unit.start.unknown-requires-inspection", "execution.unit.start.target-mismatch", "execution.unit.graceful-stop.completed-stopped", "execution.unit.graceful-stop.unknown-requires-inspection":
 		executionInput, executionOutput := asObject(input["execution_input"]), asObject(input["execution_output"])
 		inputSchemaID, outputSchemaID := "", ""
 		if strings.HasPrefix(fixtureID, "execution.unit.start.") {
