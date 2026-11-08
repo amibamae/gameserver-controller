@@ -41,6 +41,56 @@ func TestResolveSupportsMinuteThroughYearSchedules(t *testing.T) {
 	}
 }
 
+func TestNextOccurrenceUsesElapsedMinutesAndHours(t *testing.T) {
+	anchor := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	got, err := NextOccurrence(anchor, anchor.Add(6*time.Minute), Interval{Every: 5, Unit: Minute})
+	if err != nil || !got.Equal(anchor.Add(10*time.Minute)) {
+		t.Fatalf("next 5-minute occurrence = %s, err=%v", got, err)
+	}
+	got, err = NextOccurrence(anchor, anchor.Add(9*time.Hour), Interval{Every: 9, Unit: Hour})
+	if err != nil || !got.Equal(anchor.Add(18*time.Hour)) {
+		t.Fatalf("next 9-hour occurrence = %s, err=%v", got, err)
+	}
+}
+
+func TestNextOccurrenceUsesCalendarMonthsAndRetainsAnchorDay(t *testing.T) {
+	location := time.FixedZone("test", -8*60*60)
+	anchor := time.Date(2026, time.January, 31, 9, 30, 0, 0, location)
+	got, err := NextOccurrence(anchor, time.Date(2026, time.February, 1, 0, 0, 0, 0, location), Interval{Every: 1, Unit: Month})
+	if err != nil || !got.Equal(time.Date(2026, time.February, 28, 9, 30, 0, 0, location)) {
+		t.Fatalf("next monthly occurrence = %s, err=%v", got, err)
+	}
+	got, err = NextOccurrence(anchor, time.Date(2026, time.February, 28, 9, 30, 0, 0, location), Interval{Every: 1, Unit: Month})
+	if err != nil || !got.Equal(time.Date(2026, time.March, 31, 9, 30, 0, 0, location)) {
+		t.Fatalf("monthly occurrence drifted from anchor day: %s, err=%v", got, err)
+	}
+}
+
+func TestNextOccurrenceHandlesLeapDayAndLocalCalendarDays(t *testing.T) {
+	anchor := time.Date(2024, time.February, 29, 9, 0, 0, 0, time.UTC)
+	got, err := NextOccurrence(anchor, anchor, Interval{Every: 1, Unit: Year})
+	if err != nil || !got.Equal(time.Date(2025, time.February, 28, 9, 0, 0, 0, time.UTC)) {
+		t.Fatalf("next annual occurrence = %s, err=%v", got, err)
+	}
+
+	location, err := time.LoadLocation("America/Vancouver")
+	if err != nil {
+		t.Skipf("local time zone database unavailable: %v", err)
+	}
+	dayAnchor := time.Date(2026, time.March, 7, 9, 0, 0, 0, location)
+	got, err = NextOccurrence(dayAnchor, dayAnchor, Interval{Every: 1, Unit: Day})
+	want := time.Date(2026, time.March, 8, 9, 0, 0, 0, location)
+	if err != nil || !got.Equal(want) {
+		t.Fatalf("next local calendar day = %s, want %s, err=%v", got, want, err)
+	}
+}
+
+func TestNextOccurrenceRequiresAnchoredValidTimes(t *testing.T) {
+	if _, err := NextOccurrence(time.Time{}, time.Now(), Interval{Every: 1, Unit: Day}); err == nil {
+		t.Fatal("NextOccurrence accepted a missing anchor")
+	}
+}
+
 func TestPruneCandidatesKeepsNewestVerifiedBackupsAndProtectedHistory(t *testing.T) {
 	base := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	backups := []Backup{
