@@ -1,0 +1,195 @@
+{
+  "fixture_id": "execution.unit.health.diagnostic-redaction-and-binding",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "execution.unit.health.inspect",
+  "purpose": "Health diagnostic content must omit supplied synthetic secret probes, match the requested unit, and preserve unknown health.",
+  "input": {
+    "evaluations": [
+      {
+        "case_id": "clean-healthy",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          }
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "health": "healthy",
+          "diagnostics_redacted": true,
+          "safe_diagnostics": [
+            "Health check passed."
+          ],
+          "observed_at": "2026-11-07T20:00:00Z"
+        },
+        "redaction_probes": [
+          "synthetic-health-secret-DO-NOT-LOG"
+        ]
+      },
+      {
+        "case_id": "clean-unknown",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          }
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "health": "unknown",
+          "diagnostics_redacted": true,
+          "safe_diagnostics": [
+            "Health source unavailable."
+          ],
+          "observed_at": "2026-11-07T20:00:00Z"
+        },
+        "redaction_probes": [
+          "synthetic-health-secret-DO-NOT-LOG"
+        ]
+      },
+      {
+        "case_id": "leak-despite-redaction-flag",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          }
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "health": "healthy",
+          "diagnostics_redacted": true,
+          "safe_diagnostics": [
+            "token=synthetic-health-secret-DO-NOT-LOG"
+          ],
+          "observed_at": "2026-11-07T20:00:00Z"
+        },
+        "redaction_probes": [
+          "synthetic-health-secret-DO-NOT-LOG"
+        ]
+      },
+      {
+        "case_id": "mismatched-unit",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          }
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "other-server"
+          },
+          "health": "healthy",
+          "diagnostics_redacted": true,
+          "safe_diagnostics": [
+            "Health check passed."
+          ],
+          "observed_at": "2026-11-07T20:00:00Z"
+        },
+        "redaction_probes": [
+          "synthetic-health-secret-DO-NOT-LOG"
+        ]
+      },
+      {
+        "case_id": "redaction-flag-false",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          }
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "health": "healthy",
+          "diagnostics_redacted": false,
+          "safe_diagnostics": [
+            "Health check passed."
+          ],
+          "observed_at": "2026-11-07T20:00:00Z"
+        },
+        "redaction_probes": [
+          "synthetic-health-secret-DO-NOT-LOG"
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "clean-healthy",
+        "schemas_valid": true,
+        "unit_bound": true,
+        "redaction_probes_absent": true,
+        "response_accepted": true,
+        "healthy_confirmed": true
+      },
+      {
+        "case_id": "clean-unknown",
+        "schemas_valid": true,
+        "unit_bound": true,
+        "redaction_probes_absent": true,
+        "response_accepted": true,
+        "healthy_confirmed": false
+      },
+      {
+        "case_id": "leak-despite-redaction-flag",
+        "schemas_valid": true,
+        "unit_bound": true,
+        "redaction_probes_absent": false,
+        "response_accepted": false,
+        "healthy_confirmed": false
+      },
+      {
+        "case_id": "mismatched-unit",
+        "schemas_valid": true,
+        "unit_bound": false,
+        "redaction_probes_absent": true,
+        "response_accepted": false,
+        "healthy_confirmed": false
+      },
+      {
+        "case_id": "redaction-flag-false",
+        "schemas_valid": false,
+        "unit_bound": true,
+        "redaction_probes_absent": true,
+        "response_accepted": false,
+        "healthy_confirmed": false
+      }
+    ]
+  },
+  "side_effect_expected": "none"
+}
