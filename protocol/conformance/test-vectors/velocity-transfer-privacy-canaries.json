@@ -1,0 +1,212 @@
+{
+  "fixture_id": "velocity-transfer-privacy-canaries",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.velocity.players.transfer",
+  "purpose": "Synthetic player-data canaries must be absent from transfer requests, results, errors, and diagnostic logs.",
+  "input": {
+    "validation_time": "2026-11-07T10:00:00Z",
+    "privacy_probes": [
+      "synthetic-account-name-canary",
+      "synthetic-account-uuid-canary",
+      "synthetic-ip-address-canary",
+      "synthetic-chat-canary",
+      "synthetic-proxy-session-canary"
+    ],
+    "transfer_request": {
+      "server_id": "minecraft-test",
+      "environment_id": "test",
+      "source_backend_id": "velocity-lobby",
+      "destination_backend_id": "paper-main",
+      "waiting_cohort_id": "waiting-cohort-privacy",
+      "expected_instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "test",
+        "resource_kind": "instance",
+        "external_id": "instance-test-privacy-001"
+      },
+      "readiness_assertion": {
+        "assertion_id": "readiness-privacy-001",
+        "server_id": "minecraft-test",
+        "environment_id": "test",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "test",
+          "resource_kind": "instance",
+          "external_id": "instance-test-privacy-001"
+        },
+        "readiness_check_set_id": "paper-ready-v1",
+        "observed_at": "2026-11-07T09:59:00Z",
+        "expires_at": "2026-11-07T10:01:00Z"
+      },
+      "player_session_ids": [
+        "proxy-session-privacy-001"
+      ]
+    },
+    "transfer_result": {
+      "waiting_cohort_id": "waiting-cohort-privacy",
+      "source_backend_id": "velocity-lobby",
+      "destination_backend_id": "paper-main",
+      "target_instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "test",
+        "resource_kind": "instance",
+        "external_id": "instance-test-privacy-001"
+      },
+      "requested_count": 1,
+      "outcome_counts": {
+        "transferred": 1,
+        "already_at_destination": 0,
+        "disconnected": 0,
+        "rejected": 0,
+        "failed": 0,
+        "outcome_unknown": 0
+      },
+      "results": [
+        {
+          "proxy_session_id": "proxy-session-privacy-001",
+          "outcome": "transferred"
+        }
+      ]
+    },
+    "evaluations": [
+      {
+        "case_id": "clean-session-only-contract",
+        "diagnostic_log_lines": [
+          "Transfer completed for backend paper-main."
+        ]
+      },
+      {
+        "case_id": "request-field-leak",
+        "request": {
+          "server_id": "minecraft-test",
+          "environment_id": "test",
+          "source_backend_id": "velocity-lobby",
+          "destination_backend_id": "paper-main",
+          "waiting_cohort_id": "waiting-cohort-privacy",
+          "expected_instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-privacy-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-privacy-001",
+            "server_id": "minecraft-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-privacy-001"
+            },
+            "readiness_check_set_id": "paper-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          },
+          "player_session_ids": [
+            "proxy-session-privacy-001"
+          ],
+          "player_account_name": "synthetic-account-name-canary"
+        },
+        "diagnostic_log_lines": [
+          "Transfer completed for backend paper-main."
+        ]
+      },
+      {
+        "case_id": "schema-valid-error-leak",
+        "result": {
+          "waiting_cohort_id": "waiting-cohort-privacy",
+          "source_backend_id": "velocity-lobby",
+          "destination_backend_id": "paper-main",
+          "target_instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-privacy-001"
+          },
+          "requested_count": 1,
+          "outcome_counts": {
+            "transferred": 0,
+            "already_at_destination": 0,
+            "disconnected": 0,
+            "rejected": 0,
+            "failed": 1,
+            "outcome_unknown": 0
+          },
+          "results": [
+            {
+              "proxy_session_id": "proxy-session-privacy-001",
+              "outcome": "failed",
+              "error": {
+                "code": "integration.velocity.transfer.failed",
+                "category": "provider_failure",
+                "message": "Transfer failed for synthetic-account-name-canary",
+                "retryable": false,
+                "details": {
+                  "account_uuid": "synthetic-account-uuid-canary",
+                  "address": "synthetic-ip-address-canary",
+                  "message_excerpt": "synthetic-chat-canary"
+                }
+              }
+            }
+          ]
+        },
+        "diagnostic_log_lines": [
+          "Transfer failed for backend paper-main."
+        ]
+      },
+      {
+        "case_id": "diagnostic-log-leak",
+        "diagnostic_log_lines": [
+          "Transfer failed for session synthetic-proxy-session-canary."
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "clean-session-only-contract",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "transfer_result_valid_and_bound": true,
+        "request_contains_privacy_probe": false,
+        "result_contains_privacy_probe": false,
+        "logs_contain_privacy_probe": false,
+        "privacy_compliant": true
+      },
+      {
+        "case_id": "request-field-leak",
+        "request_schema_valid": false,
+        "result_schema_valid": true,
+        "transfer_result_valid_and_bound": false,
+        "request_contains_privacy_probe": true,
+        "result_contains_privacy_probe": false,
+        "logs_contain_privacy_probe": false,
+        "privacy_compliant": false
+      },
+      {
+        "case_id": "schema-valid-error-leak",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "transfer_result_valid_and_bound": true,
+        "request_contains_privacy_probe": false,
+        "result_contains_privacy_probe": true,
+        "logs_contain_privacy_probe": false,
+        "privacy_compliant": false
+      },
+      {
+        "case_id": "diagnostic-log-leak",
+        "request_schema_valid": true,
+        "result_schema_valid": true,
+        "transfer_result_valid_and_bound": true,
+        "request_contains_privacy_probe": false,
+        "result_contains_privacy_probe": false,
+        "logs_contain_privacy_probe": true,
+        "privacy_compliant": false
+      }
+    ]
+  },
+  "side_effect_expectation": "none",
+  "notes": "Every identifier is synthetic. The error-leak result remains JSON-Schema-valid so the privacy check cannot rely on schema validation alone."
+}
