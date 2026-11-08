@@ -14,6 +14,7 @@ import (
 
 	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/fakeadapter"
+	"github.com/amibamae/gameserver-controller/internal/inputbinding"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 	"github.com/amibamae/gameserver-controller/internal/store"
@@ -42,6 +43,33 @@ func TestRunPersistsAdapterOutputAndCompletes(t *testing.T) {
 	}
 	if len(fixture.adapter.Calls()) != 1 {
 		t.Fatalf("adapter calls = %d, want 1", len(fixture.adapter.Calls()))
+	}
+}
+
+func TestBoundStepPersistsValidatedResolvedInputBeforeDispatch(t *testing.T) {
+	fixture := newEngineFixtureForOperation(t, "bound-input", "1", []fakeadapter.Reply{
+		{Outcome: adapter.OutcomeCompleted, Output: json.RawMessage(testExternalRef), ObservedAt: time.Now().UTC()},
+		{Outcome: adapter.OutcomeCompleted, Output: json.RawMessage(testExternalRef), ObservedAt: time.Now().UTC()},
+	}, false, testOperationType, false, store.OperationStep{
+		StepID: "step-2", StepType: "hosting.instance.wait", Status: protocolstate.StepPending,
+		AdapterID: testAdapterID, CapabilityName: testCapability, CapabilityVersion: "1",
+		Input:         json.RawMessage(`{"adapter_id":"hosting.fake","environment_id":"staging","resource_kind":"instance"}`),
+		InputBindings: []inputbinding.Binding{{TargetPointer: "/external_id", SourceStepID: "step-1", SourcePointer: "/external_id"}},
+	})
+	completed, err := fixture.engine.Run(context.Background(), fixture.operation.Record.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := completed.Record.Steps[1]
+	if second.Status != protocolstate.StepSucceeded || len(second.ResolvedInput) == 0 {
+		t.Fatalf("bound step did not persist its resolved input: %#v", second)
+	}
+	if err := fixture.engine.schemas.ValidateJSON("urn:gameserver-controller:"+completed.Record.ProtocolVersion+":common:external-resource-ref", second.ResolvedInput); err != nil {
+		t.Fatalf("resolved input was not schema-valid: %v (%s)", err, second.ResolvedInput)
+	}
+	calls := fixture.adapter.Calls()
+	if len(calls) != 2 || !bytes.Equal(calls[1].Params.Input, second.ResolvedInput) {
+		t.Fatalf("second dispatch input = %s; persisted resolved input = %s", calls[1].Params.Input, second.ResolvedInput)
 	}
 }
 
@@ -454,7 +482,7 @@ func newLifecycleEngineFixture(t *testing.T) engineFixture {
 	}}, true, "server.workflowtest", true)
 }
 
-func newEngineFixtureForOperation(t *testing.T, operationID, capabilityVersion string, replies []fakeadapter.Reply, mutating bool, operationType string, projectLifecycle bool) engineFixture {
+func newEngineFixtureForOperation(t *testing.T, operationID, capabilityVersion string, replies []fakeadapter.Reply, mutating bool, operationType string, projectLifecycle bool, extraSteps ...store.OperationStep) engineFixture {
 	t.Helper()
 	schemas, err := schemaregistry.Load()
 	if err != nil {
@@ -539,11 +567,11 @@ func newEngineFixtureForOperation(t *testing.T, operationID, capabilityVersion s
 		ActorID: "operator-1", IdempotencyKey: "sha256:" + strings.Repeat("1", 64),
 		RequestFingerprint: "sha256:" + strings.Repeat("a", 64),
 		RequestSnapshot:    store.RequestSnapshot{OperationType: operationType, Parameters: json.RawMessage(`{}`)},
-		Steps: []store.OperationStep{{
+		Steps: append([]store.OperationStep{{
 			StepID: "step-1", StepType: "hosting.instance.create", Status: protocolstate.StepPending,
 			AdapterID: testAdapterID, CapabilityName: testCapability, CapabilityVersion: capabilityVersion,
 			Input: json.RawMessage(testExternalRef),
-		}},
+		}}, extraSteps...),
 	}
 	lockScopes := []string(nil)
 	if strings.HasPrefix(operationType, "server.") {

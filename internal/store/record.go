@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/amibamae/gameserver-controller/internal/inputbinding"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 )
 
@@ -78,6 +79,8 @@ type OperationStep struct {
 	CapabilityName       string                   `json:"capability_name,omitempty"`
 	CapabilityVersion    string                   `json:"capability_version,omitempty"`
 	Input                json.RawMessage          `json:"input,omitempty"`
+	InputBindings        []inputbinding.Binding   `json:"input_bindings,omitempty"`
+	ResolvedInput        json.RawMessage          `json:"resolved_input,omitempty"`
 	Output               json.RawMessage          `json:"output,omitempty"`
 	StartedAt            *time.Time               `json:"started_at,omitempty"`
 	CompletedAt          *time.Time               `json:"completed_at,omitempty"`
@@ -109,6 +112,9 @@ func prepareNewRecord(record OperationRecord, now time.Time) (OperationRecord, e
 		}
 		if record.Steps[i].Status != protocolstate.StepPending {
 			return OperationRecord{}, fmt.Errorf("%w: new operation steps must start pending", ErrInvalidRecord)
+		}
+		if len(record.Steps[i].ResolvedInput) > 0 {
+			return OperationRecord{}, fmt.Errorf("%w: resolved step inputs are written by the engine before dispatch", ErrInvalidRecord)
 		}
 	}
 	if record.StartedAt != nil || record.CompletedAt != nil || len(record.Result) != 0 || len(record.Error) != 0 {
@@ -221,6 +227,18 @@ func validateRecord(record OperationRecord) error {
 		if len(step.Input) > 0 && !isJSONObject(step.Input) {
 			return invalidField(fmt.Sprintf("steps[%d].input", i))
 		}
+		if len(step.InputBindings) > 0 && (step.CapabilityName == "" || !isJSONObject(step.Input)) {
+			return invalidField(fmt.Sprintf("steps[%d].input_bindings", i))
+		}
+		if len(step.ResolvedInput) > 0 && !isJSONObject(step.ResolvedInput) {
+			return invalidField(fmt.Sprintf("steps[%d].resolved_input", i))
+		}
+		if len(step.InputBindings) == 0 && len(step.ResolvedInput) > 0 {
+			return invalidField(fmt.Sprintf("steps[%d].resolved_input has no bindings", i))
+		}
+		if len(step.InputBindings) > 0 && step.Attempt > 0 && len(step.ResolvedInput) == 0 {
+			return invalidField(fmt.Sprintf("steps[%d].resolved_input must be persisted before dispatch", i))
+		}
 		if len(step.Output) > 0 && (!isJSONObject(step.Output) || step.Status != protocolstate.StepSucceeded) {
 			return invalidField(fmt.Sprintf("steps[%d].output", i))
 		}
@@ -242,6 +260,13 @@ func validateRecord(record OperationRecord) error {
 		if step.CompletedAt != nil && (step.CompletedAt.Before(record.CreatedAt) || (step.StartedAt != nil && step.CompletedAt.Before(*step.StartedAt)) || step.CompletedAt.After(record.UpdatedAt)) {
 			return invalidField(fmt.Sprintf("steps[%d].completed_at", i))
 		}
+	}
+	bindingSteps := make([]inputbinding.Step, len(record.Steps))
+	for i, step := range record.Steps {
+		bindingSteps[i] = inputbinding.Step{StepID: step.StepID, Status: string(step.Status), Input: step.Input, Output: step.Output, Binding: step.InputBindings}
+	}
+	if err := inputbinding.ValidatePlan(bindingSteps); err != nil {
+		return invalidField("step input_bindings")
 	}
 	if record.CurrentStepID != nil {
 		if *record.CurrentStepID == "" {

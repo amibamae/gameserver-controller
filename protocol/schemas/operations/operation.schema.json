@@ -193,7 +193,26 @@
           },
           "input": {
             "type": "object",
-            "description": "Immutable, validated adapter input for this step. Secret values MUST remain references."
+            "description": "Immutable adapter input template. When input_bindings are present, the template may omit those target fields. Secret values MUST remain references."
+          },
+          "input_bindings": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["target_pointer", "source_step_id", "source_pointer"],
+              "properties": {
+                "target_pointer": {"type": "string", "minLength": 1, "maxLength": 1024},
+                "source_step_id": {"type": "string", "minLength": 1, "maxLength": 200},
+                "source_pointer": {"type": "string", "maxLength": 1024}
+              }
+            },
+            "description": "Immutable bindings from outputs of earlier steps. Target JSON Pointer paths MUST be absent in input and MUST NOT overlap."
+          },
+          "resolved_input": {
+            "type": "object",
+            "description": "The fully materialized input, validated against the exact capability schema and durably persisted before dispatch. Immutable after it is set."
           },
           "output": {
             "type": "object",
@@ -247,6 +266,24 @@
                 "input"
               ]
             }
+          },
+          {
+            "if": {"required": ["input_bindings"]},
+            "then": {
+              "required": ["capability_name", "input"],
+              "properties": {"input_bindings": {"minItems": 1}}
+            }
+          },
+          {
+            "if": {"required": ["resolved_input"]},
+            "then": {"required": ["input_bindings"]}
+          },
+          {
+            "if": {
+              "required": ["input_bindings", "status"],
+              "properties": {"status": {"enum": ["running", "waiting", "outcome_unknown", "succeeded"]}}
+            },
+            "then": {"required": ["resolved_input"]}
           },
           {
             "if": {
