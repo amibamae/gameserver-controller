@@ -2655,7 +2655,7 @@ func evaluateVelocityTransferUnknownReconciliation(pkg *protocolPackage, fixture
 	}
 	return map[string]any{
 		"transfer_result_valid_and_bound": transferValid,
-		"reconciliation_cases": caseResults,
+		"reconciliation_cases":            caseResults,
 	}, nil
 }
 
