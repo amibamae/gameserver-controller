@@ -22,6 +22,9 @@ func testReceipt(scope capturestream.Scope, data string) capturestream.Receipt {
 	h := sha256.Sum256([]byte(data))
 	return capturestream.Receipt{Scope: scope, SizeBytes: int64(len(data)), SHA256: hex.EncodeToString(h[:])}
 }
+func testOutput() []byte {
+	return []byte(`{"outcome":"captured","observed_at":"2030-04-05T11:51:00Z"}`)
+}
 func newFiles(t *testing.T) *Files {
 	t.Helper()
 	f, err := New(filepath.Join(t.TempDir(), "staging"))
@@ -41,7 +44,7 @@ func TestSealSurvivesReopenAndVerifiesBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	receipt := testReceipt(scope, "abc")
-	if err = s.Seal(context.Background(), receipt); err != nil {
+	if err = s.Seal(context.Background(), receipt, testOutput()); err != nil {
 		t.Fatal(err)
 	}
 	reopened, err := New(f.root)
@@ -52,10 +55,15 @@ func TestSealSurvivesReopenAndVerifiesBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	outputFile, _, adapterOutput, outputErr := reopened.OpenVerifiedCapture(context.Background(), scope)
+	if outputErr != nil {
+		t.Fatal(outputErr)
+	}
+	defer outputFile.Close()
 	defer file.Close()
 	data, err := io.ReadAll(file)
-	if err != nil || string(data) != "abc" || got != receipt {
-		t.Fatalf("reopened bytes=%q receipt=%#v error=%v", data, got, err)
+	if err != nil || string(data) != "abc" || got != receipt || string(adapterOutput) != string(testOutput()) {
+		t.Fatalf("reopened bytes=%q receipt=%#v output=%s error=%v", data, got, adapterOutput, err)
 	}
 	info, _ := file.Stat()
 	if info.Mode().Perm() != 0400 {
@@ -75,10 +83,10 @@ func TestCompetingSealsNeverReplacePublishedCapture(t *testing.T) {
 	second, _ := f.Open(context.Background(), scope)
 	_, _ = io.WriteString(first, "first")
 	_, _ = io.WriteString(second, "second")
-	if err := first.Seal(context.Background(), testReceipt(scope, "first")); err != nil {
+	if err := first.Seal(context.Background(), testReceipt(scope, "first"), testOutput()); err != nil {
 		t.Fatal(err)
 	}
-	if err := second.Seal(context.Background(), testReceipt(scope, "second")); !errors.Is(err, captureinvoke.ErrStagingNeedsReconciliation) {
+	if err := second.Seal(context.Background(), testReceipt(scope, "second"), testOutput()); !errors.Is(err, captureinvoke.ErrStagingNeedsReconciliation) {
 		t.Fatal(err)
 	}
 	if err := second.Discard(); err != nil {
@@ -104,13 +112,13 @@ func TestUnsealedFailedOrCanceledStagesHaveNoEvidence(t *testing.T) {
 			s, _ := f.Open(ctx, scope)
 			_, _ = io.WriteString(s, "abc")
 			if scenario == "receipt" {
-				if err := s.Seal(ctx, testReceipt(scope, "wrong")); err == nil {
+				if err := s.Seal(ctx, testReceipt(scope, "wrong"), testOutput()); err == nil {
 					t.Fatal("mismatched receipt sealed")
 				}
 			}
 			if scenario == "canceled" {
 				cancel()
-				if err := s.Seal(ctx, testReceipt(scope, "abc")); err == nil {
+				if err := s.Seal(ctx, testReceipt(scope, "abc"), testOutput()); err == nil {
 					t.Fatal("canceled capture sealed")
 				}
 			}
@@ -137,7 +145,7 @@ func TestCorruptionAndSymlinksFailClosed(t *testing.T) {
 			scope := testScope()
 			s, _ := f.Open(context.Background(), scope)
 			_, _ = io.WriteString(s, "abc")
-			if err := s.Seal(context.Background(), testReceipt(scope, "abc")); err != nil {
+			if err := s.Seal(context.Background(), testReceipt(scope, "abc"), testOutput()); err != nil {
 				t.Fatal(err)
 			}
 			local := s.(*stage)
@@ -195,7 +203,7 @@ func TestPublicationSyncFailurePreservesCaptureForReconciliation(t *testing.T) {
 	}
 	_, _ = io.WriteString(s, "abc")
 	f.syncRoot = func() error { return errors.New("simulated publication sync failure") }
-	if err := s.Seal(context.Background(), testReceipt(scope, "abc")); !errors.Is(err, captureinvoke.ErrStagingNeedsReconciliation) {
+	if err := s.Seal(context.Background(), testReceipt(scope, "abc"), testOutput()); !errors.Is(err, captureinvoke.ErrStagingNeedsReconciliation) {
 		t.Fatal("publication uncertainty was hidden")
 	}
 	if err := s.Discard(); !errors.Is(err, captureinvoke.ErrStagingNeedsReconciliation) {
@@ -210,4 +218,66 @@ func TestPublicationSyncFailurePreservesCaptureForReconciliation(t *testing.T) {
 		t.Fatal(err)
 	}
 	file.Close()
+}
+
+func TestCaptureOutputIsBoundedDurableAndIntegrityChecked(t *testing.T) {
+	f := newFiles(t)
+	scope := testScope()
+	s, err := f.Open(context.Background(), scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = io.WriteString(s, "abc")
+	if err = s.Seal(context.Background(), testReceipt(scope, "abc"), []byte(`not-json`)); err == nil {
+		t.Fatal("invalid adapter output was sealed")
+	}
+	if err = s.Seal(context.Background(), testReceipt(scope, "abc"), testOutput()); err != nil {
+		t.Fatal(err)
+	}
+	name, _ := key(scope)
+	path := filepath.Join(f.root, name)
+	var saved manifest
+	encoded, _ := os.ReadFile(path)
+	if err = json.Unmarshal(encoded, &saved); err != nil || saved.Version != 2 || len(saved.Output) == 0 || saved.OutputSHA == "" {
+		t.Fatal("adapter response was not included in the durable manifest")
+	}
+	saved.Output = json.RawMessage(`{"outcome":"rejected"}`)
+	corrupt, _ := json.Marshal(saved)
+	if err = os.WriteFile(path, corrupt, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if file, _, _, err := f.OpenVerifiedCapture(context.Background(), scope); err == nil {
+		file.Close()
+		t.Fatal("modified adapter output passed integrity validation")
+	}
+}
+
+func TestLegacyReceiptRemainsReadableWithoutRecoverableAdapterOutput(t *testing.T) {
+	f := newFiles(t)
+	scope := testScope()
+	s, _ := f.Open(context.Background(), scope)
+	_, _ = io.WriteString(s, "abc")
+	if err := s.Seal(context.Background(), testReceipt(scope, "abc"), testOutput()); err != nil {
+		t.Fatal(err)
+	}
+	name, _ := key(scope)
+	path := filepath.Join(f.root, name)
+	var saved manifest
+	encoded, _ := os.ReadFile(path)
+	_ = json.Unmarshal(encoded, &saved)
+	saved.Version, saved.Output, saved.OutputSHA = 1, nil, ""
+	legacy, _ := json.Marshal(saved)
+	_ = os.WriteFile(path, legacy, 0600)
+	file, receipt, output, err := f.OpenVerifiedCapture(context.Background(), scope)
+	if err != nil || receipt != testReceipt(scope, "abc") || len(output) != 0 {
+		if file != nil {
+			file.Close()
+		}
+		t.Fatal("legacy receipt was misread as containing adapter output")
+	}
+	data, readErr := io.ReadAll(file)
+	file.Close()
+	if readErr != nil || string(data) != "abc" {
+		t.Fatal("legacy staged bytes are no longer available for manual reconciliation")
+	}
 }
