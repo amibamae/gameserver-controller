@@ -1973,7 +1973,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		accepted := bound && complete && checksumsVerified && verification == "verified" && outcomeConsistent
 		return map[string]any{
 			"schema_valid": true, "target_bound": bound, "artifact_set_complete": complete,
-			"artifact_checksums_verified": checksumsVerified,
+			"artifact_checksums_verified":       checksumsVerified,
 			"installation_result_accepted":      accepted,
 			"duplicate_install_started":         outcome == "already_installed" && started,
 			"operation_reconciliation_required": started && !accepted,
