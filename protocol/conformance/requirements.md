@@ -253,6 +253,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [game-migrate-compatibility-required.json](test-vectors/game-migrate-compatibility-required.json)
 - [game-migrate-unknown-requires-reconciliation.json](test-vectors/game-migrate-unknown-requires-reconciliation.json)
 
+- [execution-unit-inspect-exact-target-state.json](test-vectors/execution-unit-inspect-exact-target-state.json)
 - [execution-unit-create-exact-definition-no-autostart.json](test-vectors/execution-unit-create-exact-definition-no-autostart.json)
 - [execution-unit-restart-clean-stop-distinct-runtime.json](test-vectors/execution-unit-restart-clean-stop-distinct-runtime.json)
 - [execution-unit-start-accepted-not-ready.json](test-vectors/execution-unit-start-accepted-not-ready.json)
