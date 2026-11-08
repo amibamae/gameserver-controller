@@ -115,7 +115,7 @@ func TestCaptureAdapterConsumesTransientBrokerStream(t *testing.T) {
 }
 
 func TestStreamValidationAndErrorsDoNotExposeHandles(t *testing.T) {
-	for _, scenario := range []string{"missing", "undeclared", "direction", "expired", "input-leak", "adapter-error", "response-leak", "escaped-response-leak"} {
+	for _, scenario := range []string{"missing", "undeclared", "direction", "expired", "duplicate", "input-leak", "adapter-error", "response-leak", "escaped-response-leak"} {
 		t.Run(scenario, func(t *testing.T) {
 			schemas, err := schemaregistry.Load()
 			if err != nil {
@@ -138,6 +138,15 @@ func TestStreamValidationAndErrorsDoNotExposeHandles(t *testing.T) {
 				request.Params.RequestContext.StreamTransfers[0].Direction = "controller_to_adapter"
 			case "expired":
 				request.Params.RequestContext.StreamTransfers[0].ExpiresAt = time.Now().Add(-time.Second)
+			case "duplicate":
+				readExample(t, "adapter-descriptor.storage.json", &descriptor)
+				var storageInput json.RawMessage
+				readExample(t, "storage-object-put-input.json", &storageInput)
+				request.Params.Capability = "storage.object.put"
+				request.Params.Input = storageInput
+				descriptor.Capabilities[0].Constraints = map[string]any{"stream_transfer_direction": "controller_to_adapter"}
+				request.Params.RequestContext.StreamTransfers[0].Direction = "controller_to_adapter"
+				request.Params.RequestContext.StreamTransfers = append(request.Params.RequestContext.StreamTransfers, request.Params.RequestContext.StreamTransfers[0])
 			case "input-leak":
 				var input map[string]json.RawMessage
 				if err := json.Unmarshal(request.Params.Input, &input); err != nil {
