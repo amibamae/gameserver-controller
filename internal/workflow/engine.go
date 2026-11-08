@@ -218,6 +218,23 @@ func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.S
 	if err := ctx.Err(); err != nil {
 		return current, err
 	}
+	if current.Record.OperationType == "server.backup" && current.Record.BackupInitialLifecycleState == "" {
+		backupStore, ok := e.store.(store.BackupContextStore)
+		if !ok {
+			if current.Record.Status == protocolstate.OperationPending {
+				return current, errors.New("operation store cannot persist backup lifecycle context; no workflow step was dispatched")
+			}
+			return e.suspend(current, "core.backup.initial_state_unavailable", "The controller cannot durably capture the server state before backup dispatch.")
+		}
+		captured, err := backupStore.CaptureBackupInitialState(current.Record.OperationID, current.Revision)
+		if err != nil {
+			if current.Record.Status == protocolstate.OperationPending {
+				return current, errors.New("backup initial lifecycle state could not be persisted; no workflow step was dispatched")
+			}
+			return e.suspend(current, "core.backup.initial_state_unavailable", "The server's initial lifecycle state could not be durably captured before backup dispatch.")
+		}
+		current = captured
+	}
 
 	if current.Record.Status == protocolstate.OperationPending {
 		next := current.Record
@@ -331,7 +348,6 @@ func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.S
 	if !deadline.After(time.Now()) {
 		return e.failBeforeDispatch(ctx, current, stepIndex, definition, "core.operation.deadline_exceeded", "The operation deadline expired before adapter dispatch.", "timeout")
 	}
-
 	claimed := current.Record
 	claimed.Steps[stepIndex].Status = protocolstate.StepRunning
 	claimed.Steps[stepIndex].Attempt++

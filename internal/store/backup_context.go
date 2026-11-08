@@ -12,6 +12,12 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 )
 
+// BackupContextStore commits the core-owned lifecycle snapshot required before
+// any server.backup step is dispatched.
+type BackupContextStore interface {
+	CaptureBackupInitialState(operationID string, expectedRevision uint64) (StoredOperation, error)
+}
+
 // CaptureBackupInitialState persists core-owned resume context before any
 // backup step runs. The operation lock, exact target, server state, and record
 // revision are checked in the same transaction as the capture.
