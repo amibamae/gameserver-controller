@@ -28,6 +28,7 @@ After the active draft schema slices are reviewed, use a limited offline profile
 - Release-pinned artifact checksum evidence for game installation.
 - Execution start and proxy registration outcomes where acceptance alone does not prove readiness or routability.
 - Session-scoped reconciliation for unknown Velocity transfers, including exact binding, observation freshness, already-at-destination resolution, and source-only retries under current readiness.
+- Synthetic privacy canaries in transfer requests, schema-valid error details, and diagnostic logs.
 - Standard operation-result type binding, including partial failure and cancellation when `operation_data` is absent.
 
 A limited profile reports exactly which requirements and fixture IDs it covers. It does not claim full controller or adapter conformance.
