@@ -39,7 +39,6 @@ func evaluateSystemdUnitInspection(pkg *protocolPackage, fixture map[string]any)
 			"observation_unknown":      state == "unknown",
 			"safe_to_treat_as_running": unitBound && state == "running",
 			"safe_to_treat_as_stopped": unitBound && state == "stopped",
-			"inspection_read_only":     true,
 		})
 	}
 	return map[string]any{"evaluations": results}, nil
