@@ -22,7 +22,7 @@ Resolve the requested final state from the original parameters and this metadata
 | stopped | stopped | stopped | stopped |
 | degraded | stopped | stopped | ready, subject to current policy and fresh readiness |
 
-For degraded servers, explicit true expresses an intentional request to try returning to service. It does not treat the prior degraded runtime as ready. Every ready result still requires a fresh readiness assertion bound to the exact target.
+For degraded servers, explicit true expresses an intentional request to try returning to service. It does not treat the prior degraded runtime as ready. Every ready result still requires a fresh readiness assertion bound to the exact target. Before any resumed runtime can write, the controller must assign a new data generation under the existing lifecycle rules; resuming must not make the captured generation current for later destruction.
 
 The current unconditional `default: true` annotation on `resume_after_backup` must be replaced with the conditional rules above. The core must preserve whether the caller omitted the field; applying a generic JSON Schema default before resolving this policy would erase that distinction.
 
