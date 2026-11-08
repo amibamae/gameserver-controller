@@ -211,7 +211,7 @@
               "final_lifecycle_state": "stopped"
             }
           },
-          "backup_initial_lifecycle_state": "ready"
+          "backup_initial_lifecycle_state": "stopped"
         }
       },
       {
@@ -420,7 +420,7 @@
               "final_lifecycle_state": "stopped"
             }
           },
-          "backup_initial_lifecycle_state": "degraded"
+          "backup_initial_lifecycle_state": "stopped"
         }
       },
       {
@@ -518,7 +518,7 @@
               "final_lifecycle_state": "stopped"
             }
           },
-          "backup_initial_lifecycle_state": "degraded"
+          "backup_initial_lifecycle_state": "stopped"
         }
       },
       {
@@ -630,7 +630,7 @@
               }
             }
           },
-          "backup_initial_lifecycle_state": "degraded"
+          "backup_initial_lifecycle_state": "ready"
         }
       },
       {
@@ -1033,7 +1033,8 @@
                 "expires_at": "2026-11-06T07:13:00Z"
               }
             }
-          }
+          },
+          "backup_initial_lifecycle_state": "ready"
         }
       },
       {
@@ -1130,7 +1131,7 @@
               "final_lifecycle_state": "stopped"
             }
           },
-          "backup_initial_lifecycle_state": "ready"
+          "backup_initial_lifecycle_state": "stopped"
         }
       },
       {
@@ -1241,7 +1242,7 @@
               }
             }
           },
-          "backup_initial_lifecycle_state": "unknown"
+          "backup_initial_lifecycle_state": "ready"
         }
       }
     ]
@@ -1300,7 +1301,7 @@
       },
       {
         "case_id": "ready-omitted-contradictory-final-state",
-        "operation_schema_valid": true,
+        "operation_schema_valid": false,
         "final_state_matches_policy": false
       },
       {
