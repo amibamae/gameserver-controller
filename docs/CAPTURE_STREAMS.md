@@ -68,8 +68,17 @@ input and capability version, matching target, and the operation's server lock.
 The runtime issues the transient reference and pins the private stage selected
 by its injected staging factory. It compares all capture-result bindings,
 completion, byte count, digest, and receipt scope before asking staging to seal
-the capture. The staging implementation must make that evidence durable and
-associate it with the exact operation and step before returning from `Seal`.
+the capture. Staging durably records both the independently measured receipt
+and the original validated adapter output before returning from `Seal`.
+
+If the process stops after sealing but before the operation store records the
+successful step, `RecoverSealedCapture` reopens the exact scope after restart,
+rehashes the data, validates the saved output against the active protocol
+schema, and checks it against the still-unresolved durable step and server lock.
+It returns the original output and read-only stream without calling the adapter
+again. Older version 1 receipts remain readable, but have no saved adapter
+output and cannot complete this recovery automatically. They remain for manual
+reconciliation.
 
 Mismatched, incomplete, or contradictory capture evidence returns an uncertain
 invocation error so the engine reconciles instead of persisting successful
@@ -99,8 +108,10 @@ reconciliation; failure cleanup cannot remove it.
 A receipt lookup uses a hash of the complete scope rather than user-supplied
 path components. `OpenVerified` validates the bounded metadata, rejects unsafe
 paths and symlink substitutions, checks the exact scope, and rehashes the
-stored bytes before returning a rewound file descriptor. This verifies local
-staging, not a stored backup. Storage transfer and game validation remain
-separate requirements. Orphan temporary directories from interrupted captures
-are retained for inspection; automatic staging garbage collection is not yet
-implemented. No staging lookup authorizes production deletion.
+stored bytes before returning a rewound file descriptor. Version 2 manifests
+also checksum and retain the bounded adapter output needed for restart
+recovery. This verifies local staging, not a stored backup. Storage transfer
+and game validation remain separate requirements. Orphan temporary directories
+from interrupted captures are retained for inspection; automatic staging
+garbage collection is not yet implemented. No staging lookup authorizes
+production deletion.

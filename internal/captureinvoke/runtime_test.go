@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -29,14 +30,16 @@ type stage struct {
 	bytes.Buffer
 	sealed, discarded, failSeal, failDiscard bool
 	receipt                                  capturestream.Receipt
+	output                                   []byte
 }
 
-func (s *stage) Seal(_ context.Context, r capturestream.Receipt) error {
+func (s *stage) Seal(_ context.Context, r capturestream.Receipt, output []byte) error {
 	if s.failSeal {
 		return errors.New("seal failed")
 	}
 	s.sealed = true
 	s.receipt = r
+	s.output = append([]byte(nil), output...)
 	return nil
 }
 func (s *stage) Discard() error {
@@ -53,6 +56,12 @@ type staging struct {
 }
 
 func (s staging) Open(context.Context, capturestream.Scope) (Stage, error) { return s.s, s.err }
+func (s staging) OpenVerifiedCapture(_ context.Context, scope capturestream.Scope) (io.ReadCloser, capturestream.Receipt, json.RawMessage, error) {
+	if s.s == nil || s.s.receipt.Scope != scope || !s.s.sealed {
+		return nil, capturestream.Receipt{}, nil, errors.New("missing fake recovery evidence")
+	}
+	return io.NopCloser(bytes.NewReader(s.s.Bytes())), s.s.receipt, append(json.RawMessage(nil), s.s.output...), nil
+}
 
 type implementation struct {
 	d      adapter.Descriptor
@@ -190,6 +199,28 @@ func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
 			}
 			if success && (sink.String() != "abc" || sink.receipt.Scope != scope) {
 				t.Fatal("incorrect staged evidence")
+			}
+			if success && !json.Valid(sink.output) {
+				t.Fatal("original validated adapter response was not staged")
+			}
+			if success {
+				// Simulate a process restart after the stage was durably sealed but
+				// before the engine persisted the completed adapter response.
+				source.op.Record.Status = protocolstate.OperationReconciling
+				source.op.Record.Steps[0].Status = protocolstate.StepOutcomeUnknown
+				source.op.Record.CurrentStepID = &stepID
+				recovered, recoverErr := runtime.RecoverSealedCapture(context.Background(), scope.OperationID, scope.StepID)
+				if recoverErr != nil {
+					t.Fatal(recoverErr)
+				}
+				recoveredBytes, readErr := io.ReadAll(recovered.Data)
+				recovered.Data.Close()
+				if readErr != nil || string(recoveredBytes) != "abc" || string(recovered.Output) != string(sink.output) || recovered.Receipt != sink.receipt {
+					t.Fatal("restart recovery did not return the exact staged capture evidence")
+				}
+				if _, recoverErr = runtime.RecoverSealedCapture(context.Background(), scope.OperationID, "other-step"); recoverErr == nil {
+					t.Fatal("recovery accepted a nonmatching step")
+				}
 			}
 			if unknown && (response.Result.Outcome != adapter.OutcomeUnknown || len(response.Result.ExternalOperationRef) == 0) {
 				t.Fatal("capability uncertainty was not normalized")

@@ -33,11 +33,26 @@ var ErrStagingNeedsReconciliation = errors.New("capture staging requires reconci
 // failed staging. Implementations must provide bounded, cancelable I/O.
 type Stage interface {
 	io.Writer
-	Seal(context.Context, capturestream.Receipt) error
+	Seal(context.Context, capturestream.Receipt, []byte) error
 	Discard() error
 }
 type Staging interface {
 	Open(context.Context, capturestream.Scope) (Stage, error)
+}
+
+// CaptureRecoveryStore reopens one published capture without permitting
+// mutation. Implementations must verify the staged stream against receipt.
+type CaptureRecoveryStore interface {
+	OpenVerifiedCapture(context.Context, capturestream.Scope) (io.ReadCloser, capturestream.Receipt, json.RawMessage, error)
+}
+
+// RecoveredCapture contains the exact previously validated adapter output and
+// independently verified stream for a durable backup step interrupted after
+// capture sealing. The caller owns Data and must close it.
+type RecoveredCapture struct {
+	Data    io.ReadCloser
+	Receipt capturestream.Receipt
+	Output  json.RawMessage
 }
 type Runtime struct {
 	adapters *adapter.Registry
@@ -56,6 +71,94 @@ func New(adapters *adapter.Registry, schemas *schemaregistry.Registry, records R
 }
 func (r *Runtime) ProtocolVersion() string                          { return r.adapters.ProtocolVersion() }
 func (r *Runtime) Descriptor(id string) (adapter.Descriptor, error) { return r.adapters.Descriptor(id) }
+
+// RecoverSealedCapture returns a previously sealed stream only when the
+// durable operation still identifies the exact unresolved backup capture.
+// It makes no adapter or provider calls and never redispatches the capture.
+func (r *Runtime) RecoverSealedCapture(ctx context.Context, operationID, stepID string) (RecoveredCapture, error) {
+	failed := RecoveredCapture{}
+	if r == nil || ctx == nil || ctx.Err() != nil || operationID == "" || stepID == "" {
+		return failed, errors.New("invalid capture recovery request")
+	}
+	staging, ok := r.staging.(CaptureRecoveryStore)
+	if !ok {
+		return failed, errors.New("capture staging does not support recovery")
+	}
+	saved, err := r.records.GetOperation(operationID)
+	if err != nil {
+		return failed, errors.New("capture operation is unavailable")
+	}
+	op := saved.Record
+	if op.OperationID != operationID || op.OperationType != "server.backup" || op.Status != protocolstate.OperationReconciling || op.BackupInitialLifecycleState == "" || op.CurrentStepID == nil || *op.CurrentStepID != stepID || op.ProtocolVersion != r.schemas.ProtocolVersion() {
+		return failed, errors.New("capture operation is not at the exact recoverable step")
+	}
+	var step *store.OperationStep
+	for i := range op.Steps {
+		if op.Steps[i].StepID == stepID {
+			step = &op.Steps[i]
+			break
+		}
+	}
+	if step == nil || step.Status != protocolstate.StepOutcomeUnknown || step.Attempt < 1 || step.CapabilityName != "game.backup.capture" || step.Output != nil {
+		return failed, errors.New("capture step is not unresolved")
+	}
+	descriptor, err := r.adapters.Descriptor(step.AdapterID)
+	if err != nil {
+		return failed, errors.New("capture adapter is unavailable")
+	}
+	matched := false
+	for _, capability := range descriptor.Capabilities {
+		if capability.Name == step.CapabilityName && capability.Version == step.CapabilityVersion && capability.InputSchemaURI == "urn:gameserver-controller:"+r.schemas.ProtocolVersion()+":game:backup-capture-input" && capability.OutputSchemaURI == "urn:gameserver-controller:"+r.schemas.ProtocolVersion()+":game:backup-capture-output" {
+			matched = true
+			break
+		}
+	}
+	if !matched || r.schemas.ValidateJSON("urn:gameserver-controller:"+r.schemas.ProtocolVersion()+":game:backup-capture-input", step.Input) != nil {
+		return failed, errors.New("recorded capture capability or input is incompatible")
+	}
+	var input capture
+	if json.Unmarshal(step.Input, &input) != nil || input.Target.ServerID != op.Target.ServerID || input.Target.EnvironmentID != op.Target.EnvironmentID || !sameJSON(input.Target.InstanceRef, op.Target.InstanceRef) {
+		return failed, errors.New("recorded capture target differs from its operation")
+	}
+	var instance struct {
+		AdapterID     string `json:"adapter_id"`
+		EnvironmentID string `json:"environment_id"`
+		Kind          string `json:"resource_kind"`
+		ID            string `json:"external_id"`
+	}
+	if json.Unmarshal(input.Target.InstanceRef, &instance) != nil || instance.EnvironmentID != op.Target.EnvironmentID || instance.Kind != "instance" {
+		return failed, errors.New("recorded capture instance is invalid")
+	}
+	lock, err := r.records.GetResourceLock(store.LogicalServerLockScope(op.Target.EnvironmentID, op.Target.ServerID))
+	if err != nil || lock.OperationID != operationID || lock.Scope != store.LogicalServerLockScope(op.Target.EnvironmentID, op.Target.ServerID) {
+		return failed, errors.New("capture recovery requires the exact durable server lock")
+	}
+	scope := capturestream.Scope{OperationID: operationID, StepID: stepID, AdapterID: step.AdapterID, ServerID: op.Target.ServerID, EnvironmentID: op.Target.EnvironmentID, InstanceAdapterID: instance.AdapterID, InstanceID: instance.ID, DataGenerationID: input.GenerationID, DataSetID: input.DataSetID, CaptureID: input.CaptureID}
+	data, receipt, encoded, err := staging.OpenVerifiedCapture(ctx, scope)
+	if err != nil || data == nil {
+		return failed, errors.New("sealed capture evidence is unavailable or invalid")
+	}
+	closeOnError := true
+	defer func() {
+		if closeOnError {
+			_ = data.Close()
+		}
+	}()
+	if ctx.Err() != nil || receipt.Scope != scope || len(encoded) == 0 || r.schemas.ValidateJSON("urn:gameserver-controller:"+r.schemas.ProtocolVersion()+":game:backup-capture-output", encoded) != nil {
+		return failed, errors.New("sealed capture response is missing or invalid")
+	}
+	var output result
+	if json.Unmarshal(encoded, &output) != nil || output.Outcome != "captured" || !output.StreamCompleted || output.Size != receipt.SizeBytes || output.Checksum.Algorithm != "sha256" || output.Checksum.Digest != receipt.SHA256 {
+		return failed, errors.New("sealed capture response does not match measured stream evidence")
+	}
+	in, _ := json.Marshal(input)
+	out, _ := json.Marshal(output.capture)
+	if !sameJSON(in, out) {
+		return failed, errors.New("sealed capture response does not match the exact durable request")
+	}
+	closeOnError = false
+	return RecoveredCapture{Data: data, Receipt: receipt, Output: append(json.RawMessage(nil), encoded...)}, nil
+}
 
 type target struct {
 	ServerID      string          `json:"server_id"`
@@ -226,7 +329,7 @@ func (r *Runtime) Invoke(ctx context.Context, adapterID string, request adapter.
 	if err != nil || receipt.Scope != scope || !output.StreamCompleted || receipt.SizeBytes != output.Size || output.Checksum.Algorithm != "sha256" || receipt.SHA256 != output.Checksum.Digest {
 		return adapter.InvokeResponse{}, uncertain()
 	}
-	if ctx.Err() != nil || stage.Seal(ctx, receipt) != nil {
+	if ctx.Err() != nil || stage.Seal(ctx, receipt, response.Result.Output) != nil {
 		return adapter.InvokeResponse{}, uncertain()
 	}
 	sealed = true
