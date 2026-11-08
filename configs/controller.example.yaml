@@ -56,3 +56,9 @@ servers:
       idle_shutdown: 30m
       require_verified_backup_before_destroy: true
       require_approval_for_destroy: true
+      backups:
+        schedule:
+          every: 9
+          unit: hours
+        retention:
+          keep_last: 5

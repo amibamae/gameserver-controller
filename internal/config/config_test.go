@@ -3,6 +3,8 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"github.com/amibamae/gameserver-controller/internal/backuppolicy"
 )
 
 const validConfig = `schema_version: 1
@@ -82,6 +84,50 @@ func TestParseValidConfig(t *testing.T) {
 	}
 	if value.SchemaVersion != SchemaVersion || len(value.Servers) != 2 || len(value.Adapters) != 5 {
 		t.Fatalf("unexpected decoded config summary: version=%d adapters=%d servers=%d", value.SchemaVersion, len(value.Adapters), len(value.Servers))
+	}
+}
+
+func TestBackupPolicyDefaultsAndOverrides(t *testing.T) {
+	value, err := Parse(strings.NewReader(validConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaults, err := backuppolicy.Resolve(value.Servers[0].Lifecycle.Backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaults.Schedule != (backuppolicy.Interval{Every: 9, Unit: backuppolicy.Hour}) || defaults.KeepLast != 5 {
+		t.Fatalf("backup policy defaults = %#v", defaults)
+	}
+
+	customConfig := strings.Replace(validConfig,
+		"      require_approval_for_destroy: true\n",
+		"      require_approval_for_destroy: true\n      backups:\n        schedule: {every: 5, unit: minutes}\n        retention: {keep_last: 0}\n", 1)
+	custom, err := Parse(strings.NewReader(customConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := backuppolicy.Resolve(custom.Servers[0].Lifecycle.Backups)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Schedule != (backuppolicy.Interval{Every: 5, Unit: backuppolicy.Minute}) || resolved.KeepLast != 0 {
+		t.Fatalf("custom backup policy = %#v, want five minutes and unlimited retention", resolved)
+	}
+}
+
+func TestParseRejectsInvalidBackupPolicy(t *testing.T) {
+	input := strings.Replace(validConfig,
+		"      require_approval_for_destroy: true\n",
+		"      require_approval_for_destroy: true\n      backups:\n        schedule: {every: 0, unit: months}\n", 1)
+	if _, err := Parse(strings.NewReader(input)); err == nil {
+		t.Fatal("Parse accepted a zero backup schedule interval")
+	}
+	negativeRetention := strings.Replace(validConfig,
+		"      require_approval_for_destroy: true\n",
+		"      require_approval_for_destroy: true\n      backups:\n        retention: {keep_last: -1}\n", 1)
+	if _, err := Parse(strings.NewReader(negativeRetention)); err == nil {
+		t.Fatal("Parse accepted negative backup retention")
 	}
 }
 
