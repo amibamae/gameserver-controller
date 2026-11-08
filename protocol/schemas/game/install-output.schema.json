@@ -140,9 +140,9 @@
                   "const": "mismatch"
                 }
               },
-            "required": [
-              "result"
-            ]
+              "required": [
+                "result"
+              ]
             },
             "minContains": 1
           }
@@ -169,9 +169,9 @@
                   "const": "verified"
                 }
               },
-            "required": [
-              "result"
-            ]
+              "required": [
+                "result"
+              ]
             }
           }
         }
@@ -197,7 +197,9 @@
                   "const": "verified"
                 }
               },
-              "required": ["result"]
+              "required": [
+                "result"
+              ]
             }
           }
         }

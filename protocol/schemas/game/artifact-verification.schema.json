@@ -5,7 +5,10 @@
   "description": "One artifact's observed checksum compared with the checksum pinned by the release.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["artifact_id", "result"],
+  "required": [
+    "artifact_id",
+    "result"
+  ],
   "properties": {
     "artifact_id": {
       "type": "string",
@@ -13,7 +16,12 @@
       "maxLength": 160
     },
     "result": {
-      "enum": ["verified", "mismatch", "unavailable", "unknown"]
+      "enum": [
+        "verified",
+        "mismatch",
+        "unavailable",
+        "unknown"
+      ]
     },
     "expected_checksum": {
       "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum"
@@ -27,13 +35,21 @@
       "if": {
         "properties": {
           "result": {
-            "enum": ["verified", "mismatch"]
+        "enum": [
+          "verified",
+          "mismatch"
+        ]
           }
         },
-        "required": ["result"]
+        "required": [
+          "result"
+        ]
       },
       "then": {
-        "required": ["expected_checksum", "observed_checksum"]
+      "required": [
+        "expected_checksum",
+        "observed_checksum"
+      ]
       }
     }
   ]
