@@ -35,26 +35,27 @@ const (
 // controller-owned catalogs. It is deliberately separate from request fields:
 // a caller may select from a profile, but cannot supply adapter step inputs.
 type ServerProvisionProfile struct {
-	Provider                      string
-	CapacityGroup                 string
-	CapacityLimit                 int
-	CapacityGroupLimit            int
-	RegionID                      string
-	PlanID                        string
-	OS                            json.RawMessage
-	Bootstrap                     json.RawMessage
-	GameReleaseID                 string
-	ArtifactURI                   string
-	ArtifactChecksum              json.RawMessage
-	UnitRef                       json.RawMessage
-	ReadinessCheckSetID           string
-	RequiredChecks                []ReadinessRequirement
-	DataGenerationID              string
-	BackupStorageProfileID        string
-	BackupStorageAdapterID        string
-	GameReleaseDescription        json.RawMessage
-	RequiredCompatibilityCheckIDs []string
-	RequiredRestoreCheckIDs       []string
+	Provider                       string
+	CapacityGroup                  string
+	CapacityLimit                  int
+	CapacityGroupLimit             int
+	RegionID                       string
+	PlanID                         string
+	OS                             json.RawMessage
+	Bootstrap                      json.RawMessage
+	GameReleaseID                  string
+	ArtifactURI                    string
+	ArtifactChecksum               json.RawMessage
+	UnitRef                        json.RawMessage
+	ReadinessCheckSetID            string
+	RequiredChecks                 []ReadinessRequirement
+	DataGenerationID               string
+	BackupStorageProfileID         string
+	BackupStorageAdapterID         string
+	BackupStorageVersioningEnabled bool
+	GameReleaseDescription         json.RawMessage
+	RequiredCompatibilityCheckIDs  []string
+	RequiredRestoreCheckIDs        []string
 }
 
 // ServerProvisionProfileResolver resolves an allow-listed deployment using
@@ -65,7 +66,7 @@ type ServerProvisionProfileResolver interface {
 }
 
 // ServerProvisionBackupResolver supplies only controller-verified backup
-// records and exact-version object streams from an allow-listed storage profile.
+// records and exact manifest-object streams from an allow-listed storage profile.
 type ServerProvisionBackupResolver interface {
 	ResolveServerProvisionBackup(context.Context, store.LogicalServer, string, string) (VerifiedProvisionBackup, error)
 	OpenServerProvisionBackupObject(context.Context, store.LogicalServer, string, json.RawMessage) (io.ReadCloser, error)
