@@ -26,7 +26,8 @@ To store one of the credential names already referenced by your validated
 configuration, use:
 
 ```sh
-sudo go run ./cmd/controller-setup credentials set --config /etc/gameserver-controller/controller.yaml --name <configured-credential-name>
+go build -o /tmp/controller-setup ./cmd/controller-setup
+sudo /tmp/controller-setup credentials set --config /etc/gameserver-controller/controller.yaml --name <configured-credential-name>
 ```
 
 Replacing a value also requires `--replace --confirm-replace <same-name>`. The
