@@ -35,7 +35,7 @@ A limited profile reports exactly which requirements and fixture IDs it covers. 
 
 ## Independent implementation
 
-Use an implementation and validator runtime independent from the Go conformance evaluator. Generated bindings are acceptable when they come from the pinned schemas. The independent implementation must consume the same package files and fixture inputs, without importing Go evaluator code or relying on Go-generated expected outputs.
+Use an implementation and validator runtime independent from the Go conformance evaluator. Generated bindings are acceptable when they come from the pinned schemas. The independent consumer may live outside this repository; do not add a second maintained protocol-check tool here, so repository-owned tooling remains Go. The independent implementation must consume the same package files and fixture inputs, without importing Go evaluator code or relying on Go-generated expected outputs.
 
 Compare parsed JSON values for ordinary protocol results. Require exact digest values for RFC 8785 vectors. A schema-valid message alone does not prove behavioral interoperability.
 
