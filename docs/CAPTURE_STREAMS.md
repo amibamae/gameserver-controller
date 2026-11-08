@@ -60,3 +60,22 @@ unclaimed, open, failed, or aborted stream has no usable evidence.
 `Ticket.Abort` revokes an unclaimed handle or invalidates an active capture;
 the caller remains responsible for removing staged data. Tickets are
 process-local and must not enter durable operation records.
+
+`internal/captureinvoke.Runtime` wraps the adapter registry for injection into
+the workflow engine. Capture dispatch requires the stored backup operation and
+step to be running, the captured initial lifecycle state, an exact immutable
+input and capability version, matching target, and the operation's server lock.
+The runtime issues the transient reference and pins the private stage selected
+by its injected staging factory. It compares all capture-result bindings,
+completion, byte count, digest, and receipt scope before asking staging to seal
+the capture. The staging implementation must make that evidence durable and
+associate it with the exact operation and step before returning from `Seal`.
+
+Mismatched, incomplete, or contradictory capture evidence returns an uncertain
+invocation error so the engine reconciles instead of persisting successful
+output. Capability-level unknown results are normalized to an unknown envelope
+with their reconciliation reference. Unsuccessful staging is discarded after
+the stream is aborted; a discard failure remains an explicit uncertain result.
+This runtime can be composed with the engine, but there is no controller
+composition or complete backup workflow using it yet. A durable filesystem
+staging implementation and verified storage transfer remain required.
