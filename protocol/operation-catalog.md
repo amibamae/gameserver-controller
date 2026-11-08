@@ -56,7 +56,9 @@ A successful stop leaves the logical server `stopped`; it does not destroy the V
 
 ### 3.5 `server.backup`
 
-Captures a consistent backup using the game adapter's declared consistency mode, transfers objects, writes a manifest, and verifies every required object. If the server was `ready`, omitted `resume_after_backup` defaults to `true`; it requests restart and readiness validation after verification. Setting it to `false` leaves the server stopped. If the server was already `stopped`, it remains stopped. A failed or unverified backup MUST NOT be recorded as verified.
+Captures a consistent backup using the game adapter's declared consistency mode, transfers objects, writes a manifest, and verifies every required object. Immediately before the first backup-related lifecycle transition or adapter dispatch, the core MUST capture and durably persist the target's current lifecycle state as immutable `backup_initial_lifecycle_state` metadata on the operation. This metadata is core-owned, bound to the operation's exact server, environment, and instance target, and MUST remain unchanged through retries and restart. It MUST NOT be accepted from request parameters or adapter output. A target change requires reconciliation.
+
+The core MUST preserve whether `resume_after_backup` was omitted in the immutable request snapshot. Omission defaults to resuming a `ready` server; a `degraded` or `stopped` server remains stopped. Explicit `false` leaves the server stopped. Explicit `true` requests resume from `ready` or `degraded`; a `stopped` server remains stopped. Resuming from `degraded` is permitted only when current policy allows it and fresh readiness checks pass for the exact target. Any resumed runtime MUST receive a new data generation before it can write; the captured pre-backup generation MUST NOT become current again. Every successful backup operation MUST include its captured initial state, and its final lifecycle state MUST match this policy. A failed or unverified backup MUST NOT be recorded as verified.
 
 ### 3.6 `server.restore`
 

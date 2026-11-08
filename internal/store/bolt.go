@@ -414,6 +414,9 @@ func (s *BoltStore) UpdateOperation(expectedRevision uint64, next OperationRecor
 // checked against the protocol transition table and the event is derived from
 // the persisted operation identity and completed step evidence.
 func (s *BoltStore) UpdateOperationAndLogicalServer(expectedOperationRevision uint64, operation OperationRecord, expectedServerRevision uint64, server LogicalServer) (StoredOperation, StoredLogicalServer, error) {
+	if operation.OperationType == "server.backup" && operation.BackupInitialLifecycleState == "" {
+		return StoredOperation{}, StoredLogicalServer{}, fmt.Errorf("%w: backup context must precede lifecycle transition", ErrInvalidRecord)
+	}
 	if operation.OperationID == "" || operation.Target.ServerID == "" || operation.Target.EnvironmentID == "" {
 		return StoredOperation{}, StoredLogicalServer{}, fmt.Errorf("%w: operation target is required for lifecycle commit", ErrInvalidRecord)
 	}
@@ -693,7 +696,8 @@ func decodeEnvelope(value []byte) (StoredOperation, error) {
 }
 
 func sameAcceptedRequest(current, next OperationRecord) bool {
-	return current.OperationID == next.OperationID &&
+	return current.BackupInitialLifecycleState == next.BackupInitialLifecycleState &&
+		current.OperationID == next.OperationID &&
 		current.OperationType == next.OperationType &&
 		current.ProtocolVersion == next.ProtocolVersion &&
 		current.SchemaPackageRevision == next.SchemaPackageRevision &&

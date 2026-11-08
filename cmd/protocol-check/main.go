@@ -585,6 +585,9 @@ func parseJSONFile(path string) (any, error) {
 }
 
 func parseJSON(data []byte, source string) (any, error) {
+	if err := validateJSONUnicode(data); err != nil {
+		return nil, fmt.Errorf("%s: invalid JSON Unicode: %w", source, err)
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
 	value, err := parseJSONValue(decoder)

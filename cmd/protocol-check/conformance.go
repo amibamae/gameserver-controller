@@ -50,6 +50,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 	fixtureID := stringValue(fixture, "fixture_id")
 	input := asObject(fixture["input"])
 	switch fixtureID {
+	case "protocol.json.raw-wire-interoperability":
+		return evaluateRawJSONInteroperability(fixture)
 	case "execution.unit.restart.clean-stop-distinct-runtime":
 		return evaluateUnitRestart(pkg, fixture)
 	case "execution.unit.create.exact-definition-no-autostart":
@@ -1478,6 +1480,12 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"reconciliation_reference_present":       unknown && hasReference && targetBound,
 			"retry_permitted_without_reconciliation": !unknown || !hasReference,
 		}, nil
+	case "operations.backup.no-resume-final-state":
+		return evaluateBackupNoResumePolicy(pkg, fixture)
+	case "operations.backup.initial-state-resume-policy":
+		return evaluateBackupInitialStatePolicy(pkg, fixture)
+	case "operations.restore.final-state-policy":
+		return evaluateRestoreFinalStatePolicy(pkg, fixture)
 	case "operations.typed-provision-backup-restore-destroy-results", "operations.typed-provision-backup-restore-destroy-target-mismatch", "operations.typed-provision-backup-restore-readiness-binding", "operations.typed-provision-backup-restore-readiness-freshness":
 		provisionOperation := asObject(input["provision_operation"])
 		backupOperation := asObject(input["backup_operation"])

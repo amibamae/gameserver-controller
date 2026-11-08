@@ -288,6 +288,10 @@ func seedKnownDestroyGeneration(operationStore *store.BoltStore, protocolVersion
 	if err != nil {
 		return err
 	}
+	accepted, err = operationStore.CaptureBackupInitialState(operation.OperationID, accepted.Revision)
+	if err != nil {
+		return err
+	}
 	server, err := operationStore.GetLogicalServer(startTestEnvID, startTestServerID)
 	if err != nil {
 		return err

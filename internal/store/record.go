@@ -26,27 +26,28 @@ var (
 // snapshot must already be schema-validated and contain secret references,
 // never resolved secret values.
 type OperationRecord struct {
-	OperationID           string                        `json:"operation_id"`
-	OperationType         string                        `json:"operation_type"`
-	ProtocolVersion       string                        `json:"protocol_version"`
-	SchemaPackageRevision string                        `json:"schema_package_revision,omitempty"`
-	Target                OperationTarget               `json:"target"`
-	Status                protocolstate.OperationStatus `json:"status"`
-	CurrentStepID         *string                       `json:"current_step_id,omitempty"`
-	ActorID               string                        `json:"actor_id"`
-	CorrelationID         string                        `json:"correlation_id,omitempty"`
-	IdempotencyKey        string                        `json:"idempotency_key,omitempty"`
-	RequestFingerprint    string                        `json:"request_fingerprint,omitempty"`
-	RequestSnapshot       RequestSnapshot               `json:"request_snapshot"`
-	CreatedAt             time.Time                     `json:"created_at"`
-	UpdatedAt             time.Time                     `json:"updated_at"`
-	StartedAt             *time.Time                    `json:"started_at,omitempty"`
-	CompletedAt           *time.Time                    `json:"completed_at,omitempty"`
-	Deadline              *time.Time                    `json:"deadline,omitempty"`
-	Steps                 []OperationStep               `json:"steps"`
-	Progress              json.RawMessage               `json:"progress,omitempty"`
-	Result                json.RawMessage               `json:"result,omitempty"`
-	Error                 json.RawMessage               `json:"error,omitempty"`
+	BackupInitialLifecycleState protocolstate.ServerState     `json:"backup_initial_lifecycle_state,omitempty"`
+	OperationID                 string                        `json:"operation_id"`
+	OperationType               string                        `json:"operation_type"`
+	ProtocolVersion             string                        `json:"protocol_version"`
+	SchemaPackageRevision       string                        `json:"schema_package_revision,omitempty"`
+	Target                      OperationTarget               `json:"target"`
+	Status                      protocolstate.OperationStatus `json:"status"`
+	CurrentStepID               *string                       `json:"current_step_id,omitempty"`
+	ActorID                     string                        `json:"actor_id"`
+	CorrelationID               string                        `json:"correlation_id,omitempty"`
+	IdempotencyKey              string                        `json:"idempotency_key,omitempty"`
+	RequestFingerprint          string                        `json:"request_fingerprint,omitempty"`
+	RequestSnapshot             RequestSnapshot               `json:"request_snapshot"`
+	CreatedAt                   time.Time                     `json:"created_at"`
+	UpdatedAt                   time.Time                     `json:"updated_at"`
+	StartedAt                   *time.Time                    `json:"started_at,omitempty"`
+	CompletedAt                 *time.Time                    `json:"completed_at,omitempty"`
+	Deadline                    *time.Time                    `json:"deadline,omitempty"`
+	Steps                       []OperationStep               `json:"steps"`
+	Progress                    json.RawMessage               `json:"progress,omitempty"`
+	Result                      json.RawMessage               `json:"result,omitempty"`
+	Error                       json.RawMessage               `json:"error,omitempty"`
 }
 
 type OperationTarget struct {
@@ -90,6 +91,9 @@ type StoredOperation struct {
 }
 
 func prepareNewRecord(record OperationRecord, now time.Time) (OperationRecord, error) {
+	if record.BackupInitialLifecycleState != "" {
+		return OperationRecord{}, fmt.Errorf("%w: backup initial state is core-owned", ErrInvalidRecord)
+	}
 	if record.Status == "" {
 		record.Status = protocolstate.OperationPending
 	}
@@ -119,6 +123,14 @@ func prepareNewRecord(record OperationRecord, now time.Time) (OperationRecord, e
 }
 
 func validateRecord(record OperationRecord) error {
+	if record.OperationType == "server.backup" && record.Status == protocolstate.OperationSucceeded && record.BackupInitialLifecycleState == "" {
+		return invalidField("backup_initial_lifecycle_state")
+	}
+	if state := record.BackupInitialLifecycleState; state != "" {
+		if record.OperationType != "server.backup" || (state != protocolstate.ServerReady && state != protocolstate.ServerDegraded && state != protocolstate.ServerStopped) {
+			return invalidField("backup_initial_lifecycle_state")
+		}
+	}
 	if !validIdentifier(record.OperationID, 200) {
 		return invalidField("operation_id")
 	}
@@ -183,6 +195,9 @@ func validateRecord(record OperationRecord) error {
 	}
 	seenSteps := make(map[string]struct{}, len(record.Steps))
 	for i, step := range record.Steps {
+		if record.OperationType == "server.backup" && record.BackupInitialLifecycleState == "" && (step.Attempt != 0 || step.Status == protocolstate.StepRunning || step.Status == protocolstate.StepSucceeded || step.Status == protocolstate.StepWaiting || step.Status == protocolstate.StepOutcomeUnknown) {
+			return invalidField("backup_initial_lifecycle_state must precede dispatch")
+		}
 		if !validIdentifier(step.StepID, 200) || !validCapabilityName(step.StepType, 160) || !knownStepStatus(step.Status) || step.Attempt < 0 {
 			return invalidField(fmt.Sprintf("steps[%d]", i))
 		}
