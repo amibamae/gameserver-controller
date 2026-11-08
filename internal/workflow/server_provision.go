@@ -224,7 +224,7 @@ func (w *ServerProvisionWorkflow) BuildPlan(ctx context.Context, operation store
 		if w.backups == nil {
 			return nil, errors.New("server.provision restore requires a trusted backup resolver")
 		}
-		if err := validateProvisionRestoreProfile(profile); err != nil {
+		if err := validateProvisionRestoreProfile(server, profile); err != nil {
 			return nil, err
 		}
 		if w.schemas.ValidateJSON("urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":game:release-describe-output", profile.GameReleaseDescription) != nil {
