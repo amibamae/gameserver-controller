@@ -125,6 +125,26 @@ func TestCredentialSetRequiresAdministratorAndExplicitReplaceConfirmation(t *tes
 	}
 }
 
+func TestCredentialSetRejectsMismatchedEntries(t *testing.T) {
+	configPath := filepath.Join("..", "..", "configs", "controller.example.yaml")
+	values := [][]byte{[]byte("synthetic-first-value"), []byte("synthetic-other-value")}
+	index := 0
+	prompt := func(context.Context, string) ([]byte, error) {
+		value := values[index]
+		index++
+		return value, nil
+	}
+	encryptor := &testEncryptor{}
+	var stdout, stderr bytes.Buffer
+	err := runCredentialCommand([]string{"set", "--config", configPath, "--name", "example-vultr-api-token"}, &stdout, &stderr, true, prompt, encryptor, t.TempDir())
+	if err == nil || encryptor.calls != 0 {
+		t.Fatal("mismatched credential entries were accepted")
+	}
+	if strings.Contains(stdout.String()+stderr.String(), "synthetic-") {
+		t.Fatal("mismatched credential values were printed")
+	}
+}
+
 func TestCredentialSetRejectsLiteralSecretArgument(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	err := runCredentialCommand([]string{"set", "--name", "example-vultr-api-token", "--secret", "synthetic-secret"}, &stdout, &stderr, true, nil, &testEncryptor{}, t.TempDir())

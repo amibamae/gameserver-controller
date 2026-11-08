@@ -166,6 +166,9 @@ func ensureCredentialDirectory(directory string) error {
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		return errors.New("credential directory is unavailable")
 	}
+	if err := os.Chown(directory, os.Geteuid(), os.Getegid()); err != nil {
+		return errors.New("set encrypted credential directory owner failed")
+	}
 	if err := os.Chmod(directory, 0o700); err != nil {
 		return errors.New("restrict encrypted credential directory permissions failed")
 	}
