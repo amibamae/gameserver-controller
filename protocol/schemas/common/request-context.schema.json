@@ -22,6 +22,11 @@
         "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-transfer-reference"
       },
       "description": "Optional, transient references to bounded streams for the active adapter invocation. Only capabilities that declare them may consume these one-use handles; do not persist or log them."
+    },
+    "secret_refs": {
+      "type": "array",
+      "items": {"$ref": "urn:gameserver-controller:0.21.0-draft:common:secret-reference"},
+      "description": "Optional, transient opaque references to protected secret material required by this adapter invocation. The values themselves MUST NOT enter protocol data, operation records, or logs."
     }
   }
 }
