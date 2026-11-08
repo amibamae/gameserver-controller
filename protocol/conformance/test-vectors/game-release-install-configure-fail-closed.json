@@ -77,9 +77,22 @@
       "outcome": "rejected",
       "artifact_verification": "mismatch",
       "installation_started": false,
-      "verified_artifact_ids": [],
       "observed_at": "2026-11-06T09:15:00Z",
-      "reason_code": "artifact_checksum_mismatch"
+      "reason_code": "artifact_checksum_mismatch",
+      "artifact_results": [
+        {
+          "artifact_id": "paper-server-jar",
+          "result": "mismatch",
+          "expected_checksum": {
+            "algorithm": "sha256",
+            "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "observed_checksum": {
+            "algorithm": "sha256",
+            "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        }
+      ]
     },
     "configure_input": {
       "target": {

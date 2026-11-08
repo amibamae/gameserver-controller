@@ -13,14 +13,25 @@
   "outcome": "installed",
   "artifact_verification": "verified",
   "installation_started": true,
-  "verified_artifact_ids": [
-    "paper-server-jar"
-  ],
   "installation_ref": {
     "adapter_id": "execution.systemd",
     "environment_id": "staging",
     "resource_kind": "installation",
     "external_id": "paper-install-001"
   },
-  "observed_at": "2026-11-06T09:15:00Z"
+  "observed_at": "2026-11-06T09:15:00Z",
+  "artifact_results": [
+    {
+      "artifact_id": "paper-server-jar",
+      "result": "verified",
+      "expected_checksum": {
+        "algorithm": "sha256",
+        "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "observed_checksum": {
+        "algorithm": "sha256",
+        "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ]
 }

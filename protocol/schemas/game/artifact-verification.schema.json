@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:game:artifact-verification",
+  "title": "Game artifact verification result",
+  "description": "One artifact's observed checksum compared with the checksum pinned by the release.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_id", "result"],
+  "properties": {
+    "artifact_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "result": {
+      "enum": ["verified", "mismatch", "unavailable", "unknown"]
+    },
+    "expected_checksum": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum"
+    },
+    "observed_checksum": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "enum": ["verified", "mismatch"]
+          }
+        },
+        "required": ["result"]
+      },
+      "then": {
+        "required": ["expected_checksum", "observed_checksum"]
+      }
+    }
+  ]
+}

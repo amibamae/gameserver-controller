@@ -4,10 +4,6 @@
   "contract_area": "game.install",
   "purpose": "A completed installation is accepted only when it binds the exact target and release and verifies the complete pinned artifact set.",
   "input": {
-    "required_artifact_ids": [
-      "paper-server-jar",
-      "paper-plugin"
-    ],
     "install_request": {
       "target": {
         "server_id": "minecraft-test",
@@ -36,25 +32,64 @@
       "outcome": "installed",
       "artifact_verification": "verified",
       "installation_started": true,
-      "verified_artifact_ids": [
-        "paper-plugin",
-        "paper-server-jar"
-      ],
       "installation_ref": {
         "adapter_id": "execution.systemd",
         "environment_id": "staging",
         "resource_kind": "installation",
         "external_id": "paper-install-002"
       },
-      "observed_at": "2026-11-06T10:00:00Z"
+      "observed_at": "2026-11-06T10:00:00Z",
+      "artifact_results": [
+        {
+          "artifact_id": "paper-plugin",
+          "result": "verified",
+          "expected_checksum": {
+            "algorithm": "sha256",
+            "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "observed_checksum": {
+            "algorithm": "sha256",
+            "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        },
+        {
+          "artifact_id": "paper-server-jar",
+          "result": "verified",
+          "expected_checksum": {
+            "algorithm": "sha256",
+            "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "observed_checksum": {
+            "algorithm": "sha256",
+            "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      ]
     },
-    "release_id": "paper-1.21.11-build-3"
+    "release_id": "paper-1.21.11-build-3",
+    "required_artifacts": [
+      {
+        "artifact_id": "paper-server-jar",
+        "checksum": {
+          "algorithm": "sha256",
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "artifact_id": "paper-plugin",
+        "checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    ]
   },
   "expected": {
     "schema_valid": true,
     "target_bound": true,
     "artifact_set_complete": true,
     "installation_result_accepted": true,
-    "operation_reconciliation_required": false
+    "operation_reconciliation_required": false,
+    "artifact_checksums_verified": true
   }
 }

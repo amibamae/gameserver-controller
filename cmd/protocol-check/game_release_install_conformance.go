@@ -53,11 +53,7 @@ func evaluateGameInstallContract(pkg *protocolPackage, fixture map[string]any) (
 	input := asObject(fixture["input"])
 	release := asObject(input["release_description"])
 	releaseValid := pkg.validateSchema(gameReleaseOutputSchemaID, release) == nil
-	artifactIDs := make([]any, 0, len(arrayValue(release, "artifacts")))
-	for _, rawArtifact := range arrayValue(release, "artifacts") {
-		artifactIDs = append(artifactIDs, asObject(rawArtifact)["artifact_id"])
-	}
-	releaseArtifactSetValid := len(artifactIDs) > 0 && uniqueStrings(artifactIDs)
+	releaseArtifactSetValid := len(arrayValue(release, "artifacts")) > 0
 
 	evaluations := make([]any, 0, len(arrayValue(input, "evaluations")))
 	for _, rawEvaluation := range arrayValue(input, "evaluations") {
@@ -76,16 +72,18 @@ func evaluateGameInstallContract(pkg *protocolPackage, fixture map[string]any) (
 			stringValue(request, "release_id") == stringValue(response, "release_id") &&
 			stringValue(request, "release_id") == stringValue(release, "release_id")
 
-		verifiedArtifactIDs := arrayValue(response, "verified_artifact_ids")
-		artifactSetComplete := releaseArtifactSetValid && uniqueStrings(verifiedArtifactIDs) &&
-			sameStringSet(artifactIDs, verifiedArtifactIDs)
+		artifactSetComplete, artifactChecksumsVerified := compareArtifactVerifications(
+			arrayValue(release, "artifacts"), arrayValue(response, "artifact_results"),
+		)
+		artifactSetComplete = artifactSetComplete && releaseArtifactSetValid
+		artifactChecksumsVerified = artifactChecksumsVerified && releaseArtifactSetValid
 		outcome := stringValue(response, "outcome")
 		verification := stringValue(response, "artifact_verification")
 		started := boolValue(response, "installation_started")
 		outcomeConsistent := outcome == "installed" && started && verification == "verified" ||
 			outcome == "already_installed" && !started && verification == "verified"
 		accepted := releaseValid && requestValid && responseValid && targetBound && releaseBound &&
-			artifactSetComplete && outcomeConsistent
+			artifactSetComplete && artifactChecksumsVerified && outcomeConsistent
 		reconciliationRequired := outcome == "outcome_unknown" ||
 			(started && !accepted) ||
 			((outcome == "installed" || outcome == "already_installed") && !accepted)
@@ -97,11 +95,44 @@ func evaluateGameInstallContract(pkg *protocolPackage, fixture map[string]any) (
 			"target_bound":                         targetBound,
 			"release_bound":                        releaseBound,
 			"artifact_set_complete":                artifactSetComplete,
+			"artifact_checksums_verified":          artifactChecksumsVerified,
 			"installation_result_accepted":         accepted,
 			"reconciliation_required_before_retry": reconciliationRequired,
 		})
 	}
 	return map[string]any{"evaluations": evaluations}, nil
+}
+
+func compareArtifactVerifications(required, results []any) (bool, bool) {
+	requiredChecksums := make(map[string]any, len(required))
+	requiredIDs := make([]any, 0, len(required))
+	for _, rawArtifact := range required {
+		artifact := asObject(rawArtifact)
+		id := stringValue(artifact, "artifact_id")
+		if id == "" {
+			return false, false
+		}
+		requiredIDs = append(requiredIDs, id)
+		requiredChecksums[id] = artifact["checksum"]
+	}
+	resultIDs := make([]any, 0, len(results))
+	for _, rawResult := range results {
+		resultIDs = append(resultIDs, asObject(rawResult)["artifact_id"])
+	}
+	complete := len(required) > 0 && uniqueStrings(requiredIDs) && uniqueStrings(resultIDs) &&
+		sameStringSet(requiredIDs, resultIDs)
+	checksumsVerified := complete
+	for _, rawResult := range results {
+		result := asObject(rawResult)
+		id := stringValue(result, "artifact_id")
+		pinnedChecksum, exists := requiredChecksums[id]
+		if !exists || stringValue(result, "result") != "verified" ||
+			!reflect.DeepEqual(result["expected_checksum"], pinnedChecksum) ||
+			!reflect.DeepEqual(result["observed_checksum"], pinnedChecksum) {
+			checksumsVerified = false
+		}
+	}
+	return complete, checksumsVerified
 }
 
 func validSHA256Checksum(checksum map[string]any) bool {

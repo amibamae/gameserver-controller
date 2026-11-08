@@ -33,71 +33,7 @@
       "minItems": 1,
       "maxItems": 256,
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "artifact_id",
-          "result"
-        ],
-        "properties": {
-          "artifact_id": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 160
-          },
-          "result": {
-            "enum": [
-              "verified",
-              "mismatch",
-              "unavailable",
-              "unknown"
-            ]
-          },
-          "expected_checksum": {
-            "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum"
-          },
-          "observed_checksum": {
-            "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum"
-          }
-        },
-        "allOf": [
-          {
-            "if": {
-              "properties": {
-                "result": {
-                  "const": "verified"
-                }
-              },
-              "required": [
-                "result"
-              ]
-            },
-            "then": {
-              "required": [
-                "expected_checksum",
-                "observed_checksum"
-              ]
-            }
-          },
-          {
-            "if": {
-              "properties": {
-                "result": {
-                  "const": "mismatch"
-                }
-              },
-              "required": [
-                "result"
-              ]
-            },
-            "then": {
-              "required": [
-                "expected_checksum",
-                "observed_checksum"
-              ]
-            }
-          }
-        ]
+        "$ref": "urn:gameserver-controller:0.21.0-draft:game:artifact-verification"
       }
     },
     "observed_game_version": {

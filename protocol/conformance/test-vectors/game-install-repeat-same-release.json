@@ -15,9 +15,6 @@
       }
     },
     "release_id": "paper-1.21.11-build-3",
-    "required_artifact_ids": [
-      "paper-server-jar"
-    ],
     "install_request": {
       "target": {
         "server_id": "minecraft-test",
@@ -46,23 +43,44 @@
       "outcome": "already_installed",
       "artifact_verification": "verified",
       "installation_started": false,
-      "verified_artifact_ids": [
-        "paper-server-jar"
-      ],
       "installation_ref": {
         "adapter_id": "execution.systemd",
         "environment_id": "staging",
         "resource_kind": "installation",
         "external_id": "paper-install-001"
       },
-      "observed_at": "2026-11-06T09:15:00Z"
-    }
+      "observed_at": "2026-11-06T09:15:00Z",
+      "artifact_results": [
+        {
+          "artifact_id": "paper-server-jar",
+          "result": "verified",
+          "expected_checksum": {
+            "algorithm": "sha256",
+            "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "observed_checksum": {
+            "algorithm": "sha256",
+            "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      ]
+    },
+    "required_artifacts": [
+      {
+        "artifact_id": "paper-server-jar",
+        "checksum": {
+          "algorithm": "sha256",
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ]
   },
   "expected": {
     "schema_valid": true,
     "target_bound": true,
     "artifact_set_complete": true,
-    "duplicate_install_started": false
+    "duplicate_install_started": false,
+    "artifact_checksums_verified": true
   },
   "side_effect_expected": "none"
 }
