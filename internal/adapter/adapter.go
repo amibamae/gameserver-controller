@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/amibamae/gameserver-controller/internal/capturestream"
 	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 )
 
@@ -56,14 +57,15 @@ type Capability struct {
 }
 
 type RequestContext struct {
-	RequestID      string    `json:"request_id"`
-	CorrelationID  string    `json:"correlation_id"`
-	OperationID    string    `json:"operation_id,omitempty"`
-	StepID         string    `json:"step_id,omitempty"`
-	ServerID       string    `json:"server_id,omitempty"`
-	EnvironmentID  string    `json:"environment_id"`
-	Deadline       time.Time `json:"deadline"`
-	IdempotencyKey string    `json:"idempotency_key,omitempty"`
+	StreamTransfers []capturestream.Reference `json:"stream_transfers,omitempty"`
+	RequestID       string                    `json:"request_id"`
+	CorrelationID   string                    `json:"correlation_id"`
+	OperationID     string                    `json:"operation_id,omitempty"`
+	StepID          string                    `json:"step_id,omitempty"`
+	ServerID        string                    `json:"server_id,omitempty"`
+	EnvironmentID   string                    `json:"environment_id"`
+	Deadline        time.Time                 `json:"deadline"`
+	IdempotencyKey  string                    `json:"idempotency_key,omitempty"`
 }
 
 type InvokeParams struct {
@@ -202,6 +204,21 @@ func (r *Registry) Descriptor(adapterID string) (Descriptor, error) {
 }
 
 func (r *Registry) Invoke(ctx context.Context, adapterID string, request InvokeRequest) (InvokeResponse, error) {
+	response, err := r.invoke(ctx, adapterID, request)
+	if err != nil && len(request.Params.RequestContext.StreamTransfers) > 0 {
+		// Stream handles are bearer credentials. Neither adapter errors nor
+		// schema diagnostics may return their contents to ordinary logging.
+		redacted := errors.New("streamed adapter invocation failed")
+		var invocation *InvocationError
+		if errors.As(err, &invocation) {
+			return InvokeResponse{}, &InvocationError{MayHaveSideEffects: invocation.MayHaveSideEffects, Cause: redacted}
+		}
+		return InvokeResponse{}, redacted
+	}
+	return response, err
+}
+
+func (r *Registry) invoke(ctx context.Context, adapterID string, request InvokeRequest) (InvokeResponse, error) {
 	if r == nil {
 		return InvokeResponse{}, ErrAdapterNotFound
 	}
@@ -217,6 +234,21 @@ func (r *Registry) Invoke(ctx context.Context, adapterID string, request InvokeR
 	}
 	if ctx == nil {
 		return InvokeResponse{}, errors.New("invocation context is required")
+	}
+	transfers := request.Params.RequestContext.StreamTransfers
+	if capability.Name == "game.backup.capture" && len(transfers) != 1 {
+		return InvokeResponse{}, errors.New("backup capture requires one stream transfer")
+	}
+	if len(transfers) > 0 {
+		direction, _ := capability.Constraints["stream_transfer_direction"].(string)
+		if direction == "" || len(registered.descriptor.StreamTransportProfiles) == 0 {
+			return InvokeResponse{}, errors.New("capability does not declare stream transport")
+		}
+		for _, transfer := range transfers {
+			if transfer.Direction != direction || !transfer.ExpiresAt.After(time.Now()) || transfer.ExpiresAt.After(request.Params.RequestContext.Deadline) || time.Until(transfer.ExpiresAt) > 5*time.Minute {
+				return InvokeResponse{}, errors.New("invalid transient stream transfer")
+			}
+		}
 	}
 	if request.Params.ProtocolVersion != r.version {
 		return InvokeResponse{}, fmt.Errorf("request protocol version %q does not match selected version %q", request.Params.ProtocolVersion, r.version)
@@ -241,8 +273,20 @@ func (r *Registry) Invoke(ctx context.Context, adapterID string, request InvokeR
 	if err := r.schemas.ValidateJSON(capability.InputSchemaURI, request.Params.Input); err != nil {
 		return InvokeResponse{}, fmt.Errorf("invalid input for capability %q: %w", capability.Name, err)
 	}
+	if len(transfers) > 0 {
+		var input any
+		if json.Unmarshal(request.Params.Input, &input) != nil {
+			return InvokeResponse{}, errors.New("invalid streamed input")
+		}
+		for _, transfer := range transfers {
+			if containsStreamCredential(input, transfer.TransferID) {
+				return InvokeResponse{}, errors.New("stream credential in durable input")
+			}
+		}
+	}
 	inputCopy := append(json.RawMessage(nil), request.Params.Input...)
 	request.Params.Input = inputCopy
+	request.Params.RequestContext.StreamTransfers = cloneSlice(transfers)
 	if err := ctx.Err(); err != nil {
 		return InvokeResponse{}, err
 	}
@@ -264,6 +308,21 @@ func (r *Registry) Invoke(ctx context.Context, adapterID string, request InvokeR
 	if response.Result.ObservedAt.IsZero() {
 		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("adapter response observed_at is required")}
 	}
+	if len(transfers) > 0 {
+		encoded, encodeErr := json.Marshal(response)
+		if encodeErr != nil {
+			return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("invalid streamed response")}
+		}
+		var decoded any
+		if json.Unmarshal(encoded, &decoded) != nil {
+			return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("invalid streamed response")}
+		}
+		for _, transfer := range transfers {
+			if containsStreamCredential(decoded, transfer.TransferID) {
+				return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("stream credential in adapter response")}
+			}
+		}
+	}
 	if err := r.schemas.ValidateJSON(capability.OutputSchemaURI, response.Result.Output); err != nil {
 		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: fmt.Errorf("invalid output for capability %q: %w", capability.Name, err)}
 	}
@@ -276,6 +335,26 @@ func (r *Registry) Invoke(ctx context.Context, adapterID string, request InvokeR
 		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: fmt.Errorf("invalid adapter response: %w", err)}
 	}
 	return response, nil
+}
+
+func containsStreamCredential(value any, credential string) bool {
+	switch typed := value.(type) {
+	case string:
+		return strings.Contains(typed, credential)
+	case []any:
+		for _, child := range typed {
+			if containsStreamCredential(child, credential) {
+				return true
+			}
+		}
+	case map[string]any:
+		for key, child := range typed {
+			if strings.Contains(key, credential) || containsStreamCredential(child, credential) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func capabilityPrefix(category Category) (string, bool) {

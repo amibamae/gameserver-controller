@@ -155,6 +155,7 @@ func cloneMap(value map[string]any) map[string]any {
 
 func cloneRequest(value adapter.InvokeRequest) adapter.InvokeRequest {
 	value.Params.Input = append(json.RawMessage(nil), value.Params.Input...)
+	value.Params.RequestContext.StreamTransfers = cloneSlice(value.Params.RequestContext.StreamTransfers)
 	return value
 }
 
