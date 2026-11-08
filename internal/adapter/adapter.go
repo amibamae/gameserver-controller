@@ -80,17 +80,51 @@ func (c RequestContext) OpenStream(transferID string) (io.ReadCloser, error) {
 	return c.streamAccess.open(transferID)
 }
 
+// CreateStream consumes one controller-provided destination stream by its
+// transient transfer ID. A destination can be claimed once per invocation.
+func (c RequestContext) CreateStream(transferID string) (io.WriteCloser, error) {
+	if c.streamAccess == nil || transferID == "" {
+		return nil, errors.New("stream destination is unavailable")
+	}
+	return c.streamAccess.create(transferID)
+}
+
+// HasStreamDestination reports whether the trusted controller attached a
+// destination for this one-use transfer handle. It does not claim the handle.
+func (c RequestContext) HasStreamDestination(transferID string) bool {
+	if c.streamAccess == nil || transferID == "" {
+		return false
+	}
+	c.streamAccess.mu.Lock()
+	defer c.streamAccess.mu.Unlock()
+	_, ok := c.streamAccess.destinations[transferID]
+	return ok && !c.streamAccess.claimedDestinations[transferID]
+}
+
 // SetStreamSources attaches invocation-only stream sources. They are excluded
 // from JSON and must be set only by the trusted controller runtime.
 func (c *RequestContext) SetStreamSources(sources map[string]io.ReadCloser) {
 	if c == nil {
 		return
 	}
-	c.streamAccess = &streamAccess{sources: sources, claimed: make(map[string]bool)}
+	c.streamAccess = &streamAccess{sources: sources, claimedSources: make(map[string]bool)}
 }
 
-// ClearStreamSources removes invocation-only source readers before a request
-// is retained for diagnostics or test history.
+// SetStreamDestinations attaches invocation-only stream destinations. They
+// are excluded from JSON and must be set only by the trusted controller.
+func (c *RequestContext) SetStreamDestinations(destinations map[string]io.WriteCloser) {
+	if c == nil {
+		return
+	}
+	if c.streamAccess == nil {
+		c.streamAccess = &streamAccess{claimedSources: make(map[string]bool)}
+	}
+	c.streamAccess.destinations = destinations
+	c.streamAccess.claimedDestinations = make(map[string]bool)
+}
+
+// ClearStreamSources removes invocation-only stream readers and writers before
+// a request is retained for diagnostics or test history.
 func (c *RequestContext) ClearStreamSources() {
 	if c != nil {
 		c.streamAccess = nil
@@ -98,20 +132,33 @@ func (c *RequestContext) ClearStreamSources() {
 }
 
 type streamAccess struct {
-	mu      sync.Mutex
-	sources map[string]io.ReadCloser
-	claimed map[string]bool
+	mu                  sync.Mutex
+	sources             map[string]io.ReadCloser
+	destinations        map[string]io.WriteCloser
+	claimedSources      map[string]bool
+	claimedDestinations map[string]bool
 }
 
 func (s *streamAccess) open(id string) (io.ReadCloser, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	source, ok := s.sources[id]
-	if !ok || s.claimed[id] {
+	if !ok || s.claimedSources[id] {
 		return nil, errors.New("stream source is unavailable")
 	}
-	s.claimed[id] = true
+	s.claimedSources[id] = true
 	return source, nil
+}
+
+func (s *streamAccess) create(id string) (io.WriteCloser, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	destination, ok := s.destinations[id]
+	if !ok || s.claimedDestinations[id] {
+		return nil, errors.New("stream destination is unavailable")
+	}
+	s.claimedDestinations[id] = true
+	return destination, nil
 }
 
 // StreamTransfer pairs a protocol handle with a controller-owned bounded
@@ -120,6 +167,7 @@ func (s *streamAccess) open(id string) (io.ReadCloser, error) {
 type StreamTransfer struct {
 	Reference capturestream.Reference
 	Source    io.ReadCloser
+	Sink      io.WriteCloser
 	Verify    func() error
 }
 

@@ -1,0 +1,2039 @@
+package workflow
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/url"
+	"path"
+	"reflect"
+	"strings"
+	"time"
+
+	"github.com/amibamae/gameserver-controller/internal/adapter"
+	"github.com/amibamae/gameserver-controller/internal/protocolstate"
+	"github.com/amibamae/gameserver-controller/internal/store"
+)
+
+const (
+	backupInspectInstanceStep = "inspect-instance"
+	backupInspectRuntimeStep  = "inspect-runtime"
+	backupDescribeDataStep    = "describe-data"
+	backupSaveGameStep        = "save-game-data"
+	backupStopRuntimeStep     = "stop-runtime"
+	backupPrepareStep         = "prepare-backup"
+	backupValidateStep        = "validate-backup"
+	backupStartRuntimeStep    = "start-runtime"
+	backupVerifyRuntimeStep   = "verify-runtime"
+	backupVerifyStoppedStep   = "verify-stopped"
+	backupReadinessStep       = "check-readiness"
+	backupManifestVersion     = "2"
+	backupGracePeriodSeconds  = int64(120)
+)
+
+// ServerBackupDataSet is the trusted release-catalog declaration for one
+// persistent data set. The transfer limit is controller policy, not adapter
+// output, and is used to bound the capture stream before its size is known.
+type ServerBackupDataSet struct {
+	DataSetID                 string   `json:"data_set_id"`
+	RelativePaths             []string `json:"relative_paths"`
+	Required                  bool     `json:"required"`
+	SupportedConsistencyModes []string `json:"supported_consistency_modes"`
+	DataFormat                string   `json:"data_format,omitempty"`
+	MaximumBytes              int64    `json:"maximum_bytes"`
+}
+
+// ServerBackupProfile contains immutable trusted release and storage metadata.
+// The resolver must return the same profile for a profile ID throughout an
+// accepted operation's lifetime.
+type ServerBackupProfile struct {
+	ProfileID               string
+	GameReleaseID           string
+	GameName                string
+	GameVersion             string
+	WorldFormat             string
+	ConsistencyMode         string
+	DataSets                []ServerBackupDataSet
+	ValidationChecks        []ReadinessRequirement
+	StorageAdapterID        string
+	StorageProfileID        string
+	StorageContainer        string
+	UnitRef                 json.RawMessage
+	ReadinessCheckSetID     string
+	RequiredReadinessChecks []ReadinessRequirement
+}
+
+// ServerBackupProfileResolver selects immutable release, validation, and
+// storage policy using a controller-approved profile ID.
+type ServerBackupProfileResolver interface {
+	ResolveServerBackup(context.Context, store.LogicalServer, string) (ServerBackupProfile, error)
+}
+
+// ServerBackupTransferBroker issues the transport-bound handles and verifies
+// completed streams independently. Its staging area must be operation/step/
+// attempt scoped and must never persist bearer references.
+type ServerBackupTransferBroker interface {
+	IssueStepStreamTransfers(context.Context, store.OperationRecord, store.OperationStep, []ServerBackupStreamExpectation, string) ([]adapter.StreamTransfer, error)
+	VerifyStepStreams(context.Context, store.OperationRecord, store.OperationStep, []ServerBackupStreamExpectation) error
+}
+
+type serverBackupTransferCleaner interface {
+	CleanupOperation(string) error
+}
+
+type ServerBackupStreamExpectation struct {
+	DataSetID    string
+	SizeBytes    int64
+	MaximumBytes int64
+	SHA256       string
+}
+
+// ServerBackupWorkflow plans and advances an offline, exact-generation backup.
+// Network-routed servers are rejected until proxy drain is part of this flow.
+type ServerBackupWorkflow struct {
+	servers      store.LifecycleOperationStore
+	adapters     adapterRuntime
+	schemas      schemaRuntime
+	profiles     ServerBackupProfileResolver
+	transfers    ServerBackupTransferBroker
+	readinessTTL time.Duration
+}
+
+func NewServerBackupWorkflow(servers store.LifecycleOperationStore, adapters adapterRuntime, schemas schemaRuntime, profiles ServerBackupProfileResolver, transfers ServerBackupTransferBroker, readinessTTL time.Duration) (*ServerBackupWorkflow, error) {
+	if servers == nil || adapters == nil || schemas == nil || profiles == nil || transfers == nil {
+		return nil, errors.New("lifecycle store, adapter registry, schemas, trusted backup-profile resolver, and stream broker are required")
+	}
+	if readinessTTL <= 0 || readinessTTL > maxReadinessAssertionTTL {
+		return nil, errors.New("readiness assertion TTL must be in the range 1ns..15m")
+	}
+	return &ServerBackupWorkflow{
+		servers: servers, adapters: adapters, schemas: schemas, profiles: profiles,
+		transfers: transfers, readinessTTL: readinessTTL,
+	}, nil
+}
+
+type serverBackupParameters struct {
+	BackupProfile       string          `json:"backup_profile"`
+	ResumeAfterBackup   *bool           `json:"resume_after_backup,omitempty"`
+	ExpectedInstanceRef json.RawMessage `json:"expected_instance_ref,omitempty"`
+}
+
+func (w *ServerBackupWorkflow) BuildPlan(ctx context.Context, operation store.OperationRecord) ([]store.OperationStep, error) {
+	if ctx == nil || w == nil || w.servers == nil || w.adapters == nil || w.schemas == nil || w.profiles == nil || w.transfers == nil {
+		return nil, errors.New("initialized backup workflow and context are required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if operation.OperationType != "server.backup" || operation.ProtocolVersion != w.schemas.ProtocolVersion() ||
+		operation.Target.ServerID == "" || operation.Target.EnvironmentID == "" ||
+		operation.RequestSnapshot.OperationType != "server.backup" || !isObject(operation.RequestSnapshot.Parameters) {
+		return nil, errors.New("server.backup operation and loaded protocol version are required")
+	}
+	var parameters serverBackupParameters
+	if err := json.Unmarshal(operation.RequestSnapshot.Parameters, &parameters); err != nil || parameters.BackupProfile == "" {
+		return nil, errors.New("decode server.backup parameters")
+	}
+	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
+	if err != nil {
+		return nil, fmt.Errorf("load logical server for backup plan: %w", err)
+	}
+	server := stored.Record
+	if server.LifecycleState != protocolstate.ServerReady && server.LifecycleState != protocolstate.ServerDegraded && server.LifecycleState != protocolstate.ServerStopped {
+		return nil, errors.New("server.backup requires a ready, degraded, or stopped logical server")
+	}
+	if server.NetworkProfile != "" {
+		return nil, errors.New("server.backup cannot stop a network-routed server until proxy drain is integrated")
+	}
+	if server.DataGenerationStatus != "known" || server.DataGenerationID == "" || len(server.InstanceRef) == 0 {
+		return nil, errors.New("server.backup requires an exact managed instance and known data generation")
+	}
+	if len(operation.Target.InstanceRef) > 0 && !equalJSON(operation.Target.InstanceRef, server.InstanceRef) {
+		return nil, store.ErrLogicalServerTargetMismatch
+	}
+	if len(parameters.ExpectedInstanceRef) > 0 && !equalJSON(parameters.ExpectedInstanceRef, server.InstanceRef) {
+		return nil, errors.New("expected_instance_ref does not match the current managed instance")
+	}
+	profile, err := w.profiles.ResolveServerBackup(ctx, server, parameters.BackupProfile)
+	if err != nil {
+		return nil, fmt.Errorf("resolve trusted server backup profile: %w", err)
+	}
+	if err := validateServerBackupProfile(server, parameters.BackupProfile, profile); err != nil {
+		return nil, err
+	}
+	initiallyReady := server.LifecycleState == protocolstate.ServerReady
+	initiallyDegraded := server.LifecycleState == protocolstate.ServerDegraded
+	initiallyActive := initiallyReady || initiallyDegraded
+	resume := parameters.ResumeAfterBackup == nil || *parameters.ResumeAfterBackup
+	shouldResume := (initiallyReady && resume) || (initiallyDegraded && parameters.ResumeAfterBackup != nil && *parameters.ResumeAfterBackup)
+	gameDescriptor, err := w.adapters.Descriptor(server.GameAdapterID)
+	if err != nil || gameDescriptor.AdapterID != server.GameAdapterID || gameDescriptor.Category != adapter.CategoryGame {
+		return nil, errors.New("configured game adapter is unavailable or has the wrong category")
+	}
+	if err := verifyBackupDataSetsDeclared(gameDescriptor, profile); err != nil {
+		return nil, err
+	}
+	if shouldResume {
+		if err := verifyReadinessSetDeclared(gameDescriptor, server.EnvironmentID, ServerStartProfile{
+			GameReleaseID: profile.GameReleaseID, ReadinessCheckSetID: profile.ReadinessCheckSetID,
+			RequiredChecks: profile.RequiredReadinessChecks,
+		}); err != nil {
+			return nil, err
+		}
+	}
+
+	version := w.schemas.ProtocolVersion()
+	gameTarget := map[string]any{"server_id": server.ServerID, "environment_id": server.EnvironmentID, "instance_ref": server.InstanceRef}
+	targetObject := func(dataSetID string) map[string]any {
+		return map[string]any{
+			"adapter_id": profile.StorageAdapterID, "storage_profile_id": profile.StorageProfileID,
+			"environment_id": server.EnvironmentID, "container": profile.StorageContainer,
+			"key": backupObjectKey(server.ServerID, operation.OperationID, dataSetID),
+		}
+	}
+
+	steps := make([]store.OperationStep, 0, 8+len(profile.DataSets)*3)
+	addStep := func(stepID, adapterID string, category adapter.Category, name, inputSchema, outputSchema string, mutating bool, input any, dynamic bool) error {
+		capability, err := exactCapability(w.adapters, adapterID, category, name,
+			"urn:gameserver-controller:"+version+":"+inputSchema,
+			"urn:gameserver-controller:"+version+":"+outputSchema, mutating)
+		if err != nil {
+			return err
+		}
+		encoded, err := json.Marshal(input)
+		if err != nil {
+			return fmt.Errorf("encode %s input: %w", stepID, err)
+		}
+		if !dynamic {
+			if err := w.schemas.ValidateJSON(capability.InputSchemaURI, encoded); err != nil {
+				return fmt.Errorf("planned %s input does not match its declared capability schema: %w", stepID, err)
+			}
+		}
+		steps = append(steps, store.OperationStep{
+			StepID: stepID, StepType: capability.Name, Status: protocolstate.StepPending,
+			AdapterID: adapterID, CapabilityName: capability.Name, CapabilityVersion: capability.Version,
+			Input: encoded,
+		})
+		return nil
+	}
+	add := func(stepID, adapterID string, category adapter.Category, name, inputSchema, outputSchema string, mutating bool, input any) error {
+		return addStep(stepID, adapterID, category, name, inputSchema, outputSchema, mutating, input, false)
+	}
+	addDynamic := func(stepID, adapterID string, category adapter.Category, name, inputSchema, outputSchema string, mutating bool, input any) error {
+		return addStep(stepID, adapterID, category, name, inputSchema, outputSchema, mutating, input, true)
+	}
+	if err := add(backupInspectInstanceStep, adapterIDFromRef(server.InstanceRef), adapter.CategoryHosting,
+		"hosting.instance.inspect", "hosting:instance-inspect-input", "hosting:instance-inspect-output", false,
+		map[string]any{"instance_ref": server.InstanceRef}); err != nil {
+		return nil, err
+	}
+	if err := add(backupInspectRuntimeStep, server.ExecutionAdapterID, adapter.CategoryExecution,
+		"execution.unit.inspect", "execution:systemd-unit-inspect-input", "execution:systemd-unit-inspect-output", false,
+		map[string]any{"unit_ref": profile.UnitRef}); err != nil {
+		return nil, err
+	}
+	if err := add(backupDescribeDataStep, server.GameAdapterID, adapter.CategoryGame,
+		"game.data.describe", "game:data-describe-input", "game:data-describe-output", false,
+		map[string]any{"target": gameTarget, "release_id": profile.GameReleaseID}); err != nil {
+		return nil, err
+	}
+	if initiallyActive {
+		if err := add(backupSaveGameStep, server.GameAdapterID, adapter.CategoryGame,
+			"game.save.request", "game:save-request-input", "game:save-request-output", true,
+			map[string]any{"target": gameTarget, "release_id": profile.GameReleaseID, "reason": "backup"}); err != nil {
+			return nil, err
+		}
+		if err := add(backupStopRuntimeStep, server.ExecutionAdapterID, adapter.CategoryExecution,
+			"execution.unit.graceful_stop", "execution:systemd-unit-graceful-stop-input", "execution:systemd-unit-graceful-stop-output", true,
+			map[string]any{"unit_ref": profile.UnitRef, "grace_period_seconds": backupGracePeriodSeconds}); err != nil {
+			return nil, err
+		}
+	}
+	dataSetIDs := make([]string, 0, len(profile.DataSets))
+	for _, dataSet := range profile.DataSets {
+		dataSetIDs = append(dataSetIDs, dataSet.DataSetID)
+	}
+	if err := add(backupPrepareStep, server.GameAdapterID, adapter.CategoryGame,
+		"game.backup.prepare", "game:backup-prepare-input", "game:backup-prepare-output", true,
+		map[string]any{
+			"target": gameTarget, "release_id": profile.GameReleaseID,
+			"backup_id": operation.OperationID, "data_generation_id": server.DataGenerationID,
+			"data_set_ids": dataSetIDs, "consistency_mode": profile.ConsistencyMode,
+		}); err != nil {
+		return nil, err
+	}
+	manifestObjects := make([]any, 0, len(profile.DataSets))
+	objectStreams := make([]any, 0, len(profile.DataSets))
+	for _, dataSet := range profile.DataSets {
+		captureID := backupDataStepID("capture", dataSet.DataSetID)
+		putID := backupDataStepID("upload", dataSet.DataSetID)
+		getID := backupDataStepID("readback", dataSet.DataSetID)
+		objectTarget := targetObject(dataSet.DataSetID)
+		objectRef := cloneStringAnyMap(objectTarget)
+		manifestObjects = append(manifestObjects, map[string]any{"data_set_id": dataSet.DataSetID, "object_ref": objectRef})
+		objectStreams = append(objectStreams, map[string]any{"object_ref": cloneStringAnyMap(objectRef)})
+		captureInput := map[string]any{
+			"target": gameTarget, "release_id": profile.GameReleaseID,
+			"backup_id": operation.OperationID, "data_generation_id": server.DataGenerationID,
+			"data_set_id": dataSet.DataSetID, "capture_id": backupCaptureID(operation.OperationID, dataSet.DataSetID),
+			"consistency_mode": profile.ConsistencyMode,
+		}
+		if err := addDynamic(captureID, server.GameAdapterID, adapter.CategoryGame,
+			"game.backup.capture", "game:backup-capture-input", "game:backup-capture-output", true, captureInput); err != nil {
+			return nil, err
+		}
+		if err := addDynamic(putID, profile.StorageAdapterID, adapter.CategoryStorage,
+			"storage.object.put", "storage:object-put-input", "storage:object-put-output", true,
+			map[string]any{"target": objectTarget}); err != nil {
+			return nil, err
+		}
+		if err := addDynamic(getID, profile.StorageAdapterID, adapter.CategoryStorage,
+			"storage.object.get", "storage:object-get-input", "storage:object-get-output", false,
+			map[string]any{"object_ref": objectRef}); err != nil {
+			return nil, err
+		}
+	}
+	manifest := map[string]any{
+		"manifest_version": backupManifestVersion, "backup_id": operation.OperationID,
+		"server_id": server.ServerID, "environment_id": server.EnvironmentID,
+		"data_generation_id": server.DataGenerationID, "source_instance_ref": server.InstanceRef,
+		"created_at": operation.CreatedAt.UTC().Format(time.RFC3339Nano), "source_operation_id": operation.OperationID,
+		"game": map[string]any{
+			"adapter_id": server.GameAdapterID, "name": profile.GameName,
+			"version": profile.GameVersion, "world_format": profile.WorldFormat,
+		},
+		"consistency": map[string]any{"mode": profile.ConsistencyMode},
+		"objects":     manifestObjects,
+	}
+	checkIDs := make([]string, 0, len(profile.ValidationChecks))
+	for _, requirement := range profile.ValidationChecks {
+		checkIDs = append(checkIDs, requirement.CheckID)
+	}
+	if err := addDynamic(backupValidateStep, server.GameAdapterID, adapter.CategoryGame,
+		"game.backup.validate", "game:backup-validate-input", "game:backup-validate-output", false,
+		map[string]any{
+			"backup_id": operation.OperationID, "environment_id": server.EnvironmentID,
+			"manifest": manifest, "object_streams": objectStreams, "required_check_ids": checkIDs,
+		}); err != nil {
+		return nil, err
+	}
+	if shouldResume {
+		if err := add(backupStartRuntimeStep, server.ExecutionAdapterID, adapter.CategoryExecution,
+			"execution.unit.start", "execution:systemd-unit-start-input", "execution:systemd-unit-start-output", true,
+			map[string]any{"unit_ref": profile.UnitRef}); err != nil {
+			return nil, err
+		}
+		if err := add(backupVerifyRuntimeStep, server.ExecutionAdapterID, adapter.CategoryExecution,
+			"execution.unit.inspect", "execution:systemd-unit-inspect-input", "execution:systemd-unit-inspect-output", false,
+			map[string]any{"unit_ref": profile.UnitRef}); err != nil {
+			return nil, err
+		}
+		if err := add(backupReadinessStep, server.GameAdapterID, adapter.CategoryGame,
+			"game.readiness.check", "game:readiness-check-input", "game:readiness-check-output", false,
+			map[string]any{
+				"server_id": server.ServerID, "environment_id": server.EnvironmentID,
+				"instance_ref": server.InstanceRef, "game_release_id": profile.GameReleaseID,
+				"readiness_check_set_id": profile.ReadinessCheckSetID,
+				"required_checks":        profile.RequiredReadinessChecks,
+			}); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := add(backupVerifyStoppedStep, server.ExecutionAdapterID, adapter.CategoryExecution,
+			"execution.unit.inspect", "execution:systemd-unit-inspect-input", "execution:systemd-unit-inspect-output", false,
+			map[string]any{"unit_ref": profile.UnitRef}); err != nil {
+			return nil, err
+		}
+	}
+	return steps, nil
+}
+
+func validateServerBackupProfile(server store.LogicalServer, requestedID string, profile ServerBackupProfile) error {
+	if profile.ProfileID != requestedID || profile.ProfileID == "" || profile.GameReleaseID == "" ||
+		len(profile.GameReleaseID) > 500 || profile.GameName == "" || len(profile.GameName) > 200 ||
+		profile.GameVersion == "" || len(profile.GameVersion) > 200 || profile.WorldFormat != "" && len(profile.WorldFormat) > 200 ||
+		profile.ConsistencyMode != "offline" || len(profile.DataSets) == 0 || len(profile.DataSets) > 128 ||
+		len(profile.ValidationChecks) == 0 || len(profile.ValidationChecks) > 64 ||
+		profile.StorageAdapterID == "" || profile.StorageProfileID != server.StorageProfile || profile.StorageContainer == "" || len(profile.StorageContainer) > 500 {
+		return errors.New("trusted backup profile must bind a release, offline consistency, bounded data sets/checks, and the server storage profile")
+	}
+	var unitRef struct {
+		AdapterID     string `json:"adapter_id"`
+		EnvironmentID string `json:"environment_id"`
+		ResourceKind  string `json:"resource_kind"`
+		ExternalID    string `json:"external_id"`
+	}
+	if err := json.Unmarshal(profile.UnitRef, &unitRef); err != nil || !isObject(profile.UnitRef) ||
+		unitRef.AdapterID != server.ExecutionAdapterID || unitRef.EnvironmentID != server.EnvironmentID ||
+		unitRef.ResourceKind != "systemd-unit" || unitRef.ExternalID == "" {
+		return errors.New("trusted backup profile unit reference does not bind the configured execution adapter and environment")
+	}
+	seenDataSets := make(map[string]struct{}, len(profile.DataSets))
+	for _, dataSet := range profile.DataSets {
+		if dataSet.DataSetID == "" || len(dataSet.DataSetID) > 200 || dataSet.MaximumBytes < 1 || dataSet.MaximumBytes > 9007199254740991 ||
+			len(dataSet.RelativePaths) == 0 || len(dataSet.RelativePaths) > 128 || len(dataSet.SupportedConsistencyModes) == 0 {
+			return fmt.Errorf("trusted backup profile contains an incomplete data-set declaration %q", dataSet.DataSetID)
+		}
+		if _, duplicate := seenDataSets[dataSet.DataSetID]; duplicate {
+			return fmt.Errorf("trusted backup profile repeats data set %q", dataSet.DataSetID)
+		}
+		seenDataSets[dataSet.DataSetID] = struct{}{}
+		if !containsString(dataSet.SupportedConsistencyModes, profile.ConsistencyMode) || !uniqueBackupStrings(dataSet.SupportedConsistencyModes) {
+			return fmt.Errorf("trusted data set %q does not declare the selected consistency mode exactly once", dataSet.DataSetID)
+		}
+		paths := make(map[string]struct{}, len(dataSet.RelativePaths))
+		for _, relative := range dataSet.RelativePaths {
+			if !validBackupRelativePath(relative) {
+				return fmt.Errorf("trusted data set %q contains an unsafe relative path", dataSet.DataSetID)
+			}
+			if _, duplicate := paths[relative]; duplicate {
+				return fmt.Errorf("trusted data set %q repeats a path", dataSet.DataSetID)
+			}
+			paths[relative] = struct{}{}
+		}
+	}
+	seenChecks := make(map[string]struct{}, len(profile.ValidationChecks))
+	for _, check := range profile.ValidationChecks {
+		if check.CheckID == "" || len(check.CheckID) > 160 || check.CheckVersion == "" || len(check.CheckVersion) > 40 {
+			return errors.New("trusted backup validation checks require bounded IDs and versions")
+		}
+		if _, duplicate := seenChecks[check.CheckID]; duplicate {
+			return fmt.Errorf("trusted backup profile repeats validation check %q", check.CheckID)
+		}
+		seenChecks[check.CheckID] = struct{}{}
+	}
+	return nil
+}
+
+func validBackupRelativePath(value string) bool {
+	if value == "" || len(value) > 512 || strings.Contains(value, "\\") || path.IsAbs(value) || path.Clean(value) != value || value == "." {
+		return false
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+func verifyBackupDataSetsDeclared(descriptor adapter.Descriptor, profile ServerBackupProfile) error {
+	var described adapter.Capability
+	for _, capability := range descriptor.Capabilities {
+		if capability.Name == "game.data.describe" {
+			described = capability
+			break
+		}
+	}
+	if described.Name == "" {
+		return errors.New("game adapter does not declare game.data.describe")
+	}
+	encoded, err := json.Marshal(described.Constraints)
+	if err != nil {
+		return err
+	}
+	var constraints struct {
+		PersistentDataSets []struct {
+			GameReleaseID             string   `json:"game_release_id"`
+			DataSetIDs                []string `json:"data_set_ids"`
+			SupportedConsistencyModes []string `json:"supported_consistency_modes"`
+		} `json:"persistent_data_sets"`
+	}
+	if err := json.Unmarshal(encoded, &constraints); err != nil {
+		return fmt.Errorf("decode game adapter persistent-data declarations: %w", err)
+	}
+	expected := make([]string, 0, len(profile.DataSets))
+	for _, dataSet := range profile.DataSets {
+		expected = append(expected, dataSet.DataSetID)
+	}
+	for _, declared := range constraints.PersistentDataSets {
+		if declared.GameReleaseID == profile.GameReleaseID && sameBackupStringSet(declared.DataSetIDs, expected) &&
+			containsString(declared.SupportedConsistencyModes, profile.ConsistencyMode) {
+			return nil
+		}
+	}
+	return errors.New("trusted backup data sets or consistency mode do not match the game adapter release declaration")
+}
+
+func sameBackupStringSet(left, right []string) bool {
+	if len(left) != len(right) || !uniqueBackupStrings(left) || !uniqueBackupStrings(right) {
+		return false
+	}
+	set := make(map[string]struct{}, len(left))
+	for _, value := range left {
+		set[value] = struct{}{}
+	}
+	for _, value := range right {
+		if _, ok := set[value]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func uniqueBackupStrings(values []string) bool {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if _, duplicate := seen[value]; duplicate {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
+}
+
+func backupObjectKey(serverID, backupID, dataSetID string) string {
+	return url.PathEscape(serverID) + "/" + url.PathEscape(backupID) + "/" + url.PathEscape(dataSetID)
+}
+
+func backupDataStepID(action, dataSetID string) string {
+	digest := sha256.Sum256([]byte(dataSetID))
+	return action + "-" + hex.EncodeToString(digest[:])
+}
+
+func backupCaptureID(operationID, dataSetID string) string {
+	digest := sha256.Sum256([]byte(operationID + "\x00" + dataSetID))
+	return "capture-" + hex.EncodeToString(digest[:])
+}
+
+func cloneStringAnyMap(value map[string]any) map[string]any {
+	result := make(map[string]any, len(value))
+	for key, item := range value {
+		result[key] = item
+	}
+	return result
+}
+
+func (w *ServerBackupWorkflow) ResolveStepInput(ctx context.Context, operation store.OperationRecord, step store.OperationStep) (json.RawMessage, error) {
+	if ctx == nil || w == nil || operation.OperationType != "server.backup" {
+		return nil, errors.New("server.backup input resolution requires an operation and context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	resolved := make(map[string]any)
+	if err := json.Unmarshal(step.Input, &resolved); err != nil || resolved == nil {
+		return nil, fmt.Errorf("decode planned %s input", step.StepID)
+	}
+	_, profile, err := w.loadProfile(ctx, operation)
+	if err != nil {
+		return nil, err
+	}
+	switch step.CapabilityName {
+	case "game.backup.capture":
+		dataSet, ok := w.dataSetForStep(ctx, operation, step.StepID, "capture")
+		if !ok {
+			return nil, errors.New("capture step is not part of the trusted backup plan")
+		}
+		prepare, err := backupPrepareOutput(operation)
+		if err != nil || prepare.Outcome != "prepared" || prepare.PreparationID == "" ||
+			prepare.BackupID != stringValueMap(resolved, "backup_id") || prepare.DataGenerationID != stringValueMap(resolved, "data_generation_id") ||
+			!sameStringSlice(prepare.DataSetIDs, backupPlannedDataSetIDs(operation)) {
+			return nil, errors.New("capture input requires an exact completed backup preparation")
+		}
+		if !containsString(prepare.DataSetIDs, dataSet.DataSetID) {
+			return nil, errors.New("prepared backup does not include the planned data set")
+		}
+		resolved["preparation_id"] = prepare.PreparationID
+	case "storage.object.put":
+		dataSet, ok := w.dataSetForStep(ctx, operation, step.StepID, "upload")
+		if !ok {
+			return nil, errors.New("upload step is not part of the trusted backup plan")
+		}
+		capture, err := backupCaptureOutput(operation, dataSet.DataSetID)
+		if err != nil || capture.Outcome != "captured" || !capture.StreamCompleted || capture.SizeBytes < 0 || capture.SizeBytes > dataSet.MaximumBytes {
+			return nil, errors.New("storage upload input requires a complete bounded capture")
+		}
+		resolved["expected_size_bytes"] = capture.SizeBytes
+		resolved["expected_checksum"] = map[string]any{"algorithm": capture.Checksum.Algorithm, "digest": capture.Checksum.Digest}
+	case "storage.object.get":
+		dataSet, ok := w.dataSetForStep(ctx, operation, step.StepID, "readback")
+		if !ok {
+			return nil, errors.New("readback step is not part of the trusted backup plan")
+		}
+		capture, err := backupCaptureOutput(operation, dataSet.DataSetID)
+		if err != nil || capture.Outcome != "captured" {
+			return nil, errors.New("storage readback input requires a completed capture")
+		}
+		put, err := backupPutOutput(operation, dataSet.DataSetID)
+		if err != nil || put.UploadState != "uploaded" || !backupObjectRefMatchesTarget(put.ObjectRef, put.Target) {
+			return nil, errors.New("storage readback input requires the exact uploaded object")
+		}
+		resolved["object_ref"] = put.ObjectRef
+		resolved["expected_size_bytes"] = capture.SizeBytes
+		resolved["expected_checksum"] = map[string]any{"algorithm": capture.Checksum.Algorithm, "digest": capture.Checksum.Digest}
+	case "game.backup.validate":
+		if err := w.resolveBackupValidationInput(operation, step, profile, resolved); err != nil {
+			return nil, err
+		}
+	}
+	encoded, err := json.Marshal(resolved)
+	if err != nil {
+		return nil, fmt.Errorf("encode resolved %s input: %w", step.StepID, err)
+	}
+	return encoded, nil
+}
+
+func (w *ServerBackupWorkflow) resolveBackupValidationInput(operation store.OperationRecord, step store.OperationStep, profile ServerBackupProfile, input map[string]any) error {
+	prepare, err := backupPrepareOutput(operation)
+	if err != nil || prepare.Outcome != "prepared" || prepare.ConsistencyEvidence == "" {
+		return errors.New("backup validation requires a completed, evidence-bearing preparation")
+	}
+	manifest := asStringMap(input["manifest"])
+	consistency := asStringMap(manifest["consistency"])
+	consistency["evidence"] = prepare.ConsistencyEvidence
+	manifestObjects := asAnySlice(manifest["objects"])
+	streamInputs := asAnySlice(input["object_streams"])
+	if len(manifestObjects) != len(profile.DataSets) || len(streamInputs) != len(profile.DataSets) {
+		return errors.New("planned manifest and stream lists do not cover the trusted data sets")
+	}
+	for index, dataSet := range profile.DataSets {
+		capture, err := backupCaptureOutput(operation, dataSet.DataSetID)
+		if err != nil || capture.Outcome != "captured" || !capture.StreamCompleted || capture.SizeBytes > dataSet.MaximumBytes {
+			return fmt.Errorf("data set %q has no complete, bounded capture output", dataSet.DataSetID)
+		}
+		put, err := backupPutOutput(operation, dataSet.DataSetID)
+		if err != nil || put.UploadState != "uploaded" || !backupObjectRefMatchesTarget(put.ObjectRef, put.Target) || put.BytesReceived != capture.SizeBytes {
+			return fmt.Errorf("data set %q has no exact completed upload", dataSet.DataSetID)
+		}
+		get, err := backupGetOutput(operation, dataSet.DataSetID)
+		if err != nil || get.TransferState != "complete" || get.BytesSent == nil || *get.BytesSent != capture.SizeBytes || !equalJSON(get.ObjectRef, put.ObjectRef) ||
+			get.ComputedChecksum.Algorithm != capture.Checksum.Algorithm || get.ComputedChecksum.Digest != capture.Checksum.Digest {
+			return fmt.Errorf("data set %q has no exact completed storage readback", dataSet.DataSetID)
+		}
+		object := asStringMap(manifestObjects[index])
+		object["size_bytes"] = capture.SizeBytes
+		object["checksum_algorithm"] = capture.Checksum.Algorithm
+		object["checksum"] = capture.Checksum.Digest
+		object["object_ref"] = put.ObjectRef
+		if stringValueMap(object, "data_set_id") != dataSet.DataSetID {
+			return fmt.Errorf("manifest object %d is bound to the wrong data set", index)
+		}
+		stream := asStringMap(streamInputs[index])
+		stream["object_ref"] = put.ObjectRef
+	}
+	input["manifest"] = manifest
+	input["object_streams"] = streamInputs
+	return nil
+}
+
+func (w *ServerBackupWorkflow) loadProfile(ctx context.Context, operation store.OperationRecord) (store.StoredLogicalServer, ServerBackupProfile, error) {
+	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
+	if err != nil {
+		return store.StoredLogicalServer{}, ServerBackupProfile{}, err
+	}
+	var parameters serverBackupParameters
+	if err := json.Unmarshal(operation.RequestSnapshot.Parameters, &parameters); err != nil {
+		return store.StoredLogicalServer{}, ServerBackupProfile{}, errors.New("decode accepted backup profile")
+	}
+	profile, err := w.profiles.ResolveServerBackup(ctx, stored.Record, parameters.BackupProfile)
+	if err != nil {
+		return store.StoredLogicalServer{}, ServerBackupProfile{}, err
+	}
+	if err := validateServerBackupProfile(stored.Record, parameters.BackupProfile, profile); err != nil {
+		return store.StoredLogicalServer{}, ServerBackupProfile{}, err
+	}
+	if operation.RequestSnapshot.OperationType != "server.backup" || parameters.BackupProfile == "" {
+		return store.StoredLogicalServer{}, ServerBackupProfile{}, errors.New("accepted operation does not bind a backup profile")
+	}
+	return stored, profile, nil
+}
+
+func (w *ServerBackupWorkflow) dataSetForStep(ctx context.Context, operation store.OperationRecord, stepID, action string) (ServerBackupDataSet, bool) {
+	_, profile, err := w.loadProfile(ctx, operation)
+	if err != nil {
+		return ServerBackupDataSet{}, false
+	}
+	plannedIDs := backupPlannedDataSetIDs(operation)
+	for _, dataSet := range profile.DataSets {
+		if backupDataStepID(action, dataSet.DataSetID) == stepID && containsString(plannedIDs, dataSet.DataSetID) {
+			return dataSet, true
+		}
+	}
+	return ServerBackupDataSet{}, false
+}
+
+func backupPlannedDataSetIDs(operation store.OperationRecord) []string {
+	step := operationStep(operation, backupPrepareStep)
+	var input struct {
+		DataSetIDs []string `json:"data_set_ids"`
+	}
+	if json.Unmarshal(step.Input, &input) != nil {
+		return nil
+	}
+	return input.DataSetIDs
+}
+
+func (w *ServerBackupWorkflow) StreamTransfersForStep(ctx context.Context, operation store.OperationRecord, step store.OperationStep, deadline time.Time) ([]adapter.StreamTransfer, error) {
+	if ctx == nil || w == nil || w.transfers == nil {
+		return nil, errors.New("initialized backup workflow and stream context are required")
+	}
+	expectations, direction, err := w.expectedStreamTransfers(ctx, operation, step)
+	if err != nil {
+		return nil, err
+	}
+	if len(expectations) == 0 {
+		return nil, nil
+	}
+	stepContext, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	transfers, err := w.transfers.IssueStepStreamTransfers(stepContext, operation, step, expectations, direction)
+	if err != nil {
+		return nil, err
+	}
+	if len(transfers) != len(expectations) {
+		return nil, errors.New("stream broker did not issue exactly one transfer for every planned stream")
+	}
+	if deadline.IsZero() || !deadline.After(time.Now()) {
+		return nil, errors.New("stream transfer issuance has no live invocation deadline")
+	}
+	now := time.Now().UTC()
+	seen := make(map[string]struct{}, len(transfers))
+	for i := range transfers {
+		transfer := &transfers[i]
+		encoded, err := json.Marshal(transfer.Reference)
+		if err != nil || w.schemas.ValidateJSON("urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":storage:storage-transfer-reference", encoded) != nil {
+			return nil, errors.New("stream broker issued a handle that does not match the registered schema")
+		}
+		if transfer.Reference.Direction != direction || transfer.Reference.MaximumBytes != expectations[i].MaximumBytes || transfer.Reference.ExpiresAt.IsZero() ||
+			!transfer.Reference.ExpiresAt.After(now) || transfer.Reference.ExpiresAt.After(deadline) || transfer.Reference.ExpiresAt.After(now.Add(5*time.Minute)) {
+			return nil, errors.New("stream broker issued a handle with an unsafe direction, bound, or expiry")
+		}
+		if _, duplicate := seen[transfer.Reference.TransferID]; duplicate {
+			return nil, errors.New("stream broker reused a transfer ID within one invocation")
+		}
+		seen[transfer.Reference.TransferID] = struct{}{}
+		if transfer.Verify == nil || (direction == "controller_to_adapter" && (transfer.Source == nil || transfer.Sink != nil)) ||
+			(direction == "adapter_to_controller" && (transfer.Sink == nil || transfer.Source != nil)) {
+			return nil, errors.New("stream broker did not bind its handle to exactly one correct-direction stream")
+		}
+	}
+	return transfers, nil
+}
+
+func (w *ServerBackupWorkflow) expectedStreamTransfers(ctx context.Context, operation store.OperationRecord, step store.OperationStep) ([]ServerBackupStreamExpectation, string, error) {
+	input := effectiveStepInput(step)
+	switch step.CapabilityName {
+	case "game.backup.capture":
+		dataSet, ok := w.dataSetForStep(ctx, operation, step.StepID, "capture")
+		if !ok {
+			return nil, "", errors.New("capture stream is outside the trusted backup plan")
+		}
+		return []ServerBackupStreamExpectation{{DataSetID: dataSet.DataSetID, SizeBytes: -1, MaximumBytes: dataSet.MaximumBytes}}, "adapter_to_controller", nil
+	case "storage.object.put", "storage.object.get":
+		action := "upload"
+		if step.CapabilityName == "storage.object.get" {
+			action = "readback"
+		}
+		dataSet, ok := w.dataSetForStep(ctx, operation, step.StepID, action)
+		if !ok {
+			return nil, "", errors.New("storage stream is outside the trusted backup plan")
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal(input, &decoded); err != nil {
+			return nil, "", err
+		}
+		size, err := integerFromAny(decoded["expected_size_bytes"])
+		if err != nil {
+			return nil, "", errors.New("storage stream input has no exact expected size")
+		}
+		checksum := asStringMap(decoded["expected_checksum"])
+		direction := "controller_to_adapter"
+		if step.CapabilityName == "storage.object.get" {
+			direction = "adapter_to_controller"
+		}
+		return []ServerBackupStreamExpectation{{DataSetID: dataSet.DataSetID, SizeBytes: size, MaximumBytes: maxInt64(size, 1), SHA256: stringValueMap(checksum, "digest")}}, direction, nil
+	case "game.backup.validate":
+		var decoded map[string]any
+		if err := json.Unmarshal(input, &decoded); err != nil {
+			return nil, "", err
+		}
+		manifest := asStringMap(decoded["manifest"])
+		expectations := make([]ServerBackupStreamExpectation, 0, len(asAnySlice(manifest["objects"])))
+		for _, rawObject := range asAnySlice(manifest["objects"]) {
+			object := asStringMap(rawObject)
+			size, err := integerFromAny(object["size_bytes"])
+			if err != nil {
+				return nil, "", errors.New("validation manifest has an invalid object size")
+			}
+			dataSetID := stringValueMap(object, "data_set_id")
+			checksum := stringValueMap(object, "checksum")
+			if dataSetID == "" {
+				return nil, "", errors.New("validation manifest has an object without a data set ID")
+			}
+			expectations = append(expectations, ServerBackupStreamExpectation{DataSetID: dataSetID, SizeBytes: size, MaximumBytes: maxInt64(size, 1), SHA256: checksum})
+		}
+		return expectations, "controller_to_adapter", nil
+	default:
+		return nil, "", nil
+	}
+}
+
+func (w *ServerBackupWorkflow) verifyStreams(ctx context.Context, operation store.OperationRecord, stepID string, expectations []ServerBackupStreamExpectation) error {
+	step := operationStep(operation, stepID)
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded {
+		return errors.New("completed stream step is missing")
+	}
+	if err := w.transfers.VerifyStepStreams(ctx, operation, step, expectations); err != nil {
+		return fmt.Errorf("controller-side stream verification failed for %s: %w", stepID, err)
+	}
+	return nil
+}
+
+func asStringMap(value any) map[string]any {
+	if result, ok := value.(map[string]any); ok && result != nil {
+		return result
+	}
+	return map[string]any{}
+}
+
+func asAnySlice(value any) []any {
+	if result, ok := value.([]any); ok {
+		return result
+	}
+	return nil
+}
+
+func stringValueMap(object map[string]any, key string) string {
+	value, _ := object[key].(string)
+	return value
+}
+
+func integerFromAny(value any) (int64, error) {
+	switch typed := value.(type) {
+	case json.Number:
+		return typed.Int64()
+	case int:
+		return int64(typed), nil
+	case int64:
+		return typed, nil
+	case float64:
+		return int64(typed), nil
+	default:
+		return 0, fmt.Errorf("expected integer, got %T", value)
+	}
+}
+
+func maxInt64(value, minimum int64) int64 {
+	if value < minimum {
+		return minimum
+	}
+	return value
+}
+
+func sameStringSlice(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
+}
+
+type backupPreparationObservation struct {
+	Target              json.RawMessage `json:"target"`
+	ReleaseID           string          `json:"release_id"`
+	BackupID            string          `json:"backup_id"`
+	DataGenerationID    string          `json:"data_generation_id"`
+	DataSetIDs          []string        `json:"data_set_ids"`
+	ConsistencyMode     string          `json:"consistency_mode"`
+	Outcome             string          `json:"outcome"`
+	PreparationID       string          `json:"preparation_id"`
+	ConsistencyEvidence string          `json:"consistency_evidence"`
+	ObservedAt          string          `json:"observed_at"`
+}
+
+type backupCaptureObservation struct {
+	Target           json.RawMessage `json:"target"`
+	ReleaseID        string          `json:"release_id"`
+	BackupID         string          `json:"backup_id"`
+	DataGenerationID string          `json:"data_generation_id"`
+	PreparationID    string          `json:"preparation_id"`
+	DataSetID        string          `json:"data_set_id"`
+	CaptureID        string          `json:"capture_id"`
+	ConsistencyMode  string          `json:"consistency_mode"`
+	Outcome          string          `json:"outcome"`
+	StreamCompleted  bool            `json:"stream_completed"`
+	SizeBytes        int64           `json:"size_bytes"`
+	Checksum         struct {
+		Algorithm string `json:"algorithm"`
+		Digest    string `json:"digest"`
+	} `json:"checksum"`
+	ObservedAt string `json:"observed_at"`
+}
+
+type backupPutObservation struct {
+	Target        json.RawMessage `json:"target"`
+	UploadState   string          `json:"upload_state"`
+	ObjectRef     json.RawMessage `json:"object_ref"`
+	BytesReceived int64           `json:"bytes_received"`
+	ObservedAt    string          `json:"observed_at"`
+}
+
+type backupGetObservation struct {
+	ObjectRef        json.RawMessage `json:"object_ref"`
+	TransferState    string          `json:"transfer_state"`
+	BytesSent        *int64          `json:"bytes_sent"`
+	ComputedChecksum struct {
+		Algorithm string `json:"algorithm"`
+		Digest    string `json:"digest"`
+	} `json:"computed_checksum"`
+	ObservedAt string `json:"observed_at"`
+}
+
+type backupValidationObservation struct {
+	BackupID         string `json:"backup_id"`
+	EnvironmentID    string `json:"environment_id"`
+	DataGenerationID string `json:"data_generation_id"`
+	ValidationResult string `json:"validation_result"`
+	ObservedAt       string `json:"observed_at"`
+	CheckResults     []struct {
+		CheckID      string `json:"check_id"`
+		CheckVersion string `json:"check_version"`
+		Result       string `json:"result"`
+		ObservedAt   string `json:"observed_at"`
+	} `json:"check_results"`
+}
+
+func backupPrepareOutput(operation store.OperationRecord) (backupPreparationObservation, error) {
+	var output backupPreparationObservation
+	step := operationStep(operation, backupPrepareStep)
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded || json.Unmarshal(step.Output, &output) != nil {
+		return output, errors.New("backup preparation output is missing")
+	}
+	var input backupPreparationObservation
+	if json.Unmarshal(effectiveStepInput(step), &input) != nil || output.Outcome != "prepared" ||
+		!equalJSON(output.Target, input.Target) || output.ReleaseID != input.ReleaseID || output.BackupID != input.BackupID ||
+		output.DataGenerationID != input.DataGenerationID || output.ConsistencyMode != input.ConsistencyMode ||
+		!sameStringSlice(output.DataSetIDs, input.DataSetIDs) || output.PreparationID == "" || output.ConsistencyEvidence == "" {
+		return backupPreparationObservation{}, errors.New("backup preparation output does not bind the exact request")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, output.ObservedAt); err != nil {
+		return backupPreparationObservation{}, err
+	}
+	return output, nil
+}
+
+func backupCaptureOutput(operation store.OperationRecord, dataSetID string) (backupCaptureObservation, error) {
+	var output backupCaptureObservation
+	step := operationStep(operation, backupDataStepID("capture", dataSetID))
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded || json.Unmarshal(step.Output, &output) != nil {
+		return output, errors.New("capture output is missing")
+	}
+	var input backupCaptureObservation
+	if json.Unmarshal(effectiveStepInput(step), &input) != nil || output.Outcome != "captured" || !output.StreamCompleted ||
+		!equalJSON(output.Target, input.Target) || output.ReleaseID != input.ReleaseID || output.BackupID != input.BackupID ||
+		output.DataGenerationID != input.DataGenerationID || output.PreparationID != input.PreparationID ||
+		output.DataSetID != input.DataSetID || output.CaptureID != input.CaptureID || output.ConsistencyMode != input.ConsistencyMode ||
+		output.SizeBytes < 0 || output.Checksum.Algorithm != "sha256" || len(output.Checksum.Digest) != 64 {
+		return backupCaptureObservation{}, errors.New("capture output does not bind the exact prepared data set")
+	}
+	if _, err := hex.DecodeString(output.Checksum.Digest); err != nil {
+		return backupCaptureObservation{}, errors.New("capture output checksum is not hexadecimal SHA-256")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, output.ObservedAt); err != nil {
+		return backupCaptureObservation{}, err
+	}
+	return output, nil
+}
+
+func backupPutOutput(operation store.OperationRecord, dataSetID string) (backupPutObservation, error) {
+	var output backupPutObservation
+	step := operationStep(operation, backupDataStepID("upload", dataSetID))
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded || json.Unmarshal(step.Output, &output) != nil {
+		return output, errors.New("object upload output is missing")
+	}
+	var input struct {
+		Target json.RawMessage `json:"target"`
+	}
+	if json.Unmarshal(effectiveStepInput(step), &input) != nil || !equalJSON(output.Target, input.Target) ||
+		!backupObjectRefMatchesTarget(output.ObjectRef, input.Target) || output.BytesReceived < 0 {
+		return backupPutObservation{}, errors.New("object upload output does not bind the exact target")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, output.ObservedAt); err != nil {
+		return backupPutObservation{}, err
+	}
+	return output, nil
+}
+
+func backupGetOutput(operation store.OperationRecord, dataSetID string) (backupGetObservation, error) {
+	var output backupGetObservation
+	step := operationStep(operation, backupDataStepID("readback", dataSetID))
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded || json.Unmarshal(step.Output, &output) != nil {
+		return output, errors.New("object readback output is missing")
+	}
+	var input struct {
+		ObjectRef json.RawMessage `json:"object_ref"`
+	}
+	if json.Unmarshal(effectiveStepInput(step), &input) != nil || !equalJSON(output.ObjectRef, input.ObjectRef) || output.BytesSent == nil {
+		return backupGetObservation{}, errors.New("object readback output does not bind the exact object")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, output.ObservedAt); err != nil {
+		return backupGetObservation{}, err
+	}
+	return output, nil
+}
+
+func backupObjectRefMatchesTarget(objectRef, target json.RawMessage) bool {
+	var ref, destination map[string]any
+	if json.Unmarshal(objectRef, &ref) != nil || json.Unmarshal(target, &destination) != nil || len(ref) == 0 || len(destination) == 0 {
+		return false
+	}
+	for _, key := range []string{"adapter_id", "storage_profile_id", "environment_id", "container", "key"} {
+		if !reflect.DeepEqual(ref[key], destination[key]) {
+			return false
+		}
+	}
+	return true
+}
+
+func (w *ServerBackupWorkflow) CheckPreconditions(ctx context.Context, operation store.OperationRecord, step store.OperationStep) error {
+	if ctx == nil || w == nil || operation.OperationType != "server.backup" || operation.ProtocolVersion != w.schemas.ProtocolVersion() {
+		return errors.New("server.backup operation and context are required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	stored, profile, err := w.loadProfile(ctx, operation)
+	if err != nil {
+		return err
+	}
+	server := stored.Record
+	if server.NetworkProfile != "" {
+		return errors.New("server.backup is blocked until configured proxy drain is integrated")
+	}
+	instanceRef := stepField(operationStep(operation, backupInspectInstanceStep).Input, "instance_ref")
+	if len(instanceRef) == 0 || !equalJSON(instanceRef, server.InstanceRef) ||
+		(len(operation.Target.InstanceRef) > 0 && !equalJSON(operation.Target.InstanceRef, server.InstanceRef)) {
+		return store.ErrLogicalServerTargetMismatch
+	}
+	unitRef := profile.UnitRef
+	initialState := backupInitialLifecycle(operation)
+	initiallyReady := initialState == protocolstate.ServerReady
+	initiallyActive := initiallyReady || initialState == protocolstate.ServerDegraded
+	provider, providerErr := backupProviderInspection(operation)
+	unit, unitErr := backupRuntimeInspection(operation, backupInspectRuntimeStep)
+	providerActive := providerErr == nil && equalJSON(provider.InstanceRef, instanceRef) && provider.State == "active"
+	unitBound := unitErr == nil && equalJSON(unit.UnitRef, unitRef)
+	runtimeExpected := unitBound && ((initiallyActive && unit.State == "running") || (!initiallyActive && (unit.State == "stopped" || unit.State == "absent")))
+	dataDescribed := backupDataDescriptionMatches(operation, profile, server)
+	switch step.StepID {
+	case backupInspectInstanceStep:
+		if server.LifecycleState != protocolstate.ServerReady && server.LifecycleState != protocolstate.ServerDegraded && server.LifecycleState != protocolstate.ServerStopped {
+			return errors.New("provider inspection requires the original ready, degraded, or stopped lifecycle state")
+		}
+		if !stepBindsRef(step.Input, "instance_ref", server.InstanceRef) {
+			return errors.New("provider inspection is not bound to the current managed instance")
+		}
+	case backupInspectRuntimeStep:
+		if !providerActive || server.LifecycleState != backupInitialLifecycle(operation) || !stepBindsRef(step.Input, "unit_ref", unitRef) {
+			return errors.New("runtime inspection requires the exact active provider instance and original lifecycle state")
+		}
+	case backupDescribeDataStep:
+		if !providerActive || !runtimeExpected || server.LifecycleState != backupInitialLifecycle(operation) || !backupDataDescribeInputMatches(operation, profile, server) {
+			return errors.New("data-set description requires the exact instance, runtime state, and trusted release")
+		}
+	case backupSaveGameStep:
+		if !initiallyActive || server.LifecycleState != initialState || !providerActive || !runtimeExpected || !dataDescribed {
+			return errors.New("offline backup save requires the exact ready or degraded running server and declared data sets")
+		}
+	case backupStopRuntimeStep:
+		if !initiallyActive || (server.LifecycleState != initialState && server.LifecycleState != protocolstate.ServerStopping) ||
+			!gameBackupSaveConfirmed(operation) || !providerActive || !dataDescribed {
+			return errors.New("runtime stop requires a confirmed game save and exact ready or degraded server evidence")
+		}
+		if !stepBindsRef(step.Input, "unit_ref", unitRef) {
+			return errors.New("runtime stop is not bound to the trusted execution unit")
+		}
+	case backupPrepareStep:
+		if server.LifecycleState != protocolstate.ServerStopped && server.LifecycleState != protocolstate.ServerBackingUp {
+			return errors.New("backup preparation requires a stopped runtime")
+		}
+		if !providerActive || !dataDescribed || !runtimeExpectedForBackup(operation, unit, unitErr) {
+			return errors.New("backup preparation requires exact provider, runtime, and data-set evidence")
+		}
+		if initiallyActive {
+			stopped, err := backupRuntimeStopOutput(operation)
+			if err != nil || stopped.State != "stopped" || !equalJSON(stopped.UnitRef, unitRef) {
+				return errors.New("backup preparation requires the exact runtime to be confirmed stopped")
+			}
+		}
+	case "":
+		return errors.New("backup workflow step is missing an identifier")
+	default:
+		if dataSet, ok := w.dataSetForStep(ctx, operation, step.StepID, "capture"); ok {
+			if server.LifecycleState != protocolstate.ServerBackingUp || !dataDescribed {
+				return errors.New("capture requires backing_up state and exact trusted data-set evidence")
+			}
+			prepared, err := backupPrepareOutput(operation)
+			if err != nil || !containsString(prepared.DataSetIDs, dataSet.DataSetID) {
+				return errors.New("capture requires an exact completed preparation for the data set")
+			}
+			captureInput := decodeObject(effectiveStepInput(step))
+			if stringValueMap(captureInput, "preparation_id") != prepared.PreparationID ||
+				stringValueMap(captureInput, "data_set_id") != dataSet.DataSetID ||
+				stringValueMap(captureInput, "data_generation_id") != prepared.DataGenerationID ||
+				stringValueMap(captureInput, "backup_id") != prepared.BackupID {
+				return errors.New("capture input is not bound to the exact preparation")
+			}
+			return nil
+		}
+		if dataSet, ok := w.dataSetForStep(ctx, operation, step.StepID, "upload"); ok {
+			if server.LifecycleState != protocolstate.ServerBackingUp {
+				return errors.New("storage upload requires the server to remain stopped during backup")
+			}
+			capture, err := backupCaptureOutput(operation, dataSet.DataSetID)
+			if err != nil || capture.Outcome != "captured" || capture.SizeBytes > dataSet.MaximumBytes {
+				return errors.New("storage upload requires a complete bounded capture")
+			}
+			if err := w.verifyStreams(ctx, operation, backupDataStepID("capture", dataSet.DataSetID), []ServerBackupStreamExpectation{{
+				DataSetID: dataSet.DataSetID, SizeBytes: capture.SizeBytes, MaximumBytes: dataSet.MaximumBytes, SHA256: capture.Checksum.Digest,
+			}}); err != nil {
+				return err
+			}
+			return nil
+		}
+		if dataSet, ok := w.dataSetForStep(ctx, operation, step.StepID, "readback"); ok {
+			if server.LifecycleState != protocolstate.ServerBackingUp {
+				return errors.New("storage readback requires the server to remain stopped during backup")
+			}
+			capture, captureErr := backupCaptureOutput(operation, dataSet.DataSetID)
+			put, putErr := backupPutOutput(operation, dataSet.DataSetID)
+			if captureErr != nil || putErr != nil || put.UploadState != "uploaded" || put.BytesReceived != capture.SizeBytes ||
+				!backupObjectRefMatchesTarget(put.ObjectRef, put.Target) {
+				return errors.New("storage readback requires an exact completed upload")
+			}
+			if err := w.verifyStreams(ctx, operation, backupDataStepID("upload", dataSet.DataSetID), []ServerBackupStreamExpectation{{
+				DataSetID: dataSet.DataSetID, SizeBytes: capture.SizeBytes, MaximumBytes: maxInt64(capture.SizeBytes, 1), SHA256: capture.Checksum.Digest,
+			}}); err != nil {
+				return err
+			}
+			return nil
+		}
+		if step.StepID == backupValidateStep {
+			if server.LifecycleState != protocolstate.ServerBackingUp || !backupReadbacksComplete(operation, profile) {
+				return errors.New("game backup validation requires exact completed storage readbacks")
+			}
+			for _, dataSet := range profile.DataSets {
+				capture, err := backupCaptureOutput(operation, dataSet.DataSetID)
+				if err != nil {
+					return err
+				}
+				if err := w.verifyStreams(ctx, operation, backupDataStepID("readback", dataSet.DataSetID), []ServerBackupStreamExpectation{{
+					DataSetID: dataSet.DataSetID, SizeBytes: capture.SizeBytes, MaximumBytes: maxInt64(capture.SizeBytes, 1), SHA256: capture.Checksum.Digest,
+				}}); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if step.StepID == backupStartRuntimeStep {
+			if !backupResumeAfterBackup(operation) || server.LifecycleState != protocolstate.ServerBackingUp || !backupValidationConfirmed(operation, profile) {
+				return errors.New("runtime resume requires a fully validated backup of the exact data generation")
+			}
+			if err := w.verifyBackupValidationStreams(ctx, operation, profile); err != nil {
+				return err
+			}
+			return nil
+		}
+		if step.StepID == backupVerifyRuntimeStep {
+			if server.LifecycleState != protocolstate.ServerStarting || !backupRuntimeStartCompleted(operation) || !stepBindsRef(step.Input, "unit_ref", unitRef) {
+				return errors.New("runtime verification requires the exact completed start command")
+			}
+			return nil
+		}
+		if step.StepID == backupReadinessStep {
+			if server.LifecycleState != protocolstate.ServerStarting || !backupRuntimeRunning(operation) || !stepBindsRef(step.Input, "instance_ref", server.InstanceRef) {
+				return errors.New("readiness checks require the exact running runtime and managed instance")
+			}
+			return nil
+		}
+		if step.StepID == backupVerifyStoppedStep {
+			if server.LifecycleState != protocolstate.ServerBackingUp || backupResumeAfterBackup(operation) ||
+				!backupValidationConfirmed(operation, profile) || !stepBindsRef(step.Input, "unit_ref", unitRef) {
+				return errors.New("final stopped-state inspection requires the validated backup and exact execution unit")
+			}
+			return nil
+		}
+		return fmt.Errorf("unsupported server.backup step %q", step.StepID)
+	}
+	return nil
+}
+
+type backupDataSetDescription struct {
+	DataSetID                 string   `json:"data_set_id"`
+	RelativePaths             []string `json:"relative_paths"`
+	Required                  bool     `json:"required"`
+	SupportedConsistencyModes []string `json:"supported_consistency_modes"`
+	DataFormat                string   `json:"data_format,omitempty"`
+}
+
+func backupDataDescriptionMatches(operation store.OperationRecord, profile ServerBackupProfile, server store.LogicalServer) bool {
+	step := operationStep(operation, backupDescribeDataStep)
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded {
+		return false
+	}
+	var input struct {
+		Target    json.RawMessage `json:"target"`
+		ReleaseID string          `json:"release_id"`
+	}
+	var output struct {
+		Target     json.RawMessage            `json:"target"`
+		ReleaseID  string                     `json:"release_id"`
+		DataSets   []backupDataSetDescription `json:"data_sets"`
+		ObservedAt string                     `json:"observed_at"`
+	}
+	if json.Unmarshal(effectiveStepInput(step), &input) != nil || json.Unmarshal(step.Output, &output) != nil ||
+		!equalJSON(input.Target, output.Target) || input.ReleaseID != profile.GameReleaseID || output.ReleaseID != profile.GameReleaseID ||
+		!equalJSON(output.Target, mustJSON(map[string]any{"server_id": server.ServerID, "environment_id": server.EnvironmentID, "instance_ref": server.InstanceRef})) ||
+		len(output.DataSets) != len(profile.DataSets) {
+		return false
+	}
+	if _, err := time.Parse(time.RFC3339Nano, output.ObservedAt); err != nil {
+		return false
+	}
+	for i, actual := range output.DataSets {
+		trusted := profile.DataSets[i]
+		if actual.DataSetID != trusted.DataSetID || actual.Required != trusted.Required || actual.DataFormat != trusted.DataFormat ||
+			!sameStringSlice(actual.RelativePaths, trusted.RelativePaths) || !sameStringSlice(actual.SupportedConsistencyModes, trusted.SupportedConsistencyModes) {
+			return false
+		}
+		for _, relative := range actual.RelativePaths {
+			if !validBackupRelativePath(relative) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func runtimeExpectedForBackup(operation store.OperationRecord, unit stopUnitInspection, err error) bool {
+	if err != nil || !equalJSON(unit.UnitRef, stepField(operationStep(operation, backupInspectRuntimeStep).Input, "unit_ref")) {
+		return false
+	}
+	if backupInitiallyActive(operation) {
+		stopped, stopErr := backupRuntimeStopOutput(operation)
+		return stopErr == nil && stopped.State == "stopped" && unit.State == "running"
+	}
+	return unit.State == "stopped" || unit.State == "absent"
+}
+
+func backupInitiallyActive(operation store.OperationRecord) bool {
+	state := backupInitialLifecycle(operation)
+	return state == protocolstate.ServerReady || state == protocolstate.ServerDegraded
+}
+
+func backupInitialLifecycle(operation store.OperationRecord) protocolstate.ServerState {
+	if operation.BackupInitialLifecycleState != "" {
+		return operation.BackupInitialLifecycleState
+	}
+	if operationStep(operation, backupStopRuntimeStep).StepID != "" {
+		return protocolstate.ServerReady
+	}
+	return protocolstate.ServerStopped
+}
+
+func backupProviderInspection(operation store.OperationRecord) (instanceInspection, error) {
+	return instanceStepOutput(operation, backupInspectInstanceStep)
+}
+
+func backupRuntimeInspection(operation store.OperationRecord, stepID string) (stopUnitInspection, error) {
+	var output stopUnitInspection
+	step := operationStep(operation, stepID)
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded || json.Unmarshal(step.Output, &output) != nil {
+		return output, errors.New("execution unit inspection output is missing")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, output.ObservedAt); err != nil {
+		return stopUnitInspection{}, err
+	}
+	return output, nil
+}
+
+func backupRuntimeStopOutput(operation store.OperationRecord) (executionUnitStopResult, error) {
+	var output executionUnitStopResult
+	step := operationStep(operation, backupStopRuntimeStep)
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded || json.Unmarshal(step.Output, &output) != nil ||
+		output.Outcome != "completed" || output.State != "stopped" || !stepBindsRef(step.Input, "unit_ref", output.UnitRef) {
+		return executionUnitStopResult{}, errors.New("runtime stop output does not confirm the exact unit stopped")
+	}
+	return output, nil
+}
+
+func gameBackupSaveConfirmed(operation store.OperationRecord) bool {
+	step := operationStep(operation, backupSaveGameStep)
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded {
+		return false
+	}
+	var input, output struct {
+		Target struct {
+			ServerID      string          `json:"server_id"`
+			EnvironmentID string          `json:"environment_id"`
+			InstanceRef   json.RawMessage `json:"instance_ref"`
+		} `json:"target"`
+		ReleaseID  string `json:"release_id"`
+		Outcome    string `json:"outcome"`
+		ObservedAt string `json:"observed_at"`
+		SavedAt    string `json:"saved_at"`
+	}
+	if json.Unmarshal(effectiveStepInput(step), &input) != nil || json.Unmarshal(step.Output, &output) != nil ||
+		output.Outcome != "confirmed" || output.Target.ServerID != operation.Target.ServerID ||
+		output.Target.EnvironmentID != operation.Target.EnvironmentID || output.ReleaseID != input.ReleaseID ||
+		!equalJSON(output.Target.InstanceRef, input.Target.InstanceRef) ||
+		!equalJSON(input.Target.InstanceRef, stepField(operationStep(operation, backupInspectInstanceStep).Input, "instance_ref")) {
+		return false
+	}
+	_, observedErr := time.Parse(time.RFC3339Nano, output.ObservedAt)
+	_, savedErr := time.Parse(time.RFC3339Nano, output.SavedAt)
+	return observedErr == nil && savedErr == nil
+}
+
+func backupReadbacksComplete(operation store.OperationRecord, profile ServerBackupProfile) bool {
+	for _, dataSet := range profile.DataSets {
+		capture, captureErr := backupCaptureOutput(operation, dataSet.DataSetID)
+		put, putErr := backupPutOutput(operation, dataSet.DataSetID)
+		get, getErr := backupGetOutput(operation, dataSet.DataSetID)
+		if captureErr != nil || putErr != nil || getErr != nil || capture.Outcome != "captured" ||
+			put.UploadState != "uploaded" || put.BytesReceived != capture.SizeBytes ||
+			!backupObjectRefMatchesTarget(put.ObjectRef, put.Target) || get.TransferState != "complete" ||
+			get.BytesSent == nil || *get.BytesSent != capture.SizeBytes || !equalJSON(get.ObjectRef, put.ObjectRef) ||
+			get.ComputedChecksum.Algorithm != capture.Checksum.Algorithm || get.ComputedChecksum.Digest != capture.Checksum.Digest {
+			return false
+		}
+	}
+	return true
+}
+
+func backupDataDescribeInputMatches(operation store.OperationRecord, profile ServerBackupProfile, server store.LogicalServer) bool {
+	step := operationStep(operation, backupDescribeDataStep)
+	var input struct {
+		Target struct {
+			ServerID      string          `json:"server_id"`
+			EnvironmentID string          `json:"environment_id"`
+			InstanceRef   json.RawMessage `json:"instance_ref"`
+		} `json:"target"`
+		ReleaseID string `json:"release_id"`
+	}
+	return step.StepID != "" && json.Unmarshal(effectiveStepInput(step), &input) == nil &&
+		input.Target.ServerID == server.ServerID && input.Target.EnvironmentID == server.EnvironmentID &&
+		equalJSON(input.Target.InstanceRef, server.InstanceRef) && input.ReleaseID == profile.GameReleaseID
+}
+
+func backupValidationConfirmed(operation store.OperationRecord, profile ServerBackupProfile) bool {
+	step := operationStep(operation, backupValidateStep)
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded {
+		return false
+	}
+	var output backupValidationObservation
+	if json.Unmarshal(step.Output, &output) != nil || output.ValidationResult != "valid" ||
+		output.BackupID != operation.OperationID || output.EnvironmentID != operation.Target.EnvironmentID ||
+		len(output.CheckResults) != len(profile.ValidationChecks) {
+		return false
+	}
+	var input struct {
+		Manifest struct {
+			BackupID         string `json:"backup_id"`
+			EnvironmentID    string `json:"environment_id"`
+			DataGenerationID string `json:"data_generation_id"`
+		} `json:"manifest"`
+	}
+	if json.Unmarshal(effectiveStepInput(step), &input) != nil || input.Manifest.BackupID != output.BackupID ||
+		input.Manifest.EnvironmentID != output.EnvironmentID || input.Manifest.DataGenerationID != output.DataGenerationID {
+		return false
+	}
+	requested := make(map[string]string, len(profile.ValidationChecks))
+	for _, check := range profile.ValidationChecks {
+		requested[check.CheckID] = check.CheckVersion
+	}
+	for _, result := range output.CheckResults {
+		version, ok := requested[result.CheckID]
+		if !ok || version != result.CheckVersion || result.Result != "pass" {
+			return false
+		}
+		delete(requested, result.CheckID)
+		if _, err := time.Parse(time.RFC3339Nano, result.ObservedAt); err != nil {
+			return false
+		}
+	}
+	if len(requested) != 0 {
+		return false
+	}
+	_, err := time.Parse(time.RFC3339Nano, output.ObservedAt)
+	return err == nil
+}
+
+func (w *ServerBackupWorkflow) verifyBackupValidationStreams(ctx context.Context, operation store.OperationRecord, profile ServerBackupProfile) error {
+	expectations := make([]ServerBackupStreamExpectation, 0, len(profile.DataSets))
+	for _, dataSet := range profile.DataSets {
+		capture, err := backupCaptureOutput(operation, dataSet.DataSetID)
+		if err != nil {
+			return err
+		}
+		expectations = append(expectations, ServerBackupStreamExpectation{
+			DataSetID: dataSet.DataSetID, SizeBytes: capture.SizeBytes, MaximumBytes: maxInt64(capture.SizeBytes, 1), SHA256: capture.Checksum.Digest,
+		})
+	}
+	return w.verifyStreams(ctx, operation, backupValidateStep, expectations)
+}
+
+func backupRuntimeStartCompleted(operation store.OperationRecord) bool {
+	step := operationStep(operation, backupStartRuntimeStep)
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded {
+		return false
+	}
+	var output executionUnitStartResult
+	return json.Unmarshal(step.Output, &output) == nil && output.Outcome == "completed" && output.State == "running" &&
+		equalJSON(output.UnitRef, stepField(step.Input, "unit_ref"))
+}
+
+func backupRuntimeRunning(operation store.OperationRecord) bool {
+	output, err := backupRuntimeInspection(operation, backupVerifyRuntimeStep)
+	return err == nil && output.State == "running" && equalJSON(output.UnitRef, stepField(operationStep(operation, backupStartRuntimeStep).Input, "unit_ref"))
+}
+
+func backupDataSetIDFromStep(operation store.OperationRecord, stepID, action string) (string, bool) {
+	if operationStep(operation, stepID).StepID == "" {
+		return "", false
+	}
+	for _, dataSetID := range backupPlannedDataSetIDs(operation) {
+		if backupDataStepID(action, dataSetID) == stepID {
+			return dataSetID, true
+		}
+	}
+	return "", false
+}
+
+func backupDataSetForOperation(operation store.OperationRecord, stepID, action string) (ServerBackupDataSet, bool) {
+	dataSetID, ok := backupDataSetIDFromStep(operation, stepID, action)
+	return ServerBackupDataSet{DataSetID: dataSetID}, ok
+}
+
+func backupTargetMatchesOperation(raw json.RawMessage, operation store.OperationRecord) bool {
+	var target struct {
+		ServerID      string          `json:"server_id"`
+		EnvironmentID string          `json:"environment_id"`
+		InstanceRef   json.RawMessage `json:"instance_ref"`
+	}
+	if json.Unmarshal(raw, &target) != nil || target.ServerID != operation.Target.ServerID ||
+		target.EnvironmentID != operation.Target.EnvironmentID {
+		return false
+	}
+	return equalJSON(target.InstanceRef, stepField(operationStep(operation, backupInspectInstanceStep).Input, "instance_ref"))
+}
+
+func backupSaveRejected(operation store.OperationRecord) bool {
+	step := operationStep(operation, backupSaveGameStep)
+	input := decodeObject(effectiveStepInput(step))
+	output := decodeObject(step.Output)
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded ||
+		stringValueMap(output, "outcome") != "rejected" || stringValueMap(output, "reason_code") == "" ||
+		stringValueMap(output, "release_id") != stringValueMap(input, "release_id") ||
+		!equalJSON(mustJSON(output["target"]), mustJSON(input["target"])) ||
+		!backupTargetMatchesOperation(mustJSON(output["target"]), operation) {
+		return false
+	}
+	return validObservedAt(stringValueMap(output, "observed_at"))
+}
+
+func backupRuntimeStopOutputSucceeded(operation store.OperationRecord) bool {
+	_, err := backupRuntimeStopOutput(operation)
+	return err == nil
+}
+
+func backupPreparationRejected(operation store.OperationRecord) bool {
+	step := operationStep(operation, backupPrepareStep)
+	input := decodeObject(effectiveStepInput(step))
+	output := decodeObject(step.Output)
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded ||
+		stringValueMap(output, "outcome") != "rejected" || stringValueMap(output, "reason_code") == "" ||
+		stringValueMap(output, "backup_id") != stringValueMap(input, "backup_id") ||
+		stringValueMap(output, "data_generation_id") != stringValueMap(input, "data_generation_id") ||
+		stringValueMap(output, "release_id") != stringValueMap(input, "release_id") ||
+		stringValueMap(output, "consistency_mode") != stringValueMap(input, "consistency_mode") ||
+		!sameJSONList(output["data_set_ids"], input["data_set_ids"]) ||
+		!equalJSON(mustJSON(output["target"]), mustJSON(input["target"])) ||
+		!backupTargetMatchesOperation(mustJSON(output["target"]), operation) {
+		return false
+	}
+	return validObservedAt(stringValueMap(output, "observed_at"))
+}
+
+func backupCaptureRejected(operation store.OperationRecord, dataSetID string) bool {
+	step := operationStep(operation, backupDataStepID("capture", dataSetID))
+	input := decodeObject(effectiveStepInput(step))
+	output := decodeObject(step.Output)
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded ||
+		stringValueMap(output, "outcome") != "rejected" || stringValueMap(output, "reason_code") == "" ||
+		stringValueMap(output, "backup_id") != stringValueMap(input, "backup_id") ||
+		stringValueMap(output, "data_generation_id") != stringValueMap(input, "data_generation_id") ||
+		stringValueMap(output, "preparation_id") != stringValueMap(input, "preparation_id") ||
+		stringValueMap(output, "data_set_id") != dataSetID || stringValueMap(output, "data_set_id") != stringValueMap(input, "data_set_id") ||
+		stringValueMap(output, "capture_id") != stringValueMap(input, "capture_id") ||
+		stringValueMap(output, "release_id") != stringValueMap(input, "release_id") ||
+		stringValueMap(output, "consistency_mode") != stringValueMap(input, "consistency_mode") ||
+		!equalJSON(mustJSON(output["target"]), mustJSON(input["target"])) ||
+		!backupTargetMatchesOperation(mustJSON(output["target"]), operation) {
+		return false
+	}
+	return validObservedAt(stringValueMap(output, "observed_at"))
+}
+
+func backupValidationRejected(operation store.OperationRecord) bool {
+	step := operationStep(operation, backupValidateStep)
+	input := decodeObject(effectiveStepInput(step))
+	output := decodeObject(step.Output)
+	manifest := asStringMap(input["manifest"])
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded ||
+		stringValueMap(output, "validation_result") != "invalid" ||
+		stringValueMap(input, "backup_id") != operation.OperationID ||
+		stringValueMap(input, "environment_id") != operation.Target.EnvironmentID ||
+		stringValueMap(output, "backup_id") != operation.OperationID ||
+		stringValueMap(output, "environment_id") != operation.Target.EnvironmentID ||
+		stringValueMap(output, "data_generation_id") != stringValueMap(manifest, "data_generation_id") ||
+		!validObservedAt(stringValueMap(output, "observed_at")) {
+		return false
+	}
+	results, ok := output["check_results"].([]any)
+	if !ok || len(results) == 0 {
+		return false
+	}
+	hasFailure := false
+	for _, rawResult := range results {
+		result := asStringMap(rawResult)
+		if stringValueMap(result, "result") == "unknown" || !validObservedAt(stringValueMap(result, "observed_at")) {
+			return false
+		}
+		if stringValueMap(result, "result") == "fail" {
+			hasFailure = true
+		}
+	}
+	return hasFailure
+}
+
+func validObservedAt(value string) bool {
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	return err == nil && !parsed.IsZero()
+}
+
+func sameJSONList(left, right any) bool {
+	return equalJSON(mustJSON(left), mustJSON(right))
+}
+
+func decodeObject(raw json.RawMessage) map[string]any {
+	var output map[string]any
+	if json.Unmarshal(raw, &output) != nil || output == nil {
+		return map[string]any{}
+	}
+	return output
+}
+
+func mustJSON(value any) json.RawMessage {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	return encoded
+}
+
+func (w *ServerBackupWorkflow) HandlePreconditionFailure(_ context.Context, operation store.OperationRecord, step store.OperationStep, _ error) (Resolution, error) {
+	code := "core.safety.backup_precondition_unmet"
+	message := "Backup evidence did not establish the exact safe precondition; no next adapter call was issued."
+	switch step.StepID {
+	case backupStopRuntimeStep:
+		if backupSaveRejected(operation) {
+			message = "The game adapter rejected the backup save; the runtime was not stopped."
+			return Resolution{State: ResolutionDefinitiveError, Error: protocolError(code, "safety_blocked", message, operation.OperationID, false, "inspect_operation", false)}, nil
+		}
+	case backupPrepareStep:
+		if operationStep(operation, backupStopRuntimeStep).StepID != "" && backupRuntimeStopOutputSucceeded(operation) {
+			break
+		}
+		return Resolution{State: ResolutionNeedsOperator}, nil
+	default:
+		if dataSet, ok := backupDataSetForOperation(operation, step.StepID, "capture"); ok && backupPreparationRejected(operation) {
+			message = fmt.Sprintf("The game adapter rejected backup preparation for data set %q.", dataSet.DataSetID)
+			return Resolution{State: ResolutionDefinitiveError, Error: protocolError(code, "safety_blocked", message, operation.OperationID, false, "inspect_operation", false)}, nil
+		}
+		if dataSet, ok := backupDataSetForOperation(operation, step.StepID, "upload"); ok && backupCaptureRejected(operation, dataSet.DataSetID) {
+			message = fmt.Sprintf("The game adapter rejected capture of data set %q.", dataSet.DataSetID)
+			return Resolution{State: ResolutionDefinitiveError, Error: protocolError(code, "safety_blocked", message, operation.OperationID, false, "inspect_operation", false)}, nil
+		}
+		if dataSet, ok := backupDataSetForOperation(operation, step.StepID, "readback"); ok {
+			put, err := backupPutOutput(operation, dataSet.DataSetID)
+			if err == nil && put.UploadState == "not_uploaded" {
+				message = fmt.Sprintf("Storage confirmed that data set %q was not uploaded.", dataSet.DataSetID)
+				return Resolution{State: ResolutionDefinitiveError, Error: protocolError(code, "provider_failure", message, operation.OperationID, false, "inspect_operation", true)}, nil
+			}
+		}
+		if step.StepID == backupStartRuntimeStep && backupValidationRejected(operation) {
+			message = "Game-specific backup validation did not confirm every required check."
+			return Resolution{State: ResolutionDefinitiveError, Error: protocolError(code, "safety_blocked", message, operation.OperationID, false, "inspect_operation", false)}, nil
+		}
+	}
+	return Resolution{State: ResolutionNeedsOperator}, nil
+}
+
+func (w *ServerBackupWorkflow) Reconcile(ctx context.Context, operation store.OperationRecord, step store.OperationStep) (Resolution, error) {
+	if ctx == nil || ctx.Err() != nil {
+		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+	}
+	if _, ok := backupDataSetIDFromStep(operation, step.StepID, "readback"); ok {
+		return Resolution{State: ResolutionSafeToRetry, ExternalOperationRef: step.ExternalOperationRef}, nil
+	}
+	switch step.StepID {
+	case backupInspectInstanceStep, backupInspectRuntimeStep, backupDescribeDataStep, backupValidateStep, backupVerifyRuntimeStep, backupVerifyStoppedStep, backupReadinessStep:
+		// These are read-only. Any stream read is reissued with a fresh handle
+		// and a new attempt-scoped staging slot before the safe retry.
+		return Resolution{State: ResolutionSafeToRetry, ExternalOperationRef: step.ExternalOperationRef}, nil
+	case backupStopRuntimeStep:
+		observation, err := w.inspectRuntimeForReconciliation(ctx, operation, step)
+		if err != nil {
+			return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+		}
+		switch observation.State {
+		case "stopped":
+			output, _ := json.Marshal(executionUnitStopResult{UnitRef: observation.UnitRef, Outcome: "completed", State: "stopped", ObservedAt: observation.ObservedAt})
+			return Resolution{State: ResolutionCompleted, Output: output, ExternalOperationRef: step.ExternalOperationRef}, nil
+		case "running":
+			return Resolution{State: ResolutionSafeToRetry, ExternalOperationRef: step.ExternalOperationRef}, nil
+		case "stopping":
+			return Resolution{State: ResolutionPending, ExternalOperationRef: step.ExternalOperationRef}, nil
+		default:
+			return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+		}
+	case backupStartRuntimeStep:
+		observation, err := w.inspectRuntimeForReconciliation(ctx, operation, step)
+		if err != nil {
+			return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+		}
+		switch observation.State {
+		case "running":
+			output, _ := json.Marshal(executionUnitStartResult{UnitRef: observation.UnitRef, Outcome: "completed", State: "running", ObservedAt: observation.ObservedAt})
+			return Resolution{State: ResolutionCompleted, Output: output, ExternalOperationRef: step.ExternalOperationRef}, nil
+		case "stopped", "absent":
+			return Resolution{State: ResolutionSafeToRetry, ExternalOperationRef: step.ExternalOperationRef}, nil
+		case "starting":
+			return Resolution{State: ResolutionPending, ExternalOperationRef: step.ExternalOperationRef}, nil
+		case "failed":
+			return Resolution{State: ResolutionDefinitiveError, ExternalOperationRef: step.ExternalOperationRef,
+				Error: protocolError("core.execution.unit_failed", "provider_failure", "The exact execution unit is confirmed failed after backup resume was attempted.", operation.OperationID, false, "operator_review", true)}, nil
+		default:
+			return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+		}
+	default:
+		// Save, prepare, capture, and upload are mutating. The protocol has no
+		// read-only status capability that proves an unknown outcome did not
+		// take effect, so the workflow never retries these calls blindly.
+		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+	}
+}
+
+func (w *ServerBackupWorkflow) inspectRuntimeForReconciliation(ctx context.Context, operation store.OperationRecord, step store.OperationStep) (stopUnitInspection, error) {
+	inspect := operationStep(operation, backupInspectRuntimeStep)
+	if step.StepID == backupStartRuntimeStep {
+		inspect = operationStep(operation, backupVerifyRuntimeStep)
+	}
+	if inspect.StepID == "" || inspect.CapabilityName != "execution.unit.inspect" || inspect.AdapterID != step.AdapterID ||
+		inspect.CapabilityVersion == "" || !stepBindsRef(inspect.Input, "unit_ref", stepField(step.Input, "unit_ref")) {
+		return stopUnitInspection{}, errors.New("no exact runtime inspection step is available for reconciliation")
+	}
+	capability, err := exactCapability(w.adapters, inspect.AdapterID, adapter.CategoryExecution, inspect.CapabilityName,
+		"urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":execution:systemd-unit-inspect-input",
+		"urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":execution:systemd-unit-inspect-output", false)
+	if err != nil || capability.Version != inspect.CapabilityVersion {
+		return stopUnitInspection{}, errors.New("pinned runtime inspection capability is unavailable")
+	}
+	deadline := time.Now().UTC().Add(15 * time.Second)
+	requestID := backupReconcileRequestID(operation.OperationID, step.StepID, step.Attempt)
+	correlation := operation.CorrelationID
+	if correlation == "" {
+		correlation = operation.OperationID
+	}
+	request := adapter.InvokeRequest{JSONRPC: "2.0", ID: requestID, Method: "adapter.invoke", Params: adapter.InvokeParams{
+		ProtocolVersion: operation.ProtocolVersion, Capability: capability.Name,
+		RequestContext: adapter.RequestContext{RequestID: requestID, CorrelationID: correlation, OperationID: operation.OperationID,
+			StepID: step.StepID, ServerID: operation.Target.ServerID, EnvironmentID: operation.Target.EnvironmentID, Deadline: deadline},
+		Input: append(json.RawMessage(nil), effectiveStepInput(inspect)...),
+	}}
+	callContext, cancel := context.WithDeadline(ctx, deadline)
+	response, invokeErr := w.adapters.Invoke(callContext, inspect.AdapterID, request)
+	cancel()
+	if invokeErr != nil || response.JSONRPC != "2.0" || response.ID != requestID || response.Result.Outcome != adapter.OutcomeCompleted ||
+		w.schemas.ValidateJSON(capability.OutputSchemaURI, response.Result.Output) != nil {
+		return stopUnitInspection{}, errors.New("runtime inspection did not complete during reconciliation")
+	}
+	var observation stopUnitInspection
+	if json.Unmarshal(response.Result.Output, &observation) != nil || !equalJSON(observation.UnitRef, stepField(step.Input, "unit_ref")) {
+		return stopUnitInspection{}, errors.New("runtime reconciliation inspection is not bound to the exact unit")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, observation.ObservedAt); err != nil {
+		return stopUnitInspection{}, err
+	}
+	return observation, nil
+}
+
+func backupReconcileRequestID(operationID, stepID string, attempt int) string {
+	digest := sha256.Sum256([]byte(operationID + "\x00" + stepID + "\x00reconcile-backup\x00" + fmt.Sprint(attempt)))
+	return "reconcile-" + hex.EncodeToString(digest[:16])
+}
+
+func (w *ServerBackupWorkflow) ValidateCompletion(ctx context.Context, operation store.OperationRecord) error {
+	if ctx == nil || operation.OperationType != "server.backup" {
+		return errors.New("server.backup completion validation requires an operation and context")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	stored, profile, err := w.loadProfile(ctx, operation)
+	if err != nil {
+		return err
+	}
+	if !backupDataDescriptionMatches(operation, profile, stored.Record) {
+		return errors.New("game data description does not match the trusted release profile")
+	}
+	if _, err := backupPrepareOutput(operation); err != nil {
+		return err
+	}
+	for _, dataSet := range profile.DataSets {
+		capture, err := backupCaptureOutput(operation, dataSet.DataSetID)
+		if err != nil || capture.SizeBytes > dataSet.MaximumBytes {
+			return fmt.Errorf("capture for data set %q is missing, invalid, or oversized", dataSet.DataSetID)
+		}
+		if err := w.verifyStreams(ctx, operation, backupDataStepID("capture", dataSet.DataSetID), []ServerBackupStreamExpectation{{
+			DataSetID: dataSet.DataSetID, SizeBytes: capture.SizeBytes, MaximumBytes: dataSet.MaximumBytes, SHA256: capture.Checksum.Digest,
+		}}); err != nil {
+			return err
+		}
+		put, err := backupPutOutput(operation, dataSet.DataSetID)
+		if err != nil || put.UploadState != "uploaded" || put.BytesReceived != capture.SizeBytes || !backupObjectRefMatchesTarget(put.ObjectRef, put.Target) {
+			return fmt.Errorf("upload for data set %q does not bind the exact capture and target", dataSet.DataSetID)
+		}
+		if err := w.verifyStreams(ctx, operation, backupDataStepID("upload", dataSet.DataSetID), []ServerBackupStreamExpectation{{
+			DataSetID: dataSet.DataSetID, SizeBytes: capture.SizeBytes, MaximumBytes: maxInt64(capture.SizeBytes, 1), SHA256: capture.Checksum.Digest,
+		}}); err != nil {
+			return err
+		}
+		get, err := backupGetOutput(operation, dataSet.DataSetID)
+		if err != nil || get.TransferState != "complete" || get.BytesSent == nil || *get.BytesSent != capture.SizeBytes ||
+			!equalJSON(get.ObjectRef, put.ObjectRef) || get.ComputedChecksum.Algorithm != capture.Checksum.Algorithm ||
+			get.ComputedChecksum.Digest != capture.Checksum.Digest {
+			return fmt.Errorf("storage readback for data set %q does not match the captured bytes", dataSet.DataSetID)
+		}
+		if err := w.verifyStreams(ctx, operation, backupDataStepID("readback", dataSet.DataSetID), []ServerBackupStreamExpectation{{
+			DataSetID: dataSet.DataSetID, SizeBytes: capture.SizeBytes, MaximumBytes: maxInt64(capture.SizeBytes, 1), SHA256: capture.Checksum.Digest,
+		}}); err != nil {
+			return err
+		}
+	}
+	if !backupValidationConfirmed(operation, profile) {
+		return errors.New("game-specific backup validation did not pass the complete trusted check set")
+	}
+	if err := w.verifyBackupValidationStreams(ctx, operation, profile); err != nil {
+		return err
+	}
+	if backupResumeAfterBackup(operation) {
+		if !backupRuntimeStartCompleted(operation) || !backupRuntimeRunning(operation) {
+			return errors.New("resumed runtime is not confirmed running at the exact unit")
+		}
+		server, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
+		if err != nil {
+			return err
+		}
+		if _, err := BuildReadinessAssertion(w.schemas, operation, server.Record, backupReadinessStep, w.readinessTTL); err != nil {
+			return err
+		}
+	} else {
+		if backupInitiallyActive(operation) {
+			if _, err := backupRuntimeStopOutput(operation); err != nil {
+				return err
+			}
+		}
+		if !backupFinalRuntimeStopped(operation) {
+			return errors.New("final exact-unit inspection did not confirm the runtime stopped")
+		}
+	}
+	return nil
+}
+
+func backupResumeAfterBackup(operation store.OperationRecord) bool {
+	return operationStep(operation, backupStartRuntimeStep).StepID != ""
+}
+
+func backupFinalRuntimeStopped(operation store.OperationRecord) bool {
+	step := operationStep(operation, backupVerifyStoppedStep)
+	unit, err := backupRuntimeInspection(operation, backupVerifyStoppedStep)
+	return err == nil && (unit.State == "stopped" || unit.State == "absent") &&
+		stepBindsRef(step.Input, "unit_ref", unit.UnitRef)
+}
+
+func (w *ServerBackupWorkflow) BuildSuccessResult(ctx context.Context, operation store.OperationRecord) (json.RawMessage, error) {
+	if err := w.ValidateCompletion(ctx, operation); err != nil {
+		return nil, err
+	}
+	stored, _, err := w.loadProfile(ctx, operation)
+	if err != nil {
+		return nil, err
+	}
+	validationStep := operationStep(operation, backupValidateStep)
+	var validation backupValidationObservation
+	if json.Unmarshal(validationStep.Output, &validation) != nil {
+		return nil, errors.New("decode completed backup validation output")
+	}
+	var validationInput struct {
+		Manifest json.RawMessage `json:"manifest"`
+	}
+	if json.Unmarshal(effectiveStepInput(validationStep), &validationInput) != nil || !isObject(validationInput.Manifest) {
+		return nil, errors.New("completed backup validation has no resolved manifest")
+	}
+	manifest := decodeObject(validationInput.Manifest)
+	dataGenerationID := stringValueMap(manifest, "data_generation_id")
+	prepared, prepareErr := backupPrepareOutput(operation)
+	if dataGenerationID == "" || prepareErr != nil || dataGenerationID != prepared.DataGenerationID ||
+		(dataGenerationID != stored.Record.DataGenerationID && !backupResumeAfterBackup(operation)) {
+		return nil, errors.New("verified manifest is not bound to the accepted data generation")
+	}
+	finalState := string(protocolstate.ServerStopped)
+	operationData := map[string]any{
+		"backup_id": operation.OperationID, "environment_id": operation.Target.EnvironmentID,
+		"data_generation_id": dataGenerationID, "manifest": manifest,
+		"verified_at": validation.ObservedAt, "final_lifecycle_state": finalState,
+	}
+	if backupResumeAfterBackup(operation) {
+		finalState = string(protocolstate.ServerReady)
+		assertion, err := BuildReadinessAssertion(w.schemas, operation, stored.Record, backupReadinessStep, w.readinessTTL)
+		if err != nil {
+			return nil, err
+		}
+		operationData["final_lifecycle_state"] = finalState
+		operationData["readiness_assertion"] = json.RawMessage(assertion)
+	}
+	result := map[string]any{
+		"outcome_summary": "Backup objects were captured, read back, and game-validated for the recorded data generation.",
+		"operation_type":  "server.backup", "affected_resources": []any{stored.Record.InstanceRef},
+		"completed_steps": completedStepSummaries(operation), "failed_steps": []any{},
+		"warnings": []string{}, "unresolved_conditions": []any{}, "audit_event_ids": []string{}, "partial": false,
+		"operation_data": operationData,
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	if err := w.schemas.ValidateJSON("urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":operations:server-backup-result", encoded); err != nil {
+		return nil, fmt.Errorf("server.backup result does not match protocol schema: %w", err)
+	}
+	return encoded, nil
+}
+
+func (w *ServerBackupWorkflow) BuildFailureResult(_ context.Context, operation store.OperationRecord, step store.OperationStep, failure json.RawMessage) (json.RawMessage, error) {
+	failed := []any{}
+	if step.StepID != "" && len(failure) > 0 && step.Status == protocolstate.StepFailed {
+		failed = append(failed, map[string]any{"step_id": step.StepID, "step_type": step.StepType, "error": failure})
+	}
+	partial := false
+	for _, planned := range operation.Steps {
+		if planned.Attempt > 0 && backupStepMayMutate(planned.CapabilityName) {
+			partial = true
+			break
+		}
+	}
+	result := map[string]any{
+		"outcome_summary": "Server backup did not establish a complete, verified backup result.",
+		"operation_type":  "server.backup", "affected_resources": []any{},
+		"completed_steps": completedStepSummaries(operation), "failed_steps": failed,
+		"warnings": []string{}, "unresolved_conditions": []any{}, "audit_event_ids": []string{}, "partial": partial,
+	}
+	instanceRef := operation.Target.InstanceRef
+	if len(instanceRef) == 0 && w != nil && w.servers != nil {
+		if server, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID); err == nil {
+			instanceRef = server.Record.InstanceRef
+		}
+	}
+	if len(instanceRef) > 0 {
+		result["affected_resources"] = []any{instanceRef}
+	}
+	if step.StepID == "" {
+		result["unresolved_conditions"] = []any{map[string]any{
+			"condition_id": "server.backup.postcondition_unmet",
+			"description":  "The operation did not establish exact capture, storage readback, and game-validation evidence.",
+		}}
+	}
+	return json.Marshal(result)
+}
+
+func backupStepMayMutate(capability string) bool {
+	switch capability {
+	case "game.save.request", "execution.unit.graceful_stop", "game.backup.prepare", "game.backup.capture",
+		"storage.object.put", "execution.unit.start":
+		return true
+	default:
+		return false
+	}
+}
+
+func (w *ServerBackupWorkflow) ProjectLifecycle(operation store.OperationRecord, current store.StoredLogicalServer) (store.LogicalServer, bool, error) {
+	if operation.OperationType != "server.backup" || current.Record.ServerID != operation.Target.ServerID ||
+		current.Record.EnvironmentID != operation.Target.EnvironmentID {
+		return store.LogicalServer{}, false, errors.New("server.backup lifecycle projection target mismatch")
+	}
+	next := current.Record
+	stop := operationStep(operation, backupStopRuntimeStep)
+	prepare := operationStep(operation, backupPrepareStep)
+	start := operationStep(operation, backupStartRuntimeStep)
+	readiness := operationStep(operation, backupReadinessStep)
+	switch current.Record.LifecycleState {
+	case protocolstate.ServerReady:
+		if stop.StepID != "" && stop.Status != protocolstate.StepPending {
+			next.LifecycleState = protocolstate.ServerStopping
+			next.DesiredState = "stopped"
+			return next, true, nil
+		}
+	case protocolstate.ServerDegraded:
+		if stop.StepID != "" && stop.Status != protocolstate.StepPending {
+			next.LifecycleState = protocolstate.ServerStopping
+			next.DesiredState = "stopped"
+			return next, true, nil
+		}
+	case protocolstate.ServerStopped:
+		if prepare.Status != protocolstate.StepPending {
+			next.LifecycleState = protocolstate.ServerBackingUp
+			next.DesiredState = "stopped"
+			return next, true, nil
+		}
+	case protocolstate.ServerStopping:
+		if stop.Status == protocolstate.StepSucceeded {
+			if _, err := backupRuntimeStopOutput(operation); err != nil {
+				return store.LogicalServer{}, false, errors.New("backup stop step lacks exact stopped-unit evidence")
+			}
+			next.LifecycleState = protocolstate.ServerBackingUp
+			next.DesiredState = "stopped"
+			return next, true, nil
+		}
+		if operation.Status == protocolstate.OperationFailed || operation.Status == protocolstate.OperationCancelled {
+			next.LifecycleState = protocolstate.ServerFailed
+			next.DesiredState = "stopped"
+			return next, true, nil
+		}
+	case protocolstate.ServerBackingUp:
+		if start.StepID != "" && start.Status != protocolstate.StepPending {
+			next.LifecycleState = protocolstate.ServerStarting
+			next.DesiredState = "running"
+			next.DataGenerationID = backupNextGenerationID(operation.OperationID, current.Record.DataGenerationID)
+			next.DataGenerationStatus = "unknown"
+			return next, true, nil
+		}
+		if operation.Status == protocolstate.OperationSucceeded {
+			if backupResumeAfterBackup(operation) {
+				return store.LogicalServer{}, false, errors.New("resumed backup cannot succeed before lifecycle enters starting")
+			}
+			if !hasValidBackupResult(operation.Result, operation, current.Record, w.schemas, protocolstate.ServerStopped) {
+				return store.LogicalServer{}, false, errors.New("terminal server.backup result lacks exact stopped-state manifest evidence")
+			}
+			next.LifecycleState = protocolstate.ServerStopped
+			next.DesiredState = "stopped"
+			return next, true, nil
+		}
+		if operation.Status == protocolstate.OperationFailed || operation.Status == protocolstate.OperationCancelled {
+			if start.Attempt > 0 || (operationStep(operation, backupVerifyStoppedStep).Attempt > 0 && !backupFinalRuntimeStopped(operation)) {
+				next.LifecycleState = protocolstate.ServerFailed
+				next.DataGenerationStatus = "unknown"
+			} else {
+				next.LifecycleState = protocolstate.ServerStopped
+			}
+			next.DesiredState = "stopped"
+			return next, true, nil
+		}
+	case protocolstate.ServerStarting:
+		if readiness.Status != protocolstate.StepPending {
+			next.LifecycleState = protocolstate.ServerValidating
+			next.DesiredState = "running"
+			return next, true, nil
+		}
+		if operation.Status == protocolstate.OperationFailed || operation.Status == protocolstate.OperationCancelled {
+			next.LifecycleState = protocolstate.ServerFailed
+			next.DataGenerationStatus = "unknown"
+			return next, true, nil
+		}
+	case protocolstate.ServerValidating:
+		if operation.Status == protocolstate.OperationSucceeded {
+			if !hasValidBackupResult(operation.Result, operation, current.Record, w.schemas, protocolstate.ServerReady) {
+				return store.LogicalServer{}, false, errors.New("terminal server.backup result lacks exact ready-state manifest and readiness evidence")
+			}
+			next.LifecycleState = protocolstate.ServerReady
+			next.DesiredState = "running"
+			next.DataGenerationStatus = "known"
+			return next, true, nil
+		}
+		if operation.Status == protocolstate.OperationFailed || operation.Status == protocolstate.OperationCancelled {
+			next.LifecycleState = protocolstate.ServerDegraded
+			next.DataGenerationStatus = "unknown"
+			return next, true, nil
+		}
+	}
+	return current.Record, false, nil
+}
+
+func (w *ServerBackupWorkflow) FinalizeOperation(operation store.OperationRecord) {
+	if w == nil || w.transfers == nil || operation.OperationType != "server.backup" ||
+		!protocolstate.IsTerminalOperation(operation.Status) {
+		return
+	}
+	if cleaner, ok := w.transfers.(serverBackupTransferCleaner); ok {
+		_ = cleaner.CleanupOperation(operation.OperationID)
+	}
+}
+
+func backupNextGenerationID(operationID, previous string) string {
+	digest := sha256.Sum256([]byte("server.backup\x00" + operationID + "\x00" + previous))
+	return "generation-" + hex.EncodeToString(digest[:16])
+}
+
+func hasValidBackupResult(raw json.RawMessage, operation store.OperationRecord, server store.LogicalServer, schemas schemaRuntime, expectedState protocolstate.ServerState) bool {
+	if schemas == nil || schemas.ValidateJSON("urn:gameserver-controller:"+schemas.ProtocolVersion()+":operations:server-backup-result", raw) != nil {
+		return false
+	}
+	var result struct {
+		OperationType string `json:"operation_type"`
+		OperationData struct {
+			BackupID         string          `json:"backup_id"`
+			EnvironmentID    string          `json:"environment_id"`
+			DataGenerationID string          `json:"data_generation_id"`
+			Manifest         json.RawMessage `json:"manifest"`
+			FinalState       string          `json:"final_lifecycle_state"`
+			Readiness        json.RawMessage `json:"readiness_assertion"`
+		} `json:"operation_data"`
+	}
+	if json.Unmarshal(raw, &result) != nil || result.OperationType != "server.backup" ||
+		result.OperationData.BackupID != operation.OperationID || result.OperationData.EnvironmentID != operation.Target.EnvironmentID ||
+		result.OperationData.FinalState != string(expectedState) || !isObject(result.OperationData.Manifest) {
+		return false
+	}
+	var manifest struct {
+		ManifestVersion   string          `json:"manifest_version"`
+		BackupID          string          `json:"backup_id"`
+		ServerID          string          `json:"server_id"`
+		EnvironmentID     string          `json:"environment_id"`
+		DataGenerationID  string          `json:"data_generation_id"`
+		SourceInstanceRef json.RawMessage `json:"source_instance_ref"`
+		SourceOperationID string          `json:"source_operation_id"`
+	}
+	if json.Unmarshal(result.OperationData.Manifest, &manifest) != nil ||
+		manifest.ManifestVersion != backupManifestVersion || manifest.BackupID != operation.OperationID ||
+		manifest.ServerID != operation.Target.ServerID || manifest.EnvironmentID != operation.Target.EnvironmentID ||
+		manifest.DataGenerationID != result.OperationData.DataGenerationID || manifest.SourceOperationID != operation.OperationID ||
+		!equalJSON(manifest.SourceInstanceRef, server.InstanceRef) {
+		return false
+	}
+	if expectedState == protocolstate.ServerReady {
+		var assertion readinessAssertion
+		return json.Unmarshal(result.OperationData.Readiness, &assertion) == nil &&
+			assertion.ServerID == server.ServerID && assertion.EnvironmentID == server.EnvironmentID &&
+			equalJSON(assertion.InstanceRef, server.InstanceRef) &&
+			schemas.ValidateJSON("urn:gameserver-controller:"+schemas.ProtocolVersion()+":lifecycle:readiness-assertion", result.OperationData.Readiness) == nil
+	}
+	return backupFinalRuntimeStopped(operation)
+}
