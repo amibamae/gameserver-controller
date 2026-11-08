@@ -73,6 +73,8 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 
 ## Phase 3: Local controller and safe manual lifecycle
 
+- [x] Add a read-only Go setup planner for an existing Debian/systemd machine; it validates configuration and prints a redacted JSON plan without host changes or provider access.
+
 - [ ] Implement [controller setup on an existing machine](CONTROLLER_SETUP.md) in Go, with secure Vultr/Wasabi credential input and a redacted installation plan.
 - [ ] Implement scoped, expiring, revocable controller API keys and enforce authentication and authorization before enabling a remote management listener.
 - Preserve password-backed sessions and delegated controller access as the future panel's integration contract; panel implementation remains out of scope.
