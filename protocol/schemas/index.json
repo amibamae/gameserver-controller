@@ -235,6 +235,14 @@
       "id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-create-output"
     },
     {
+      "path": "hosting/instance-find-by-resource-key-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-find-by-resource-key-input"
+    },
+    {
+      "path": "hosting/instance-find-by-resource-key-output.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-find-by-resource-key-output"
+    },
+    {
       "path": "hosting/instance-destroy-input.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-destroy-input"
     },

@@ -56,6 +56,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return evaluateUnitRestart(pkg, fixture)
 	case "execution.unit.create.exact-definition-no-autostart":
 		return evaluateUnitCreate(pkg, fixture)
+	case "hosting.instance.find-by-resource-key.create-recovery":
+		return evaluateInstanceCreateRecovery(pkg, fixture)
 	case "game.release.describe.integrity-and-identity":
 		return evaluateGameReleaseDescription(pkg, fixture)
 	case "game.install.release-binding-and-reconciliation":

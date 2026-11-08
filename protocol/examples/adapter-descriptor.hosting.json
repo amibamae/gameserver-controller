@@ -5,7 +5,7 @@
   "implementation_version": "0.1.0",
   "protocol_versions": ["0.21.0-draft"],
   "contract_versions": ["hosting.v1-draft"],
-  "required_permissions": ["instance.create", "instance.inspect", "bootstrap.deliver", "bootstrap.inspect"],
+  "required_permissions": ["instance.create", "instance.find_by_resource_key", "instance.inspect", "bootstrap.deliver", "bootstrap.inspect"],
   "capabilities": [
     {
       "name": "hosting.instance.create",
@@ -22,6 +22,14 @@
       "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:instance-inspect-input",
       "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:instance-inspect-output",
       "required_permissions": ["instance.inspect"]
+    },
+    {
+      "name": "hosting.instance.find_by_resource_key",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:instance-find-by-resource-key-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:instance-find-by-resource-key-output",
+      "required_permissions": ["instance.find_by_resource_key"]
     },
     {
       "name": "hosting.bootstrap.deliver",

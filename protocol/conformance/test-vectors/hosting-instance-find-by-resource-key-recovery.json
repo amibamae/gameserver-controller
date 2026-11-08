@@ -1,0 +1,66 @@
+{
+  "fixture_id": "hosting.instance.find-by-resource-key.create-recovery",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "hosting.instance.create",
+  "purpose": "A lost create response is reconciled only from a complete exact-key lookup with one match; zero is inconclusive and duplicates require operator review.",
+  "input": {
+    "create_request": {
+      "server_id": "server-staging",
+      "environment_id": "staging",
+      "resource_key": "gsc-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "region_id": "region-test",
+      "plan_id": "plan-small",
+      "os": {
+        "provider_os_id": "debian-13",
+        "distribution": "Debian",
+        "version": "13",
+        "architecture": "x86_64"
+      }
+    },
+    "lookups": [
+      {
+        "case_id": "one-exact-match",
+        "output": {
+          "resource_key": "gsc-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "inventory_complete": true,
+          "matches": [{
+            "instance_ref": {"adapter_id":"hosting.example","environment_id":"staging","resource_kind":"instance","external_id":"vm-one"},
+            "state": "creating"
+          }],
+          "observed_at": "2026-11-08T20:30:00Z"
+        }
+      },
+      {
+        "case_id": "zero-match-is-inconclusive",
+        "output": {
+          "resource_key": "gsc-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "inventory_complete": true,
+          "matches": [],
+          "observed_at": "2026-11-08T20:30:00Z"
+        }
+      },
+      {
+        "case_id": "duplicate-matches-require-operator",
+        "output": {
+          "resource_key": "gsc-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "inventory_complete": true,
+          "matches": [
+            {"instance_ref":{"adapter_id":"hosting.example","environment_id":"staging","resource_kind":"instance","external_id":"vm-one"},"state":"creating"},
+            {"instance_ref":{"adapter_id":"hosting.example","environment_id":"staging","resource_kind":"instance","external_id":"vm-two"},"state":"creating"}
+          ],
+          "observed_at": "2026-11-08T20:30:00Z"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "create_request_schema_valid": true,
+    "lookups": [
+      {"case_id":"one-exact-match","schema_valid":true,"match_count":1,"reconcile_as_created":true,"retry_create":false,"operator_review":false},
+      {"case_id":"zero-match-is-inconclusive","schema_valid":true,"match_count":0,"reconcile_as_created":false,"retry_create":false,"operator_review":true},
+      {"case_id":"duplicate-matches-require-operator","schema_valid":true,"match_count":2,"reconcile_as_created":false,"retry_create":false,"operator_review":true}
+    ],
+    "retry_requires_authoritative_safe_to_retry_evidence": true
+  },
+  "side_effect_expected": "none"
+}

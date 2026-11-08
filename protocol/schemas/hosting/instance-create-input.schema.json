@@ -5,10 +5,11 @@
   "description": "Adapter-level request to create one infrastructure instance. Game installation, backup restore, and bootstrap execution are separate capabilities.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["server_id", "environment_id", "region_id", "plan_id", "os"],
+  "required": ["server_id", "environment_id", "resource_key", "region_id", "plan_id", "os"],
   "properties": {
     "server_id": {"type": "string", "minLength": 1, "maxLength": 200},
     "environment_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "resource_key": {"type": "string", "pattern": "^gsc-[a-f0-9]{64}$"},
     "region_id": {"type": "string", "minLength": 1, "maxLength": 200},
     "plan_id": {"type": "string", "minLength": 1, "maxLength": 200},
     "os": {
