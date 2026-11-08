@@ -136,6 +136,9 @@ func SetEncryptedCredential(ctx context.Context, value config.Config, name, dire
 	if err := os.Chmod(temporaryPath, 0o600); err != nil {
 		return errors.New("restrict encrypted credential permissions failed")
 	}
+	if err := syncFile(temporaryPath); err != nil {
+		return errors.New("flush encrypted credential failed")
+	}
 	if replace {
 		if err := os.Rename(temporaryPath, finalPath); err != nil {
 			return errors.New("replace encrypted credential failed")
@@ -148,11 +151,27 @@ func SetEncryptedCredential(ctx context.Context, value config.Config, name, dire
 			return errors.New("install encrypted credential failed")
 		}
 	}
-	if directoryFile, openErr := os.Open(directory); openErr == nil {
-		_ = directoryFile.Sync()
+	directoryFile, err := os.Open(directory)
+	if err != nil {
+		return errors.New("credential was installed but directory durability could not be confirmed")
+	}
+	if err := directoryFile.Sync(); err != nil {
 		_ = directoryFile.Close()
+		return errors.New("credential was installed but directory durability could not be confirmed")
+	}
+	if err := directoryFile.Close(); err != nil {
+		return errors.New("credential was installed but directory durability could not be confirmed")
 	}
 	return nil
+}
+
+func syncFile(path string) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return file.Sync()
 }
 
 func ensureCredentialDirectory(directory string) error {
