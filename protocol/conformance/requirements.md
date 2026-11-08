@@ -148,6 +148,8 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
  
 ## 6. Test vector index
 
+- [raw-json-wire-interoperability.json](test-vectors/raw-json-wire-interoperability.json)
+
 - [valid-provision-request.json](test-vectors/valid-provision-request.json)
 - [invalid-lifecycle-transition.json](test-vectors/invalid-lifecycle-transition.json)
 - [lifecycle-replacement-identity.json](test-vectors/lifecycle-replacement-identity.json)
