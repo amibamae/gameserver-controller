@@ -416,6 +416,16 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 	if correlationID == "" {
 		correlationID = running.Record.OperationID
 	}
+	var secretRefs []adapter.SecretReference
+	if provider, ok := definition.(StepSecretReferences); ok {
+		refs, err := provider.SecretReferencesForStep(ctx, running.Record, step)
+		if err != nil {
+			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
+				"core.workflow.secret_reference_failed",
+				"The controller could not authorize the secret references required by this adapter step.", "safety_blocked")
+		}
+		secretRefs = refs
+	}
 	request := adapter.InvokeRequest{
 		JSONRPC: "2.0",
 		ID:      requestID,
@@ -427,7 +437,7 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 				RequestID: requestID, CorrelationID: correlationID,
 				OperationID: running.Record.OperationID, StepID: step.StepID,
 				ServerID: running.Record.Target.ServerID, EnvironmentID: running.Record.Target.EnvironmentID,
-				Deadline: deadline,
+				Deadline: deadline, SecretRefs: secretRefs,
 			},
 			Input: append(json.RawMessage(nil), effectiveStepInput(step)...),
 		},
