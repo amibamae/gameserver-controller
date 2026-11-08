@@ -758,6 +758,7 @@
       },
       {
         "case_id": "installed-claimed-verified-with-wrong-observed-checksum",
+        "release_schema_valid": true,
         "request_schema_valid": true,
         "response_schema_valid": true,
         "target_bound": true,
@@ -770,6 +771,7 @@
       },
       {
         "case_id": "installed-claimed-verified-with-substituted-checksum",
+        "release_schema_valid": true,
         "request_schema_valid": true,
         "response_schema_valid": true,
         "target_bound": true,
