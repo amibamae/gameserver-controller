@@ -35,3 +35,18 @@ Stream references contain bearer credentials. JSON encoding is only for the
 transient invocation context. Ordinary formatted references are redacted,
 and broker errors do not include the handle or underlying sink error text.
 Callers must not log reference fields or persist their JSON representation.
+
+The in-process adapter registry now carries `stream_transfers` in invocation
+context and copies the reference slice before dispatch. A capability must
+advertise a stream direction and transport profile. Capture requires exactly
+one stream; expired, excessive-lifetime, or deadline-exceeding references are
+rejected before dispatch. The broker still checks the authenticated scope when
+the adapter claims the handle.
+
+The registry rejects handle text in durable capability input and adapter
+responses, including JSON-escaped strings. Streamed-call errors omit adapter
+and schema diagnostic text while preserving whether side effects are possible.
+A fake-adapter integration test exercises broker consumption through this
+boundary. The workflow engine does not yet issue streams or assemble verified
+backups; the transport caller must still compare independent capture evidence
+with the adapter result.
