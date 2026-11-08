@@ -208,7 +208,7 @@
         "transfer_result_valid_and_bound": true,
         "request_contains_privacy_probe": false,
         "result_contains_privacy_probe": false,
-        "logs_contain_privacy_probe": true,
+        "logs_contain_privacy_probe": false,
         "privacy_compliant": false,
         "logs_contain_session_id": true
       }
