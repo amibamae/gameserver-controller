@@ -34,5 +34,5 @@
       "format": "date-time"
     }
   },
-  "description": "Opaque, controller-issued, one-use, operation-scoped handle for a bounded byte stream. A transport binding maps it to the stream."
+  "description": "Opaque, transient controller-issued, one-use, operation-scoped handle for a bounded byte stream. Supply it only in request_context.stream_transfers; never persist it in capability inputs or operation records. A transport binding maps it to the stream."
 }

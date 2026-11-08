@@ -7,12 +7,6 @@
     "key": "test/minecraft-test/backup-test-001/world.tar.zst",
     "version_id": "object-version-001"
   },
-  "destination_transfer": {
-    "transfer_id": "a4e7d1c9b3f80562e9a16bc4d7028f35c6a0e1b9f8437d25ac61f08e39b4726d",
-    "direction": "adapter_to_controller",
-    "maximum_bytes": 2048,
-    "expires_at": "2026-11-06T13:00:00Z"
-  },
   "expected_size_bytes": 1024,
   "expected_checksum": {
     "algorithm": "sha256",
