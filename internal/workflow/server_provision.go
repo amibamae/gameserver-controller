@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/adapter"
@@ -16,36 +17,44 @@ import (
 )
 
 const (
-	provisionCreateStep       = "create-instance"
-	provisionWaitStep         = "wait-instance-active"
-	provisionBootstrapStep    = "deliver-bootstrap"
-	provisionBootstrapInspect = "inspect-bootstrap"
-	provisionInstallStep      = "install-game"
-	provisionCreateUnitStep   = "create-unit"
-	provisionStartUnitStep    = "start-unit"
-	provisionInspectUnitStep  = "inspect-unit"
-	provisionReadinessStep    = "check-readiness"
+	provisionCreateStep         = "create-instance"
+	provisionWaitStep           = "wait-instance-active"
+	provisionBootstrapStep      = "deliver-bootstrap"
+	provisionBootstrapInspect   = "inspect-bootstrap"
+	provisionInstallStep        = "install-game"
+	provisionCompatibilityStep  = "check-restore-compatibility"
+	provisionRestoreStep        = "restore-backup"
+	provisionRestoreInspectStep = "inspect-restore"
+	provisionCreateUnitStep     = "create-unit"
+	provisionStartUnitStep      = "start-unit"
+	provisionInspectUnitStep    = "inspect-unit"
+	provisionReadinessStep      = "check-readiness"
 )
 
 // ServerProvisionProfile contains immutable deployment choices resolved from
 // controller-owned catalogs. It is deliberately separate from request fields:
 // a caller may select from a profile, but cannot supply adapter step inputs.
 type ServerProvisionProfile struct {
-	Provider            string
-	CapacityGroup       string
-	CapacityLimit       int
-	CapacityGroupLimit  int
-	RegionID            string
-	PlanID              string
-	OS                  json.RawMessage
-	Bootstrap           json.RawMessage
-	GameReleaseID       string
-	ArtifactURI         string
-	ArtifactChecksum    json.RawMessage
-	UnitRef             json.RawMessage
-	ReadinessCheckSetID string
-	RequiredChecks      []ReadinessRequirement
-	DataGenerationID    string
+	Provider                      string
+	CapacityGroup                 string
+	CapacityLimit                 int
+	CapacityGroupLimit            int
+	RegionID                      string
+	PlanID                        string
+	OS                            json.RawMessage
+	Bootstrap                     json.RawMessage
+	GameReleaseID                 string
+	ArtifactURI                   string
+	ArtifactChecksum              json.RawMessage
+	UnitRef                       json.RawMessage
+	ReadinessCheckSetID           string
+	RequiredChecks                []ReadinessRequirement
+	DataGenerationID              string
+	BackupStorageProfileID        string
+	BackupStorageAdapterID        string
+	GameReleaseDescription        json.RawMessage
+	RequiredCompatibilityCheckIDs []string
+	RequiredRestoreCheckIDs       []string
 }
 
 // ServerProvisionProfileResolver resolves an allow-listed deployment using
@@ -53,6 +62,18 @@ type ServerProvisionProfile struct {
 // must return controller-owned immutable data, not copy the request into a plan.
 type ServerProvisionProfileResolver interface {
 	ResolveServerProvision(context.Context, store.LogicalServer, json.RawMessage) (ServerProvisionProfile, error)
+}
+
+// ServerProvisionBackupResolver supplies only controller-verified backup
+// records and exact-version object streams from an allow-listed storage profile.
+type ServerProvisionBackupResolver interface {
+	ResolveServerProvisionBackup(context.Context, store.LogicalServer, string, string) (VerifiedProvisionBackup, error)
+	OpenServerProvisionBackupObject(context.Context, store.LogicalServer, string, json.RawMessage) (io.ReadCloser, error)
+}
+
+type VerifiedProvisionBackup struct {
+	Result            json.RawMessage
+	IntegrityVerified bool
 }
 
 // ProvisionCapacityStore is implemented by the durable store. Capacity is
@@ -71,18 +92,26 @@ type ServerProvisionWorkflow struct {
 	adapters     adapterRuntime
 	schemas      schemaRuntime
 	profiles     ServerProvisionProfileResolver
+	backups      ServerProvisionBackupResolver
 	assertionTTL time.Duration
 }
 
 func NewServerProvisionWorkflow(servers store.LifecycleOperationStore, capacity ProvisionCapacityStore,
-	adapters adapterRuntime, schemas schemaRuntime, profiles ServerProvisionProfileResolver, assertionTTL time.Duration) (*ServerProvisionWorkflow, error) {
+	adapters adapterRuntime, schemas schemaRuntime, profiles ServerProvisionProfileResolver, assertionTTL time.Duration, backupResolvers ...ServerProvisionBackupResolver) (*ServerProvisionWorkflow, error) {
 	if servers == nil || capacity == nil || adapters == nil || schemas == nil || profiles == nil {
 		return nil, errors.New("lifecycle store, capacity store, adapter registry, schemas, and trusted provision-profile resolver are required")
 	}
 	if assertionTTL <= 0 || assertionTTL > maxReadinessAssertionTTL {
 		return nil, errors.New("readiness assertion TTL must be in the range 1ns..15m")
 	}
-	return &ServerProvisionWorkflow{servers: servers, capacity: capacity, adapters: adapters, schemas: schemas, profiles: profiles, assertionTTL: assertionTTL}, nil
+	if len(backupResolvers) > 1 {
+		return nil, errors.New("at most one trusted server provision backup resolver may be configured")
+	}
+	var backups ServerProvisionBackupResolver
+	if len(backupResolvers) == 1 {
+		backups = backupResolvers[0]
+	}
+	return &ServerProvisionWorkflow{servers: servers, capacity: capacity, adapters: adapters, schemas: schemas, profiles: profiles, backups: backups, assertionTTL: assertionTTL}, nil
 }
 
 type provisionRequest struct {
@@ -169,9 +198,6 @@ func (w *ServerProvisionWorkflow) BuildPlan(ctx context.Context, operation store
 	if request.ServerID != operation.Target.ServerID || request.EnvironmentID != operation.Target.EnvironmentID {
 		return nil, errors.New("server.provision request identity does not match its operation target")
 	}
-	if request.RestoreBackup != "" {
-		return nil, errors.New("server.provision restore_backup_id requires the verified restore workflow, which is not implemented")
-	}
 	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
 	if err != nil {
 		return nil, fmt.Errorf("load logical server for provision plan: %w", err)
@@ -191,6 +217,34 @@ func (w *ServerProvisionWorkflow) BuildPlan(ctx context.Context, operation store
 	if err := validateProvisionProfile(server, request, profile); err != nil {
 		return nil, err
 	}
+	var backupResult json.RawMessage
+	var backupManifest json.RawMessage
+	if request.RestoreBackup != "" {
+		if w.backups == nil {
+			return nil, errors.New("server.provision restore requires a trusted backup resolver")
+		}
+		if err := validateProvisionRestoreProfile(profile); err != nil {
+			return nil, err
+		}
+		if w.schemas.ValidateJSON("urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":game:release-describe-output", profile.GameReleaseDescription) != nil {
+			return nil, errors.New("trusted target game release metadata failed schema validation")
+		}
+		var release struct {
+			GameAdapterID string `json:"game_adapter_id"`
+			ReleaseID     string `json:"release_id"`
+		}
+		if json.Unmarshal(profile.GameReleaseDescription, &release) != nil || release.GameAdapterID != request.Game.AdapterID || release.ReleaseID != profile.GameReleaseID {
+			return nil, errors.New("trusted target release metadata does not match the selected game adapter and release")
+		}
+		verified, err := w.backups.ResolveServerProvisionBackup(ctx, server, profile.BackupStorageProfileID, request.RestoreBackup)
+		if err != nil {
+			return nil, fmt.Errorf("resolve verified server backup: %w", err)
+		}
+		backupResult, backupManifest, err = w.validateVerifiedProvisionBackup(server, request.RestoreBackup, profile, verified)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	version := w.schemas.ProtocolVersion()
 	type requirement struct {
@@ -209,6 +263,18 @@ func (w *ServerProvisionWorkflow) BuildPlan(ctx context.Context, operation store
 		{provisionStartUnitStep, request.Execution.AdapterID, adapter.CategoryExecution, "execution.unit.start", "execution:systemd-unit-start-input", "execution:systemd-unit-start-output", true},
 		{provisionInspectUnitStep, request.Execution.AdapterID, adapter.CategoryExecution, "execution.unit.inspect", "execution:systemd-unit-inspect-input", "execution:systemd-unit-inspect-output", false},
 		{provisionReadinessStep, request.Game.AdapterID, adapter.CategoryGame, "game.readiness.check", "game:readiness-check-input", "game:readiness-check-output", false},
+	}
+	if request.RestoreBackup != "" {
+		requirements = append([]requirement{
+			{provisionCompatibilityStep, request.Game.AdapterID, adapter.CategoryGame, "game.compatibility.check", "game:compatibility-check-input", "game:compatibility-check-output", false},
+		}, requirements...)
+		insertAt := 6 // immediately after game.install
+		requirements = append(requirements, requirement{})
+		copy(requirements[insertAt+1:], requirements[insertAt:])
+		requirements[insertAt] = requirement{provisionRestoreStep, request.Game.AdapterID, adapter.CategoryGame, "game.restore", "game:restore-input", "game:restore-output", true}
+		requirements = append(requirements[:insertAt+1], append([]requirement{
+			{provisionRestoreInspectStep, request.Game.AdapterID, adapter.CategoryGame, "game.restore.inspect", "game:restore-inspect-input", "game:restore-output", false},
+		}, requirements[insertAt+1:]...)...)
 	}
 	capabilities := make([]adapter.Capability, len(requirements))
 	for i, requirement := range requirements {
@@ -233,34 +299,60 @@ func (w *ServerProvisionWorkflow) BuildPlan(ctx context.Context, operation store
 	target := map[string]any{"server_id": server.ServerID, "environment_id": server.EnvironmentID}
 	instanceBinding := []inputbinding.Binding{{TargetPointer: "/instance_ref", SourceStepID: provisionCreateStep, SourcePointer: "/instance_ref"}}
 	targetBinding := []inputbinding.Binding{{TargetPointer: "/target/instance_ref", SourceStepID: provisionCreateStep, SourcePointer: "/instance_ref"}}
-	inputs := []struct {
+	inputs := map[string]struct {
 		value   any
 		binding []inputbinding.Binding
 	}{
-		{provisionCreateInput(server, request, profile, resourceKey), nil},
-		{map[string]any{"expected_state": "active", "wait_timeout_seconds": 300}, instanceBinding},
-		{map[string]any{"bootstrap": profile.Bootstrap}, instanceBinding},
-		{map[string]any{}, []inputbinding.Binding{
+		provisionCreateStep:    {provisionCreateInput(server, request, profile, resourceKey), nil},
+		provisionWaitStep:      {map[string]any{"expected_state": "active", "wait_timeout_seconds": 300}, instanceBinding},
+		provisionBootstrapStep: {map[string]any{"bootstrap": profile.Bootstrap}, instanceBinding},
+		provisionBootstrapInspect: {map[string]any{}, []inputbinding.Binding{
 			{TargetPointer: "/instance_ref", SourceStepID: provisionCreateStep, SourcePointer: "/instance_ref"},
 			{TargetPointer: "/bootstrap_execution_ref", SourceStepID: provisionBootstrapStep, SourcePointer: "/bootstrap_execution_ref"},
 		}},
-		{map[string]any{"target": target, "release_id": profile.GameReleaseID}, targetBinding},
-		{map[string]any{"unit_ref": profile.UnitRef, "target": target, "release_id": profile.GameReleaseID,
+		provisionInstallStep: {map[string]any{"target": target, "release_id": profile.GameReleaseID}, targetBinding},
+		provisionCreateUnitStep: {map[string]any{"unit_ref": profile.UnitRef, "target": target, "release_id": profile.GameReleaseID,
 			"unit_definition": map[string]any{"artifact_uri": profile.ArtifactURI, "checksum": profile.ArtifactChecksum}, "start": false}, targetBinding},
-		{map[string]any{"unit_ref": profile.UnitRef}, nil},
-		{map[string]any{"unit_ref": profile.UnitRef}, nil},
-		{map[string]any{"server_id": server.ServerID, "environment_id": server.EnvironmentID,
+		provisionStartUnitStep:   {map[string]any{"unit_ref": profile.UnitRef}, nil},
+		provisionInspectUnitStep: {map[string]any{"unit_ref": profile.UnitRef}, nil},
+		provisionReadinessStep: {map[string]any{"server_id": server.ServerID, "environment_id": server.EnvironmentID,
 			"game_release_id": profile.GameReleaseID, "readiness_check_set_id": profile.ReadinessCheckSetID, "required_checks": profile.RequiredChecks}, instanceBinding},
+	}
+	if request.RestoreBackup != "" {
+		inputs[provisionCompatibilityStep] = struct {
+			value   any
+			binding []inputbinding.Binding
+		}{map[string]any{"source_manifest": json.RawMessage(backupManifest), "target_release": json.RawMessage(profile.GameReleaseDescription),
+			"required_check_ids": profile.RequiredCompatibilityCheckIDs}, nil}
+		inputs[provisionRestoreStep] = struct {
+			value   any
+			binding []inputbinding.Binding
+		}{map[string]any{"source_backup": json.RawMessage(backupResult), "target": target,
+			"target_release_id": profile.GameReleaseID, "target_data_generation_id": provisionDataGeneration(operation.OperationID),
+			"required_check_ids": profile.RequiredRestoreCheckIDs,
+			"object_streams":     provisionObjectStreams(backupManifest)}, []inputbinding.Binding{
+			{TargetPointer: "/compatibility_result", SourceStepID: provisionCompatibilityStep, SourcePointer: ""},
+			{TargetPointer: "/target/instance_ref", SourceStepID: provisionCreateStep, SourcePointer: "/instance_ref"},
+		}}
+		inputs[provisionRestoreInspectStep] = struct {
+			value   any
+			binding []inputbinding.Binding
+		}{map[string]any{"backup_id": request.RestoreBackup, "target": target,
+			"target_data_generation_id": provisionDataGeneration(operation.OperationID)}, []inputbinding.Binding{
+			{TargetPointer: "/target/instance_ref", SourceStepID: provisionCreateStep, SourcePointer: "/instance_ref"},
+			{TargetPointer: "/restore_execution_ref", SourceStepID: provisionRestoreStep, SourcePointer: "/restore_execution_ref"},
+		}}
 	}
 	steps := make([]store.OperationStep, len(requirements))
 	for i, requirement := range requirements {
-		encoded, err := json.Marshal(inputs[i].value)
+		input := inputs[requirement.step]
+		encoded, err := json.Marshal(input.value)
 		if err != nil {
 			return nil, fmt.Errorf("encode %s input: %w", requirement.step, err)
 		}
 		steps[i] = store.OperationStep{StepID: requirement.step, StepType: capabilities[i].Name, Status: protocolstate.StepPending,
 			AdapterID: requirement.adapterID, CapabilityName: capabilities[i].Name, CapabilityVersion: capabilities[i].Version,
-			Input: encoded, InputBindings: inputs[i].binding}
+			Input: encoded, InputBindings: input.binding}
 	}
 	return steps, nil
 }
@@ -443,7 +535,23 @@ func (w *ServerProvisionWorkflow) CheckPreconditions(ctx context.Context, operat
 	if server.ServerID != operation.Target.ServerID || server.EnvironmentID != operation.Target.EnvironmentID {
 		return store.ErrLogicalServerTargetMismatch
 	}
+	var request provisionRequest
+	if json.Unmarshal(operation.RequestSnapshot.Parameters, &request) != nil {
+		return errors.New("persisted provision request cannot be decoded")
+	}
+	if step.StepID == provisionCompatibilityStep {
+		if request.RestoreBackup == "" {
+			return errors.New("backup compatibility step is not part of this provision request")
+		}
+		return nil
+	}
 	if step.StepID == provisionCreateStep {
+		if request.RestoreBackup != "" {
+			profile, err := w.profiles.ResolveServerProvision(ctx, server, operation.RequestSnapshot.Parameters)
+			if err != nil || !provisionCompatibilitySucceeded(operation, w.schemas, profile) {
+				return errors.New("provider create requires a complete compatible-backup result")
+			}
+		}
 		initial := server.LifecycleState == protocolstate.ServerUnprovisioned || server.LifecycleState == protocolstate.ServerProvisioning
 		if !initial || len(server.InstanceRef) != 0 || step.Attempt != 0 {
 			return errors.New("provider create requires an unprovisioned logical server")
@@ -487,9 +595,22 @@ func (w *ServerProvisionWorkflow) CheckPreconditions(ctx context.Context, operat
 		if !stepSucceeded(operation, provisionBootstrapInspect) || !provisionBootstrapSucceeded(operation) {
 			return errors.New("game installation requires successful inspection of the pinned bootstrap")
 		}
+	case provisionRestoreStep:
+		profile, err := w.profiles.ResolveServerProvision(ctx, server, operation.RequestSnapshot.Parameters)
+		if err != nil || !stepSucceeded(operation, provisionInstallStep) || !provisionInstallSucceeded(operation) ||
+			!provisionCompatibilitySucceeded(operation, w.schemas, profile) {
+			return errors.New("backup restore requires verified installation and a compatible exact backup")
+		}
+	case provisionRestoreInspectStep:
+		if !stepSucceeded(operation, provisionRestoreStep) {
+			return errors.New("restore inspection requires the recorded restore call")
+		}
 	case provisionCreateUnitStep:
 		if !stepSucceeded(operation, provisionInstallStep) || !provisionInstallSucceeded(operation) {
 			return errors.New("execution unit creation requires verified installation of the pinned game release")
+		}
+		if request.RestoreBackup != "" && !provisionRestoreSucceeded(operation) {
+			return errors.New("execution unit creation requires verified completion of the requested backup restore")
 		}
 	case provisionStartUnitStep:
 		if !stepSucceeded(operation, provisionCreateUnitStep) || !provisionUnitCreated(operation) {
@@ -500,7 +621,7 @@ func (w *ServerProvisionWorkflow) CheckPreconditions(ctx context.Context, operat
 			return errors.New("unit inspection requires a completed start")
 		}
 	case provisionReadinessStep:
-		if !stepSucceeded(operation, provisionInspectUnitStep) || !provisionUnitRunning(operation) {
+		if !stepSucceeded(operation, provisionInspectUnitStep) || !provisionUnitRunning(operation) || (request.RestoreBackup != "" && !provisionRestoreSucceeded(operation)) {
 			return errors.New("game readiness requires the exact execution unit to be running")
 		}
 	default:
@@ -660,6 +781,10 @@ func (w *ServerProvisionWorkflow) Reconcile(ctx context.Context, operation store
 		return w.reconcileBootstrap(ctx, operation, step)
 	case provisionStartUnitStep:
 		return w.reconcileUnitStart(ctx, operation, step)
+	case provisionRestoreStep:
+		return w.reconcileRestore(ctx, operation, step)
+	case provisionCompatibilityStep, provisionRestoreInspectStep:
+		return Resolution{State: ResolutionSafeToRetry, ExternalOperationRef: step.ExternalOperationRef}, nil
 	case provisionReadinessStep:
 		// This is a read-only observation. Repeating the exact pinned checks is safe.
 		return Resolution{State: ResolutionSafeToRetry, ExternalOperationRef: step.ExternalOperationRef}, nil
@@ -829,6 +954,15 @@ func (w *ServerProvisionWorkflow) invokeProvision(ctx context.Context, operation
 }
 
 func (w *ServerProvisionWorkflow) HandlePreconditionFailure(_ context.Context, operation store.OperationRecord, step store.OperationStep, _ error) (Resolution, error) {
+	if step.StepID == provisionCreateStep {
+		var request provisionRequest
+		if json.Unmarshal(operation.RequestSnapshot.Parameters, &request) == nil && request.RestoreBackup != "" {
+			if status := stepField(operationStep(operation, provisionCompatibilityStep).Output, "compatibility_status"); string(status) != `"compatible"` {
+				return Resolution{State: ResolutionDefinitiveError, Error: protocolError("core.restore.incompatible", "safety_blocked",
+					"The selected backup did not pass every required compatibility check; no provider instance was created.", operation.OperationID, false, "inspect_operation", false)}, nil
+			}
+		}
+	}
 	if step.StepID == provisionWaitStep && stepSucceeded(operation, provisionCreateStep) {
 		return Resolution{State: ResolutionNeedsOperator}, nil
 	}
@@ -851,9 +985,19 @@ func (w *ServerProvisionWorkflow) ValidateCompletion(ctx context.Context, operat
 		!provisionUnitCreated(operation) || !provisionUnitStarted(operation) || !provisionUnitRunning(operation) {
 		return errors.New("server.provision exact instance, bootstrap, game, or execution postconditions were not confirmed")
 	}
+	var request provisionRequest
+	if json.Unmarshal(operation.RequestSnapshot.Parameters, &request) != nil {
+		return errors.New("server.provision request cannot be decoded")
+	}
 	server, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
 	if err != nil {
 		return err
+	}
+	if request.RestoreBackup != "" {
+		profile, err := w.profiles.ResolveServerProvision(ctx, server.Record, operation.RequestSnapshot.Parameters)
+		if err != nil || !provisionCompatibilitySucceeded(operation, w.schemas, profile) || !provisionRestoreSucceeded(operation) {
+			return errors.New("server.provision requested restore lacks exact compatible source and verified restore evidence")
+		}
 	}
 	if !equalJSON(server.Record.InstanceRef, created.InstanceRef) {
 		return errors.New("server.provision logical server is not bound to the exact created instance")
@@ -930,12 +1074,17 @@ func (w *ServerProvisionWorkflow) BuildSuccessResult(ctx context.Context, operat
 		return nil, errors.New("persisted game install input cannot be decoded")
 	}
 	var request provisionRequest
-	_ = json.Unmarshal(operation.RequestSnapshot.Parameters, &request)
+	if json.Unmarshal(operation.RequestSnapshot.Parameters, &request) != nil {
+		return nil, errors.New("persisted provision request cannot be decoded")
+	}
 	data := map[string]any{"server_id": server.Record.ServerID, "environment_id": server.Record.EnvironmentID,
 		"instance_ref": created.InstanceRef, "bootstrap": map[string]string{"revision": pinnedBootstrap.Revision, "digest": pinnedBootstrap.Digest},
 		"game":               map[string]any{"adapter_id": request.Game.AdapterID, "release_ref": gameInput.ReleaseID},
 		"execution":          map[string]any{"adapter_id": request.Execution.AdapterID, "unit_ref": unit},
 		"data_generation_id": server.Record.DataGenerationID, "lifecycle_state": string(protocolstate.ServerReady), "readiness_assertion": assertion}
+	if request.RestoreBackup != "" {
+		data["restored_backup_id"] = request.RestoreBackup
+	}
 	result := map[string]any{"outcome_summary": "Server provisioned and all required game readiness checks passed.",
 		"operation_type": "server.provision", "affected_resources": []any{created.InstanceRef, unit},
 		"completed_steps": completedStepSummaries(operation), "failed_steps": []any{}, "warnings": []string{},
