@@ -10,24 +10,24 @@ Check that independently built implementations assign the same meaning to a pinn
 
 An interoperability exercise must name an immutable package using all of these values:
 
-- protocol_version
+- `protocol_version`
 - Source commit or immutable tag
-- schema_registry_digest
-- fixture_suite_digest
+- `schema_registry_digest`
+- `fixture_suite_digest`
 
-Do not treat an untagged branch or open pull request as a compatibility target. Use the package manifest and schema index from the same snapshot. See [compatibility rules](../protocol/COMPATIBILITY.md).
+Do not treat an untagged branch or open pull request as a compatibility target. Use the [package manifest](../protocol/conformance/package-manifest.json), [schema index](../protocol/schemas/index.json), and [conformance requirements](../protocol/conformance/requirements.md) from the same snapshot. See [compatibility rules](../protocol/COMPATIBILITY.md).
 
 ## Initial interoperability profile
 
 After the active draft schema slices are reviewed, use a limited offline profile that covers:
 
 - JSON Schema 2020-12 validation for the package schemas and examples, with local references only.
-- Duplicate object-name rejection before ordinary JSON parsing.
+- Duplicate JSON object member names are rejected before ordinary JSON parsing.
 - The protocol's interoperable integer and Unicode rules.
-- RFC 8785 configuration-digest vectors, including secret references, number and string serialization, UTF-16 property ordering, array order, and member-order invariance.
+- `game.configure` RFC 8785 configuration-digest vectors, including secret references, number and string serialization, UTF-16 property ordering, array order, and member-order invariance.
 - Release-pinned artifact checksum evidence for game installation.
-- Execution and proxy outcomes where an accepted result does not prove readiness or routability.
-- Standard operation-result type binding, including partial failure and cancellation.
+- Execution start and proxy registration outcomes where acceptance alone does not prove readiness or routability.
+- Standard operation-result type binding, including partial failure and cancellation when `operation_data` is absent.
 
 A limited profile reports exactly which requirements and fixture IDs it covers. It does not claim full controller or adapter conformance.
 
