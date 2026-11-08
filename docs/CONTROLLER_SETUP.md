@@ -1,9 +1,22 @@
 # Controller setup and management access
 
-**Status:** Accepted implementation direction. The setup command, management
-authentication runtime, password login, and session issuance are not implemented.
-The existing configuration validator and systemd credential accessor provide
-parts of the foundation. This document does not authorize live installation.
+**Status:** Accepted implementation direction. The Go `controller-setup plan
+--config <file> --json` command now validates the configuration and emits a
+redacted, read-only plan for an existing Debian/systemd machine. It does not
+install or modify files, contact providers, or read credential contents. The
+setup apply command, management authentication runtime, password login, and
+session issuance are not implemented. This document does not authorize live
+installation.
+
+Run the preview from a checkout with:
+
+```sh
+go run ./cmd/controller-setup plan --config configs/controller.example.yaml --json
+```
+
+The example configuration contains placeholder provider references and is
+intended to show the plan shape. The output reports supported-target blockers
+and fixed destination paths; it does not claim that setup can be applied yet.
 
 ## Setup on an existing machine
 
