@@ -1,8 +1,13 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"reflect"
+
+	"github.com/gowebpki/jcs"
 )
 
 func evaluateConfiguration(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
@@ -28,8 +33,16 @@ func evaluateConfiguration(pkg *protocolPackage, fixture map[string]any) (map[st
 			reflect.DeepEqual(request["target"], output["target"]) && request["release_id"] == output["release_id"]
 		validated := stringValue(output, "validation_result") == "valid"
 		validationBeforeApplication := !boolValue(output, "application_started") || validated
+		configurationDigestMatches := false
+		if requestValid {
+			expectedDigest, err := requestedConfigurationDigest(request)
+			if err != nil {
+				return nil, fmt.Errorf("configuration request %q digest: %w", stringValue(configurationCase, "case_id"), err)
+			}
+			configurationDigestMatches = reflect.DeepEqual(expectedDigest, output["configuration_digest"])
+		}
 		dispatchAllowed := requestValid && targetConsistent && releaseBound && pinMatches
-		resultValid := outputValid && targetBound && validationBeforeApplication
+		resultValid := outputValid && targetBound && validationBeforeApplication && configurationDigestMatches
 		outcome := stringValue(output, "outcome")
 		confirmed := dispatchAllowed && resultValid && validated && (outcome == "applied" || outcome == "unchanged")
 		results = append(results, map[string]any{
@@ -42,9 +55,29 @@ func evaluateConfiguration(pkg *protocolPackage, fixture map[string]any) (map[st
 			"result_schema_valid":           outputValid,
 			"result_target_bound":           targetBound,
 			"validation_before_application": validationBeforeApplication,
+			"configuration_digest_matches":  configurationDigestMatches,
 			"configuration_confirmed":       confirmed,
 			"must_reconcile_before_retry":   dispatchAllowed && (!resultValid || outcome == "outcome_unknown"),
 		})
 	}
 	return map[string]any{"evaluations": results}, nil
+}
+
+func requestedConfigurationDigest(request map[string]any) (map[string]any, error) {
+	encoded, err := json.Marshal(map[string]any{
+		"configuration":   request["configuration"],
+		"secret_bindings": request["secret_bindings"],
+	})
+	if err != nil {
+		return nil, err
+	}
+	canonical, err := jcs.Transform(encoded)
+	if err != nil {
+		return nil, err
+	}
+	digest := sha256.Sum256(canonical)
+	return map[string]any{
+		"algorithm": "sha256",
+		"digest":    hex.EncodeToString(digest[:]),
+	}, nil
 }
