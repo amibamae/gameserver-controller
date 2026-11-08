@@ -57,7 +57,8 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 
 ### Operations
 - Event sequence numbers increase monotonically per operation; consumers ignore identical duplicate deliveries without reapplying them or regressing their cursor, detect gaps, and recover by reading the operation resource.
-- Successful standard operations validate their typed result schema and bind result server/environment/instance fields to the durable operation target. Any readiness assertion is bound to that target and valid at operation completion. Successful stop results accept proxy-drain outcomes only when they match the request and configured profile.
+- Successful standard operations validate their typed result schema and bind result server/environment/instance fields to the durable operation target.
+- Successful `server.backup` operations preserve core-owned `backup_initial_lifecycle_state` in the durable operation. The captured state, request-parameter presence, and explicit value determine the final state: ready resumes by default, degraded stays stopped by default but may explicitly resume under current policy and fresh readiness, and stopped remains stopped. Missing or unknown initial state and contradictory final states are rejected. Any readiness assertion is bound to that target and valid at operation completion. Successful stop results accept proxy-drain outcomes only when they match the request and configured profile.
 - Go vectors cover result-to-target binding for all seven standard operations, readiness target and freshness checks, and request-consistent stop drain outcomes.
 - Restart requires the exact selected game adapter's `game.save.request` capability version and schema identity, a `succeeded` save step in the same durable operation, and inspection of the expected running incarnation no later than the save's `saved_at` time.
 - The enclosing operation, immutable request snapshot, and any present result use the same `operation_type`, including results that preserve partial effects after failure or cancellation.
@@ -169,6 +170,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [typed-provision-backup-restore-destroy-results.json](test-vectors/typed-provision-backup-restore-destroy-results.json)
 - [restore-result-final-state-policy.json](test-vectors/restore-result-final-state-policy.json)
 - [backup-result-no-resume-final-state.json](test-vectors/backup-result-no-resume-final-state.json)
+- [backup-initial-state-resume-policy.json](test-vectors/backup-initial-state-resume-policy.json)
 - [typed-provision-backup-restore-destroy-target-mismatch.json](test-vectors/typed-provision-backup-restore-destroy-target-mismatch.json)
 - [typed-provision-backup-restore-readiness-binding.json](test-vectors/typed-provision-backup-restore-readiness-binding.json)
 - [typed-provision-backup-restore-readiness-freshness.json](test-vectors/typed-provision-backup-restore-readiness-freshness.json)
