@@ -166,6 +166,35 @@ func TestServerProvisionCreateDispatchReservesAndClaimsCapacityOnce(t *testing.T
 	}
 }
 
+func TestServerProvisionSecretReferencesAreBootstrapScopedAndConsistent(t *testing.T) {
+	f := newProvisionPlanFixture(t)
+	steps, err := f.workflow.BuildPlan(context.Background(), f.operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := store.SecretReference{SecretRef: "systemd-credential://wasabi-backup", Purpose: "bootstrap backup credentials"}
+	request, err := json.Marshal(map[string]any{
+		"server_id": provisionTestServer, "environment_id": provisionTestEnv,
+		"hosting_adapter_id": "hosting.fake", "secret_refs": []store.SecretReference{ref},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.operation.RequestSnapshot.Parameters = request
+	refs, err := f.workflow.SecretReferencesForStep(context.Background(), f.operation, steps[2])
+	if err != nil || len(refs) != 1 || refs[0].SecretRef != ref.SecretRef {
+		t.Fatalf("parameter secret references=%#v, err=%v", refs, err)
+	}
+	refs, err = f.workflow.SecretReferencesForStep(context.Background(), f.operation, steps[0])
+	if err != nil || len(refs) != 0 {
+		t.Fatalf("unrelated step secret references=%#v, err=%v", refs, err)
+	}
+	f.operation.RequestSnapshot.SecretRefs = []store.SecretReference{{SecretRef: "systemd-credential://other", Purpose: ref.Purpose}}
+	if _, err := f.workflow.SecretReferencesForStep(context.Background(), f.operation, steps[2]); err == nil {
+		t.Fatal("conflicting parameter and operation snapshot secret references were accepted")
+	}
+}
+
 func TestServerProvisionRejectsUnimplementedRestoreRequest(t *testing.T) {
 	f := newProvisionPlanFixture(t)
 	var request map[string]any
@@ -226,7 +255,12 @@ func TestServerProvisionCreateReconciliationRequiresOneExactMatch(t *testing.T) 
 
 func TestServerProvisionRunsDurablePlanAndProjectsReady(t *testing.T) {
 	f := newProvisionPlanFixture(t)
-	f.operation.RequestSnapshot.SecretRefs = []store.SecretReference{{SecretRef: "systemd-credential://wasabi-backup", Purpose: "bootstrap backup credentials", PermissionScope: []string{"bootstrap.deliver"}, VersionRef: "version-1"}}
+	var request map[string]any
+	if err := json.Unmarshal(f.operation.RequestSnapshot.Parameters, &request); err != nil {
+		t.Fatal(err)
+	}
+	request["secret_refs"] = []any{map[string]any{"secret_ref": "systemd-credential://wasabi-backup", "purpose": "bootstrap backup credentials", "permission_scope": []string{"bootstrap.deliver"}, "version_ref": "version-1"}}
+	f.operation.RequestSnapshot.Parameters, _ = json.Marshal(request)
 	steps, err := f.workflow.BuildPlan(context.Background(), f.operation)
 	if err != nil {
 		t.Fatal(err)
