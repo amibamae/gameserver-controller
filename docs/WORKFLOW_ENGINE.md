@@ -133,10 +133,13 @@ to their parameters, and validates separate secret-reference metadata. The
 acceptance package exposes this validator, but there is not yet a production
 controller/API composition that wires it into a running service.
 
-The bbolt store exposes `CaptureBackupInitialState` for the backup workflow.
-It captures the current ready, degraded, or stopped state while checking the
-operation revision, its durable server lock, and the exact managed instance in
-one transaction. Requests cannot supply this metadata, and ordinary operation
-updates cannot change it. Backup dispatch and lifecycle transitions require
-the captured context. This store boundary does not implement the backup plan,
-scheduler, or retention cleanup.
+Before the first `server.backup` lifecycle transition or adapter dispatch, the
+engine calls `CaptureBackupInitialState`. The bbolt transaction captures the
+current ready, degraded, or stopped state while checking the operation revision,
+its durable server lock, and the exact managed instance. Requests cannot supply
+this metadata, and ordinary operation updates cannot change it. If capture
+fails while the operation is pending, it stays pending and no adapter is
+dispatched. If recovery finds an already active operation without the snapshot,
+the engine suspends it. Backup lifecycle transitions require the saved context.
+This boundary does not implement the backup plan, scheduler, or retention
+cleanup.

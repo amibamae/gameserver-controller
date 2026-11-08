@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -267,6 +268,95 @@ func TestRecoverMarksInterruptedStepUnknownWithoutDispatch(t *testing.T) {
 	}
 }
 
+func TestEngineCapturesBackupInitialStateBeforeFirstAdapterDispatch(t *testing.T) {
+	fixture := newServerStartFixture(t, true, adapter.OutcomeCompleted, "active")
+	started, err := fixture.engine.Run(context.Background(), fixture.operation.Record.OperationID)
+	if err != nil || started.Record.Status != protocolstate.OperationSucceeded {
+		t.Fatalf("seed server.start operation: status=%v err=%v", started.Record.Status, err)
+	}
+
+	observedAt := time.Now().UTC()
+	output, err := json.Marshal(map[string]any{
+		"instance_ref": json.RawMessage(startTestInstance), "state": "active", "observed_at": observedAt.Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = fixture.hosting.SetScript("hosting.instance.inspect", fakeadapter.Reply{
+		Outcome: adapter.OutcomeCompleted, Output: output, ObservedAt: observedAt,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	observer := &backupContextObserver{inner: fixture.hosting, records: fixture.store, operationID: "backup-context-operation"}
+	registry, err := adapter.NewRegistry(fixture.schemas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = registry.Register(observer); err != nil {
+		t.Fatal(err)
+	}
+	definitions := NewDefinitions()
+	definition := &testDefinition{operationType: "server.backup"}
+	if err = definitions.Register("server.backup", &projectingTestDefinition{testDefinition: definition}); err != nil {
+		t.Fatal(err)
+	}
+	engine, err := NewEngine(fixture.store, registry, fixture.schemas, definitions, &testResumeAuthorizer{}, time.Minute, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backup := store.OperationRecord{
+		OperationID: observer.operationID, OperationType: "server.backup", ProtocolVersion: fixture.schemas.ProtocolVersion(),
+		Target:  store.OperationTarget{ServerID: startTestServerID, EnvironmentID: startTestEnvID, InstanceRef: json.RawMessage(startTestInstance)},
+		ActorID: "operator-1", IdempotencyKey: "backup-context-key", RequestFingerprint: "sha256:" + strings.Repeat("b", 64),
+		RequestSnapshot: store.RequestSnapshot{OperationType: "server.backup", Parameters: json.RawMessage(`{"backup_profile":"test-storage"}`)},
+		Steps: []store.OperationStep{{
+			StepID: "backup-context-inspect", StepType: "hosting.instance.inspect", Status: protocolstate.StepPending,
+			AdapterID: "hosting.fake", CapabilityName: "hosting.instance.inspect", CapabilityVersion: "1",
+			Input: json.RawMessage(fmt.Sprintf(`{"instance_ref":%s}`, startTestInstance)),
+		}},
+	}
+	accepted, _, err := fixture.store.AcceptOperation(backup, testProof(77), []string{store.LogicalServerLockScope(startTestEnvID, startTestServerID)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	advanced, err := engine.Advance(context.Background(), accepted.Record.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !observer.sawInitialContext {
+		t.Fatal("adapter was dispatched before the backup lifecycle snapshot was durable")
+	}
+	if advanced.Record.BackupInitialLifecycleState != protocolstate.ServerReady || advanced.Record.Steps[0].Status != protocolstate.StepSucceeded {
+		t.Fatalf("backup context/step = %q/%q", advanced.Record.BackupInitialLifecycleState, advanced.Record.Steps[0].Status)
+	}
+	server, err := fixture.store.GetLogicalServer(startTestEnvID, startTestServerID)
+	if err != nil || server.Record.LifecycleState != protocolstate.ServerStopping {
+		t.Fatalf("backup lifecycle transition = %q, err=%v", server.Record.LifecycleState, err)
+	}
+}
+
+type backupContextObserver struct {
+	inner   adapter.Implementation
+	records interface {
+		GetOperation(string) (store.StoredOperation, error)
+	}
+	operationID       string
+	sawInitialContext bool
+}
+
+func (a *backupContextObserver) Descriptor() adapter.Descriptor { return a.inner.Descriptor() }
+func (a *backupContextObserver) Invoke(ctx context.Context, request adapter.InvokeRequest) (adapter.InvokeResponse, error) {
+	operation, err := a.records.GetOperation(a.operationID)
+	if err != nil {
+		return adapter.InvokeResponse{}, err
+	}
+	a.sawInitialContext = operation.Record.BackupInitialLifecycleState != ""
+	if !a.sawInitialContext {
+		return adapter.InvokeResponse{}, errors.New("backup state was not persisted before dispatch")
+	}
+	return a.inner.Invoke(ctx, request)
+}
+
 func TestUnavailableExactCapabilitySuspendsWithoutDispatch(t *testing.T) {
 	fixture := newEngineFixture(t, "capability-version", "2", nil)
 	stored, err := fixture.engine.Advance(context.Background(), fixture.operation.Record.OperationID)
@@ -513,6 +603,8 @@ func (d *projectingTestDefinition) ProjectLifecycle(operation store.OperationRec
 		return next, false, nil
 	}
 	switch {
+	case operation.OperationType == "server.backup" && operation.Status == protocolstate.OperationRunning && current.Record.LifecycleState == protocolstate.ServerReady:
+		next.LifecycleState = protocolstate.ServerStopping
 	case operation.Status == protocolstate.OperationRunning && current.Record.LifecycleState == protocolstate.ServerUnprovisioned:
 		next.LifecycleState = protocolstate.ServerProvisioning
 	case operation.Status == protocolstate.OperationSucceeded && current.Record.LifecycleState == protocolstate.ServerProvisioning:
