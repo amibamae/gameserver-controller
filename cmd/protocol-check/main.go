@@ -77,7 +77,7 @@ var exampleSchemaIDs = map[string]string{
 	"hosting-instance-stop-input.json":              "urn:gameserver-controller:0.21.0-draft:hosting:instance-stop-input",
 	"hosting-instance-stop-output.json":             "urn:gameserver-controller:0.21.0-draft:hosting:instance-stop-output",
 	"hosting-instance-wait-input.json":              "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-input",
-	"hosting-instance-wait-no-ref-input.json": "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-input",
+	"hosting-instance-wait-no-ref-input.json":       "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-input",
 	"hosting-instance-wait-output.json":             "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-output",
 	"hosting-instance-reboot-input.json":            "urn:gameserver-controller:0.21.0-draft:hosting:instance-reboot-input",
 	"hosting-instance-reboot-output.json":           "urn:gameserver-controller:0.21.0-draft:hosting:instance-reboot-output",
