@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -101,9 +102,15 @@ func Resolve(steps []Step, targetIndex int) (json.RawMessage, error) {
 // without requiring the source steps to have executed yet.
 func ValidatePlan(steps []Step) error {
 	for i, step := range steps {
+		if len(step.Binding) > 100 {
+			return fmt.Errorf("step %q has too many input bindings", step.StepID)
+		}
 		targets := make([][]string, 0, len(step.Binding))
 		seen := make(map[string]struct{}, len(step.Binding))
 		for j, binding := range step.Binding {
+			if len(binding.TargetPointer) > 1024 || len(binding.SourcePointer) > 1024 || binding.SourceStepID == "" || len(binding.SourceStepID) > 200 {
+				return fmt.Errorf("step %q binding %d exceeds protocol limits", step.StepID, j)
+			}
 			path, err := pointerTokens(binding.TargetPointer)
 			if err != nil || len(path) == 0 {
 				return fmt.Errorf("step %q binding %d has an invalid target pointer", step.StepID, j)
@@ -228,15 +235,6 @@ func arrayIndex(token string, length int) (int, bool) {
 	if token == "" || (len(token) > 1 && token[0] == '0') {
 		return 0, false
 	}
-	index := 0
-	for _, r := range token {
-		if r < '0' || r > '9' {
-			return 0, false
-		}
-		index = index*10 + int(r-'0')
-		if index >= length {
-			return 0, false
-		}
-	}
-	return index, index < length
+	index, err := strconv.Atoi(token)
+	return index, err == nil && index >= 0 && index < length
 }

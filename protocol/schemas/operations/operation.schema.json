@@ -197,14 +197,15 @@
           },
           "input_bindings": {
             "type": "array",
+            "maxItems": 100,
             "items": {
               "type": "object",
               "additionalProperties": false,
               "required": ["target_pointer", "source_step_id", "source_pointer"],
               "properties": {
-                "target_pointer": {"type": "string", "minLength": 1},
+                "target_pointer": {"type": "string", "minLength": 1, "maxLength": 1024},
                 "source_step_id": {"type": "string", "minLength": 1, "maxLength": 200},
-                "source_pointer": {"type": "string"}
+                "source_pointer": {"type": "string", "maxLength": 1024}
               }
             },
             "description": "Immutable bindings from outputs of earlier steps. Target JSON Pointer paths MUST be absent in input and MUST NOT overlap."

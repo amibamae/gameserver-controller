@@ -56,3 +56,13 @@ func TestResolveRejectsOverwritesOverlapsAndBadPointers(t *testing.T) {
 		t.Fatal("Resolve accepted an invalid JSON Pointer escape")
 	}
 }
+
+func TestResolveRejectsOutOfRangeArrayPointerWithoutOverflow(t *testing.T) {
+	steps := []Step{
+		{StepID: "create", Status: "succeeded", Output: json.RawMessage(`{"items":["vm-1"]}`)},
+		{StepID: "configure", Status: "pending", Input: json.RawMessage(`{}`), Binding: []Binding{{TargetPointer: "/id", SourceStepID: "create", SourcePointer: "/items/999999999999999999999999999999"}}},
+	}
+	if _, err := Resolve(steps, 1); err == nil {
+		t.Fatal("Resolve accepted an out-of-range array index")
+	}
+}
