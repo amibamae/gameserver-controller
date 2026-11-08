@@ -2,12 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-output",
   "title": "Hosting instance wait output",
-  "description": "Provider operation status and any observed instance state. A succeeded provider operation is not a confirmed instance postcondition unless the exact expected state is observed.",
+  "description": "Wait status and observed instance state. A provider operation reference is returned when available. A succeeded wait is not a confirmed instance postcondition unless the exact expected state is observed.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "instance_ref",
-    "provider_operation_ref",
     "operation_status",
     "observed_at"
   ],
