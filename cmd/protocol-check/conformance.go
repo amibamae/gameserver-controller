@@ -1474,6 +1474,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		}, nil
 	case "operations.backup.no-resume-final-state":
 		return evaluateBackupNoResumePolicy(pkg, fixture)
+	case "operations.backup.initial-state-resume-policy":
+		return evaluateBackupInitialStatePolicy(pkg, fixture)
 	case "operations.restore.final-state-policy":
 		return evaluateRestoreFinalStatePolicy(pkg, fixture)
 	case "operations.typed-provision-backup-restore-destroy-results", "operations.typed-provision-backup-restore-destroy-target-mismatch", "operations.typed-provision-backup-restore-readiness-binding", "operations.typed-provision-backup-restore-readiness-freshness":

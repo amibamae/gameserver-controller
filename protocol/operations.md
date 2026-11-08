@@ -55,6 +55,8 @@ Operation request parameters MUST be retained in a way that lets the controller 
 
 The operation's accepted request is immutable. A changed target, changed parameter, or materially changed plan requires a new operation and, where applicable, a new approval.
 
+For `server.backup`, the operation also carries core-owned `backup_initial_lifecycle_state` metadata. While holding the operation's server lock, the controller MUST read the exact target lifecycle state and durably commit it to the operation immediately before the first backup-related lifecycle transition or adapter dispatch. The capture and commit MUST precede that transition or dispatch. The field is immutable across retries and restart, cannot be supplied or changed by a client or adapter, and is bound to the operation's server, environment, and instance target. If the controller cannot establish or recover trustworthy context after dispatch, it MUST reconcile or require operator intervention; it MUST NOT infer the initial state from the current state, automatically start the runtime, or claim success.
+
 ## 4. Operation acceptance
 
 Before accepting an operation, the controller MUST:
