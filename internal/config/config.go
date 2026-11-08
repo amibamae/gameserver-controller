@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/amibamae/gameserver-controller/internal/backuppolicy"
 )
 
 const SchemaVersion = 1
@@ -91,9 +93,10 @@ type ServerAdapters struct {
 }
 
 type ServerLifecycle struct {
-	IdleShutdown                       string `yaml:"idle_shutdown"`
-	RequireVerifiedBackupBeforeDestroy bool   `yaml:"require_verified_backup_before_destroy"`
-	RequireApprovalForDestroy          bool   `yaml:"require_approval_for_destroy"`
+	IdleShutdown                       string              `yaml:"idle_shutdown"`
+	RequireVerifiedBackupBeforeDestroy bool                `yaml:"require_verified_backup_before_destroy"`
+	RequireApprovalForDestroy          bool                `yaml:"require_approval_for_destroy"`
+	Backups                            backuppolicy.Policy `yaml:"backups"`
 }
 
 // Load reads a single YAML document with unknown-field rejection, then checks
@@ -213,6 +216,9 @@ func Validate(value Config) error {
 		if server.Lifecycle.IdleShutdown != "" {
 			idle, err := time.ParseDuration(server.Lifecycle.IdleShutdown)
 			add(err == nil && idle > 0 && idle <= 7*24*time.Hour, label+".lifecycle.idle_shutdown must be greater than zero and no more than 168h")
+		}
+		if _, err := backuppolicy.Resolve(server.Lifecycle.Backups); err != nil {
+			problems = append(problems, label+".lifecycle.backups: "+err.Error())
 		}
 		add(server.Lifecycle.RequireVerifiedBackupBeforeDestroy, label+".lifecycle.require_verified_backup_before_destroy must be true")
 		add(server.Lifecycle.RequireApprovalForDestroy, label+".lifecycle.require_approval_for_destroy must be true")
