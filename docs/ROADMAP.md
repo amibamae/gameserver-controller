@@ -73,6 +73,9 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 
 ## Phase 3: Local controller and safe manual lifecycle
 
+- [ ] Implement [controller setup on an existing machine](CONTROLLER_SETUP.md) in Go, with secure Vultr/Wasabi credential input and a redacted installation plan.
+- [ ] Implement scoped, expiring, revocable controller API keys and enforce authentication and authorization before enabling a remote management listener.
+- Preserve password-backed sessions and delegated controller access as the future panel's integration contract; panel implementation remains out of scope.
 - Implement the core and application services against the protocol.
 - Build a local CLI for inspection, config validation, plan/preview, and operation monitoring.
 - Implement Vultr hosting and standard OS selection.
