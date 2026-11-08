@@ -58,6 +58,7 @@ type Capability struct {
 
 type RequestContext struct {
 	StreamTransfers []capturestream.Reference `json:"stream_transfers,omitempty"`
+	SecretRefs      []SecretReference         `json:"secret_refs,omitempty"`
 	RequestID       string                    `json:"request_id"`
 	CorrelationID   string                    `json:"correlation_id"`
 	OperationID     string                    `json:"operation_id,omitempty"`
@@ -66,6 +67,16 @@ type RequestContext struct {
 	EnvironmentID   string                    `json:"environment_id"`
 	Deadline        time.Time                 `json:"deadline"`
 	IdempotencyKey  string                    `json:"idempotency_key,omitempty"`
+}
+
+// SecretReference is an opaque pointer to protected secret material. Adapters
+// receive references only, never resolved values, and must still enforce their
+// own configured authorization policy before resolving one.
+type SecretReference struct {
+	SecretRef       string   `json:"secret_ref"`
+	Purpose         string   `json:"purpose"`
+	PermissionScope []string `json:"permission_scope,omitempty"`
+	VersionRef      string   `json:"version_ref,omitempty"`
 }
 
 type InvokeParams struct {
