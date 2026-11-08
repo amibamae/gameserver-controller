@@ -1,12 +1,16 @@
 # Controller setup and management access
 
-**Status:** Accepted implementation direction. The Go `controller-setup plan
---config <file> --json` command now validates the configuration and emits a
-redacted, read-only plan for an existing Debian/systemd machine. It does not
-install or modify files, contact providers, or read credential contents. The
-setup apply command, management authentication runtime, password login, and
-session issuance are not implemented. This document does not authorize live
-installation.
+**Status:** Accepted implementation direction. `controller-setup plan` validates
+configuration and emits a redacted, read-only plan for an existing Debian/
+systemd machine. It does not install or modify files, contact providers, or read
+credential contents. `controller-setup credentials set` accepts only a
+credential name referenced by the validated config, prompts twice with
+`systemd-ask-password`, and stores the value with `systemd-creds` in
+`/etc/credstore.encrypted`. It runs only on Debian/systemd with local
+administrator privileges, requires exact name confirmation to replace an
+existing value, and never prints the credential. The setup apply command,
+management authentication runtime, password login, and session issuance are
+not implemented. This document does not authorize live installation.
 
 Run the preview from a checkout with:
 
@@ -17,6 +21,20 @@ go run ./cmd/controller-setup plan --config configs/controller.example.yaml --js
 The example configuration contains placeholder provider references and is
 intended to show the plan shape. The output reports supported-target blockers
 and fixed destination paths; it does not claim that setup can be applied yet.
+
+To store one of the credential names already referenced by your validated
+configuration, use:
+
+```sh
+sudo go run ./cmd/controller-setup credentials set --config /etc/gameserver-controller/controller.yaml --name <configured-credential-name>
+```
+
+Replacing a value also requires `--replace --confirm-replace <same-name>`. The
+command passes the prompt response to `systemd-creds encrypt` on standard input;
+secret values are never command-line arguments. See the upstream
+[`systemd-ask-password`](https://freedesktop.org/software/systemd/man/latest/systemd-ask-password.html)
+and [`systemd-creds`](https://freedesktop.org/software/systemd/man/latest/systemd-creds.html)
+manuals for the host tools it uses.
 
 ## Setup on an existing machine
 
