@@ -50,3 +50,13 @@ A fake-adapter integration test exercises broker consumption through this
 boundary. The workflow engine does not yet issue streams or assemble verified
 backups; the transport caller must still compare independent capture evidence
 with the adapter result.
+
+Controller workflows should use `IssueTracked` with their private staging sink.
+It returns a private `Ticket` alongside the transient reference. The adapter
+cannot replace that sink when claiming the handle. After invocation, the
+controller reads `Ticket.Evidence` to obtain the broker's measured receipt,
+including the exact scope, independently of the adapter's returned JSON. An
+unclaimed, open, failed, or aborted stream has no usable evidence.
+`Ticket.Abort` revokes an unclaimed handle or invalidates an active capture;
+the caller remains responsible for removing staged data. Tickets are
+process-local and must not enter durable operation records.
