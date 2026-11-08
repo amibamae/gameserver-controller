@@ -1,0 +1,260 @@
+{
+  "fixture_id": "protocol.json.raw-wire-interoperability",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "protocol.encoding",
+  "purpose": "Decode exact hexadecimal wire bytes before parsing; reject duplicate members, unsafe integers, invalid UTF-8 and unpaired escaped surrogates without replacing invalid input.",
+  "input": {
+    "evaluations": [
+      {
+        "case_id": "ordinary-object",
+        "wire_hex": "7b226964223a2261227d"
+      },
+      {
+        "case_id": "duplicate-members",
+        "wire_hex": "7b226964223a312c226964223a327d"
+      },
+      {
+        "case_id": "escaped-duplicate",
+        "wire_hex": "7b226964223a312c225c753030363964223a327d"
+      },
+      {
+        "case_id": "nested-duplicate",
+        "wire_hex": "7b2278223a5b7b226964223a312c226964223a327d5d7d"
+      },
+      {
+        "case_id": "safe-positive",
+        "wire_hex": "39303037313939323534373430393931"
+      },
+      {
+        "case_id": "safe-negative",
+        "wire_hex": "2d39303037313939323534373430393931"
+      },
+      {
+        "case_id": "safe-decimal",
+        "wire_hex": "393030373139393235343734303939312e30"
+      },
+      {
+        "case_id": "safe-exponent",
+        "wire_hex": "392e303037313939323534373430393931653135"
+      },
+      {
+        "case_id": "unsafe-positive",
+        "wire_hex": "39303037313939323534373430393932"
+      },
+      {
+        "case_id": "unsafe-negative",
+        "wire_hex": "2d39303037313939323534373430393932"
+      },
+      {
+        "case_id": "unsafe-decimal",
+        "wire_hex": "393030373139393235343734303939322e30"
+      },
+      {
+        "case_id": "unsafe-exponent",
+        "wire_hex": "392e303037313939323534373430393932653135"
+      },
+      {
+        "case_id": "paired-surrogates",
+        "wire_hex": "225c75443833445c754445303022"
+      },
+      {
+        "case_id": "escaped-backslash",
+        "wire_hex": "225c5c754438303022"
+      },
+      {
+        "case_id": "ordinary-escape",
+        "wire_hex": "225c753030343122"
+      },
+      {
+        "case_id": "lone-high",
+        "wire_hex": "225c754438303022"
+      },
+      {
+        "case_id": "lone-low",
+        "wire_hex": "225c754443303022"
+      },
+      {
+        "case_id": "reversed-pair",
+        "wire_hex": "225c75444330305c754438303022"
+      },
+      {
+        "case_id": "high-with-nonsurrogate",
+        "wire_hex": "225c75443830305c753030343122"
+      },
+      {
+        "case_id": "invalid-member-name",
+        "wire_hex": "7b225c7544383030223a317d"
+      },
+      {
+        "case_id": "trailing-value",
+        "wire_hex": "7b7d207b7d"
+      },
+      {
+        "case_id": "nan",
+        "wire_hex": "4e614e"
+      },
+      {
+        "case_id": "infinity",
+        "wire_hex": "496e66696e697479"
+      },
+      {
+        "case_id": "overflow-number",
+        "wire_hex": "3165393939"
+      },
+      {
+        "case_id": "raw-supplementary",
+        "wire_hex": "22f09f988022"
+      },
+      {
+        "case_id": "literal-replacement-character",
+        "wire_hex": "22efbfbd22"
+      },
+      {
+        "case_id": "invalid-utf8",
+        "wire_hex": "22ff22"
+      },
+      {
+        "case_id": "overlong-utf8",
+        "wire_hex": "22c0af22"
+      },
+      {
+        "case_id": "utf8-surrogate",
+        "wire_hex": "22eda08022"
+      },
+      {
+        "case_id": "truncated-utf8",
+        "wire_hex": "22f09f22"
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "ordinary-object",
+        "accepted": true
+      },
+      {
+        "case_id": "duplicate-members",
+        "accepted": false
+      },
+      {
+        "case_id": "escaped-duplicate",
+        "accepted": false
+      },
+      {
+        "case_id": "nested-duplicate",
+        "accepted": false
+      },
+      {
+        "case_id": "safe-positive",
+        "accepted": true
+      },
+      {
+        "case_id": "safe-negative",
+        "accepted": true
+      },
+      {
+        "case_id": "safe-decimal",
+        "accepted": true
+      },
+      {
+        "case_id": "safe-exponent",
+        "accepted": true
+      },
+      {
+        "case_id": "unsafe-positive",
+        "accepted": false
+      },
+      {
+        "case_id": "unsafe-negative",
+        "accepted": false
+      },
+      {
+        "case_id": "unsafe-decimal",
+        "accepted": false
+      },
+      {
+        "case_id": "unsafe-exponent",
+        "accepted": false
+      },
+      {
+        "case_id": "paired-surrogates",
+        "accepted": true,
+        "parsed_string": "😀"
+      },
+      {
+        "case_id": "escaped-backslash",
+        "accepted": true,
+        "parsed_string": "\\uD800"
+      },
+      {
+        "case_id": "ordinary-escape",
+        "accepted": true,
+        "parsed_string": "A"
+      },
+      {
+        "case_id": "lone-high",
+        "accepted": false
+      },
+      {
+        "case_id": "lone-low",
+        "accepted": false
+      },
+      {
+        "case_id": "reversed-pair",
+        "accepted": false
+      },
+      {
+        "case_id": "high-with-nonsurrogate",
+        "accepted": false
+      },
+      {
+        "case_id": "invalid-member-name",
+        "accepted": false
+      },
+      {
+        "case_id": "trailing-value",
+        "accepted": false
+      },
+      {
+        "case_id": "nan",
+        "accepted": false
+      },
+      {
+        "case_id": "infinity",
+        "accepted": false
+      },
+      {
+        "case_id": "overflow-number",
+        "accepted": false
+      },
+      {
+        "case_id": "raw-supplementary",
+        "accepted": true,
+        "parsed_string": "😀"
+      },
+      {
+        "case_id": "literal-replacement-character",
+        "accepted": true,
+        "parsed_string": "�"
+      },
+      {
+        "case_id": "invalid-utf8",
+        "accepted": false
+      },
+      {
+        "case_id": "overlong-utf8",
+        "accepted": false
+      },
+      {
+        "case_id": "utf8-surrogate",
+        "accepted": false
+      },
+      {
+        "case_id": "truncated-utf8",
+        "accepted": false
+      }
+    ]
+  },
+  "side_effect_expected": "none"
+}
