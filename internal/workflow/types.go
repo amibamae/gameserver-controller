@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sync"
 
+	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
@@ -71,6 +72,13 @@ type PreconditionFailureHandler interface {
 // An error prevents the adapter call and fails the operation.
 type DispatchGuard interface {
 	BeforeAdapterDispatch(context.Context, store.OperationRecord, store.OperationStep) error
+}
+
+// StepSecretReferences provides only the request's opaque secret references
+// needed by one specific adapter step. Implementations must never return
+// resolved secret values or references for unrelated steps.
+type StepSecretReferences interface {
+	SecretReferencesForStep(context.Context, store.OperationRecord, store.OperationStep) ([]adapter.SecretReference, error)
 }
 
 // LifecycleProjector derives a logical-server record from durable operation
