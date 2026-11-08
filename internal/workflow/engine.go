@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/adapter"
+	"github.com/amibamae/gameserver-controller/internal/capturestream"
 	"github.com/amibamae/gameserver-controller/internal/inputbinding"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 	"github.com/amibamae/gameserver-controller/internal/store"
@@ -416,6 +418,59 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 	if correlationID == "" {
 		correlationID = running.Record.OperationID
 	}
+	var secretRefs []adapter.SecretReference
+	if provider, ok := definition.(StepSecretReferences); ok {
+		refs, err := provider.SecretReferencesForStep(ctx, running.Record, step)
+		if err != nil {
+			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
+				"core.workflow.secret_reference_failed",
+				"The controller could not authorize the secret references required by this adapter step.", "safety_blocked")
+		}
+		secretRefs = refs
+	}
+	var streamTransfers []adapter.StreamTransfer
+	if provider, ok := definition.(StepStreamTransfers); ok {
+		transfers, err := provider.StreamTransfersForStep(ctx, running.Record, step, deadline)
+		if err != nil {
+			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
+				"core.workflow.stream_transfer_failed",
+				"The controller could not prepare the bounded stream inputs required by this adapter step.", "safety_blocked")
+		}
+		streamTransfers = transfers
+	}
+	streamSources := make(map[string]io.ReadCloser, len(streamTransfers))
+	streamRefs := make([]capturestream.Reference, len(streamTransfers))
+	for index, transfer := range streamTransfers {
+		if transfer.Source == nil || transfer.Verify == nil || transfer.Reference.TransferID == "" || transfer.Reference.Direction != "controller_to_adapter" {
+			for _, prepared := range streamTransfers {
+				if prepared.Source != nil {
+					_ = prepared.Source.Close()
+				}
+			}
+			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
+				"core.workflow.stream_transfer_failed",
+				"The controller could not prepare the bounded stream inputs required by this adapter step.", "safety_blocked")
+		}
+		if _, duplicate := streamSources[transfer.Reference.TransferID]; duplicate {
+			for _, prepared := range streamTransfers {
+				if prepared.Source != nil {
+					_ = prepared.Source.Close()
+				}
+			}
+			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
+				"core.workflow.stream_transfer_failed",
+				"The controller could not prepare the bounded stream inputs required by this adapter step.", "safety_blocked")
+		}
+		streamRefs[index] = transfer.Reference
+		streamSources[transfer.Reference.TransferID] = transfer.Source
+	}
+	defer func() {
+		for _, transfer := range streamTransfers {
+			if transfer.Source != nil {
+				_ = transfer.Source.Close()
+			}
+		}
+	}()
 	request := adapter.InvokeRequest{
 		JSONRPC: "2.0",
 		ID:      requestID,
@@ -427,14 +482,23 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 				RequestID: requestID, CorrelationID: correlationID,
 				OperationID: running.Record.OperationID, StepID: step.StepID,
 				ServerID: running.Record.Target.ServerID, EnvironmentID: running.Record.Target.EnvironmentID,
-				Deadline: deadline,
+				Deadline: deadline, SecretRefs: secretRefs, StreamTransfers: streamRefs,
 			},
 			Input: append(json.RawMessage(nil), effectiveStepInput(step)...),
 		},
 	}
+	request.Params.RequestContext.SetStreamSources(streamSources)
 	callContext, cancel := context.WithDeadline(ctx, deadline)
 	response, invokeErr := e.adapters.Invoke(callContext, step.AdapterID, request)
 	cancel()
+	if invokeErr == nil {
+		for _, transfer := range streamTransfers {
+			if err := transfer.Verify(); err != nil {
+				invokeErr = &adapter.InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("controller-provided stream was not fully and correctly consumed")}
+				break
+			}
+		}
+	}
 	if invokeErr != nil {
 		var ambiguous *adapter.InvocationError
 		if errors.As(invokeErr, &ambiguous) && ambiguous.MayHaveSideEffects {

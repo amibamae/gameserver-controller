@@ -107,14 +107,18 @@ func buildReadinessAssertionAt(schemas schemaRuntime, operation store.OperationR
 	inputSchema := "urn:gameserver-controller:" + version + ":game:readiness-check-input"
 	outputSchema := "urn:gameserver-controller:" + version + ":game:readiness-check-output"
 	assertionSchema := "urn:gameserver-controller:" + version + ":lifecycle:readiness-assertion"
-	if err := schemas.ValidateJSON(inputSchema, step.Input); err != nil {
+	readinessInput := step.Input
+	if len(step.ResolvedInput) > 0 {
+		readinessInput = step.ResolvedInput
+	}
+	if err := schemas.ValidateJSON(inputSchema, readinessInput); err != nil {
 		return nil, fmt.Errorf("readiness request does not match protocol schema: %w", err)
 	}
 	if err := schemas.ValidateJSON(outputSchema, step.Output); err != nil {
 		return nil, fmt.Errorf("readiness observation does not match protocol schema: %w", err)
 	}
 	var input readinessCheckInput
-	if err := json.Unmarshal(step.Input, &input); err != nil {
+	if err := json.Unmarshal(readinessInput, &input); err != nil {
 		return nil, errors.New("decode readiness request")
 	}
 	var output readinessCheckOutput

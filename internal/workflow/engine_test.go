@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/adapter"
+	"github.com/amibamae/gameserver-controller/internal/capturestream"
 	"github.com/amibamae/gameserver-controller/internal/fakeadapter"
 	"github.com/amibamae/gameserver-controller/internal/inputbinding"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
@@ -43,6 +45,27 @@ func TestRunPersistsAdapterOutputAndCompletes(t *testing.T) {
 	}
 	if len(fixture.adapter.Calls()) != 1 {
 		t.Fatalf("adapter calls = %d, want 1", len(fixture.adapter.Calls()))
+	}
+}
+
+func TestMutatingStreamMustBeFullyVerifiedOrReconciled(t *testing.T) {
+	fixture := newEngineFixture(t, "unverified-stream", "1", []fakeadapter.Reply{{
+		Outcome: adapter.OutcomeCompleted, Output: json.RawMessage(testExternalRef), ObservedAt: time.Now().UTC(),
+	}})
+	fixture.definition.streamTransfers = []adapter.StreamTransfer{{
+		Reference: capturestream.Reference{TransferID: strings.Repeat("a", 64), Direction: "controller_to_adapter", MaximumBytes: 7, ExpiresAt: time.Now().UTC().Add(20 * time.Second)},
+		Source:    io.NopCloser(strings.NewReader("payload")),
+		Verify:    func() error { return errors.New("stream was not consumed") },
+	}}
+	stored, err := fixture.engine.Run(context.Background(), fixture.operation.Record.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if (stored.Record.Status != protocolstate.OperationReconciling && stored.Record.Status != protocolstate.OperationNeedsOperator) || stored.Record.Steps[0].Status != protocolstate.StepOutcomeUnknown {
+		t.Fatalf("unverified mutating stream did not require reconciliation: operation=%s step=%s", stored.Record.Status, stored.Record.Steps[0].Status)
+	}
+	if len(fixture.adapter.Calls()) != 1 {
+		t.Fatalf("adapter calls=%d, want one uncertain call", len(fixture.adapter.Calls()))
 	}
 }
 
@@ -542,8 +565,8 @@ func newEngineFixtureForOperation(t *testing.T, operationID, capabilityVersion s
 			Name: testCapability, Version: "1", Mutating: mutating,
 			InputSchemaURI:      "urn:gameserver-controller:" + schemas.ProtocolVersion() + ":common:external-resource-ref",
 			OutputSchemaURI:     "urn:gameserver-controller:" + schemas.ProtocolVersion() + ":common:external-resource-ref",
-			RequiredPermissions: []string{},
-		}},
+			RequiredPermissions: []string{}, Constraints: map[string]any{"stream_transfer_direction": "controller_to_adapter"},
+		}}, StreamTransportProfiles: []string{"local-unix-stream-v1"},
 	})
 	if len(replies) == 0 {
 		replies = []fakeadapter.Reply{{Outcome: adapter.OutcomeCompleted, Output: json.RawMessage(testExternalRef), ObservedAt: time.Now().UTC()}}
@@ -642,6 +665,11 @@ type testDefinition struct {
 	dispatchGuard           func(context.Context, store.OperationRecord, store.OperationStep) error
 	operationType           string
 	mutateWithoutTransition bool
+	streamTransfers         []adapter.StreamTransfer
+}
+
+func (d *testDefinition) StreamTransfersForStep(_ context.Context, _ store.OperationRecord, _ store.OperationStep, _ time.Time) ([]adapter.StreamTransfer, error) {
+	return d.streamTransfers, nil
 }
 
 func (d *testDefinition) CheckPreconditions(context.Context, store.OperationRecord, store.OperationStep) error {

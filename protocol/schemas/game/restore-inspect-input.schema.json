@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:game:restore-inspect-input",
+  "title": "Game restore execution inspection input",
+  "description": "Inspect one exact prior restore execution before retry or completion.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["backup_id", "target", "target_data_generation_id", "restore_execution_ref"],
+  "properties": {
+    "backup_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "target": {"$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target"},
+    "target_data_generation_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "restore_execution_ref": {"$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"}
+  }
+}

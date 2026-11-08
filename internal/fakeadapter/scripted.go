@@ -156,7 +156,21 @@ func cloneMap(value map[string]any) map[string]any {
 func cloneRequest(value adapter.InvokeRequest) adapter.InvokeRequest {
 	value.Params.Input = append(json.RawMessage(nil), value.Params.Input...)
 	value.Params.RequestContext.StreamTransfers = cloneSlice(value.Params.RequestContext.StreamTransfers)
+	value.Params.RequestContext.SecretRefs = cloneSecretRefs(value.Params.RequestContext.SecretRefs)
+	value.Params.RequestContext.ClearStreamSources()
 	return value
+}
+
+func cloneSecretRefs(values []adapter.SecretReference) []adapter.SecretReference {
+	if values == nil {
+		return nil
+	}
+	cloned := make([]adapter.SecretReference, len(values))
+	copy(cloned, values)
+	for index := range cloned {
+		cloned[index].PermissionScope = cloneSlice(values[index].PermissionScope)
+	}
+	return cloned
 }
 
 func cloneReplies(values []Reply) []Reply {

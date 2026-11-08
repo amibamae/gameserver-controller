@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +59,8 @@ type Capability struct {
 
 type RequestContext struct {
 	StreamTransfers []capturestream.Reference `json:"stream_transfers,omitempty"`
+	streamAccess    *streamAccess             `json:"-"`
+	SecretRefs      []SecretReference         `json:"secret_refs,omitempty"`
 	RequestID       string                    `json:"request_id"`
 	CorrelationID   string                    `json:"correlation_id"`
 	OperationID     string                    `json:"operation_id,omitempty"`
@@ -66,6 +69,68 @@ type RequestContext struct {
 	EnvironmentID   string                    `json:"environment_id"`
 	Deadline        time.Time                 `json:"deadline"`
 	IdempotencyKey  string                    `json:"idempotency_key,omitempty"`
+}
+
+// OpenStream consumes one controller-provided source stream by its transient
+// transfer ID. A source can be claimed once per invocation.
+func (c RequestContext) OpenStream(transferID string) (io.ReadCloser, error) {
+	if c.streamAccess == nil || transferID == "" {
+		return nil, errors.New("stream source is unavailable")
+	}
+	return c.streamAccess.open(transferID)
+}
+
+// SetStreamSources attaches invocation-only stream sources. They are excluded
+// from JSON and must be set only by the trusted controller runtime.
+func (c *RequestContext) SetStreamSources(sources map[string]io.ReadCloser) {
+	if c == nil {
+		return
+	}
+	c.streamAccess = &streamAccess{sources: sources, claimed: make(map[string]bool)}
+}
+
+// ClearStreamSources removes invocation-only source readers before a request
+// is retained for diagnostics or test history.
+func (c *RequestContext) ClearStreamSources() {
+	if c != nil {
+		c.streamAccess = nil
+	}
+}
+
+type streamAccess struct {
+	mu      sync.Mutex
+	sources map[string]io.ReadCloser
+	claimed map[string]bool
+}
+
+func (s *streamAccess) open(id string) (io.ReadCloser, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	source, ok := s.sources[id]
+	if !ok || s.claimed[id] {
+		return nil, errors.New("stream source is unavailable")
+	}
+	s.claimed[id] = true
+	return source, nil
+}
+
+// StreamTransfer pairs a protocol handle with a controller-owned bounded
+// source. Verify must succeed after the adapter has consumed the complete
+// stream; Close is called after invocation regardless of outcome.
+type StreamTransfer struct {
+	Reference capturestream.Reference
+	Source    io.ReadCloser
+	Verify    func() error
+}
+
+// SecretReference is an opaque pointer to protected secret material. Adapters
+// receive references only, never resolved values, and must still enforce their
+// own configured authorization policy before resolving one.
+type SecretReference struct {
+	SecretRef       string   `json:"secret_ref"`
+	Purpose         string   `json:"purpose"`
+	PermissionScope []string `json:"permission_scope,omitempty"`
+	VersionRef      string   `json:"version_ref,omitempty"`
 }
 
 type InvokeParams struct {

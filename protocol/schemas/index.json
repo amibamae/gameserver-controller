@@ -187,6 +187,18 @@
       "id": "urn:gameserver-controller:0.21.0-draft:game:readiness-check-input"
     },
     {
+      "path": "game/restore-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:game:restore-input"
+    },
+    {
+      "path": "game/restore-inspect-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:game:restore-inspect-input"
+    },
+    {
+      "path": "game/restore-output.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:game:restore-output"
+    },
+    {
       "path": "game/readiness-check-output.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:game:readiness-check-output"
     },

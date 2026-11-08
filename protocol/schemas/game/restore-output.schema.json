@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:game:restore-output",
+  "title": "Game backup restore result",
+  "description": "Restore evidence is bound to the exact verified source backup, new target generation, and instance. Unknown outcomes require inspection by restore_execution_ref before any retry.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["backup_id", "environment_id", "source_data_generation_id", "target", "target_data_generation_id", "restore_execution_ref", "outcome", "observed_at"],
+  "properties": {
+    "backup_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "environment_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "source_data_generation_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "target": {"$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target"},
+    "target_data_generation_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "restore_execution_ref": {"$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"},
+    "outcome": {"enum": ["restored", "rejected", "outcome_unknown"]},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "validation_checks": {
+      "type": "array", "minItems": 1, "maxItems": 64,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["check_id", "result", "observed_at"],
+        "properties": {
+          "check_id": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-z][a-z0-9._-]*$"},
+          "result": {"enum": ["pass", "fail", "unknown"]},
+          "observed_at": {"type": "string", "format": "date-time"},
+          "reason_code": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z][a-z0-9._-]*$"}
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"outcome": {"const": "restored"}}, "required": ["outcome"]},
+      "then": {
+        "required": ["validation_checks"],
+        "properties": {
+          "validation_checks": {
+            "items": {
+              "properties": {"result": {"const": "pass"}}
+            }
+          }
+        }
+      }
+    },
+    {"if": {"properties": {"outcome": {"const": "outcome_unknown"}}, "required": ["outcome"]}, "then": {"required": ["restore_execution_ref"]}}
+  ]
+}
