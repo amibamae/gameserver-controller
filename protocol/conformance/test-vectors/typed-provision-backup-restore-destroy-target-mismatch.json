@@ -329,7 +329,9 @@
     "backup_result_bound": false,
     "restore_result_bound": false,
     "destroy_result_bound": false,
-    "all_results_bound": false
+    "all_results_bound": false,
+    "restore_backup_owner_bound": false,
+    "restore_data_generation_rotated": true
   },
   "side_effect_expectation": "none",
   "notes": "Each result remains individually schema-valid, but its identity conflicts with the accepted operation target."

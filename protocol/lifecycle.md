@@ -162,7 +162,7 @@ A failed or uncertain backup MUST block destruction. An unknown destroy result M
 
 ### 5.6 Restore
 
-Restore MUST use an explicit backup reference and validate integrity, ownership, environment, game compatibility, and archive safety before writing data. It MUST NOT extract paths outside the configured data root or follow unsafe archive links.
+Restore MUST use an explicit backup reference and validate integrity, ownership, environment, game compatibility, and archive safety before writing data. The backup manifest's `server_id` and `environment_id` MUST match the logical restore target; the physical target instance may differ from the manifest's source instance during replacement. A successful restore MUST assign a new data generation distinct from the source backup's generation before the runtime can write. Importing backup data into a different logical server requires a separate, explicitly authorized workflow. Restore MUST NOT extract paths outside the configured data root or follow unsafe archive links.
 
 Restoring over existing data requires a separate safety plan and approval according to environment policy. A restore to a new replacement instance is preferred where practical. A successful restore can end in `stopped` or proceed to `starting`, according to the accepted operation.
 

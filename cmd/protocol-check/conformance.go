@@ -1547,7 +1547,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return evaluateBackupInitialStatePolicy(pkg, fixture)
 	case "operations.restore.final-state-policy":
 		return evaluateRestoreFinalStatePolicy(pkg, fixture)
-	case "operations.typed-provision-backup-restore-destroy-results", "operations.typed-provision-backup-restore-destroy-target-mismatch", "operations.typed-provision-backup-restore-readiness-binding", "operations.typed-provision-backup-restore-readiness-freshness":
+	case "operations.typed-provision-backup-restore-destroy-results", "operations.typed-provision-backup-restore-destroy-target-mismatch", "operations.typed-provision-backup-restore-readiness-binding", "operations.typed-provision-backup-restore-readiness-freshness", "operations.typed-restore-data-generation-not-rotated":
 		provisionOperation := asObject(input["provision_operation"])
 		backupOperation := asObject(input["backup_operation"])
 		restoreOperation := asObject(input["restore_operation"])
@@ -1622,6 +1622,7 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		restoreTarget := asObject(restoreOperation["target"])
 		restoreParameters := asObject(asObject(restoreOperation["request_snapshot"])["parameters"])
 		restoreData := asObject(asObject(restoreOperation["result"])["operation_data"])
+		restoreBackupManifest := asObject(backupData["manifest"])
 		restoreInstance := asObject(restoreTarget["instance_ref"])
 		restoreResultInstance := asObject(restoreData["target_instance_ref"])
 		restoreRequestedInstance := asObject(restoreParameters["target_instance_ref"])
@@ -1635,7 +1636,16 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		if err != nil {
 			return nil, fmt.Errorf("restore readiness assertion: %w", err)
 		}
-		restoreResultBound := stringValue(restoreTarget, "environment_id") == stringValue(restoreInstance, "environment_id") &&
+		restoreBackupOwnerBound := backupResultBound &&
+			stringValue(restoreParameters, "backup_id") == stringValue(restoreBackupManifest, "backup_id") &&
+			stringValue(restoreTarget, "server_id") == stringValue(restoreBackupManifest, "server_id") &&
+			stringValue(restoreTarget, "environment_id") == stringValue(restoreBackupManifest, "environment_id") &&
+			stringValue(backupOperation, "status") == "succeeded" &&
+			stringValue(backupData, "verified_at") != ""
+		restoreDataGenerationRotated := stringValue(restoreData, "data_generation_id") != "" &&
+			stringValue(restoreData, "data_generation_id") != stringValue(restoreBackupManifest, "data_generation_id")
+		restoreResultBound := restoreBackupOwnerBound && restoreDataGenerationRotated &&
+			stringValue(restoreTarget, "environment_id") == stringValue(restoreInstance, "environment_id") &&
 			stringValue(restoreParameters, "backup_id") == stringValue(restoreData, "backup_id") &&
 			reflect.DeepEqual(restoreTarget["instance_ref"], restoreData["target_instance_ref"]) &&
 			(restoreParameters["target_instance_ref"] == nil || reflect.DeepEqual(restoreRequestedInstance, restoreResultInstance)) &&
@@ -1658,12 +1668,14 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 
 		allResultsBound := provisionResultBound && backupResultBound && restoreResultBound && destroyResultBound
 		return map[string]any{
-			"schemas_valid":          true,
-			"provision_result_bound": provisionResultBound,
-			"backup_result_bound":    backupResultBound,
-			"restore_result_bound":   restoreResultBound,
-			"destroy_result_bound":   destroyResultBound,
-			"all_results_bound":      allResultsBound,
+			"schemas_valid":                   true,
+			"provision_result_bound":          provisionResultBound,
+			"backup_result_bound":             backupResultBound,
+			"restore_backup_owner_bound":      restoreBackupOwnerBound,
+			"restore_data_generation_rotated": restoreDataGenerationRotated,
+			"restore_result_bound":            restoreResultBound,
+			"destroy_result_bound":            destroyResultBound,
+			"all_results_bound":               allResultsBound,
 		}, nil
 	case "operations.typed-define-start-stop-results", "operations.typed-define-start-stop-target-mismatch", "operations.typed-define-start-stop-future-readiness", "operations.typed-define-start-stop-no-drain", "operations.typed-define-start-stop-no-proxy-drain":
 		defineOperation := asObject(input["define_operation"])

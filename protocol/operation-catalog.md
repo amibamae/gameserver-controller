@@ -62,7 +62,7 @@ The core MUST preserve whether `resume_after_backup` was omitted in the immutabl
 
 ### 3.6 `server.restore`
 
-Restores the immutable backup identified by `backup_id`. Integrity, environment ownership, data format, and game compatibility MUST pass before data is made available to the game runtime. Replacing existing data requires `replace_existing_data=true` plus explicit approval where policy requires it. Default final state is `stopped`; `start_after_restore` defaults to `false` and when set to `true` triggers startup and validation. `replace_existing_data` defaults to `false`.
+Restores the immutable backup identified by `backup_id`. Its manifest `server_id` and `environment_id` MUST match the logical restore target. The physical `target_instance_ref` may differ from the source instance when replacing a host. Integrity, environment ownership, data format, and game compatibility MUST pass before data is made available to the game runtime. A successful restore assigns a new target data generation that differs from the source backup generation. Importing data under a different logical server ID requires a separate, explicitly authorized workflow. Replacing existing data requires `replace_existing_data=true` plus explicit approval where policy requires it. Default final state is `stopped`; `start_after_restore` defaults to `false` and when set to `true` triggers startup and validation. `replace_existing_data` defaults to `false`.
 
 ### 3.7 `server.destroy`
 
