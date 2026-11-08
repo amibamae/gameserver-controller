@@ -54,15 +54,19 @@ func TestMutatingStreamMustBeFullyVerifiedOrReconciled(t *testing.T) {
 	}})
 	fixture.definition.streamTransfers = []adapter.StreamTransfer{{
 		Reference: capturestream.Reference{TransferID: strings.Repeat("a", 64), Direction: "controller_to_adapter", MaximumBytes: 7, ExpiresAt: time.Now().UTC().Add(20 * time.Second)},
-		Source: io.NopCloser(strings.NewReader("payload")),
-		Verify: func() error { return errors.New("stream was not consumed") },
+		Source:    io.NopCloser(strings.NewReader("payload")),
+		Verify:    func() error { return errors.New("stream was not consumed") },
 	}}
 	stored, err := fixture.engine.Run(context.Background(), fixture.operation.Record.OperationID)
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	if (stored.Record.Status != protocolstate.OperationReconciling && stored.Record.Status != protocolstate.OperationNeedsOperator) || stored.Record.Steps[0].Status != protocolstate.StepOutcomeUnknown {
 		t.Fatalf("unverified mutating stream did not require reconciliation: operation=%s step=%s", stored.Record.Status, stored.Record.Steps[0].Status)
 	}
-	if len(fixture.adapter.Calls()) != 1 { t.Fatalf("adapter calls=%d, want one uncertain call", len(fixture.adapter.Calls())) }
+	if len(fixture.adapter.Calls()) != 1 {
+		t.Fatalf("adapter calls=%d, want one uncertain call", len(fixture.adapter.Calls()))
+	}
 }
 
 func TestDispatchGuardRunsAfterDurableClaimAndBeforeAdapterCall(t *testing.T) {
