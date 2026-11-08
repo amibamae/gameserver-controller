@@ -47,6 +47,7 @@ type CapacityReservation struct {
 	UpdatedAt          time.Time                    `json:"updated_at"`
 	ProvisionedAt      time.Time                    `json:"provisioned_at,omitempty"`
 	ReadyAt            time.Time                    `json:"ready_at,omitempty"`
+	Adoption           *CapacityAdoption            `json:"adoption,omitempty"`
 	LastObservation    *CapacityProviderObservation `json:"last_observation,omitempty"`
 }
 
@@ -76,67 +77,71 @@ func (s *BoltStore) ReserveCapacity(reservation CapacityReservation, totalLimit,
 	var result CapacityReservation
 	created := false
 	err := s.db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(capacityReservationsBucket)
-		if existingValue := bucket.Get([]byte(reservation.OperationID)); existingValue != nil {
-			existing, err := decodeCapacityReservation(existingValue)
-			if err != nil {
-				return err
-			}
-			if !sameCapacityRequest(existing, reservation) {
-				return ErrCapacityConflict
-			}
-			result = existing
-			return nil
-		}
-
-		total, groupCount := 0, 0
-		cursor := bucket.Cursor()
-		for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-			existing, err := decodeCapacityReservation(value)
-			if err != nil {
-				return err
-			}
-			if string(key) != existing.OperationID {
-				return fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
-			}
-			if capacityStateReleased(existing.State) {
-				continue
-			}
-			if existing.ServerID == reservation.ServerID && existing.EnvironmentID == reservation.EnvironmentID {
-				return fmt.Errorf("%w: server %q in environment %q", ErrCapacityOccupied, reservation.ServerID, reservation.EnvironmentID)
-			}
-			if existing.Provider == reservation.Provider && existing.ResourceKey == reservation.ResourceKey {
-				return fmt.Errorf("%w: provider resource key %q is already reserved", ErrCapacityConflict, reservation.ResourceKey)
-			}
-			total++
-			if existing.CapacityGroup == reservation.CapacityGroup {
-				groupCount++
-			}
-		}
-		if total >= totalLimit {
-			return ErrCapacityReached
-		}
-		if groupCount >= groupLimit {
-			return ErrCapacityReached
-		}
-		now := time.Now().UTC()
-		reservation.State = CapacityReserved
-		reservation.CreatedAt = now
-		reservation.UpdatedAt = now
-		encoded, err := json.Marshal(reservation)
-		if err != nil {
-			return fmt.Errorf("encode capacity reservation: %w", err)
-		}
-		if err := bucket.Put([]byte(reservation.OperationID), encoded); err != nil {
-			return err
-		}
-		result, created = reservation, true
-		return nil
+		var err error
+		result, created, err = reserveCapacityTx(tx, reservation, totalLimit, groupLimit)
+		return err
 	})
 	if err != nil {
 		return CapacityReservation{}, false, err
 	}
 	return result, created, nil
+}
+
+func reserveCapacityTx(tx *bolt.Tx, reservation CapacityReservation, totalLimit, groupLimit int) (CapacityReservation, bool, error) {
+	bucket := tx.Bucket(capacityReservationsBucket)
+	if existingValue := bucket.Get([]byte(reservation.OperationID)); existingValue != nil {
+		existing, err := decodeCapacityReservation(existingValue)
+		if err != nil {
+			return CapacityReservation{}, false, err
+		}
+		if !sameCapacityRequest(existing, reservation) {
+			return CapacityReservation{}, false, ErrCapacityConflict
+		}
+		return existing, false, nil
+	}
+
+	total, groupCount := 0, 0
+	cursor := bucket.Cursor()
+	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+		existing, err := decodeCapacityReservation(value)
+		if err != nil {
+			return CapacityReservation{}, false, err
+		}
+		if string(key) != existing.OperationID {
+			return CapacityReservation{}, false, fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
+		}
+		if capacityStateReleased(existing.State) {
+			continue
+		}
+		if existing.ServerID == reservation.ServerID && existing.EnvironmentID == reservation.EnvironmentID {
+			return CapacityReservation{}, false, fmt.Errorf("%w: server %q in environment %q", ErrCapacityOccupied, reservation.ServerID, reservation.EnvironmentID)
+		}
+		if existing.Provider == reservation.Provider && existing.ResourceKey == reservation.ResourceKey {
+			return CapacityReservation{}, false, fmt.Errorf("%w: provider resource key %q is already reserved", ErrCapacityConflict, reservation.ResourceKey)
+		}
+		total++
+		if existing.CapacityGroup == reservation.CapacityGroup {
+			groupCount++
+		}
+	}
+	if total >= totalLimit {
+		return CapacityReservation{}, false, ErrCapacityReached
+	}
+	if groupCount >= groupLimit {
+		return CapacityReservation{}, false, ErrCapacityReached
+	}
+	now := time.Now().UTC()
+	reservation.State = CapacityReserved
+	reservation.CreatedAt = now
+	reservation.UpdatedAt = now
+	encoded, err := json.Marshal(reservation)
+	if err != nil {
+		return CapacityReservation{}, false, fmt.Errorf("encode capacity reservation: %w", err)
+	}
+	if err := bucket.Put([]byte(reservation.OperationID), encoded); err != nil {
+		return CapacityReservation{}, false, err
+	}
+	return reservation, true, nil
 }
 
 // MarkCapacityCreateSent is a one-time dispatch claim. Callers must claim it
@@ -331,7 +336,7 @@ func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanc
 		if !found {
 			return ErrCapacityNotFound
 		}
-		if result.State != CapacityActive || result.LastObservation == nil || result.LastObservation.State != "present" {
+		if result.Adoption != nil || result.State != CapacityActive || result.LastObservation == nil || result.LastObservation.State != "present" {
 			return ErrCapacityTransition
 		}
 		if readyAt.Before(result.CreatedAt) || (!result.ProvisionedAt.IsZero() && readyAt.Before(result.ProvisionedAt)) {
@@ -616,13 +621,16 @@ func validateCapacityReservationRequest(reservation CapacityReservation) error {
 		!validCapacityIdentifier(reservation.EnvironmentID, 200) || !validCapacityIdentifier(reservation.CapacityGroup, 100) ||
 		!validCapacityIdentifier(reservation.Provider, 100) || !validCapacityIdentifier(reservation.ResourceKey, 240) ||
 		reservation.ProviderInstanceID != "" || reservation.State != "" || !reservation.CreatedAt.IsZero() || !reservation.UpdatedAt.IsZero() ||
-		!reservation.ProvisionedAt.IsZero() || !reservation.ReadyAt.IsZero() || reservation.LastObservation != nil {
+		!reservation.ProvisionedAt.IsZero() || !reservation.ReadyAt.IsZero() || reservation.LastObservation != nil || reservation.Adoption != nil {
 		return fmt.Errorf("%w: invalid capacity reservation request", ErrInvalidRecord)
 	}
 	return nil
 }
 
 func validatePersistedCapacityReservation(reservation CapacityReservation) error {
+	if reservation.Adoption != nil && (validateCapacityAdoption(*reservation.Adoption) != nil || reservation.ProviderInstanceID != reservation.Adoption.InstanceID || !reservation.CreatedAt.Equal(reservation.Adoption.ObservedAt) || reservation.LastObservation == nil || !reservation.ProvisionedAt.IsZero() || !reservation.ReadyAt.IsZero()) {
+		return ErrInvalidRecord
+	}
 	if reservation.ProviderAdapterID != "" && !validCapacityIdentifier(reservation.ProviderAdapterID, 160) {
 		return ErrInvalidRecord
 	}

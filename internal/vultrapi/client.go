@@ -49,6 +49,7 @@ type Instance struct {
 	Region      string   `json:"region"`
 	Plan        string   `json:"plan"`
 	OSID        int      `json:"os_id"`
+	OS          string   `json:"os"`
 	Label       string   `json:"label"`
 	Hostname    string   `json:"hostname"`
 	Status      string   `json:"status"`
@@ -89,11 +90,12 @@ type instanceListEnvelope struct {
 }
 
 type instanceListMeta struct {
+	Total *int               `json:"total"`
 	Links *instanceListLinks `json:"links"`
 }
 
 type instanceListLinks struct {
-	Next string `json:"next"`
+	Next *string `json:"next"`
 }
 
 // NewClient creates a client for the production Vultr API. It accepts an
@@ -196,7 +198,7 @@ func (c *Client) ListInstancesByLabel(ctx context.Context, token []byte, label s
 		if err := decodeJSON(response, &envelope); err != nil {
 			return nil, ErrInvalidResponse
 		}
-		if envelope.Meta == nil || envelope.Meta.Links == nil {
+		if envelope.Meta == nil || envelope.Meta.Links == nil || envelope.Meta.Links.Next == nil {
 			return nil, ErrInvalidResponse
 		}
 		for _, instance := range envelope.Instances {
@@ -207,7 +209,7 @@ func (c *Client) ListInstancesByLabel(ctx context.Context, token []byte, label s
 				instances = append(instances, instance)
 			}
 		}
-		cursor = envelope.Meta.Links.Next
+		cursor = *envelope.Meta.Links.Next
 		if cursor == "" {
 			return instances, nil
 		}
