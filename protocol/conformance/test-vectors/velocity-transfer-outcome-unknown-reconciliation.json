@@ -1,0 +1,572 @@
+{
+  "fixture_id": "velocity-transfer-outcome-unknown-reconciliation",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.velocity.players.transfer",
+  "purpose": "An outcome_unknown transfer is reconciled against a fresh, exact proxy-session observation before retry.",
+  "input": {
+    "transfer_request": {
+      "server_id": "minecraft-test",
+      "environment_id": "test",
+      "source_backend_id": "velocity-lobby",
+      "destination_backend_id": "paper-main",
+      "waiting_cohort_id": "waiting-cohort-001",
+      "expected_instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "test",
+        "resource_kind": "instance",
+        "external_id": "instance-test-001"
+      },
+      "readiness_assertion": {
+        "assertion_id": "readiness-001",
+        "server_id": "minecraft-test",
+        "environment_id": "test",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "test",
+          "resource_kind": "instance",
+          "external_id": "instance-test-001"
+        },
+        "readiness_check_set_id": "paper-ready-v1",
+        "observed_at": "2026-11-07T09:59:00Z",
+        "expires_at": "2026-11-07T10:01:00Z"
+      },
+      "player_session_ids": [
+        "proxy-session-001",
+        "proxy-session-002",
+        "proxy-session-003"
+      ]
+    },
+    "transfer_result": {
+      "waiting_cohort_id": "waiting-cohort-001",
+      "source_backend_id": "velocity-lobby",
+      "destination_backend_id": "paper-main",
+      "target_instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "test",
+        "resource_kind": "instance",
+        "external_id": "instance-test-001"
+      },
+      "requested_count": 3,
+      "outcome_counts": {
+        "transferred": 1,
+        "already_at_destination": 0,
+        "disconnected": 1,
+        "rejected": 0,
+        "failed": 0,
+        "outcome_unknown": 1
+      },
+      "results": [
+        {
+          "proxy_session_id": "proxy-session-003",
+          "outcome": "outcome_unknown"
+        },
+        {
+          "proxy_session_id": "proxy-session-001",
+          "outcome": "transferred"
+        },
+        {
+          "proxy_session_id": "proxy-session-002",
+          "outcome": "disconnected"
+        }
+      ]
+    },
+    "transfer_validation_time": "2026-11-07T10:00:00Z",
+    "reconciliation_cases": [
+      {
+        "case_id": "fresh-source-backend",
+        "decision_time": "2026-11-07T10:00:05Z",
+        "inspection_request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "maximum_observation_age_seconds": 30
+        },
+        "inspection_result": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "connection_state": "connected",
+          "observed_at": "2026-11-07T10:00:02Z",
+          "current_backend_id": "velocity-lobby"
+        },
+        "retry_readiness_assertion": {
+          "assertion_id": "readiness-retry-001",
+          "server_id": "minecraft-test",
+          "environment_id": "test",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_check_set_id": "paper-ready-v1",
+          "observed_at": "2026-11-07T10:00:01Z",
+          "expires_at": "2026-11-07T10:01:00Z"
+        }
+      },
+      {
+        "case_id": "fresh-destination-backend",
+        "decision_time": "2026-11-07T10:00:05Z",
+        "inspection_request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "maximum_observation_age_seconds": 30
+        },
+        "inspection_result": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "connection_state": "connected",
+          "observed_at": "2026-11-07T10:00:02Z",
+          "current_backend_id": "paper-main"
+        },
+        "retry_readiness_assertion": {
+          "assertion_id": "readiness-retry-001",
+          "server_id": "minecraft-test",
+          "environment_id": "test",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_check_set_id": "paper-ready-v1",
+          "observed_at": "2026-11-07T10:00:01Z",
+          "expires_at": "2026-11-07T10:01:00Z"
+        }
+      },
+      {
+        "case_id": "stale-observation",
+        "decision_time": "2026-11-07T10:00:05Z",
+        "inspection_request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "maximum_observation_age_seconds": 30
+        },
+        "inspection_result": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "connection_state": "connected",
+          "observed_at": "2026-11-07T09:59:20Z",
+          "current_backend_id": "velocity-lobby"
+        },
+        "retry_readiness_assertion": {
+          "assertion_id": "readiness-retry-001",
+          "server_id": "minecraft-test",
+          "environment_id": "test",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_check_set_id": "paper-ready-v1",
+          "observed_at": "2026-11-07T10:00:01Z",
+          "expires_at": "2026-11-07T10:01:00Z"
+        }
+      },
+      {
+        "case_id": "future-observation",
+        "decision_time": "2026-11-07T10:00:05Z",
+        "inspection_request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "maximum_observation_age_seconds": 30
+        },
+        "inspection_result": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "connection_state": "connected",
+          "observed_at": "2026-11-07T10:00:06Z",
+          "current_backend_id": "velocity-lobby"
+        },
+        "retry_readiness_assertion": {
+          "assertion_id": "readiness-retry-001",
+          "server_id": "minecraft-test",
+          "environment_id": "test",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_check_set_id": "paper-ready-v1",
+          "observed_at": "2026-11-07T10:00:01Z",
+          "expires_at": "2026-11-07T10:01:00Z"
+        }
+      },
+      {
+        "case_id": "session-mismatch",
+        "decision_time": "2026-11-07T10:00:05Z",
+        "inspection_request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-004",
+          "maximum_observation_age_seconds": 30
+        },
+        "inspection_result": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-004",
+          "connection_state": "connected",
+          "observed_at": "2026-11-07T10:00:02Z",
+          "current_backend_id": "velocity-lobby"
+        },
+        "retry_readiness_assertion": {
+          "assertion_id": "readiness-retry-001",
+          "server_id": "minecraft-test",
+          "environment_id": "test",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_check_set_id": "paper-ready-v1",
+          "observed_at": "2026-11-07T10:00:01Z",
+          "expires_at": "2026-11-07T10:01:00Z"
+        }
+      },
+      {
+        "case_id": "environment-mismatch",
+        "decision_time": "2026-11-07T10:00:05Z",
+        "inspection_request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "other",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "maximum_observation_age_seconds": 30
+        },
+        "inspection_result": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "other",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "connection_state": "connected",
+          "observed_at": "2026-11-07T10:00:02Z",
+          "current_backend_id": "velocity-lobby"
+        },
+        "retry_readiness_assertion": {
+          "assertion_id": "readiness-retry-001",
+          "server_id": "minecraft-test",
+          "environment_id": "test",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_check_set_id": "paper-ready-v1",
+          "observed_at": "2026-11-07T10:00:01Z",
+          "expires_at": "2026-11-07T10:01:00Z"
+        }
+      },
+      {
+        "case_id": "unknown-connection-state",
+        "decision_time": "2026-11-07T10:00:05Z",
+        "inspection_request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "maximum_observation_age_seconds": 30
+        },
+        "inspection_result": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "connection_state": "unknown",
+          "observed_at": "2026-11-07T10:00:02Z"
+        },
+        "retry_readiness_assertion": {
+          "assertion_id": "readiness-retry-001",
+          "server_id": "minecraft-test",
+          "environment_id": "test",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_check_set_id": "paper-ready-v1",
+          "observed_at": "2026-11-07T10:00:01Z",
+          "expires_at": "2026-11-07T10:01:00Z"
+        }
+      },
+      {
+        "case_id": "disconnected-session",
+        "decision_time": "2026-11-07T10:00:05Z",
+        "inspection_request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "maximum_observation_age_seconds": 30
+        },
+        "inspection_result": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "connection_state": "disconnected",
+          "observed_at": "2026-11-07T10:00:02Z"
+        },
+        "retry_readiness_assertion": {
+          "assertion_id": "readiness-retry-001",
+          "server_id": "minecraft-test",
+          "environment_id": "test",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_check_set_id": "paper-ready-v1",
+          "observed_at": "2026-11-07T10:00:01Z",
+          "expires_at": "2026-11-07T10:01:00Z"
+        }
+      },
+      {
+        "case_id": "other-backend",
+        "decision_time": "2026-11-07T10:00:05Z",
+        "inspection_request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "maximum_observation_age_seconds": 30
+        },
+        "inspection_result": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "connection_state": "connected",
+          "observed_at": "2026-11-07T10:00:02Z",
+          "current_backend_id": "paper-other"
+        },
+        "retry_readiness_assertion": {
+          "assertion_id": "readiness-retry-001",
+          "server_id": "minecraft-test",
+          "environment_id": "test",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_check_set_id": "paper-ready-v1",
+          "observed_at": "2026-11-07T10:00:01Z",
+          "expires_at": "2026-11-07T10:01:00Z"
+        }
+      },
+      {
+        "case_id": "retry-readiness-expired",
+        "decision_time": "2026-11-07T10:00:05Z",
+        "inspection_request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "maximum_observation_age_seconds": 30
+        },
+        "inspection_result": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "proxy_session_id": "proxy-session-003",
+          "connection_state": "connected",
+          "observed_at": "2026-11-07T10:00:02Z",
+          "current_backend_id": "velocity-lobby"
+        },
+        "retry_readiness_assertion": {
+          "assertion_id": "readiness-retry-001",
+          "server_id": "minecraft-test",
+          "environment_id": "test",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_check_set_id": "paper-ready-v1",
+          "observed_at": "2026-11-07T10:00:01Z",
+          "expires_at": "2026-11-07T10:00:04Z"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "transfer_result_valid_and_bound": true,
+    "reconciliation_cases": [
+      {
+        "case_id": "fresh-source-backend",
+        "session_inspection_schema_valid": true,
+        "session_inspection_bound": true,
+        "session_inspection_fresh": true,
+        "retry_readiness_current": true,
+        "reconciliation_state": "still_on_source",
+        "retry_permitted": true
+      },
+      {
+        "case_id": "fresh-destination-backend",
+        "session_inspection_schema_valid": true,
+        "session_inspection_bound": true,
+        "session_inspection_fresh": true,
+        "retry_readiness_current": true,
+        "reconciliation_state": "already_at_destination",
+        "retry_permitted": false
+      },
+      {
+        "case_id": "stale-observation",
+        "session_inspection_schema_valid": true,
+        "session_inspection_bound": true,
+        "session_inspection_fresh": false,
+        "retry_readiness_current": true,
+        "reconciliation_state": "unresolved",
+        "retry_permitted": false
+      },
+      {
+        "case_id": "future-observation",
+        "session_inspection_schema_valid": true,
+        "session_inspection_bound": true,
+        "session_inspection_fresh": false,
+        "retry_readiness_current": true,
+        "reconciliation_state": "unresolved",
+        "retry_permitted": false
+      },
+      {
+        "case_id": "session-mismatch",
+        "session_inspection_schema_valid": true,
+        "session_inspection_bound": false,
+        "session_inspection_fresh": true,
+        "retry_readiness_current": true,
+        "reconciliation_state": "unresolved",
+        "retry_permitted": false
+      },
+      {
+        "case_id": "environment-mismatch",
+        "session_inspection_schema_valid": true,
+        "session_inspection_bound": false,
+        "session_inspection_fresh": true,
+        "retry_readiness_current": true,
+        "reconciliation_state": "unresolved",
+        "retry_permitted": false
+      },
+      {
+        "case_id": "unknown-connection-state",
+        "session_inspection_schema_valid": true,
+        "session_inspection_bound": true,
+        "session_inspection_fresh": true,
+        "retry_readiness_current": true,
+        "reconciliation_state": "unknown",
+        "retry_permitted": false
+      },
+      {
+        "case_id": "disconnected-session",
+        "session_inspection_schema_valid": true,
+        "session_inspection_bound": true,
+        "session_inspection_fresh": true,
+        "retry_readiness_current": true,
+        "reconciliation_state": "disconnected",
+        "retry_permitted": false
+      },
+      {
+        "case_id": "other-backend",
+        "session_inspection_schema_valid": true,
+        "session_inspection_bound": true,
+        "session_inspection_fresh": true,
+        "retry_readiness_current": true,
+        "reconciliation_state": "other_backend",
+        "retry_permitted": false
+      },
+      {
+        "case_id": "retry-readiness-expired",
+        "session_inspection_schema_valid": true,
+        "session_inspection_bound": true,
+        "session_inspection_fresh": true,
+        "retry_readiness_current": false,
+        "reconciliation_state": "still_on_source",
+        "retry_permitted": false
+      }
+    ]
+  },
+  "side_effect_expectation": "simulated",
+  "notes": "Only a fresh observation of the same session still connected to the requested source backend, together with a current readiness assertion for a retry, permits another transfer attempt."
+}
