@@ -36,8 +36,8 @@ Language-neutral fixtures should cover all nine table cells, unknown/missing con
 
 Do not change controller or infrastructure code as part of the protocol design slice.
 
-## Decision for review
+## Selected policy
 
-Confirm whether an explicitly requested resume from degraded should be allowed under policy and new readiness checks, as recommended here, or whether all degraded backups must end stopped. Either choice must be explicit in the catalog, parameter schema description, and conformance matrix before claiming complete backup resume coverage.
+The project owner selected explicit resume from degraded under current policy and fresh readiness checks. Omitted or false resume leaves a degraded server stopped. Carry this decision into the catalog, parameter schema description, and conformance matrix before claiming complete backup resume coverage.
 
 Related contracts: [operation catalog](../protocol/operation-catalog.md), [lifecycle](../protocol/lifecycle.md), [durable operations](../protocol/operations.md), and [backup parameters](../protocol/schemas/operations/backup-parameters.schema.json).
