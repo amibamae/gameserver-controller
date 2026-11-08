@@ -6,31 +6,12 @@
   "additionalProperties": false,
   "required": [
     "target",
-    "source_transfer",
     "expected_size_bytes",
     "expected_checksum"
   ],
   "properties": {
     "target": {
       "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-object-target"
-    },
-    "source_transfer": {
-      "allOf": [
-        {
-          "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-transfer-reference"
-        },
-        {
-          "type": "object",
-          "required": [
-            "direction"
-          ],
-          "properties": {
-            "direction": {
-              "const": "controller_to_adapter"
-            }
-          }
-        }
-      ]
     },
     "expected_size_bytes": {
       "type": "integer",

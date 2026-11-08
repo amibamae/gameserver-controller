@@ -29,34 +29,14 @@
     "object_streams": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 10000,
+      "maxItems": 64,
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "object_ref",
-          "transfer_ref"
-        ],
+        "required": ["object_ref"],
         "properties": {
           "object_ref": {
             "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-object-reference"
-          },
-          "transfer_ref": {
-            "allOf": [
-              {
-                "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-transfer-reference"
-              },
-              {
-                "properties": {
-                  "direction": {
-                    "const": "controller_to_adapter"
-                  }
-                },
-                "required": [
-                  "direction"
-                ]
-              }
-            ]
           }
         }
       }

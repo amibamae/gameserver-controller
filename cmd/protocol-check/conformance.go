@@ -1025,6 +1025,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:migrate-input", migrationInput); err != nil {
 			return nil, fmt.Errorf("migration input does not match schema: %w", err)
 		}
+		requestContext := asObject(input["request_context"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:common:request-context", requestContext); err != nil {
+			return nil, fmt.Errorf("migration request context does not match schema: %w", err)
+		}
 		sourceBackup := asObject(migrationInput["source_backup"])
 		backupData := asObject(sourceBackup["operation_data"])
 		manifest := asObject(backupData["manifest"])
@@ -1073,6 +1077,37 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		for _, matched := range matchedStreams {
 			if !matched {
 				streamsBound = false
+			}
+		}
+		transfers := arrayValue(requestContext, "stream_transfers")
+		if len(transfers) != len(streams) {
+			streamsBound = false
+		}
+		for i, rawStream := range streams {
+			if i >= len(transfers) {
+				break
+			}
+			transfer := asObject(transfers[i])
+			if stringValue(transfer, "direction") != "controller_to_adapter" {
+				streamsBound = false
+			}
+			for _, rawObject := range manifestObjects {
+				object := asObject(rawObject)
+				if !reflect.DeepEqual(object["object_ref"], asObject(asObject(rawStream)["object_ref"])) {
+					continue
+				}
+				expectedSize, err := integerValue(object["size_bytes"])
+				if err != nil {
+					return nil, err
+				}
+				maximumBytes, err := integerValue(transfer["maximum_bytes"])
+				if err != nil {
+					return nil, err
+				}
+				if maximumBytes < expectedSize {
+					streamsBound = false
+				}
+				break
 			}
 		}
 		preconditions := asObject(fixture["core_preconditions"])
@@ -1288,6 +1323,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-validate-input", backupInput); err != nil {
 			return nil, fmt.Errorf("backup validation input does not match schema: %w", err)
 		}
+		requestContext := asObject(input["request_context"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:common:request-context", requestContext); err != nil {
+			return nil, fmt.Errorf("backup validation request context does not match schema: %w", err)
+		}
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-validate-output", backupOutput); err != nil {
 			return nil, fmt.Errorf("backup validation output does not match schema: %w", err)
 		}
@@ -1306,7 +1345,12 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			streamRefs = append(streamRefs, asObject(rawStream)["object_ref"])
 		}
 		streamsBound := sameObjectRefSet(manifestRefs, streamRefs)
-		for _, rawStream := range arrayValue(backupInput, "object_streams") {
+		streams := arrayValue(backupInput, "object_streams")
+		transfers := arrayValue(requestContext, "stream_transfers")
+		if len(transfers) != len(streams) {
+			streamsBound = false
+		}
+		for i, rawStream := range streams {
 			stream := asObject(rawStream)
 			if stringValue(asObject(stream["object_ref"]), "environment_id") != stringValue(backupInput, "environment_id") {
 				streamsBound = false
@@ -1322,11 +1366,16 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 				if err != nil {
 					return nil, err
 				}
-				maximumBytes, err := integerValue(asObject(stream["transfer_ref"])["maximum_bytes"])
+				if i >= len(transfers) {
+					streamsBound = false
+					break
+				}
+				transfer := asObject(transfers[i])
+				maximumBytes, err := integerValue(transfer["maximum_bytes"])
 				if err != nil {
 					return nil, err
 				}
-				if maximumBytes < expectedSize {
+				if maximumBytes < expectedSize || stringValue(transfer, "direction") != "controller_to_adapter" {
 					streamsBound = false
 				}
 				break
