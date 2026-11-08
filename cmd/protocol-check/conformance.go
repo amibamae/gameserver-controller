@@ -1795,6 +1795,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"unknown_health_not_healthy": stringValue(healthOutput, "health") == "unknown",
 			"persistent_data_preserved":  boolValue(deleteOutput, "persistent_data_preserved"),
 		}, nil
+	case "execution.unit.health.diagnostic-redaction-and-binding":
+		return evaluateExecutionHealthDiagnostics(pkg, fixture)
 	case "execution.unit.logs.byte-bound-and-redaction":
 		return evaluateExecutionLogRead(pkg, fixture)
 	case "integration.proxy.register.expired-readiness-rejected":
