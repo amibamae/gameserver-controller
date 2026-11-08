@@ -72,7 +72,7 @@ func example(t *testing.T, path string, v any) {
 }
 
 func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
-	for _, scenario := range []string{"success", "digest", "size", "binding", "incomplete", "no-stream", "rejected-empty", "rejected-bytes", "unknown", "seal-error", "changed-input", "missing-lock", "wrong-version", "cleanup-error"} {
+	for _, scenario := range []string{"success", "digest", "size", "binding", "incomplete", "no-stream", "rejected-empty", "rejected-bytes", "unknown", "seal-error", "changed-input", "missing-lock", "wrong-version", "cleanup-error", "unknown-reference"} {
 		t.Run(scenario, func(t *testing.T) {
 			schemas, err := schemaregistry.Load()
 			if err != nil {
@@ -115,7 +115,7 @@ func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
 				var output map[string]any
 				example(t, "game-backup-capture-output.json", &output)
 				output["capture_id"] = in.CaptureID
-				if scenario != "no-stream" && scenario != "rejected-empty" && scenario != "unknown" && scenario != "cleanup-error" {
+				if scenario != "no-stream" && scenario != "rejected-empty" && scenario != "unknown" && scenario != "cleanup-error" && scenario != "unknown-reference" {
 					writer, err := broker.Claim(context.Background(), r.Params.RequestContext.StreamTransfers[0].TransferID, scope, nil)
 					if err != nil {
 						return adapter.InvokeResponse{}, err
@@ -140,15 +140,18 @@ func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
 				if scenario == "binding" {
 					output["capture_id"] = "different-capture"
 				}
-				if scenario == "rejected-empty" || scenario == "rejected-bytes" || scenario == "unknown" || scenario == "cleanup-error" {
+				if scenario == "rejected-empty" || scenario == "rejected-bytes" || scenario == "unknown" || scenario == "cleanup-error" || scenario == "unknown-reference" {
 					delete(output, "size_bytes")
 					delete(output, "checksum")
 					delete(output, "stream_completed")
 					output["outcome"] = "rejected"
 					output["reason_code"] = "capture_rejected"
-					if scenario == "unknown" {
+					if scenario == "unknown" || scenario == "unknown-reference" {
 						output["outcome"] = "outcome_unknown"
 						output["reconciliation_ref"] = map[string]any{"adapter_id": descriptor.AdapterID, "environment_id": scope.EnvironmentID, "resource_kind": "operation", "external_id": "capture-unknown"}
+						if scenario == "unknown-reference" {
+							output["reconciliation_ref"].(map[string]any)["environment_id"] = "production"
+						}
 					}
 				}
 				encoded, _ := json.Marshal(output)

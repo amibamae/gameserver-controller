@@ -191,6 +191,13 @@ func (r *Runtime) Invoke(ctx context.Context, adapterID string, request adapter.
 		return adapter.InvokeResponse{}, uncertain()
 	}
 	if output.Outcome == "outcome_unknown" {
+		var reference struct {
+			AdapterID     string `json:"adapter_id"`
+			EnvironmentID string `json:"environment_id"`
+		}
+		if json.Unmarshal(output.ReconciliationRef, &reference) != nil || reference.AdapterID != adapterID || reference.EnvironmentID != c.EnvironmentID {
+			return adapter.InvokeResponse{}, uncertain()
+		}
 		if len(response.Result.ExternalOperationRef) > 0 && !sameJSON(response.Result.ExternalOperationRef, output.ReconciliationRef) {
 			return adapter.InvokeResponse{}, uncertain()
 		}
