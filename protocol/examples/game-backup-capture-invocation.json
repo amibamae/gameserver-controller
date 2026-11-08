@@ -1,0 +1,45 @@
+{
+  "jsonrpc": "2.0",
+  "id": "request-backup-capture-004",
+  "method": "adapter.invoke",
+  "params": {
+    "protocol_version": "0.21.0-draft",
+    "capability": "game.backup.capture",
+    "request_context": {
+      "request_id": "request-backup-capture-004",
+      "correlation_id": "operation-backup-004",
+      "operation_id": "operation-backup-004",
+      "step_id": "capture-world",
+      "server_id": "minecraft-demo",
+      "environment_id": "staging",
+      "deadline": "2030-04-05T12:00:00Z",
+      "stream_transfers": [
+        {
+          "transfer_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "direction": "adapter_to_controller",
+          "maximum_bytes": 5368709120,
+          "expires_at": "2030-04-05T11:55:00Z"
+        }
+      ]
+    },
+    "input": {
+      "target": {
+        "server_id": "minecraft-demo",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.vultr",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-demo-01"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3",
+      "backup_id": "backup-demo-004",
+      "data_generation_id": "generation-demo-004",
+      "preparation_id": "prep-demo-004-world",
+      "data_set_id": "world",
+      "capture_id": "operation-backup-004-capture-world",
+      "consistency_mode": "offline"
+    }
+  }
+}

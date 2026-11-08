@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:game:backup-capture-input",
+  "title": "Game backup capture input",
+  "description": "Stable intent to capture one exact prepared persistent data set. The bounded stream handle is supplied only in transient invocation context.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "target",
+    "release_id",
+    "backup_id",
+    "data_generation_id",
+    "preparation_id",
+    "data_set_id",
+    "capture_id",
+    "consistency_mode"
+  ],
+  "properties": {
+    "target": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target"
+    },
+    "release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "backup_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "data_generation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "preparation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Exact preparation_id from a completed game.backup.prepare result for this target, generation, data set, and consistency mode."
+    },
+    "data_set_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "capture_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Controller-generated stable identity for this capture within the operation; adapters use it to avoid creating duplicate snapshots."
+    },
+    "consistency_mode": {
+      "enum": [
+        "offline",
+        "game_native"
+      ]
+    }
+  }
+}

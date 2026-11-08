@@ -61,6 +61,8 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Go vectors cover result-to-target binding for all seven standard operations, readiness target and freshness checks, and request-consistent stop drain outcomes.
 - Restart requires the exact selected game adapter's `game.save.request` capability version and schema identity, a `succeeded` save step in the same durable operation, and inspection of the expected running incarnation no later than the save's `saved_at` time.
 - The enclosing operation, immutable request snapshot, and any present result use the same `operation_type`, including results that preserve partial effects after failure or cancellation.
+- An uncertain adapter result's capability output is validated but not persisted as completed evidence. A capability `reconciliation_ref` and any envelope `external_operation_ref` normalize into the durable step reference only when they match; a conflict blocks retry and requires operator review.
+- Implementations that compute request fingerprints reproduce the canonical UTF-8 JSON and SHA-256 outputs in [request-fingerprint-jcs.json](test-vectors/request-fingerprint-jcs.json), including property ordering, number formatting, string escaping, and rejection of duplicate members, non-object parameters, and unsafe integers.
 - `server.define` leaves the logical server `unprovisioned` and creates no external resource; `server.start` includes a readiness assertion bound to the exact instance; `server.stop` confirms game save and runtime termination.
 - Operation record commits before side effect.
 - Same idempotency key and same request returns the same stable operation reference and does not dispatch a second side effect.
@@ -80,7 +82,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Adapter logs and errors redact secrets.
 - Hosting instance inspection is read-only and bound to the exact requested instance; `unknown` is not treated as `active` or `destroyed`. Start, stop, reboot, and destroy results bind the exact provider instance; accepted does not establish completion, completed requires the action's exact postcondition, reboot does not establish game readiness, and unknown requires inspection before retry. Before rebooting an instance with persistent or unknown data status, the core requires confirmed save or clean-stop evidence bound to the exact instance; bypass requires separate valid approval bound to the emergency reboot action and exact instance. Destroy is blocked unless the core confirms authorization, stopped state, and a verified backup for the current data generation. Any required approval must bind the exact action, logical server, environment, adapter, instance, plan fingerprint, expiry, and approver; expired or mismatched approvals produce no provider call. Provider waits bind the exact operation and instance, remain bounded, do not cancel provider work on timeout, and require the expected observed state before confirming the action; unknown outcomes, terminal failures, or mismatched instance/operation references require inspection before retry. Region, plan, and OS-offering catalog listings preserve opaque IDs, honor requested filters and page bounds, and never treat unknown availability as permission to create.
 - Game readiness output is bound to the exact requested instance and release; every requested required check has exactly one result, and `unknown` never permits `ready`.
-- Data-set descriptions are release-bound, use unique IDs and safe relative paths, and advertise supported consistency modes. Confirmed game saves require completion evidence; unknown save or backup preparation outcomes require reconciliation references.
+- Data-set descriptions are release-bound, use unique IDs and safe relative paths, and advertise supported consistency modes. Confirmed game saves require completion evidence; unknown save, backup preparation, or capture outcomes require reconciliation references. Backup capture binds exact preparation, target, release, data generation, data set, and stable capture ID; the one-use adapter-to-controller stream appears only in the transient invocation context, never the persisted step input or operation result. Its authorization scope expires within five minutes, respects its byte limit, and has independently verified byte count and SHA-256. A consumed or expired handle cannot be replayed, and game-native watermarks remain informational because this draft defines no interoperable verifier.
 - Game health results bind to the exact release and instance, contain exactly one result per requested check, and do not promote unknown evidence to healthy. Game backup validation uses bounded streams for the exact manifest objects; `unknown` validation never verifies a backup.
 - Game compatibility checks bind the exact backup manifest and target release, contain exactly one result per requested check, and derive aggregate status from all results. Unknown or incomplete evidence cannot be compatible, and a compatibility result does not verify backup integrity or authorize restore.
 - Game migration requires an exactly bound verified backup, a `migration_required` result, exact approval, a distinct stopped target, bounded streams for every manifest object, and new target data generation. The source remains unchanged, all requested migration checks must pass, and an unknown outcome requires reconciliation before retry.
@@ -111,6 +113,9 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - ETag is not treated as a content checksum.
 - A partial or missing object, length mismatch, or checksum mismatch blocks backup verification, restore, and destruction as applicable.
 - A checksum-valid backup from an older data generation does not authorize destruction of the current instance.
+- Game backup capture is dispatched only for a schema-valid, completed preparation that exactly binds target, release, backup, generation, data set, and consistency mode.
+- A capture result is accepted only when its complete binding and bounded stream integrity are verified; any schema-invalid result after dispatch requires reconciliation. A valid exact-bound `rejected` result proves no capture side effect, while an invalid or mismatched rejection requires reconciliation.
+- A game-native write watermark without a standardized verifier contract cannot establish freshness or authorize destruction; game-native backups remain recovery-only for destructive decisions in this draft.
 - A forced stop request without an approval reference is rejected by schema/policy.
 - Incomplete upload cannot be marked verified.
 - Checksum/length mismatch blocks restore and destruction.
@@ -162,6 +167,8 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [operation-lock-survives-restart.json](test-vectors/operation-lock-survives-restart.json)
 - [typed-define-start-stop-results.json](test-vectors/typed-define-start-stop-results.json)
 - [operation-type-binding.json](test-vectors/operation-type-binding.json)
+- [operation-unknown-result-reference-projection.json](test-vectors/operation-unknown-result-reference-projection.json)
+- [request-fingerprint-jcs.json](test-vectors/request-fingerprint-jcs.json)
 - [typed-define-start-stop-target-mismatch.json](test-vectors/typed-define-start-stop-target-mismatch.json)
 - [typed-define-start-stop-future-readiness.json](test-vectors/typed-define-start-stop-future-readiness.json)
 - [typed-define-start-stop-no-drain.json](test-vectors/typed-define-start-stop-no-drain.json)
@@ -187,6 +194,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [game-release-describe-integrity-and-identity.json](test-vectors/game-release-describe-integrity-and-identity.json)
 - [game-install-release-binding-and-reconciliation.json](test-vectors/game-install-release-binding-and-reconciliation.json)
 - [game-configure-pinned-schema-and-result-binding.json](test-vectors/game-configure-pinned-schema-and-result-binding.json)
+- [game-backup-capture-binding-and-stream-integrity.json](test-vectors/game-backup-capture-binding-and-stream-integrity.json)
 - [game-install-repeat-same-release.json](test-vectors/game-install-repeat-same-release.json)
 - [game-install-completed-verifies-exact-artifacts.json](test-vectors/game-install-completed-verifies-exact-artifacts.json)
 - [game-install-incomplete-artifact-set-requires-reconciliation.json](test-vectors/game-install-incomplete-artifact-set-requires-reconciliation.json)

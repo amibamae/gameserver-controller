@@ -92,7 +92,8 @@
     },
     "request_fingerprint": {
       "type": "string",
-      "pattern": "^sha256:[a-fA-F0-9]{64}$"
+      "pattern": "^sha256:[a-fA-F0-9]{64}$",
+      "description": "Fingerprint of the accepted management request parameters for idempotency; adapter reconciliation fingerprints the durable capability input separately."
     },
     "request_snapshot": {
       "type": "object",
@@ -213,7 +214,8 @@
             "format": "date-time"
           },
           "external_operation_ref": {
-            "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+            "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref",
+            "description": "Normalized reference retained for an accepted or uncertain external effect. For an outcome_unknown adapter response, the controller copies the capability output's reconciliation_ref or external_operation_ref here; it does not persist the transient output."
           },
           "error": {
             "$ref": "urn:gameserver-controller:0.21.0-draft:common:protocol-error"

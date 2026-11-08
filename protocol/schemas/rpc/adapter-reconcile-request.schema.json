@@ -18,7 +18,11 @@
         "operation_id": {"type": "string", "minLength": 1, "maxLength": 200},
         "step_id": {"type": "string", "minLength": 1, "maxLength": 200},
         "capability": {"type": "string", "minLength": 1, "maxLength": 160},
-        "request_fingerprint": {"type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$"},
+        "request_fingerprint": {
+          "type": "string",
+          "pattern": "^sha256:[a-fA-F0-9]{64}$",
+          "description": "SHA-256 of RFC 8785 JCS bytes for the immutable capability input. Excludes transient request context, stream handles, outputs, and resolved secret values."
+        },
         "external_operation_ref": {"$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"},
         "external_resource_refs": {
           "type": "array",

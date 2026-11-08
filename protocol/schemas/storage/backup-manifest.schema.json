@@ -95,6 +95,10 @@
         "evidence": {
           "type": "string",
           "maxLength": 2000
+        },
+        "write_watermark": {
+          "$ref": "urn:gameserver-controller:0.21.0-draft:game:backup-write-watermark",
+          "description": "Optional informational game-specific snapshot watermark. This draft defines no interoperable verifier; it does not establish freshness or destructive authority."
         }
       }
     },

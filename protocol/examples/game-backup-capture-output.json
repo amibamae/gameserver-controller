@@ -1,0 +1,27 @@
+{
+  "target": {
+    "server_id": "minecraft-demo",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.vultr",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-demo-01"
+    }
+  },
+  "release_id": "paper-1.21.11-build-3",
+  "backup_id": "backup-demo-004",
+  "data_generation_id": "generation-demo-004",
+  "preparation_id": "prep-demo-004-world",
+  "data_set_id": "world",
+  "capture_id": "operation-demo-004-capture-world",
+  "consistency_mode": "offline",
+  "outcome": "captured",
+  "stream_completed": true,
+  "size_bytes": 3,
+  "checksum": {
+    "algorithm": "sha256",
+    "digest": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  },
+  "observed_at": "2030-04-05T11:51:00Z"
+}

@@ -20,7 +20,7 @@ An `adapter.invoke` request carries:
 
 - `protocol_version`: the negotiated version.
 - `capability`: the exact name the adapter declared.
-- `request_context`: request and correlation IDs; operation and step IDs for mutating work; deadline; environment and, where applicable, logical server ID; and an idempotency key when supported.
+- `request_context`: request and correlation IDs; operation and step IDs for mutating work; deadline; environment and, where applicable, logical server ID; and an idempotency key when supported. A controller may add one-use `stream_transfers` immediately before dispatch when a capability needs bounded byte streams. These bearer handles are ephemeral invocation context; they MUST NOT be persisted in operation records or copied into logs, audit records, errors, or management API responses.
 - `input`: the capability-specific object, validated against its declared input schema.
 
 The controller must not trust actor identity or authorization claims from an adapter. It gives the adapter only the scoped operation context and permissions required for the work.
@@ -131,9 +131,11 @@ Example accepted result:
 
 The descriptor or protocol spec links the exact capability output schema. A successful JSON-RPC response alone does not prove the external operation finished.
 
+For an `outcome_unknown` response, the controller validates the capability output, then normalizes its `reconciliation_ref` or `external_operation_ref` into the durable operation step's `external_operation_ref`. If the JSON-RPC result also supplies its own `external_operation_ref`, it MUST exactly match any reference in the capability output; a conflict is untrusted and requires operator review. The controller persists the immutable step input and normalized reference, but MUST NOT persist the capability output as if the effect were complete. Reconciliation uses the operation/step IDs and the SHA-256 fingerprint of RFC 8785 JCS bytes for the durable capability input; transient request context, stream handles, outputs, and resolved secrets are excluded.
+
 ## 6. Reconcile
 
-`adapter.reconcile` receives the original operation and step IDs, capability name, prior external references, and a safe input reference or fingerprint. It should inspect state without mutating it.
+`adapter.reconcile` receives the original operation and step IDs, capability name, the fingerprint of the durable capability input, and any prior external references. It should inspect state without mutating it. The controller computes the fingerprint from RFC 8785 JCS bytes and excludes transient request context, stream handles, outputs, and resolved secret values.
 
 It returns a documented result such as `completed`, `not_applied`, `still_pending`, or `indeterminate`. It must not repeat the original side effect just to discover what happened. If the adapter cannot determine the outcome, the controller suspends the operation for operator review.
 

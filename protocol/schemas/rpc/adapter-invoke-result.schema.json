@@ -14,7 +14,10 @@
       "required": ["outcome", "output", "observed_at"],
       "properties": {
         "outcome": {"enum": ["completed", "accepted", "outcome_unknown"]},
-        "external_operation_ref": {"$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"},
+        "external_operation_ref": {
+          "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref",
+          "description": "Optional envelope-level reconciliation reference. If the capability output also includes a reconciliation_ref or external_operation_ref, this value must match it exactly."
+        },
         "output": {"type": "object"},
         "observed_at": {"type": "string", "format": "date-time"}
       }
