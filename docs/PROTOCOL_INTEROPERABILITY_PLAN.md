@@ -31,6 +31,7 @@ After the active draft schema slices are reviewed, use a limited offline profile
 - Session-scoped reconciliation for unknown Velocity transfers, including exact binding, observation freshness, already-at-destination resolution, and source-only retries under current readiness.
 - Synthetic privacy canaries in transfer requests, schema-valid error details, and diagnostic logs.
 - Standard operation-result type binding, including partial failure and cancellation when `operation_data` is absent.
+- Backup resume policy bound to the core-owned initial lifecycle state, preserving omitted versus explicit `resume_after_backup` and checking the full nine-cell state/request matrix, including degraded resume readiness.
 
 A limited profile reports exactly which requirements and fixture IDs it covers. It does not claim full controller or adapter conformance.
 
@@ -56,12 +57,13 @@ Use every case and expected assertion in each fixture below. The fixture's `expe
 | `operations.type-binding` | Per-record schema and type-binding outcomes, including valid and malformed partial cancellations |
 | `operations.restore.final-state-policy` | Omitted/false startup ends stopped; explicit startup ends ready; contradictions fail |
 | `operations.backup.no-resume-final-state` | Explicitly disabling resume forbids a successful ready result |
+| `operations.backup.initial-state-resume-policy` | All nine initial-state/request combinations, plus missing, unknown, and contradictory context |
 
-Resolve these IDs by reading the fixture files in the selected package, not by guessing filenames. Before a run, record the exact fixture paths and case counts from that snapshot. Some listed fixtures are currently proposed in separate drafts. A snapshot missing a required fixture cannot claim this profile; report it as not runnable, or name a narrower exploratory subset with its omissions.
+Resolve these IDs by reading the fixture files in the selected package, not by guessing filenames. Before a run, record the exact fixture paths and case counts from that snapshot. Some listed fixtures are currently proposed in separate drafts, including backup initial-state coverage in PR #123. A snapshot missing a required fixture cannot claim this profile; report it as not runnable, or name a narrower exploratory subset with its omissions.
 
 The raw-wire fixture supplies 30 parsing cases as `wire_hex` with expected acceptance and, for accepted strings, exact `parsed_string` values. Decode the hexadecimal bytes directly into the parser under test. Do not parse and reserialize those bytes first: a decoder could replace invalid Unicode or collapse duplicate members before the implementation sees them. The fixture is proposed in a separate draft and must exist in the selected immutable snapshot.
 
-Backup automatic resume from its starting lifecycle state is excluded until the proposed durable context contract and conformance are available. The selected degraded policy defaults to stopped and allows explicitly requested resume only under current policy and fresh readiness checks. The no-resume fixture above proves only the explicit false rule.
+Backup resume from its starting lifecycle state is covered by `operations.backup.initial-state-resume-policy`. The selected degraded policy defaults to stopped and allows explicitly requested resume only under current policy and fresh readiness checks. The no-resume fixture above separately covers the explicit false rule.
 
 ## Independent implementation
 
