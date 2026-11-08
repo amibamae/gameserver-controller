@@ -1,0 +1,49 @@
+{
+  "fixture_id": "execution.unit.graceful-stop.unknown-requires-inspection",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "execution.unit.graceful_stop",
+  "purpose": "An unknown graceful-stop result for the exact unit requires inspection before retry or dependent work.",
+  "input": {
+    "execution_input": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "grace_period_seconds": 120
+    },
+    "execution_output": {
+      "unit_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-unit",
+        "external_id": "paper-server"
+      },
+      "outcome": "outcome_unknown",
+      "state": "unknown",
+      "observed_at": "2026-11-07T19:20:00Z",
+      "external_operation_ref": {
+        "adapter_id": "execution.systemd",
+        "environment_id": "staging",
+        "resource_kind": "systemd-operation",
+        "external_id": "systemd-graceful-stop-unknown-021"
+      }
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "unit_bound": true,
+    "outcome": "outcome_unknown",
+    "state": "unknown",
+    "external_operation_ref_present": true,
+    "operation_ref_environment_matches": true,
+    "readiness_established": false,
+    "reconciliation_required": true,
+    "result_requires_inspection": true,
+    "retry_without_inspection": false,
+    "successful_start_claim_accepted": false,
+    "termination_confirmed": false
+  },
+  "side_effect_expected": "simulated"
+}
