@@ -976,6 +976,106 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          },
+          "status": {
+            "const": "succeeded"
+          },
+          "backup_initial_lifecycle_state": {
+            "const": "ready"
+          },
+          "request_snapshot": {
+            "properties": {
+              "parameters": {
+                "not": {
+                  "required": [
+                    "resume_after_backup"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "parameters"
+            ]
+          }
+        },
+        "required": [
+          "operation_type",
+          "status",
+          "backup_initial_lifecycle_state",
+          "request_snapshot"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_data": {
+                "properties": {
+                  "final_lifecycle_state": {
+                    "const": "ready"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          },
+          "status": {
+            "const": "succeeded"
+          },
+          "backup_initial_lifecycle_state": {
+            "const": "degraded"
+          },
+          "request_snapshot": {
+            "properties": {
+              "parameters": {
+                "not": {
+                  "required": [
+                    "resume_after_backup"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "parameters"
+            ]
+          }
+        },
+        "required": [
+          "operation_type",
+          "status",
+          "backup_initial_lifecycle_state",
+          "request_snapshot"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_data": {
+                "properties": {
+                  "final_lifecycle_state": {
+                    "const": "stopped"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "description": "Read-only durable operation resource. Unknown optional properties MAY be added at this top level; nested objects remain closed."
