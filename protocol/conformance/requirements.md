@@ -216,6 +216,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [game-validate-installation-valid-claim-with-unverified-artifact.json](test-vectors/game-validate-installation-valid-claim-with-unverified-artifact.json)
 - [game-validate-installation-valid-claim-with-checksum-mismatch.json](test-vectors/game-validate-installation-valid-claim-with-checksum-mismatch.json)
 - [execution-logs-health-delete-safety.json](test-vectors/execution-logs-health-delete-safety.json)
+- [execution-unit-health-diagnostic-redaction-and-binding.json](test-vectors/execution-unit-health-diagnostic-redaction-and-binding.json)
 - [proxy-register-expired-readiness.json](test-vectors/proxy-register-expired-readiness.json)
 - [proxy-backend-drain-unregister-state-confirmation.json](test-vectors/proxy-backend-drain-unregister-state-confirmation.json)
 - [proxy-backend-inspect-target-state-and-routability.json](test-vectors/proxy-backend-inspect-target-state-and-routability.json)
