@@ -167,6 +167,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [typed-define-start-stop-no-drain.json](test-vectors/typed-define-start-stop-no-drain.json)
 - [typed-define-start-stop-no-proxy-drain.json](test-vectors/typed-define-start-stop-no-proxy-drain.json)
 - [typed-provision-backup-restore-destroy-results.json](test-vectors/typed-provision-backup-restore-destroy-results.json)
+- [restore-result-final-state-policy.json](test-vectors/restore-result-final-state-policy.json)
 - [typed-provision-backup-restore-destroy-target-mismatch.json](test-vectors/typed-provision-backup-restore-destroy-target-mismatch.json)
 - [typed-provision-backup-restore-readiness-binding.json](test-vectors/typed-provision-backup-restore-readiness-binding.json)
 - [typed-provision-backup-restore-readiness-freshness.json](test-vectors/typed-provision-backup-restore-readiness-freshness.json)
