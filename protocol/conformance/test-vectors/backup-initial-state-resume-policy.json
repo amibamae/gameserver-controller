@@ -1033,8 +1033,7 @@
                 "expires_at": "2026-11-06T07:13:00Z"
               }
             }
-          },
-          "backup_initial_lifecycle_state": "ready"
+          }
         }
       },
       {
@@ -1131,7 +1130,7 @@
               "final_lifecycle_state": "stopped"
             }
           },
-          "backup_initial_lifecycle_state": "stopped"
+          "backup_initial_lifecycle_state": "ready"
         }
       },
       {
@@ -1242,7 +1241,7 @@
               }
             }
           },
-          "backup_initial_lifecycle_state": "ready"
+          "backup_initial_lifecycle_state": "unknown"
         }
       }
     ]
