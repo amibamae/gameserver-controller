@@ -49,10 +49,10 @@ type provisionBackupManifest struct {
 	} `json:"objects"`
 }
 
-func validateProvisionRestoreProfile(profile ServerProvisionProfile) error {
-	if profile.BackupStorageProfileID == "" || profile.BackupStorageAdapterID == "" ||
+func validateProvisionRestoreProfile(server store.LogicalServer, profile ServerProvisionProfile) error {
+	if profile.BackupStorageProfileID == "" || profile.BackupStorageProfileID != server.StorageProfile || profile.BackupStorageAdapterID == "" ||
 		!isObject(profile.GameReleaseDescription) || len(profile.RequiredCompatibilityCheckIDs) == 0 || len(profile.RequiredRestoreCheckIDs) == 0 {
-		return errors.New("trusted provision profile must pin backup storage, target release metadata, and required compatibility and restore checks")
+		return errors.New("trusted provision profile must match the server storage profile and pin target release metadata and required restore checks")
 	}
 	return nil
 }
@@ -133,7 +133,7 @@ func (w *ServerProvisionWorkflow) StreamTransfersForStep(ctx context.Context, op
 		return nil, err
 	}
 	profile, err := w.profiles.ResolveServerProvision(ctx, stored.Record, operation.RequestSnapshot.Parameters)
-	if err != nil || validateProvisionRestoreProfile(profile) != nil {
+	if err != nil || validateProvisionRestoreProfile(stored.Record, profile) != nil {
 		return nil, errors.New("trusted restore storage profile is unavailable")
 	}
 	var request provisionRequest
