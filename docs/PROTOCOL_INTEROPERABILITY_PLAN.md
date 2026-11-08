@@ -34,6 +34,34 @@ After the active draft schema slices are reviewed, use a limited offline profile
 
 A limited profile reports exactly which requirements and fixture IDs it covers. It does not claim full controller or adapter conformance.
 
+## Required fixture selection
+
+Use every case and expected assertion in each fixture below. The fixture's `expected` object is the published oracle; an independent consumer computes its own results from the inputs. A negative message that correctly fails validation is a passing case, not a skipped fixture.
+
+| Fixture ID | Required evidence |
+|---|---|
+| `game.release.describe.integrity-and-identity` | Exact release identity, unique artifacts, and supported checksum representation |
+| `game.configure.pinned-schema-and-result-binding` | All configuration cases, including digest mismatch, secret references, RFC 8785 serialization, and permuted member order |
+| `game.install.release-binding-and-reconciliation` | Exact artifact set, release-pinned expected/observed checksums, and uncertain outcomes |
+| `execution.unit.start.accepted-not-ready` | Accepted process startup does not establish game readiness |
+| `execution.unit.graceful-stop.unknown-requires-inspection` | Unknown stop does not confirm termination or permit blind retry |
+| `execution.unit.inspect.exact-target-state` | Exact running/stopped observations; unknown and mismatched unit results remain inconclusive |
+| `execution.unit.logs.byte-bound-and-redaction` | UTF-8 bytes plus newline separators, exact unit binding, and synthetic secret detection |
+| `execution.unit.health.diagnostic-redaction-and-binding` | Diagnostic canaries, target binding, and unknown health |
+| `integration.proxy.register.accepted-is-not-routable` | Registration acceptance alone does not authorize routing |
+| `integration.proxy.players.inspect.fresh-count-and-target-binding` | Count/timestamp pairing, exact target, age boundary, stale/future evidence, and unknown state |
+| `velocity-transfer-outcome-unknown-reconciliation` | Every reconciliation case, including destination resolution and source-only retry under current readiness |
+| `velocity-transfer-privacy-canaries` | Message/error probes and exact session-ID redaction in diagnostic logs |
+| `operations.type-binding` | Per-record schema and type-binding outcomes, including valid and malformed partial cancellations |
+| `operations.restore.final-state-policy` | Omitted/false startup ends stopped; explicit startup ends ready; contradictions fail |
+| `operations.backup.no-resume-final-state` | Explicitly disabling resume forbids a successful ready result |
+
+Resolve these IDs by reading the fixture files in the selected package, not by guessing filenames. Before a run, record the exact fixture paths and case counts from that snapshot. Some listed fixtures are currently proposed in separate drafts. A snapshot missing a required fixture cannot claim this profile; report it as not runnable, or name a narrower exploratory subset with its omissions.
+
+This selection does not yet name a shared raw-byte parsing corpus. Before claiming the full initial profile, select or publish messages and expected acceptance for duplicate member names, safe-integer boundaries in ordinary/decimal/exponent notation, invalid UTF-8, lone escaped surrogates, and valid surrogate pairs. Preserve invalid wire bytes using an unambiguous encoding such as hexadecimal; parsing the test corpus itself must not normalize them. Go unit tests alone do not establish cross-language agreement on those inputs.
+
+Backup automatic resume from its starting lifecycle state is excluded until the proposed durable context and degraded-state policy are resolved. The no-resume fixture above proves only the explicit false rule.
+
 ## Independent implementation
 
 Use an implementation and validator runtime independent from the Go conformance evaluator. Generated bindings are acceptable when they come from the pinned schemas. The independent consumer may live outside this repository; do not add a second maintained protocol-check tool here, so repository-owned tooling remains Go. The independent implementation must consume the same package files and fixture inputs, without importing Go evaluator code or relying on Go-generated expected outputs.
