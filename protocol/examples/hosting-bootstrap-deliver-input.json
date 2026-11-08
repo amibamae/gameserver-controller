@@ -1,0 +1,14 @@
+{
+  "instance_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "staging",
+    "resource_kind": "instance",
+    "external_id": "provider-instance-example"
+  },
+  "bootstrap": {
+    "source_uri": "https://artifacts.example.invalid/bootstrap/sha256-example",
+    "revision": "git:0123456789abcdef",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "inputs": {"game_profile": "paper-standard"}
+  }
+}

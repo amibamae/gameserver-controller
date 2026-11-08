@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-inspect-input",
+  "title": "Hosting bootstrap inspect input",
+  "description": "Inspect one exact bootstrap execution on one exact instance without changing host or provider state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["instance_ref", "bootstrap_execution_ref"],
+  "properties": {
+    "instance_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
+    "bootstrap_execution_ref": {
+      "allOf": [
+        {"$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"},
+        {"properties": {"resource_kind": {"const": "bootstrap-execution"}}, "required": ["resource_kind"]}
+      ]
+    }
+  }
+}

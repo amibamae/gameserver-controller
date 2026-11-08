@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-execution-output",
+  "title": "Hosting bootstrap execution output",
+  "description": "Observed status and evidence for one pinned bootstrap execution. Completion does not establish game readiness; the controller must run separate host and game readiness checks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["instance_ref", "bootstrap_execution_ref", "revision", "digest", "state", "observed_at"],
+  "properties": {
+    "instance_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
+    "bootstrap_execution_ref": {
+      "allOf": [
+        {"$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"},
+        {"properties": {"resource_kind": {"const": "bootstrap-execution"}}, "required": ["resource_kind"]}
+      ]
+    },
+    "revision": {"type": "string", "minLength": 1, "maxLength": 200},
+    "digest": {"type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$"},
+    "state": {"enum": ["running", "succeeded", "failed", "unknown"]},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "started_at": {"type": ["string", "null"], "format": "date-time"},
+    "completed_at": {"type": ["string", "null"], "format": "date-time"},
+    "exit_code": {"type": ["integer", "null"]},
+    "validation_evidence": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["check_id", "result", "observed_at"],
+        "properties": {
+          "check_id": {"type": "string", "minLength": 1, "maxLength": 200},
+          "result": {"enum": ["pass", "fail", "unknown"]},
+          "observed_at": {"type": "string", "format": "date-time"},
+          "summary": {"type": "string", "maxLength": 1000}
+        }
+      }
+    },
+    "safe_diagnostics": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "maxLength": 1000}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"state": {"const": "succeeded"}}, "required": ["state"]},
+      "then": {
+        "required": ["started_at", "completed_at", "exit_code", "validation_evidence"],
+        "properties": {
+          "exit_code": {"const": 0},
+          "validation_evidence": {"minItems": 1}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"state": {"const": "failed"}}, "required": ["state"]},
+      "then": {"required": ["started_at", "completed_at", "exit_code"]}
+    }
+  ]
+}

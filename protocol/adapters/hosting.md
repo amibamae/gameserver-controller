@@ -27,10 +27,13 @@ An adapter may declare any subset of these capabilities:
 | `hosting.network.inspect` | Inspect addresses and network attachments |
 | `hosting.firewall.manage` | Manage firewall policy when explicitly supported |
 | `hosting.bootstrap.deliver` | Deliver or invoke a protected bootstrap reference |
+| `hosting.bootstrap.inspect` | Inspect one exact bootstrap execution |
 
 Each capability declares constraints, permission scopes, idempotency behavior, and whether the adapter can reconcile a lost response. Catalog listings are read-only. Return region, plan, and OS IDs unchanged; they are opaque. An `unknown` availability result never authorizes creation.
 
 The read-only region, plan, and OS-list capabilities use registered schemas with opaque page tokens. The adapter-level `hosting.instance.create` call uses [instance-create-input.schema.json](../schemas/hosting/instance-create-input.schema.json) and [instance-create-output.schema.json](../schemas/hosting/instance-create-output.schema.json). The broader [provision request](../schemas/hosting/provision-request.schema.json) belongs to controller orchestration and is not sent wholesale to the hosting adapter.
+
+`hosting.bootstrap.deliver` accepts [bootstrap-deliver-input.schema.json](../schemas/hosting/bootstrap-deliver-input.schema.json) and returns [bootstrap-execution-output.schema.json](../schemas/hosting/bootstrap-execution-output.schema.json). It MUST bind the exact instance, immutable revision, and SHA-256 digest. The controller supplies only non-secret inputs; credentials remain in the protected secret-resolution channel. An accepted or uncertain execution MUST retain its exact `bootstrap_execution_ref` so the controller can reconcile it with `hosting.bootstrap.inspect`, whose input is [bootstrap-inspect-input.schema.json](../schemas/hosting/bootstrap-inspect-input.schema.json) and whose output uses the same execution schema. The adapter MUST reject an execution reference associated with another instance or bootstrap revision.
 
 ## 3. Create specification
 
@@ -67,10 +70,10 @@ Use least-privilege provider credentials; never include them in diagnostics. Net
 
 ## 6. Bootstrap
 
-The initial preferred path uses a provider-supported standard OS image and a reviewed, versioned bootstrap. The adapter may deliver a protected script reference or report a host connection target to a separate bootstrap runner.
+The initial preferred path uses a provider-supported standard OS image and a reviewed, versioned bootstrap. The adapter may deliver a protected script reference or start a separate bootstrap runner. A repeated delivery with the same instance, revision, digest, and operation step MUST be idempotent or return the exact existing execution reference; it MUST NOT launch an untracked duplicate run. The controller reconciles an accepted or uncertain execution by inspecting that exact reference rather than resubmitting blindly.
 
-Report how bootstrap started, its immutable revision/digest, execution reference, exit status, and validation evidence. Uploading a script or submitting a remote command does not prove the host is prepared.
+Report how bootstrap started, its immutable revision/digest, execution reference, exit status, timestamps, and validation evidence. A successful script exit does not prove the game is installed or ready. The controller MUST perform separate host and game readiness checks before transitioning the logical server to `ready`. Uploading a script or submitting a remote command does not prove the host is prepared.
 
 ## 7. Conformance cases
 
-Test filtered catalog results, opaque pagination, unknown availability, exact-instance start/stop completion, accepted and unknown outcomes, create success and ambiguous timeout, duplicate idempotency keys, inspect scope mismatch, provider transient failures, destroy-target mismatch, missing core authorization, and destroy-result reconciliation.
+Test filtered catalog results, opaque pagination, unknown availability, exact-instance start/stop completion, accepted and unknown outcomes, create success and ambiguous timeout, pinned bootstrap delivery, duplicate delivery idempotency, bootstrap execution reconciliation, cross-instance execution mismatch, false bootstrap success, duplicate idempotency keys, inspect scope mismatch, provider transient failures, destroy-target mismatch, missing core authorization, and destroy-result reconciliation.

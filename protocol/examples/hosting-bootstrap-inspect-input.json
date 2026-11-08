@@ -1,0 +1,14 @@
+{
+  "instance_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "staging",
+    "resource_kind": "instance",
+    "external_id": "provider-instance-example"
+  },
+  "bootstrap_execution_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "staging",
+    "resource_kind": "bootstrap-execution",
+    "external_id": "bootstrap-execution-example"
+  }
+}
