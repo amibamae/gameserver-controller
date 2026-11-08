@@ -1,0 +1,10 @@
+{
+  "proxy_instance_ref": {
+    "adapter_id": "integration.velocity",
+    "environment_id": "test",
+    "resource_kind": "proxy-instance",
+    "external_id": "velocity-edge-001"
+  },
+  "proxy_session_id": "proxy-session-003",
+  "maximum_observation_age_seconds": 30
+}
