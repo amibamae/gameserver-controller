@@ -19,11 +19,11 @@ import (
 )
 
 type provisionBackupResult struct {
-	OperationType string `json:"operation_type"`
-	Partial bool `json:"partial"`
-	FailedSteps []json.RawMessage `json:"failed_steps"`
+	OperationType        string            `json:"operation_type"`
+	Partial              bool              `json:"partial"`
+	FailedSteps          []json.RawMessage `json:"failed_steps"`
 	UnresolvedConditions []json.RawMessage `json:"unresolved_conditions"`
-	OperationData struct {
+	OperationData        struct {
 		BackupID       string          `json:"backup_id"`
 		EnvironmentID  string          `json:"environment_id"`
 		DataGeneration string          `json:"data_generation_id"`
@@ -93,7 +93,7 @@ func (w *ServerProvisionWorkflow) validateVerifiedProvisionBackup(server store.L
 			len(object.Checksum) != sha256.Size*2 || strings.TrimSpace(object.Checksum) != object.Checksum {
 			return nil, nil, errors.New("selected backup contains an invalid or cross-profile object reference")
 		}
-		if ref.VersionID == "" {
+		if profile.BackupStorageVersioningEnabled && ref.VersionID == "" {
 			return nil, nil, errors.New("selected backup object lacks an immutable version reference")
 		}
 		if _, err := hex.DecodeString(object.Checksum); err != nil {
@@ -390,8 +390,8 @@ func (w *ServerProvisionWorkflow) reconcileRestore(ctx context.Context, operatio
 	var input struct {
 		SourceBackup struct {
 			OperationData struct {
-				BackupID string `json:"backup_id"`
-				EnvironmentID string `json:"environment_id"`
+				BackupID         string `json:"backup_id"`
+				EnvironmentID    string `json:"environment_id"`
 				DataGenerationID string `json:"data_generation_id"`
 			} `json:"operation_data"`
 		} `json:"source_backup"`
