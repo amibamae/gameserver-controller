@@ -2558,8 +2558,8 @@ func evaluateVelocityTransferUnknownReconciliation(pkg *protocolPackage, fixture
 		"fixture_id": "velocity-transfer-partial-results",
 		"input": map[string]any{
 			"transfer_request": request,
-			"transfer_result": result,
-			"validation_time": input["transfer_validation_time"],
+			"transfer_result":  result,
+			"validation_time":  input["transfer_validation_time"],
 		},
 	})
 	if err != nil {
@@ -2644,13 +2644,13 @@ func evaluateVelocityTransferUnknownReconciliation(pkg *protocolPackage, fixture
 		}
 		retryPermitted := state == "still_on_source" && retryReadinessCurrent
 		caseResults = append(caseResults, map[string]any{
-			"case_id": stringValue(reconciliation, "case_id"),
+			"case_id":                         stringValue(reconciliation, "case_id"),
 			"session_inspection_schema_valid": true,
-			"session_inspection_bound": bound,
-			"session_inspection_fresh": fresh,
-			"retry_readiness_current": retryReadinessCurrent,
-			"reconciliation_state": state,
-			"retry_permitted": retryPermitted,
+			"session_inspection_bound":        bound,
+			"session_inspection_fresh":        fresh,
+			"retry_readiness_current":         retryReadinessCurrent,
+			"reconciliation_state":            state,
+			"retry_permitted":                 retryPermitted,
 		})
 	}
 	return map[string]any{
@@ -2658,7 +2658,6 @@ func evaluateVelocityTransferUnknownReconciliation(pkg *protocolPackage, fixture
 		"reconciliation_cases": caseResults,
 	}, nil
 }
-
 
 func readinessAssertionBindsAtCompletion(assertion map[string]any, completedAt, serverID, environmentID string, instanceRef any) (bool, error) {
 	if len(assertion) == 0 {
