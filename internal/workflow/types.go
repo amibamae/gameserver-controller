@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"regexp"
 	"sync"
+	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/store"
@@ -79,6 +80,12 @@ type DispatchGuard interface {
 // resolved secret values or references for unrelated steps.
 type StepSecretReferences interface {
 	SecretReferencesForStep(context.Context, store.OperationRecord, store.OperationStep) ([]adapter.SecretReference, error)
+}
+
+// StepStreamTransfers supplies controller-owned, bounded input streams for a
+// single adapter invocation. Stream sources are transient and never persisted.
+type StepStreamTransfers interface {
+	StreamTransfersForStep(context.Context, store.OperationRecord, store.OperationStep, time.Time) ([]adapter.StreamTransfer, error)
 }
 
 // LifecycleProjector derives a logical-server record from durable operation
