@@ -54,12 +54,12 @@ func TestCaptureAdapterConsumesTransientBrokerStream(t *testing.T) {
 	broker, _ := capturestream.New(1)
 	scope := capturestream.Scope{OperationID: request.Params.RequestContext.OperationID, StepID: request.Params.RequestContext.StepID, AdapterID: descriptor.AdapterID, ServerID: "minecraft-demo", EnvironmentID: "staging", InstanceAdapterID: "hosting.vultr", InstanceID: "instance-demo-01", DataGenerationID: "generation-demo-004", DataSetID: "world", CaptureID: "operation-backup-004-capture-world"}
 	request.Params.RequestContext.Deadline = time.Now().Add(2 * time.Minute)
-	ref, err := broker.Issue(scope, 3, time.Now().Add(time.Minute), request.Params.RequestContext.Deadline)
+	var sink bytes.Buffer
+	ref, ticket, err := broker.IssueTracked(scope, 3, time.Now().Add(time.Minute), request.Params.RequestContext.Deadline, &sink)
 	if err != nil {
 		t.Fatal(err)
 	}
 	request.Params.RequestContext.StreamTransfers = []capturestream.Reference{ref}
-	var sink bytes.Buffer
 	called := false
 	implementation := &captureAdapter{descriptor: descriptor, invoke: func(r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
 		called = true
@@ -69,7 +69,7 @@ func TestCaptureAdapterConsumesTransientBrokerStream(t *testing.T) {
 		if bytes.Contains(r.Params.Input, []byte(ref.TransferID)) {
 			t.Fatal("stream credential entered durable input")
 		}
-		writer, err := broker.Claim(context.Background(), r.Params.RequestContext.StreamTransfers[0].TransferID, scope, &sink)
+		writer, err := broker.Claim(context.Background(), r.Params.RequestContext.StreamTransfers[0].TransferID, scope, nil)
 		if err != nil {
 			return adapter.InvokeResponse{}, err
 		}
@@ -92,8 +92,22 @@ func TestCaptureAdapterConsumesTransientBrokerStream(t *testing.T) {
 	if err := registry.Register(implementation); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := registry.Invoke(context.Background(), descriptor.AdapterID, request); err != nil {
+	response, err := registry.Invoke(context.Background(), descriptor.AdapterID, request)
+	if err != nil {
 		t.Fatal(err)
+	}
+	evidence, err := ticket.Evidence()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reported struct {
+		Size     int64 `json:"size_bytes"`
+		Checksum struct {
+			Digest string `json:"digest"`
+		} `json:"checksum"`
+	}
+	if json.Unmarshal(response.Result.Output, &reported) != nil || evidence.Scope != scope || evidence.SizeBytes != reported.Size || evidence.SHA256 != reported.Checksum.Digest {
+		t.Fatal("adapter output does not match independent controller evidence")
 	}
 	if !called || sink.String() != "abc" {
 		t.Fatal("capture did not reach private staging sink")

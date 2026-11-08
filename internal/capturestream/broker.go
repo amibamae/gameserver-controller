@@ -43,6 +43,8 @@ func (Reference) GoString() string { return "[transient capture stream]" }
 type permit struct {
 	scope     Scope
 	reference Reference
+	ticket    *Ticket
+	sink      io.Writer
 }
 type Broker struct {
 	mu      sync.Mutex
@@ -60,6 +62,26 @@ func New(maxPending int) (*Broker, error) {
 
 // Issue bounds the lifetime by both five minutes and the adapter deadline.
 func (b *Broker) Issue(scope Scope, maximumBytes int64, expiresAt, deadline time.Time) (Reference, error) {
+	return b.issue(scope, maximumBytes, expiresAt, deadline, nil, nil)
+}
+
+// IssueTracked pins a controller-owned staging sink and returns a private
+// ticket for independently reading completion evidence after adapter dispatch.
+func (b *Broker) IssueTracked(scope Scope, maximumBytes int64, expiresAt, deadline time.Time, sink io.Writer) (Reference, *Ticket, error) {
+	if sink == nil {
+		return Reference{}, nil, ErrUnauthorized
+	}
+	ticket := &Ticket{}
+	ref, err := b.issue(scope, maximumBytes, expiresAt, deadline, sink, ticket)
+	if err != nil {
+		return Reference{}, nil, err
+	}
+	ticket.broker = b
+	ticket.id = ref.TransferID
+	return ref, ticket, nil
+}
+
+func (b *Broker) issue(scope Scope, maximumBytes int64, expiresAt, deadline time.Time, sink io.Writer, ticket *Ticket) (Reference, error) {
 	if b == nil {
 		return Reference{}, ErrUnauthorized
 	}
@@ -91,7 +113,7 @@ func (b *Broker) Issue(scope Scope, maximumBytes int64, expiresAt, deadline time
 		return Reference{}, errors.New("issue capture stream failed")
 	}
 	ref := Reference{TransferID: id, Direction: "adapter_to_controller", MaximumBytes: maximumBytes, ExpiresAt: expiresAt.UTC()}
-	b.pending[id] = permit{scope: scope, reference: ref}
+	b.pending[id] = permit{scope: scope, reference: ref, sink: sink, ticket: ticket}
 	return ref, nil
 }
 
@@ -99,13 +121,19 @@ func (b *Broker) Issue(scope Scope, maximumBytes int64, expiresAt, deadline time
 // canceled captures cannot replay it. A scope mismatch does not consume it.
 // The trusted caller owns the sink, including its cancellation and cleanup.
 func (b *Broker) Claim(ctx context.Context, id string, scope Scope, sink io.Writer) (*Writer, error) {
-	if b == nil || ctx == nil || sink == nil {
+	if b == nil || ctx == nil {
 		return nil, ErrUnauthorized
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	p, ok := b.pending[id]
 	if !ok || p.scope != scope {
+		return nil, ErrUnauthorized
+	}
+	if p.sink != nil {
+		sink = p.sink
+	}
+	if sink == nil {
 		return nil, ErrUnauthorized
 	}
 	if !p.reference.ExpiresAt.After(b.now()) {
@@ -116,11 +144,18 @@ func (b *Broker) Claim(ctx context.Context, id string, scope Scope, sink io.Writ
 	if ctx.Err() != nil {
 		return nil, ErrExpired
 	}
-	return &Writer{ctx: ctx, sink: sink, digest: sha256.New(), maximum: p.reference.MaximumBytes, expires: p.reference.ExpiresAt, now: b.now}, nil
+	writer := &Writer{ctx: ctx, sink: sink, digest: sha256.New(), maximum: p.reference.MaximumBytes, expires: p.reference.ExpiresAt, now: b.now, scope: scope}
+	if p.ticket != nil {
+		p.ticket.mu.Lock()
+		p.ticket.writer = writer
+		p.ticket.mu.Unlock()
+	}
+	return writer, nil
 }
 
 // Receipt contains only independently measured evidence, never the handle.
 type Receipt struct {
+	Scope     Scope
 	SizeBytes int64
 	SHA256    string
 }
@@ -134,6 +169,9 @@ type Writer struct {
 	now           func() time.Time
 	failure       error
 	closed        bool
+	scope         Scope
+	completed     bool
+	receipt       Receipt
 }
 
 func (w *Writer) live() error {
@@ -190,7 +228,9 @@ func (w *Writer) Complete() (Receipt, error) {
 	if err := w.live(); err != nil {
 		return Receipt{}, err
 	}
-	return Receipt{SizeBytes: w.size, SHA256: hex.EncodeToString(w.digest.Sum(nil))}, nil
+	w.receipt = Receipt{Scope: w.scope, SizeBytes: w.size, SHA256: hex.EncodeToString(w.digest.Sum(nil))}
+	w.completed = true
+	return w.receipt, nil
 }
 
 // Abort permanently prevents evidence from being issued for a partial stream.
