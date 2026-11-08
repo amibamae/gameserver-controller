@@ -27,6 +27,7 @@ After the active draft schema slices are reviewed, use a limited offline profile
 - `game.configure` RFC 8785 configuration-digest vectors, including secret references, number and string serialization, UTF-16 property ordering, array order, and member-order invariance.
 - Release-pinned artifact checksum evidence for game installation.
 - Execution start and proxy registration outcomes where acceptance alone does not prove readiness or routability.
+- Session-scoped reconciliation for unknown Velocity transfers, including exact binding, observation freshness, already-at-destination resolution, and source-only retries under current readiness.
 - Standard operation-result type binding, including partial failure and cancellation when `operation_data` is absent.
 
 A limited profile reports exactly which requirements and fixture IDs it covers. It does not claim full controller or adapter conformance.
