@@ -244,7 +244,12 @@ func (r *Registry) invoke(ctx context.Context, adapterID string, request InvokeR
 		if direction == "" || len(registered.descriptor.StreamTransportProfiles) == 0 {
 			return InvokeResponse{}, errors.New("capability does not declare stream transport")
 		}
+		seenTransferIDs := make(map[string]struct{}, len(transfers))
 		for _, transfer := range transfers {
+			if _, duplicate := seenTransferIDs[transfer.TransferID]; duplicate {
+				return InvokeResponse{}, errors.New("transient stream transfer IDs must be unique within an invocation")
+			}
+			seenTransferIDs[transfer.TransferID] = struct{}{}
 			if transfer.Direction != direction || !transfer.ExpiresAt.After(time.Now()) || transfer.ExpiresAt.After(request.Params.RequestContext.Deadline) || (capability.Name == "game.backup.capture" && time.Until(transfer.ExpiresAt) > 5*time.Minute) {
 				return InvokeResponse{}, errors.New("invalid transient stream transfer")
 			}
