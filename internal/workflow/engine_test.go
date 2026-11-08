@@ -46,6 +46,48 @@ func TestRunPersistsAdapterOutputAndCompletes(t *testing.T) {
 	}
 }
 
+func TestDispatchGuardRunsAfterDurableClaimAndBeforeAdapterCall(t *testing.T) {
+	fixture := newEngineFixture(t, "dispatch-guard", "1", nil)
+	var observed bool
+	fixture.definition.dispatchGuard = func(ctx context.Context, record store.OperationRecord, step store.OperationStep) error {
+		if step.StepID != "step-1" || step.Status != protocolstate.StepRunning || step.Attempt != 1 {
+			t.Fatalf("dispatch guard received step state %q/%d", step.Status, step.Attempt)
+		}
+		stored, err := fixture.store.GetOperation(record.OperationID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stored.Record.Steps[0].Status != protocolstate.StepRunning || stored.Record.Steps[0].Attempt != 1 {
+			t.Fatalf("dispatch guard ran before the durable running claim: %#v", stored.Record.Steps[0])
+		}
+		observed = true
+		return nil
+	}
+	completed, err := fixture.engine.Run(context.Background(), fixture.operation.Record.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !observed || completed.Record.Status != protocolstate.OperationSucceeded || len(fixture.adapter.Calls()) != 1 {
+		t.Fatalf("guard/result/calls = %v/%s/%d", observed, completed.Record.Status, len(fixture.adapter.Calls()))
+	}
+}
+
+func TestDispatchGuardFailurePreventsAdapterCall(t *testing.T) {
+	fixture := newEngineFixture(t, "dispatch-guard-failure", "1", nil)
+	fixture.definition.dispatchGuard = func(context.Context, store.OperationRecord, store.OperationStep) error {
+		return errors.New("capacity claim unavailable")
+	}
+	failed, err := fixture.engine.Run(context.Background(), fixture.operation.Record.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed.Record.Status != protocolstate.OperationFailed || failed.Record.Steps[0].Status != protocolstate.StepFailed ||
+		len(fixture.adapter.Calls()) != 0 || !strings.Contains(string(failed.Record.Error), "dispatch_guard_failed") {
+		t.Fatalf("guard failure dispatched or was not recorded safely: status=%s step=%s calls=%d error=%s",
+			failed.Record.Status, failed.Record.Steps[0].Status, len(fixture.adapter.Calls()), failed.Record.Error)
+	}
+}
+
 func TestBoundStepPersistsValidatedResolvedInputBeforeDispatch(t *testing.T) {
 	fixture := newEngineFixtureForOperation(t, "bound-input", "1", []fakeadapter.Reply{
 		{Outcome: adapter.OutcomeCompleted, Output: json.RawMessage(testExternalRef), ObservedAt: time.Now().UTC()},
@@ -597,12 +639,20 @@ type testDefinition struct {
 	preconditionErr         error
 	resolution              Resolution
 	reconcileFn             func(context.Context, store.OperationRecord, store.OperationStep) (Resolution, error)
+	dispatchGuard           func(context.Context, store.OperationRecord, store.OperationStep) error
 	operationType           string
 	mutateWithoutTransition bool
 }
 
 func (d *testDefinition) CheckPreconditions(context.Context, store.OperationRecord, store.OperationStep) error {
 	return d.preconditionErr
+}
+
+func (d *testDefinition) BeforeAdapterDispatch(ctx context.Context, operation store.OperationRecord, step store.OperationStep) error {
+	if d.dispatchGuard == nil {
+		return nil
+	}
+	return d.dispatchGuard(ctx, operation, step)
 }
 
 func (d *testDefinition) Reconcile(ctx context.Context, operation store.OperationRecord, step store.OperationStep) (Resolution, error) {

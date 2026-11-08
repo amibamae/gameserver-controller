@@ -403,6 +403,13 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 		failed.Steps[stepIndex].Error = errValue
 		return e.fail(ctx, running, failed, stepIndex, definition, errValue)
 	}
+	if guard, ok := definition.(DispatchGuard); ok {
+		if err := guard.BeforeAdapterDispatch(ctx, running.Record, step); err != nil {
+			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
+				"core.workflow.dispatch_guard_failed",
+				"A controller safety check failed immediately before adapter dispatch.", "safety_blocked")
+		}
+	}
 
 	requestID := adapterRequestID(running.Record.OperationID, step.StepID, step.Attempt)
 	correlationID := running.Record.CorrelationID
