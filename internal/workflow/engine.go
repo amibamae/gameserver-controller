@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/adapter"
+	"github.com/amibamae/gameserver-controller/internal/inputbinding"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
@@ -334,6 +335,24 @@ func (e *Engine) advanceLocked(ctx context.Context, operationID string) (store.S
 	}
 
 	step := current.Record.Steps[stepIndex]
+	if len(step.InputBindings) > 0 && len(step.ResolvedInput) == 0 {
+		resolved, resolveErr := resolveStepInput(current.Record.Steps, stepIndex)
+		if resolveErr != nil {
+			return e.suspend(current, "core.workflow.input_binding_unavailable", "A workflow input could not be safely resolved from an earlier completed step.")
+		}
+		step.ResolvedInput = resolved
+		_, preflightErr := e.preflight(current.Record, step)
+		if preflightErr != nil {
+			return e.suspend(current, "core.compatibility.capability_unavailable", "The exact adapter capability recorded for this step is unavailable or incompatible.")
+		}
+		resolvedRecord := current.Record
+		resolvedRecord.Steps[stepIndex].ResolvedInput = append(json.RawMessage(nil), resolved...)
+		current, err = e.updateOperation(current.Revision, resolvedRecord)
+		if err != nil {
+			return store.StoredOperation{}, err
+		}
+		step = current.Record.Steps[stepIndex]
+	}
 	capability, err := e.preflight(current.Record, step)
 	if err != nil {
 		return e.suspend(current, "core.compatibility.capability_unavailable", "The exact adapter capability recorded for this step is unavailable or incompatible.")
@@ -403,7 +422,7 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 				ServerID: running.Record.Target.ServerID, EnvironmentID: running.Record.Target.EnvironmentID,
 				Deadline: deadline,
 			},
-			Input: append(json.RawMessage(nil), step.Input...),
+			Input: append(json.RawMessage(nil), effectiveStepInput(step)...),
 		},
 	}
 	callContext, cancel := context.WithDeadline(ctx, deadline)
@@ -664,7 +683,8 @@ func (e *Engine) preflight(record store.OperationRecord, step store.OperationSte
 	if record.ProtocolVersion != e.adapters.ProtocolVersion() || record.ProtocolVersion != e.schemas.ProtocolVersion() {
 		return adapter.Capability{}, errors.New("operation protocol version differs from adapter registry")
 	}
-	if step.AdapterID == "" || step.CapabilityName == "" || step.CapabilityVersion == "" || !isObject(step.Input) {
+	input := effectiveStepInput(step)
+	if step.AdapterID == "" || step.CapabilityName == "" || step.CapabilityVersion == "" || !isObject(input) {
 		return adapter.Capability{}, errors.New("step does not contain a complete adapter invocation plan")
 	}
 	descriptor, err := e.adapters.Descriptor(step.AdapterID)
@@ -684,12 +704,30 @@ func (e *Engine) preflight(record store.OperationRecord, step store.OperationSte
 		if !e.schemas.HasSchema(capability.InputSchemaURI) || !e.schemas.HasSchema(capability.OutputSchemaURI) {
 			return adapter.Capability{}, errors.New("recorded capability schemas are unavailable")
 		}
-		if err := e.schemas.ValidateJSON(capability.InputSchemaURI, step.Input); err != nil {
+		if err := e.schemas.ValidateJSON(capability.InputSchemaURI, input); err != nil {
 			return adapter.Capability{}, fmt.Errorf("step input does not match recorded capability: %w", err)
 		}
 		return capability, nil
 	}
 	return adapter.Capability{}, errors.New("recorded capability is unavailable")
+}
+
+func effectiveStepInput(step store.OperationStep) json.RawMessage {
+	if len(step.ResolvedInput) > 0 {
+		return step.ResolvedInput
+	}
+	return step.Input
+}
+
+func resolveStepInput(steps []store.OperationStep, targetIndex int) (json.RawMessage, error) {
+	bindings := make([]inputbinding.Step, len(steps))
+	for i, step := range steps {
+		bindings[i] = inputbinding.Step{
+			StepID: step.StepID, Status: string(step.Status), Input: step.Input,
+			Output: step.Output, Binding: step.InputBindings,
+		}
+	}
+	return inputbinding.Resolve(bindings, targetIndex)
 }
 
 func (e *Engine) validateExternalOperationRef(step store.OperationStep, value json.RawMessage) error {

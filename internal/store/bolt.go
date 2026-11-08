@@ -13,6 +13,7 @@ import (
 
 	bolt "go.etcd.io/bbolt"
 
+	"github.com/amibamae/gameserver-controller/internal/inputbinding"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 )
 
@@ -739,8 +740,8 @@ func equalTimePointer(left, right *time.Time) bool {
 }
 
 func validateStepChanges(current, next []OperationStep, operationStatus protocolstate.OperationStatus) error {
-	if len(next) < len(current) {
-		return fmt.Errorf("%w: operation steps cannot be removed", ErrImmutableFields)
+	if len(next) != len(current) {
+		return fmt.Errorf("%w: accepted operation steps cannot be added or removed", ErrImmutableFields)
 	}
 	for i, previous := range current {
 		candidate := next[i]
@@ -752,8 +753,27 @@ func validateStepChanges(current, next []OperationStep, operationStatus protocol
 			(previous.CapabilityVersion != "" && previous.CapabilityVersion != candidate.CapabilityVersion) {
 			return fmt.Errorf("%w: recorded adapter capability identity cannot change", ErrImmutableFields)
 		}
+		if !sameInputBindings(previous.InputBindings, candidate.InputBindings) {
+			return fmt.Errorf("%w: recorded step input bindings cannot change", ErrImmutableFields)
+		}
 		if !bytes.Equal(previous.Input, candidate.Input) {
 			return fmt.Errorf("%w: recorded step input cannot change", ErrImmutableFields)
+		}
+		if len(previous.ResolvedInput) > 0 && !bytes.Equal(previous.ResolvedInput, candidate.ResolvedInput) {
+			return fmt.Errorf("%w: resolved step input cannot change", ErrImmutableFields)
+		}
+		if len(previous.ResolvedInput) == 0 && len(candidate.ResolvedInput) > 0 {
+			if len(previous.InputBindings) == 0 || previous.Status != protocolstate.StepPending || candidate.Status != protocolstate.StepPending || candidate.Attempt != previous.Attempt || operationStatus != protocolstate.OperationRunning {
+				return fmt.Errorf("%w: resolved input must be committed while the bound step is pending", ErrInvalidRecord)
+			}
+			steps := make([]inputbinding.Step, len(next))
+			for j, item := range next {
+				steps[j] = inputbinding.Step{StepID: item.StepID, Status: string(item.Status), Input: item.Input, Output: item.Output, Binding: item.InputBindings}
+			}
+			expected, err := inputbinding.Resolve(steps, i)
+			if err != nil || !bytes.Equal(expected, candidate.ResolvedInput) {
+				return fmt.Errorf("%w: resolved input does not match the immutable bindings and recorded outputs", ErrInvalidRecord)
+			}
 		}
 		if len(previous.Output) > 0 && !bytes.Equal(previous.Output, candidate.Output) {
 			return fmt.Errorf("%w: recorded step output cannot change", ErrImmutableFields)
@@ -777,12 +797,19 @@ func validateStepChanges(current, next []OperationStep, operationStatus protocol
 			return fmt.Errorf("%w: step attempt can change only when entering running", ErrImmutableFields)
 		}
 	}
-	for i := len(current); i < len(next); i++ {
-		if next[i].Status != protocolstate.StepPending || next[i].Attempt != 0 {
-			return fmt.Errorf("%w: new steps must start pending", ErrInvalidRecord)
+	return nil
+}
+
+func sameInputBindings(left, right []inputbinding.Binding) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
 		}
 	}
-	return nil
+	return true
 }
 
 func updateStepTimestamps(current, next []OperationStep, now time.Time) []OperationStep {
