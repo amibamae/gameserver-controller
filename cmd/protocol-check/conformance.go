@@ -1472,6 +1472,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"reconciliation_reference_present":       unknown && hasReference && targetBound,
 			"retry_permitted_without_reconciliation": !unknown || !hasReference,
 		}, nil
+	case "operations.restore.final-state-policy":
+		return evaluateRestoreFinalStatePolicy(pkg, fixture)
 	case "operations.typed-provision-backup-restore-destroy-results", "operations.typed-provision-backup-restore-destroy-target-mismatch", "operations.typed-provision-backup-restore-readiness-binding", "operations.typed-provision-backup-restore-readiness-freshness":
 		provisionOperation := asObject(input["provision_operation"])
 		backupOperation := asObject(input["backup_operation"])
