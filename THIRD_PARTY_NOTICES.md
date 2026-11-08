@@ -35,6 +35,7 @@ When distributing binaries containing Go runtime or standard-library code, repro
 ## github.com/dlclark/regexp2
 
 - Version: `v1.11.0`, pinned in [go.mod](go.mod)
+- Upstream: [github.com/dlclark/regexp2](https://github.com/dlclark/regexp2/tree/v1.11.0)
 - License: MIT
 - Copyright: Doug Clark
 - Full license: [licenses/regexp2-LICENSE](licenses/regexp2-LICENSE)
@@ -42,6 +43,7 @@ When distributing binaries containing Go runtime or standard-library code, repro
 ## github.com/gowebpki/jcs
 
 - Version: `v1.0.2`, pinned in [go.mod](go.mod)
+- Upstream: [github.com/gowebpki/jcs](https://github.com/gowebpki/jcs/tree/v1.0.2)
 - License: Apache License 2.0
 - Copyright notices in the upstream Go source: Copyright 2021-2026 Bret Jordan and Benedikt Thoma; Copyright 2006-2019 WebPKI.org
 - Original-work credit: The upstream README credits Anders Rundgren as the creator of the original JCS implementation and says this Go fork was made with his permission.
@@ -57,6 +59,7 @@ When distributing binaries containing Go runtime or standard-library code, repro
 ## golang.org/x/sys
 
 - Version: `v0.29.0`, pinned in [go.mod](go.mod)
+- Upstream: [golang.org/x/sys](https://github.com/golang/sys/tree/v0.29.0)
 - License: BSD 3-Clause
 - Copyright: Copyright 2009 The Go Authors
 - The pinned upstream license text matches [licenses/go-LICENSE](licenses/go-LICENSE) exactly; include that full text for x/sys as well.
@@ -64,6 +67,7 @@ When distributing binaries containing Go runtime or standard-library code, repro
 ## golang.org/x/text
 
 - Version: `v0.14.0`, pinned in [go.mod](go.mod)
+- Upstream: [golang.org/x/text](https://github.com/golang/text/tree/v0.14.0)
 - License: BSD 3-Clause
 - Copyright: Copyright (c) 2009 The Go Authors. All rights reserved.
 - Full license: [licenses/x-text-LICENSE](licenses/x-text-LICENSE)
@@ -71,6 +75,7 @@ When distributing binaries containing Go runtime or standard-library code, repro
 ## gopkg.in/yaml.v3
 
 - Version: `v3.0.1`, pinned in [go.mod](go.mod)
+- Upstream: [go-yaml/yaml](https://github.com/go-yaml/yaml/tree/v3.0.1)
 - License: MIT and Apache License 2.0; see the upstream license for file-level scope
 - Copyright notices: Canonical Ltd and Kirill Simonov, as stated in the upstream license
 - Full license: [licenses/yaml-LICENSE](licenses/yaml-LICENSE)
