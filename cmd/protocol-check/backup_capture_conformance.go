@@ -89,7 +89,7 @@ func evaluateBackupCapture(pkg *protocolPackage, fixture map[string]any) (map[st
 			outcome == "captured" && streamCompleted && streamWithinBounds && checksumValid
 		requiresReconciliation := !outputSchemaValid || outcome == "outcome_unknown" ||
 			outcome == "captured" && !captureAccepted ||
-			outcome == "rejected" && (!bindingExact || !dispatchPermitted)
+			outcome == "rejected" && (!bindingExact || !dispatchPermitted || len(streamBytes) != 0)
 
 		watermark := asObject(output["write_watermark"])
 		watermarkBound := len(watermark) > 0 && stringValue(watermark, "data_generation_id") == stringValue(request, "data_generation_id")
