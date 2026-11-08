@@ -15,6 +15,7 @@ Integration adapters connect the controller to proxies, monitoring, notification
 | `integration.proxy.backend.drain` | Stop new sessions/players reaching a backend |
 | `integration.proxy.backend.unregister` | Remove a backend from routing |
 | `integration.proxy.backend.players.inspect` | Inspect active player/session count where supported |
+| `integration.proxy.session.inspect` | Inspect one proxy-scoped session's connection state and current backend |
 | `integration.velocity.players.transfer` | Transfer an explicit waiting cohort to one confirmed-ready Velocity backend |
 | `integration.monitoring.event.publish` | Publish an allowed operational event |
 | `integration.notification.send` | Send an authorized notification |
@@ -53,7 +54,9 @@ The adapter MUST reject stale or mismatched readiness assertions and MUST NOT tr
 
 The result MUST contain one explicit outcome for every requested proxy session. Outcomes are `transferred`, `already_at_destination`, `disconnected`, `rejected`, `failed`, or `outcome_unknown`. The result array MAY be in any order; consumers MUST match outcomes by `proxy_session_id`. The adapter and controller MUST validate that session IDs are unique and exactly match the request, `requested_count` equals the request size, and aggregate counts equal the per-session outcomes. These cross-field invariants require behavioral validation in addition to JSON Schema validation. A partial batch result is valid and MUST NOT be collapsed into one success/failure boolean.
 
-An `outcome_unknown` result means the transfer may have occurred. The controller MUST inspect the proxy's current backend for that session before retrying; it MUST NOT blindly repeat the transfer. The adapter SHOULD use native Velocity mechanisms (for example, the `/send` command) internally where appropriate, but those mechanisms are implementation details, not protocol semantics.
+An `outcome_unknown` result means the transfer may have occurred. Before retrying, the controller MUST invoke `integration.proxy.session.inspect` for that exact proxy instance and session, then validate the response binding and freshness against `maximum_observation_age_seconds`. Only a fresh result showing the session still connected to the requested source backend permits another transfer attempt, and the retry MUST use a current readiness assertion for the same destination instance. A fresh result showing the destination backend resolves the session without a retry. Disconnected, unknown, stale, future-dated, mismatched, or other-backend observations MUST NOT authorize a retry. The adapter SHOULD use native Velocity mechanisms (for example, the `/send` command) internally where appropriate, but those mechanisms are implementation details, not protocol semantics.
+
+The session-inspect capability is read-only, bound to one proxy instance and opaque session ID, and returns only connection state, current backend when connected, and observation time. Adapters MUST NOT include player names, account UUIDs, IP addresses, chat, or unrelated activity in this result. Session IDs SHOULD remain short-lived and MUST be redacted from ordinary logs.
 
 The protocol uses opaque, proxy-scoped session identifiers, not Minecraft account UUIDs or player profiles. Adapters MUST avoid exposing names, UUIDs, IP addresses, chat, or unrelated player activity in operation results and logs. Session identifiers SHOULD be short-lived and MUST be redacted from ordinary diagnostic output.
 
