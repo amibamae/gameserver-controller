@@ -419,6 +419,25 @@ func TestServerProvisionRestoreRejectsCrossProfileBackupBeforeCreate(t *testing.
 	}
 }
 
+func TestServerProvisionRestoreRequiresPersistedStorageProfile(t *testing.T) {
+	f := newProvisionPlanFixture(t)
+	resolver, _ := provisionRestoreSetup(t, &f)
+	profile := f.profile
+	profile.BackupStorageProfileID = "another-storage-profile"
+	var err error
+	f.workflow, err = NewServerProvisionWorkflow(f.store, f.store, f.registry, f.schemas,
+		&staticProvisionProfileResolver{profile: profile}, time.Minute, resolver)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.workflow.BuildPlan(context.Background(), f.operation); err == nil {
+		t.Fatal("trusted profile differing from the persisted server storage profile was accepted")
+	}
+	if len(f.hosting.Calls()) != 0 {
+		t.Fatal("provider was called before stored storage-profile validation")
+	}
+}
+
 func TestServerProvisionRestoreReconcilesOnlyExactExecution(t *testing.T) {
 	f := newProvisionPlanFixture(t)
 	_, steps := provisionRestoreSetup(t, &f)
