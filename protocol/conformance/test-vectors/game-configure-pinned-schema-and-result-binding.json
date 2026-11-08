@@ -816,6 +816,166 @@
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
       }
+    },
+    {
+      "case_id": "rfc8785-canonicalization-cross-language",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "numbers": [
+            333333333.33333329,
+            4.50,
+            0.002,
+            0.000000000000000000000000001
+          ],
+          "rfc_string": "€$\u000f\nA'B\"\\\\\"/",
+          "literals": [
+            null,
+            true,
+            false
+          ],
+          "order": [
+            "first",
+            "second"
+          ],
+          "unicode_keys": {
+            "1": "One",
+            "\r": "Carriage Return",
+            "": "Control",
+            "ö": "Latin Small Letter O With Diaeresis",
+            "€": "Euro Sign",
+            "😀": "Emoji: Grinning Face",
+            "דּ": "Hebrew Letter Dalet With Dagesh"
+          }
+        },
+        "secret_bindings": {
+          "rcon.password": {
+            "secret_ref": "vault://games/minecraft-test/rcon",
+            "purpose": "rcon-password",
+            "permission_scope": [
+              "game.configure"
+            ],
+            "version_ref": "v1"
+          }
+        }
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "dd530be9ff4ae61b3431e9636f1f017c3c04a43390d3493f3d1d4d8563a11560"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "rfc8785-permuted-member-order",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "unicode_keys": {
+            "1": "One",
+            "דּ": "Hebrew Letter Dalet With Dagesh",
+            "😀": "Emoji: Grinning Face",
+            "€": "Euro Sign",
+            "ö": "Latin Small Letter O With Diaeresis",
+            "": "Control",
+            "\r": "Carriage Return"
+          },
+          "order": [
+            "first",
+            "second"
+          ],
+          "literals": [
+            null,
+            true,
+            false
+          ],
+          "rfc_string": "€$\u000f\nA'B\"\\\\\"/",
+          "numbers": [
+            333333333.33333329,
+            4.50,
+            0.002,
+            0.000000000000000000000000001
+          ]
+        },
+        "secret_bindings": {
+          "rcon.password": {
+            "version_ref": "v1",
+            "permission_scope": [
+              "game.configure"
+            ],
+            "purpose": "rcon-password",
+            "secret_ref": "vault://games/minecraft-test/rcon"
+          }
+        }
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "dd530be9ff4ae61b3431e9636f1f017c3c04a43390d3493f3d1d4d8563a11560"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
     }
   ],
   "expected": {
@@ -1043,6 +1203,34 @@
         "configuration_confirmed": false,
         "must_reconcile_before_retry": true,
         "configuration_digest_matches": false
+      },
+      {
+        "case_id": "rfc8785-canonicalization-cross-language",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": true,
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
+      },
+      {
+        "case_id": "rfc8785-permuted-member-order",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": true,
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
       }
     ]
   },
