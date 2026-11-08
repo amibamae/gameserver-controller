@@ -1,6 +1,6 @@
 # Backup resume context proposal
 
-Status: Draft decision proposal. This document proposes protocol metadata and conformance work; it does not implement a controller workflow.
+Status: Draft design record. The schema and conformance slice is in PR #123, stacked on PR #120. This document records the design rationale; it does not implement a controller workflow.
 
 ## Problem
 
@@ -30,7 +30,7 @@ An operation missing trustworthy starting-state context after dispatch remains r
 
 ## Implementation and conformance scope
 
-A separate schema slice should add the operation field and require it for successful backup results. Normative text must require persistence before the first transition or dispatch, even though a response schema alone cannot prove write ordering or immutability.
+PR #123 adds the operation field and requires it for successful backup results. Normative text requires persistence before the first transition or dispatch, even though a response schema alone cannot prove write ordering or immutability.
 
 Language-neutral fixtures should cover all nine table cells, unknown/missing context, contradictory final states, and readiness binding/freshness. A Go fake implementation exercise should additionally record the context commit and attempted effects, restart between backup and resume, reject context mutation, and prove that missing context dispatches no startup call.
 
