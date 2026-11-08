@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-find-by-resource-key-output",
+  "title": "Hosting instance lookup by controller resource key",
+  "description": "Complete provider inventory lookup result. At most two matches are returned so callers can distinguish zero, one, and duplicate resources.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["resource_key", "inventory_complete", "matches", "observed_at"],
+  "properties": {
+    "resource_key": {"type": "string", "pattern": "^gsc-[a-f0-9]{64}$"},
+    "inventory_complete": {"const": true},
+    "matches": {
+      "type": "array",
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["instance_ref", "state"],
+        "properties": {
+          "instance_ref": {"$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"},
+          "state": {"enum": ["creating", "active", "stopped", "destroying", "destroyed", "failed", "unknown"]}
+        }
+      }
+    },
+    "observed_at": {"type": "string", "format": "date-time"}
+  }
+}

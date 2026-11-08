@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-find-by-resource-key-input",
+  "title": "Find hosting instance by controller resource key",
+  "description": "Look up one controller-managed instance using the stable key supplied to hosting.instance.create.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["resource_key"],
+  "properties": {
+    "resource_key": {"type": "string", "pattern": "^gsc-[a-f0-9]{64}$"}
+  }
+}
