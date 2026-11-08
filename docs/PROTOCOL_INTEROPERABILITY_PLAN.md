@@ -25,8 +25,9 @@ After the active draft schema slices are reviewed, use a limited offline profile
 - Duplicate JSON object member names are rejected before ordinary JSON parsing.
 - The protocol's interoperable integer and Unicode rules.
 - `game.configure` RFC 8785 configuration-digest vectors, including secret references, number and string serialization, UTF-16 property ordering, array order, and member-order invariance.
-- Release-pinned artifact checksum evidence for game installation.
-- Execution start and proxy registration outcomes where acceptance alone does not prove readiness or routability.
+- Release-pinned installation evidence for the exact artifact set, including per-artifact expected and observed checksums.
+- Execution lifecycle outcomes: exact unit inspection, unknown start and graceful-stop reconciliation, and the distinction between process-running and game-ready.
+- Proxy player-count freshness and registration outcomes where acceptance alone does not prove routability.
 - Session-scoped reconciliation for unknown Velocity transfers, including exact binding, observation freshness, already-at-destination resolution, and source-only retries under current readiness.
 - Synthetic privacy canaries in transfer requests, schema-valid error details, and diagnostic logs.
 - Standard operation-result type binding, including partial failure and cancellation when `operation_data` is absent.
