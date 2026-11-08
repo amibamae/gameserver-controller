@@ -262,7 +262,9 @@
           {
             "if": {
               "properties": {
-                "status": {"const": "succeeded"}
+                "status": {
+                  "const": "succeeded"
+                }
               },
               "required": [
                 "status",
@@ -556,6 +558,127 @@
         "properties": {
           "result": {
             "$ref": "urn:gameserver-controller:0.21.0-draft:operations:server-stop-result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.restore"
+          },
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "operation_type",
+          "status"
+        ]
+      },
+      "then": {
+        "if": {
+          "properties": {
+            "request_snapshot": {
+              "properties": {
+                "parameters": {
+                  "properties": {
+                    "start_after_restore": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "start_after_restore"
+                  ]
+                }
+              },
+              "required": [
+                "parameters"
+              ]
+            }
+          },
+          "required": [
+            "request_snapshot"
+          ]
+        },
+        "then": {
+          "properties": {
+            "result": {
+              "properties": {
+                "operation_data": {
+                  "properties": {
+                    "final_lifecycle_state": {
+                      "const": "ready"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "result": {
+              "properties": {
+                "operation_data": {
+                  "properties": {
+                    "final_lifecycle_state": {
+                      "const": "stopped"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          },
+          "status": {
+            "const": "succeeded"
+          },
+          "request_snapshot": {
+            "properties": {
+              "parameters": {
+                "properties": {
+                  "resume_after_backup": {
+                    "const": false
+                  }
+                },
+                "required": [
+                  "resume_after_backup"
+                ]
+              }
+            },
+            "required": [
+              "parameters"
+            ]
+          }
+        },
+        "required": [
+          "operation_type",
+          "status",
+          "request_snapshot"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_data": {
+                "properties": {
+                  "final_lifecycle_state": {
+                    "const": "stopped"
+                  }
+                }
+              }
+            }
           }
         }
       }

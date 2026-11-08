@@ -1,0 +1,235 @@
+{
+  "fixture_id": "operations.backup.no-resume-final-state",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "operations.result",
+  "purpose": "A successful backup with resume_after_backup explicitly false leaves the server stopped.",
+  "input": {
+    "evaluations": [
+      {
+        "case_id": "no-resume-stopped",
+        "operation": {
+          "operation_id": "operation-backup-no-resume-stopped",
+          "operation_type": "server.backup",
+          "protocol_version": "0.21.0-draft",
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "status": "succeeded",
+          "actor_id": "operator-example",
+          "request_snapshot": {
+            "operation_type": "server.backup",
+            "parameters": {
+              "backup_profile": "daily",
+              "expected_instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "test",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              },
+              "resume_after_backup": false
+            }
+          },
+          "created_at": "2026-11-06T07:10:00Z",
+          "updated_at": "2026-11-06T07:12:00Z",
+          "started_at": "2026-11-06T07:10:30Z",
+          "completed_at": "2026-11-06T07:12:00Z",
+          "steps": [],
+          "result": {
+            "outcome_summary": "Backup captured and verified for the current data generation.",
+            "affected_resources": [],
+            "completed_steps": [],
+            "failed_steps": [],
+            "warnings": [],
+            "unresolved_conditions": [],
+            "audit_event_ids": [
+              "audit-example-001"
+            ],
+            "partial": false,
+            "operation_type": "server.backup",
+            "operation_data": {
+              "backup_id": "backup-test-002",
+              "environment_id": "test",
+              "data_generation_id": "generation-test-002",
+              "manifest": {
+                "manifest_version": "1",
+                "backup_id": "backup-test-002",
+                "server_id": "minecraft-test",
+                "environment_id": "test",
+                "data_generation_id": "generation-test-002",
+                "source_instance_ref": {
+                  "adapter_id": "hosting.example",
+                  "environment_id": "test",
+                  "resource_kind": "instance",
+                  "external_id": "instance-test-001"
+                },
+                "created_at": "2026-11-06T07:10:00Z",
+                "source_operation_id": "operation-backup-001",
+                "game": {
+                  "adapter_id": "game.minecraft-paper",
+                  "name": "Minecraft Java Edition",
+                  "version": "paper-test"
+                },
+                "consistency": {
+                  "mode": "offline",
+                  "evidence": "Runtime stopped and data flushed before capture."
+                },
+                "objects": [
+                  {
+                    "size_bytes": 1024,
+                    "checksum_algorithm": "sha256",
+                    "checksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "object_ref": {
+                      "adapter_id": "storage.s3-compatible",
+                      "storage_profile_id": "profile-test",
+                      "environment_id": "test",
+                      "container": "test-backups",
+                      "key": "backups/minecraft-test/world.tar.zst",
+                      "version_id": "object-version-002"
+                    }
+                  }
+                ]
+              },
+              "verified_at": "2026-11-06T07:12:00Z",
+              "final_lifecycle_state": "stopped"
+            }
+          }
+        }
+      },
+      {
+        "case_id": "no-resume-ready",
+        "operation": {
+          "operation_id": "operation-backup-no-resume-ready",
+          "operation_type": "server.backup",
+          "protocol_version": "0.21.0-draft",
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            }
+          },
+          "status": "succeeded",
+          "actor_id": "operator-example",
+          "request_snapshot": {
+            "operation_type": "server.backup",
+            "parameters": {
+              "backup_profile": "daily",
+              "expected_instance_ref": {
+                "adapter_id": "hosting.example",
+                "environment_id": "test",
+                "resource_kind": "instance",
+                "external_id": "instance-test-001"
+              },
+              "resume_after_backup": false
+            }
+          },
+          "created_at": "2026-11-06T07:10:00Z",
+          "updated_at": "2026-11-06T07:12:00Z",
+          "started_at": "2026-11-06T07:10:30Z",
+          "completed_at": "2026-11-06T07:12:00Z",
+          "steps": [],
+          "result": {
+            "outcome_summary": "Backup captured and verified for the current data generation.",
+            "affected_resources": [],
+            "completed_steps": [],
+            "failed_steps": [],
+            "warnings": [],
+            "unresolved_conditions": [],
+            "audit_event_ids": [
+              "audit-example-001"
+            ],
+            "partial": false,
+            "operation_type": "server.backup",
+            "operation_data": {
+              "backup_id": "backup-test-002",
+              "environment_id": "test",
+              "data_generation_id": "generation-test-002",
+              "manifest": {
+                "manifest_version": "1",
+                "backup_id": "backup-test-002",
+                "server_id": "minecraft-test",
+                "environment_id": "test",
+                "data_generation_id": "generation-test-002",
+                "source_instance_ref": {
+                  "adapter_id": "hosting.example",
+                  "environment_id": "test",
+                  "resource_kind": "instance",
+                  "external_id": "instance-test-001"
+                },
+                "created_at": "2026-11-06T07:10:00Z",
+                "source_operation_id": "operation-backup-001",
+                "game": {
+                  "adapter_id": "game.minecraft-paper",
+                  "name": "Minecraft Java Edition",
+                  "version": "paper-test"
+                },
+                "consistency": {
+                  "mode": "offline",
+                  "evidence": "Runtime stopped and data flushed before capture."
+                },
+                "objects": [
+                  {
+                    "size_bytes": 1024,
+                    "checksum_algorithm": "sha256",
+                    "checksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "object_ref": {
+                      "adapter_id": "storage.s3-compatible",
+                      "storage_profile_id": "profile-test",
+                      "environment_id": "test",
+                      "container": "test-backups",
+                      "key": "backups/minecraft-test/world.tar.zst",
+                      "version_id": "object-version-002"
+                    }
+                  }
+                ]
+              },
+              "verified_at": "2026-11-06T07:12:00Z",
+              "final_lifecycle_state": "ready",
+              "readiness_assertion": {
+                "assertion_id": "readiness-test-001",
+                "server_id": "minecraft-test",
+                "environment_id": "test",
+                "instance_ref": {
+                  "adapter_id": "hosting.example",
+                  "environment_id": "test",
+                  "resource_kind": "instance",
+                  "external_id": "instance-test-001"
+                },
+                "readiness_check_set_id": "paper-ready-v1",
+                "observed_at": "2026-11-06T07:11:30Z",
+                "expires_at": "2026-11-06T07:13:00Z"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "no-resume-stopped",
+        "parameters_schema_valid": true,
+        "operation_schema_valid": true,
+        "final_state_matches_policy": true
+      },
+      {
+        "case_id": "no-resume-ready",
+        "parameters_schema_valid": true,
+        "operation_schema_valid": false,
+        "final_state_matches_policy": false
+      }
+    ]
+  },
+  "side_effect_expected": "none"
+}
