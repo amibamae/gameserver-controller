@@ -1,0 +1,37 @@
+{
+  "fixture_id": "hosting.instance.wait.without-operation-reference",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "hosting.instance.wait",
+  "purpose": "Wait can poll an exact instance when the provider does not expose an operation reference.",
+  "input": {
+    "wait_input": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-022"
+      },
+      "expected_state": "active",
+      "wait_timeout_seconds": 60
+    },
+    "wait_output": {
+      "instance_ref": {
+        "adapter_id": "hosting.example",
+        "environment_id": "staging",
+        "resource_kind": "instance",
+        "external_id": "instance-paper-022"
+      },
+      "operation_status": "succeeded",
+      "instance_state": "active",
+      "observed_at": "2026-11-08T20:45:00Z"
+    }
+  },
+  "expected": {
+    "schemas_valid": true,
+    "target_bound": true,
+    "operation_reference_bound": true,
+    "wait_completed": true,
+    "poll_again": false,
+    "instance_postcondition_confirmed": true
+  }
+}
