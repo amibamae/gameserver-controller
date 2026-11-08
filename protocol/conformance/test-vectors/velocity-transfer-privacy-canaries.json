@@ -9,8 +9,7 @@
       "synthetic-account-name-canary",
       "synthetic-account-uuid-canary",
       "synthetic-ip-address-canary",
-      "synthetic-chat-canary",
-      "synthetic-proxy-session-canary"
+      "synthetic-chat-canary"
     ],
     "transfer_request": {
       "server_id": "minecraft-test",
@@ -158,9 +157,13 @@
       {
         "case_id": "diagnostic-log-leak",
         "diagnostic_log_lines": [
-          "Transfer failed for session synthetic-proxy-session-canary."
+          "Transfer failed for session proxy-session-privacy-001."
         ]
       }
+    ],
+    "log_redaction_probes": [
+      "proxy-session-privacy-001",
+      "synthetic-proxy-session-canary"
     ]
   },
   "expected": {
@@ -173,7 +176,8 @@
         "request_contains_privacy_probe": false,
         "result_contains_privacy_probe": false,
         "logs_contain_privacy_probe": false,
-        "privacy_compliant": true
+        "privacy_compliant": true,
+        "logs_contain_session_id": false
       },
       {
         "case_id": "request-field-leak",
@@ -183,7 +187,8 @@
         "request_contains_privacy_probe": true,
         "result_contains_privacy_probe": false,
         "logs_contain_privacy_probe": false,
-        "privacy_compliant": false
+        "privacy_compliant": false,
+        "logs_contain_session_id": false
       },
       {
         "case_id": "schema-valid-error-leak",
@@ -193,7 +198,8 @@
         "request_contains_privacy_probe": false,
         "result_contains_privacy_probe": true,
         "logs_contain_privacy_probe": false,
-        "privacy_compliant": false
+        "privacy_compliant": false,
+        "logs_contain_session_id": false
       },
       {
         "case_id": "diagnostic-log-leak",
@@ -203,7 +209,8 @@
         "request_contains_privacy_probe": false,
         "result_contains_privacy_probe": false,
         "logs_contain_privacy_probe": true,
-        "privacy_compliant": false
+        "privacy_compliant": false,
+        "logs_contain_session_id": true
       }
     ]
   },
