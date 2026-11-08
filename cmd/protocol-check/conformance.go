@@ -1753,8 +1753,6 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"stop_postconditions_confirmed":     stopPostconditions,
 		}, nil
 	case "execution.logs.health.delete.safety":
-	case "execution.unit.logs.byte-bound-and-redaction":
-		return evaluateExecutionLogRead(pkg, fixture)
 		logsInput, logsOutput := asObject(input["logs_input"]), asObject(input["logs_output"])
 		healthInput, healthOutput := asObject(input["health_input"]), asObject(input["health_output"])
 		deleteInput, deleteOutput := asObject(input["delete_input"]), asObject(input["delete_output"])
@@ -1797,6 +1795,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"unknown_health_not_healthy": stringValue(healthOutput, "health") == "unknown",
 			"persistent_data_preserved":  boolValue(deleteOutput, "persistent_data_preserved"),
 		}, nil
+	case "execution.unit.logs.byte-bound-and-redaction":
+		return evaluateExecutionLogRead(pkg, fixture)
 	case "integration.proxy.register.expired-readiness-rejected":
 		registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
