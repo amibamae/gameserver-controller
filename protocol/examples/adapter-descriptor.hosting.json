@@ -5,7 +5,7 @@
   "implementation_version": "0.1.0",
   "protocol_versions": ["0.21.0-draft"],
   "contract_versions": ["hosting.v1-draft"],
-  "required_permissions": ["instance.create", "instance.inspect"],
+  "required_permissions": ["instance.create", "instance.inspect", "bootstrap.deliver", "bootstrap.inspect"],
   "capabilities": [
     {
       "name": "hosting.instance.create",
@@ -22,11 +22,28 @@
       "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:instance-inspect-input",
       "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:instance-inspect-output",
       "required_permissions": ["instance.inspect"]
+    },
+    {
+      "name": "hosting.bootstrap.deliver",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-deliver-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-execution-output",
+      "required_permissions": ["bootstrap.deliver"]
+    },
+    {
+      "name": "hosting.bootstrap.inspect",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-execution-output",
+      "required_permissions": ["bootstrap.inspect"]
     }
   ],
   "constraints": {
     "supports_standard_os_offerings": true,
     "supports_idempotent_create": true,
-    "supports_create_reconciliation": true
+    "supports_create_reconciliation": true,
+    "supports_bootstrap_execution_reconciliation": true
   }
 }

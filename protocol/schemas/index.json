@@ -215,6 +215,18 @@
       "id": "urn:gameserver-controller:0.21.0-draft:game:validate-installation-output"
     },
     {
+      "path": "hosting/bootstrap-deliver-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-deliver-input"
+    },
+    {
+      "path": "hosting/bootstrap-execution-output.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-execution-output"
+    },
+    {
+      "path": "hosting/bootstrap-inspect-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-inspect-input"
+    },
+    {
       "path": "hosting/instance-create-input.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-create-input"
     },

@@ -1,0 +1,57 @@
+{
+  "fixture_id": "hosting.bootstrap.execution-binding-and-readiness-gate",
+  "protocol_version": "0.21.0-draft",
+  "contract": "hosting.bootstrap.deliver",
+  "purpose": "Bootstrap execution is reconciled against the exact instance and pinned revision, and successful bootstrap alone does not authorize ready.",
+  "cases": [
+    {
+      "case_id": "exact-execution",
+      "deliver_input": {
+        "instance_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "instance", "external_id": "vm-001"},
+        "bootstrap": {"source_uri": "https://artifacts.example.invalid/bootstrap/sha256-example", "revision": "git:0123456789abcdef", "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "inputs": {"game_profile": "paper-standard"}}
+      },
+      "execution_output": {
+        "instance_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "instance", "external_id": "vm-001"},
+        "bootstrap_execution_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "bootstrap-execution", "external_id": "boot-001"},
+        "revision": "git:0123456789abcdef",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "succeeded",
+        "observed_at": "2026-11-08T12:02:00Z",
+        "started_at": "2026-11-08T12:00:00Z",
+        "completed_at": "2026-11-08T12:02:00Z",
+        "exit_code": 0,
+        "validation_evidence": [{"check_id": "bootstrap-script-completed", "result": "pass", "observed_at": "2026-11-08T12:02:00Z"}]
+      },
+      "inspect_input": {
+        "instance_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "instance", "external_id": "vm-001"},
+        "bootstrap_execution_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "bootstrap-execution", "external_id": "boot-001"}
+      },
+      "expected": {"instance_bound": true, "revision_and_digest_bound": true, "execution_reference_bound": true, "bootstrap_completed": true, "ready_transition_permitted": false}
+    },
+    {
+      "case_id": "wrong-instance",
+      "deliver_input": {
+        "instance_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "instance", "external_id": "vm-001"},
+        "bootstrap": {"source_uri": "https://artifacts.example.invalid/bootstrap/sha256-example", "revision": "git:0123456789abcdef", "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+      },
+      "execution_output": {
+        "instance_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "instance", "external_id": "vm-002"},
+        "bootstrap_execution_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "bootstrap-execution", "external_id": "boot-001"},
+        "revision": "git:0123456789abcdef",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "state": "succeeded",
+        "observed_at": "2026-11-08T12:02:00Z",
+        "started_at": "2026-11-08T12:00:00Z",
+        "completed_at": "2026-11-08T12:02:00Z",
+        "exit_code": 0,
+        "validation_evidence": [{"check_id": "bootstrap-script-completed", "result": "pass", "observed_at": "2026-11-08T12:02:00Z"}]
+      },
+      "inspect_input": {
+        "instance_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "instance", "external_id": "boot-host-001"},
+        "bootstrap_execution_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "bootstrap-execution", "external_id": "boot-001"}
+      },
+      "expected": {"instance_bound": false, "revision_and_digest_bound": true, "execution_reference_bound": true, "bootstrap_completed": true, "ready_transition_permitted": false}
+    }
+  ],
+  "expected": {"bootstrap_completion_alone_never_permits_ready": true}
+}

@@ -24,7 +24,13 @@
         "server_id": "minecraft-test",
         "environment_id": "test",
         "region_id": "region-test",
-        "plan_id": "plan-test"
+        "plan_id": "plan-test",
+        "os": {
+          "provider_os_id": "debian-13",
+          "distribution": "Debian",
+          "version": "13",
+          "architecture": "x86_64"
+        }
       }
     },
     {
@@ -35,10 +41,16 @@
       "adapter_id": "hosting.example",
       "capability_name": "hosting.bootstrap.deliver",
       "capability_version": "1",
+      "input_bindings": [
+        {"target_pointer": "/instance_ref", "source_step_id": "create-instance", "source_pointer": "/instance_ref"}
+      ],
       "input": {
-        "server_id": "minecraft-test",
-        "environment_id": "test",
-        "bootstrap_revision": "git:0123456789abcdef"
+        "bootstrap": {
+          "source_uri": "https://artifacts.example.invalid/bootstrap.sh",
+          "revision": "git:0123456789abcdef",
+          "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "inputs": {"game_profile": "paper-standard"}
+        }
       }
     }
   ],

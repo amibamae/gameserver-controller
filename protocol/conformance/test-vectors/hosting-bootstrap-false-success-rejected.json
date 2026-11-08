@@ -1,0 +1,19 @@
+{
+  "fixture_id": "hosting.bootstrap.rejects-false-success",
+  "protocol_version": "0.21.0-draft",
+  "contract": "hosting.bootstrap.deliver",
+  "purpose": "A failed bootstrap exit or missing validation evidence cannot be reported as a successful execution.",
+  "execution_output": {
+    "instance_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "instance", "external_id": "vm-001"},
+    "bootstrap_execution_ref": {"adapter_id": "hosting.example", "environment_id": "staging", "resource_kind": "bootstrap-execution", "external_id": "boot-001"},
+    "revision": "git:0123456789abcdef",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "succeeded",
+    "observed_at": "2026-11-08T12:02:00Z",
+    "started_at": "2026-11-08T12:00:00Z",
+    "completed_at": "2026-11-08T12:02:00Z",
+    "exit_code": 1,
+    "validation_evidence": []
+  },
+  "expected": {"accepted": false}
+}

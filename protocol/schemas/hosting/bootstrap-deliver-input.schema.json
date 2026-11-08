@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-deliver-input",
+  "title": "Hosting bootstrap deliver input",
+  "description": "Start the exact immutable bootstrap revision on one exact instance. Inputs contain non-secret configuration only; credential references use the controller's protected resolution channel.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["instance_ref", "bootstrap"],
+  "properties": {
+    "instance_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
+    "bootstrap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_uri", "revision", "digest"],
+      "properties": {
+        "source_uri": {"type": "string", "format": "uri", "maxLength": 2048},
+        "revision": {"type": "string", "minLength": 1, "maxLength": 200},
+        "digest": {"type": "string", "pattern": "^sha256:[a-fA-F0-9]{64}$"},
+        "inputs": {"type": "object", "description": "Non-secret, validated bootstrap configuration only."}
+      }
+    }
+  }
+}
