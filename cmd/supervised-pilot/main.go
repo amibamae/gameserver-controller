@@ -74,8 +74,8 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 	}
 
 	action := args[0]
-	if action != "status" && action != "backup" && action != "history" && action != "provision" && action != "capacity" && action != "boot-status" {
-		return fmt.Errorf("unknown action %q; expected status, backup, history, provision, capacity, or boot-status", action)
+	if action != "status" && action != "backup" && action != "history" && action != "provision" && action != "capacity" && action != "boot-status" && action != "adopt" {
+		return fmt.Errorf("unknown action %q; expected status, backup, history, provision, capacity, boot-status, or adopt", action)
 	}
 
 	flags := flag.NewFlagSet("gsc-pilot "+action, flag.ContinueOnError)
@@ -83,6 +83,10 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 	host := flags.String("host", "", "SSH config alias or user@host for the Minecraft server")
 	execute := flags.Bool("execute", false, "execute the selected action; mutating actions are dry runs by default")
 	confirmHost := flags.String("confirm-host", "", "repeat the exact SSH target to approve a backup run")
+	confirmAdopt := flags.String("confirm-adopt", "", "repeat <server-id>@<environment>/<instance-id> to approve local managed ownership")
+	instanceID := flags.String("instance-id", "", "exact existing Vultr instance ID for adoption")
+	expectedIP := flags.String("expected-ip", "", "expected public IPv4 address for adoption")
+	osName := flags.String("os-name", "", "exact expected Vultr operating system name for adoption")
 	confirmCreate := flags.String("confirm-create", "", "repeat <server-id>@<environment> to approve billable Vultr VM creation")
 	timeout := flags.Duration("timeout", time.Hour, "maximum time to wait for the selected operation")
 	serverID := flags.String("server-id", "", "stable logical server ID for Vultr provisioning")
@@ -92,7 +96,7 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 	osID := flags.String("os-id", "", "Vultr OS offering ID")
 	hostname := flags.String("hostname", "", "optional VM hostname")
 	credentialRef := flags.String("credential-ref", defaultVultrCredential, "systemd credential reference for the Vultr API key")
-	operationID := flags.String("operation-id", "", "reuse the exact operation ID to reconcile an uncertain create")
+	operationID := flags.String("operation-id", "", "reuse the exact operation ID to reconcile a create or repeat an adoption")
 	var sshKeyIDs stringListFlag
 	flags.Var(&sshKeyIDs, "ssh-key-id", "Vultr SSH key ID; repeat for multiple keys (required for provisioning)")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -147,6 +151,26 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
 		return provisionVultr(*execute, *confirmCreate, *timeout, policy, statePath, *serverID, *environmentID, *region, *plan, *osID, *hostname, sshKeyIDs, *credentialRef, *operationID, stdout, stderr)
+	case "adopt":
+		if err := allowOnlyFlags(flags, "execute", "confirm-adopt", "timeout", "server-id", "environment", "instance-id", "expected-ip", "region", "plan", "os-id", "os-name", "credential-ref", "operation-id"); err != nil {
+			return err
+		}
+		policy, err := pilotcapacity.LoadEmbeddedPolicy()
+		if err != nil {
+			return err
+		}
+		statePath, err := settings.capacityStatePath()
+		if err != nil {
+			return err
+		}
+		providerOSID, err := vultrapi.ParseOSID(*osID)
+		if err != nil {
+			return err
+		}
+		return adoptVultr(*execute, *confirmAdopt, *timeout, policy, statePath, *credentialRef, pilotvultr.AdoptionRequest{
+			OperationID: *operationID, ServerID: *serverID, Environment: *environmentID, InstanceID: *instanceID,
+			IP: *expectedIP, Region: *region, Plan: *plan, OSID: providerOSID, OS: *osName,
+		}, stdout)
 	case "capacity":
 		if flags.NFlag() != 0 {
 			return errors.New("capacity reads the fixed local policy and state database; remove all flags")
@@ -230,6 +254,7 @@ func usage(w io.Writer) error {
 	fmt.Fprintln(w, "  gsc-pilot history")
 	fmt.Fprintln(w, "  gsc-pilot boot-status --server-id <id> --environment <environment>")
 	fmt.Fprintln(w, "  gsc-pilot provision --server-id <id> --environment staging --region <id> --plan <id> --os-id <id> --ssh-key-id <id>")
+	fmt.Fprintln(w, "  gsc-pilot adopt --server-id <id> --environment <environment> --instance-id <id> --expected-ip <IPv4> --region <id> --plan <id> --os-id <id> --os-name <name>")
 	fmt.Fprintln(w, "  gsc-pilot capacity")
 	return errors.New("an action is required")
 }
@@ -745,6 +770,8 @@ func validAuditRecord(record auditRecord) bool {
 	switch record.Action {
 	case "backup":
 		return record.Service == backupUnit && safeSSHHost.MatchString(record.Target) && validBackupAuditEvent(record.Event)
+	case "adopt":
+		return record.Service == "vultr.instance.adopt" && safePilotTarget.MatchString(record.Target) && (record.Event == "adoption_requested" || record.Event == "adoption_failed" || record.Event == "adoption_confirmed")
 	case "provision":
 		return record.Service == "vultr.instance.create" && safePilotTarget.MatchString(record.Target) && validProvisionAuditEvent(record.Event)
 	default:

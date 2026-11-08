@@ -57,7 +57,7 @@ Only after reviewing the dry run, an operator may add `--execute --confirm-creat
 
 The provider key is read only through the configured systemd credential reference, defaulting to `systemd-credential://vultr-pilot-api-token`. Execute the command from a systemd-managed process that receives this named credential through `LoadCredentialEncrypted`; do not pass the key in arguments, environment variables, config, or logs. See [secret management](SECRET_MANAGEMENT.md). The repository does not yet include an operator unit or automate credential provisioning, so do not run the billable command until the host-side systemd credential setup has been reviewed.
 
-`gsc-pilot capacity` displays durable reservation state from the current account's `.local/state/gsc-pilot/pilot.db`. The bbolt database is local state and must be backed up and protected like other controller state. Do not delete it to clear an occupied slot; reconcile the provider outcome first. The pilot CLI does not yet adopt or destroy a VM, install Paper, restore a world, configure DNS, or check game readiness. The generic durable `server.destroy` workflow is implemented and fake-tested, but it is not wired into this CLI or a production hosting adapter.
+`gsc-pilot capacity` displays durable reservation state from the current account's `.local/state/gsc-pilot/pilot.db`. The bbolt database is local state and must be backed up and protected like other controller state. Do not delete it to clear an occupied slot; reconcile the provider outcome first. The pilot CLI can explicitly adopt an existing Vultr VM into managed capacity after checking its exact metadata. It does not yet destroy a VM, install Paper, restore a world, configure DNS, or check game readiness. The generic durable `server.destroy` workflow is implemented and fake-tested, but it is not wired into this CLI or a production hosting adapter.
 
 For controller-owned VMs, the local store can record the provider creation timestamp and the time Paper's required readiness checks pass. If Vultr does not return a usable creation timestamp, the pilot leaves that time unknown; it does not substitute the later provider observation time. `gsc-pilot boot-status` uses completed intervals for the same server and environment to show an advisory estimate after at least three samples; it uses the 75th percentile with a 25% safety factor. Progress stays below 100% until readiness is confirmed. With fewer samples, an unmanaged VM, or an unknown creation timestamp, progress is indeterminate. A completed initial boot is historical evidence, not a live Paper health check. Readiness recorded for a non-active VM remains historical and does not show current progress as ready. The first ready timestamp is committed atomically with the successful `server.start` transition and bound to the exact hosting adapter and VM. Older reservations without adapter identity remain usable for capacity enforcement but do not gain automatic timing samples. These measurements stay local. Sharing aggregate averages with a hosted lobby/DNS service remains a separate future opt-in and is never required for local timing.
 
@@ -99,3 +99,64 @@ Before you execute:
 The `service_succeeded` audit event records a successful systemd invocation. It does not inspect the backup script, files, object storage, checksums, or world contents. Use the server's existing backup process to verify that a usable backup exists.
 
 The local audit log is `~/.local/state/gsc-pilot/operations.jsonl` with owner-only file permissions. Pilot tests use fake SSH and fake Vultr APIs; they do not run the backup service, create a VM, or connect to a live server.
+
+
+## Adopt an existing Vultr VM into managed capacity
+
+`gsc-pilot adopt` ports the exact-target and inventory safeguards from the
+previous shell registry into the existing Go pilot. It records local ownership
+and occupied capacity in the same bbolt transaction used by creation. It does
+not import or rewrite the legacy JSON registry, change a provider resource, or
+create a durable `server.provision` operation. Logical-server attachment and
+production lifecycle migration remain separate work.
+
+Keep deployment values in your local configuration. This example uses
+placeholders that you must replace with the exact independently checked target:
+
+```sh
+gsc-pilot adopt \
+  --server-id '<server-id>' \
+  --environment production \
+  --instance-id '<existing-instance-id>' \
+  --expected-ip '<expected-public-ipv4>' \
+  --region '<expected-region>' \
+  --plan '<expected-plan>' \
+  --os-id '<expected-os-id>' \
+  --os-name '<exact-expected-os-name>'
+```
+
+The default is a local dry run. It reads no credentials, calls no provider API,
+and changes no capacity. To audit the live inventory and commit ownership, add
+`--execute --confirm-adopt '<server-id>@production/<existing-instance-id>'`.
+Use the existing systemd credential setup described above; never pass an API
+token on the command line. The command prints an operation ID before mutation.
+If interrupted or if audit completion fails, inspect `gsc-pilot capacity` and
+reuse that ID with `--operation-id` and the same exact parameters.
+
+The live check follows all inventory pages, requires a consistent total and
+unique IDs, and rejects missing metadata or incomplete responses. It checks
+existing active Vultr reservations against inventory, comparing adopted
+metadata or the managed create label. Unresolved reservations require
+reconciliation first. The requested VM must match the expected ID, IPv4,
+region, plan, OS ID, and OS name in both inventory and a direct lookup. A VM
+with a controller create label must be recovered through its create operation,
+rather than adopted around an unresolved outcome.
+
+The commit applies the current source-controlled total and environment-group
+limits atomically with ownership. Concurrent creates and adoptions share those
+limits; one provider instance cannot occupy two active adoption slots.
+Unmanaged VMs remain outside managed capacity, following the current approved
+policy. Inventory reads are observations, not a provider-wide atomic snapshot;
+external changes can invalidate an observation and need another audit.
+
+Adoption records presence and metadata, not game readiness, safe backups, or
+permission to destroy the VM. It never produces a controller provisioning-time
+sample for a VM created outside this controller. Do not replace the live shell
+workflow until logical-server migration and equivalent lifecycle behavior have
+been tested and deliberately approved.
+
+The supplied legacy scripts remain reference material outside the repository.
+The Go implementation uses configurable identities and has no deployment IPs,
+provider resource IDs, or literal credentials. Startup-script verification,
+SSH-key verification, and the legacy Fabric create flow still need to be
+integrated with the versioned bootstrap and durable provision workflow.
