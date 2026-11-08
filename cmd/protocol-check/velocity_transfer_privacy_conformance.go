@@ -16,8 +16,9 @@ func evaluateVelocityTransferPrivacy(pkg *protocolPackage, fixture map[string]an
 	baseRequest := asObject(input["transfer_request"])
 	baseResult := asObject(input["transfer_result"])
 	probes := arrayValue(input, "privacy_probes")
-	if len(probes) == 0 {
-		return nil, fmt.Errorf("privacy fixture must include canary probes")
+	logRedactionProbes := arrayValue(input, "log_redaction_probes")
+	if len(probes) == 0 || len(logRedactionProbes) == 0 {
+		return nil, fmt.Errorf("privacy fixture must include message and log canary probes")
 	}
 
 	evaluations := make([]any, 0, len(arrayValue(input, "evaluations")))
@@ -50,7 +51,12 @@ func evaluateVelocityTransferPrivacy(pkg *protocolPackage, fixture map[string]an
 			}
 			logText = append(logText, line)
 		}
-		logsContainProbe, err := containsPrivacyProbe(strings.Join(logText, "\n"), probes)
+		joinedLogs := strings.Join(logText, "\n")
+		logsContainProbe, err := containsPrivacyProbe(joinedLogs, probes)
+		if err != nil {
+			return nil, err
+		}
+		logsContainSessionID, err := containsPrivacyProbe(joinedLogs, logRedactionProbes)
 		if err != nil {
 			return nil, err
 		}
@@ -71,7 +77,7 @@ func evaluateVelocityTransferPrivacy(pkg *protocolPackage, fixture map[string]an
 			transferValid = boolValue(state, "result_valid_and_bound")
 		}
 		privacyCompliant := requestValid && resultValid && transferValid &&
-			!requestContainsProbe && !resultContainsProbe && !logsContainProbe
+			!requestContainsProbe && !resultContainsProbe && !logsContainProbe && !logsContainSessionID
 		caseResult := map[string]any{}
 		caseResult["case_id"] = stringValue(evaluation, "case_id")
 		caseResult["request_schema_valid"] = requestValid
@@ -80,6 +86,7 @@ func evaluateVelocityTransferPrivacy(pkg *protocolPackage, fixture map[string]an
 		caseResult["request_contains_privacy_probe"] = requestContainsProbe
 		caseResult["result_contains_privacy_probe"] = resultContainsProbe
 		caseResult["logs_contain_privacy_probe"] = logsContainProbe
+		caseResult["logs_contain_session_id"] = logsContainSessionID
 		caseResult["privacy_compliant"] = privacyCompliant
 		evaluations = append(evaluations, caseResult)
 	}
