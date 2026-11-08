@@ -79,3 +79,28 @@ the stream is aborted; a discard failure remains an explicit uncertain result.
 This runtime can be composed with the engine, but there is no controller
 composition or complete backup workflow using it yet. A durable filesystem
 staging implementation and verified storage transfer remain required.
+
+`internal/capturestage.Files` implements staging on a local filesystem. Use a
+private root owned and exclusively controlled by the controller user. Existing
+roots with group/other permissions or a symlink at the root are rejected. The
+implementation resolves ancestor paths at construction; protection against
+another process running as the same user and changing those paths is outside
+this boundary. The filesystem must support hard links and directory syncing.
+
+Data and receipts are written into private temporary directories. Sealing
+checks the independently supplied receipt against another measurement of the
+staged bytes, syncs and closes the data, syncs the receipt and temporary
+directory, then publishes the receipt with an atomic hard link that cannot
+replace an existing record. The root directory is synced before success.
+Published data is read-only to avoid accidental writes. If publication has
+occurred but its final sync fails, the capture remains available for
+reconciliation; failure cleanup cannot remove it.
+
+A receipt lookup uses a hash of the complete scope rather than user-supplied
+path components. `OpenVerified` validates the bounded metadata, rejects unsafe
+paths and symlink substitutions, checks the exact scope, and rehashes the
+stored bytes before returning a rewound file descriptor. This verifies local
+staging, not a stored backup. Storage transfer and game validation remain
+separate requirements. Orphan temporary directories from interrupted captures
+are retained for inspection; automatic staging garbage collection is not yet
+implemented. No staging lookup authorizes production deletion.
