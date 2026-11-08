@@ -24,6 +24,10 @@ type Records interface {
 	GetResourceLock(string) (store.ResourceLock, error)
 }
 
+// ErrStagingNeedsReconciliation signals durable evidence from an earlier
+// attempt that must be inspected before another capture can be dispatched.
+var ErrStagingNeedsReconciliation = errors.New("capture staging requires reconciliation")
+
 // Stage owns private staging bytes. Seal must durably associate verified
 // capture evidence with the operation/step before returning. Discard removes
 // failed staging. Implementations must provide bounded, cancelable I/O.
@@ -151,6 +155,9 @@ func (r *Runtime) Invoke(ctx context.Context, adapterID string, request adapter.
 	}
 	scope := capturestream.Scope{OperationID: c.OperationID, StepID: c.StepID, AdapterID: adapterID, ServerID: c.ServerID, EnvironmentID: c.EnvironmentID, InstanceAdapterID: instance.AdapterID, InstanceID: instance.ID, DataGenerationID: input.GenerationID, DataSetID: input.DataSetID, CaptureID: input.CaptureID}
 	stage, err := r.staging.Open(ctx, scope)
+	if errors.Is(err, ErrStagingNeedsReconciliation) {
+		return adapter.InvokeResponse{}, uncertain()
+	}
 	if err != nil || stage == nil {
 		return adapter.InvokeResponse{}, errors.New("capture staging is unavailable")
 	}

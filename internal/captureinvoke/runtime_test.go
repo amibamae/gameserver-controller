@@ -47,9 +47,12 @@ func (s *stage) Discard() error {
 	return nil
 }
 
-type staging struct{ s *stage }
+type staging struct {
+	s   *stage
+	err error
+}
 
-func (s staging) Open(context.Context, capturestream.Scope) (Stage, error) { return s.s, nil }
+func (s staging) Open(context.Context, capturestream.Scope) (Stage, error) { return s.s, s.err }
 
 type implementation struct {
 	d      adapter.Descriptor
@@ -72,7 +75,7 @@ func example(t *testing.T, path string, v any) {
 }
 
 func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
-	for _, scenario := range []string{"success", "digest", "size", "binding", "incomplete", "no-stream", "rejected-empty", "rejected-bytes", "unknown", "seal-error", "changed-input", "missing-lock", "wrong-version", "cleanup-error", "unknown-reference"} {
+	for _, scenario := range []string{"success", "digest", "size", "binding", "incomplete", "no-stream", "rejected-empty", "rejected-bytes", "unknown", "seal-error", "changed-input", "missing-lock", "wrong-version", "cleanup-error", "unknown-reference", "existing-stage"} {
 		t.Run(scenario, func(t *testing.T) {
 			schemas, err := schemaregistry.Load()
 			if err != nil {
@@ -160,7 +163,11 @@ func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
 			if err = registry.Register(adapterImpl); err != nil {
 				t.Fatal(err)
 			}
-			runtime, err := New(registry, schemas, source, broker, staging{sink}, 10)
+			var stageErr error
+			if scenario == "existing-stage" {
+				stageErr = ErrStagingNeedsReconciliation
+			}
+			runtime, err := New(registry, schemas, source, broker, staging{s: sink, err: stageErr}, 10)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -168,7 +175,7 @@ func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
 			success := scenario == "success"
 			definitive := scenario == "rejected-empty"
 			unknown := scenario == "unknown"
-			predispatch := scenario == "changed-input" || scenario == "missing-lock" || scenario == "wrong-version"
+			predispatch := scenario == "changed-input" || scenario == "missing-lock" || scenario == "wrong-version" || scenario == "existing-stage"
 			if (success || definitive || unknown) != (err == nil) {
 				t.Fatalf("unexpected error=%v", err)
 			}
@@ -187,7 +194,7 @@ func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
 			if unknown && (response.Result.Outcome != adapter.OutcomeUnknown || len(response.Result.ExternalOperationRef) == 0) {
 				t.Fatal("capability uncertainty was not normalized")
 			}
-			if err != nil && !predispatch {
+			if err != nil && (!predispatch || scenario == "existing-stage") {
 				var uncertain *adapter.InvocationError
 				if !errors.As(err, &uncertain) || !uncertain.MayHaveSideEffects {
 					t.Fatal("failure could bypass reconciliation")
