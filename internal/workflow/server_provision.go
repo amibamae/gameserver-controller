@@ -101,11 +101,12 @@ type provisionRequest struct {
 		AdapterID string `json:"adapter_id"`
 		Profile   string `json:"profile"`
 	} `json:"execution"`
-	NetworkProfile string            `json:"network_profile,omitempty"`
-	FirewallPolicy string            `json:"firewall_policy_ref,omitempty"`
-	SSHKeyRefs     []string          `json:"ssh_key_refs,omitempty"`
-	Labels         map[string]string `json:"labels,omitempty"`
-	RestoreBackup  string            `json:"restore_backup_id,omitempty"`
+	SecretRefs     []store.SecretReference `json:"secret_refs,omitempty"`
+	NetworkProfile string                  `json:"network_profile,omitempty"`
+	FirewallPolicy string                  `json:"firewall_policy_ref,omitempty"`
+	SSHKeyRefs     []string                `json:"ssh_key_refs,omitempty"`
+	Labels         map[string]string       `json:"labels,omitempty"`
+	RestoreBackup  string                  `json:"restore_backup_id,omitempty"`
 }
 
 type provisionCreateOutput struct {
@@ -371,15 +372,26 @@ func (w *ServerProvisionWorkflow) SecretReferencesForStep(ctx context.Context, o
 	if json.Unmarshal(operation.RequestSnapshot.Parameters, &request) != nil || step.AdapterID != request.HostingAdapter || step.CapabilityName != "hosting.bootstrap.deliver" {
 		return nil, errors.New("provision secret references are not bound to the pinned bootstrap delivery capability")
 	}
-	refs := make([]adapter.SecretReference, 0, len(operation.RequestSnapshot.SecretRefs))
-	for _, ref := range operation.RequestSnapshot.SecretRefs {
+	refs := request.SecretRefs
+	if len(refs) > 0 && len(operation.RequestSnapshot.SecretRefs) > 0 {
+		requestRefsJSON, _ := json.Marshal(refs)
+		snapshotRefsJSON, _ := json.Marshal(operation.RequestSnapshot.SecretRefs)
+		if !equalJSON(requestRefsJSON, snapshotRefsJSON) {
+			return nil, errors.New("provision parameter and operation snapshot secret references differ")
+		}
+	}
+	if len(refs) == 0 {
+		refs = operation.RequestSnapshot.SecretRefs
+	}
+	result := make([]adapter.SecretReference, 0, len(refs))
+	for _, ref := range refs {
 		if ref.SecretRef == "" || ref.Purpose == "" {
 			return nil, errors.New("persisted provision secret reference is incomplete")
 		}
-		refs = append(refs, adapter.SecretReference{SecretRef: ref.SecretRef, Purpose: ref.Purpose,
+		result = append(result, adapter.SecretReference{SecretRef: ref.SecretRef, Purpose: ref.Purpose,
 			PermissionScope: append([]string(nil), ref.PermissionScope...), VersionRef: ref.VersionRef})
 	}
-	return refs, nil
+	return result, nil
 }
 
 func (w *ServerProvisionWorkflow) observeCreatedCapacity(operation store.OperationRecord) error {
