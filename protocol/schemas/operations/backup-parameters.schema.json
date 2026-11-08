@@ -7,7 +7,10 @@
   "required": ["backup_profile"],
   "properties": {
     "backup_profile": {"type": "string", "minLength": 1, "maxLength": 200},
-    "resume_after_backup": {"type": "boolean", "default": true},
+    "resume_after_backup": {
+      "type": "boolean",
+      "description": "When omitted, a ready server resumes and a degraded or stopped server remains stopped. Explicit true requests resume for ready or degraded initial state, subject to current policy and fresh readiness checks. A stopped initial state remains stopped. False leaves the server stopped. The core records omission as supplied; it does not materialize a default."
+    },
     "expected_instance_ref": {"$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"},
     "extensions": {"type": "object", "additionalProperties": {"type": "object"}}
   }
