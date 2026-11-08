@@ -1,0 +1,165 @@
+{
+  "fixture_id": "execution.unit.logs.byte-bound-and-redaction",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "execution.unit.logs.read",
+  "purpose": "The returned log window stays within the UTF-8 byte bound including line separators, binds the requested unit, and contains no supplied synthetic secret canary.",
+  "input": {
+    "evaluations": [
+      {
+        "case_id": "utf8-and-newline-bytes-at-exact-limit",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "max_bytes": 12
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "lines": [
+            "café",
+            "世界"
+          ],
+          "truncated": false,
+          "redaction_applied": true,
+          "observed_at": "2026-11-07T18:30:00Z"
+        },
+        "redaction_probes": [
+          "SYNTHETIC_SECRET_CANARY"
+        ]
+      },
+      {
+        "case_id": "newline-separator-counts-toward-limit",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "max_bytes": 2
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "lines": [
+            "a",
+            "b"
+          ],
+          "truncated": false,
+          "redaction_applied": true,
+          "observed_at": "2026-11-07T18:30:00Z"
+        },
+        "redaction_probes": []
+      },
+      {
+        "case_id": "flag-does-not-hide-a-secret-canary",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "max_bytes": 200
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "lines": [
+            "token=SYNTHETIC_SECRET_CANARY"
+          ],
+          "truncated": false,
+          "redaction_applied": true,
+          "observed_at": "2026-11-07T18:30:00Z"
+        },
+        "redaction_probes": [
+          "SYNTHETIC_SECRET_CANARY"
+        ]
+      },
+      {
+        "case_id": "log-response-for-different-unit-is-rejected",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "max_bytes": 100
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "other-unit"
+          },
+          "lines": [
+            "safe"
+          ],
+          "truncated": false,
+          "redaction_applied": true,
+          "observed_at": "2026-11-07T18:30:00Z"
+        },
+        "redaction_probes": []
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "utf8-and-newline-bytes-at-exact-limit",
+        "schemas_valid": true,
+        "unit_bound": true,
+        "total_bytes": 12,
+        "logs_within_bound": true,
+        "redaction_probes_absent": true,
+        "response_accepted": true
+      },
+      {
+        "case_id": "newline-separator-counts-toward-limit",
+        "schemas_valid": true,
+        "unit_bound": true,
+        "total_bytes": 3,
+        "logs_within_bound": false,
+        "redaction_probes_absent": true,
+        "response_accepted": false
+      },
+      {
+        "case_id": "flag-does-not-hide-a-secret-canary",
+        "schemas_valid": true,
+        "unit_bound": true,
+        "total_bytes": 29,
+        "logs_within_bound": true,
+        "redaction_probes_absent": false,
+        "response_accepted": false
+      },
+      {
+        "case_id": "log-response-for-different-unit-is-rejected",
+        "schemas_valid": true,
+        "unit_bound": false,
+        "total_bytes": 4,
+        "logs_within_bound": true,
+        "redaction_probes_absent": true,
+        "response_accepted": false
+      }
+    ]
+  },
+  "side_effect_expectation": "none"
+}

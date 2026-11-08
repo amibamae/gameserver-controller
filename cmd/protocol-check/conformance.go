@@ -1753,6 +1753,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"stop_postconditions_confirmed":     stopPostconditions,
 		}, nil
 	case "execution.logs.health.delete.safety":
+	case "execution.unit.logs.byte-bound-and-redaction":
+		return evaluateExecutionLogRead(pkg, fixture)
 		logsInput, logsOutput := asObject(input["logs_input"]), asObject(input["logs_output"])
 		healthInput, healthOutput := asObject(input["health_input"]), asObject(input["health_output"])
 		deleteInput, deleteOutput := asObject(input["delete_input"]), asObject(input["delete_output"])
