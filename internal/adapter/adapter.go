@@ -245,7 +245,7 @@ func (r *Registry) invoke(ctx context.Context, adapterID string, request InvokeR
 			return InvokeResponse{}, errors.New("capability does not declare stream transport")
 		}
 		for _, transfer := range transfers {
-			if transfer.Direction != direction || !transfer.ExpiresAt.After(time.Now()) || transfer.ExpiresAt.After(request.Params.RequestContext.Deadline) || time.Until(transfer.ExpiresAt) > 5*time.Minute {
+			if transfer.Direction != direction || !transfer.ExpiresAt.After(time.Now()) || transfer.ExpiresAt.After(request.Params.RequestContext.Deadline) || (capability.Name == "game.backup.capture" && time.Until(transfer.ExpiresAt) > 5*time.Minute) {
 				return InvokeResponse{}, errors.New("invalid transient stream transfer")
 			}
 		}
