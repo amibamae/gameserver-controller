@@ -1,0 +1,78 @@
+{
+  "fixture_id": "operations.request-fingerprint-jcs",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "operations.idempotency-and-reconciliation",
+  "purpose": "Cross-language golden vectors for RFC 8785 canonical JSON and SHA-256 request fingerprints.",
+  "input": {
+    "cases": [
+      {
+        "case_id": "property-order-and-integral-number",
+        "parameters_json": "{\"z\":1,\"a\":1.0,\"nested\":{\"b\":2,\"a\":1}}"
+      },
+      {
+        "case_id": "equivalent-property-order-and-number-form",
+        "parameters_json": "{\"nested\":{\"a\":1,\"b\":2},\"a\":1,\"z\":1.0}"
+      },
+      {
+        "case_id": "utf16-key-order-and-string-escaping",
+        "parameters_json": "{\"\\ue000\":\"line\\nquote\\\"slash\\\\\",\"\\ud800\\udc00\":\"é\"}"
+      },
+      {
+        "case_id": "number-formatting",
+        "parameters_json": "{\"negative_zero\":-0,\"small\":1e-7,\"threshold\":1e-6}"
+      },
+      {
+        "case_id": "duplicate-members-rejected",
+        "parameters_json": "{\"plan\":\"small\",\"plan\":\"large\"}"
+      },
+      {
+        "case_id": "top-level-array-rejected",
+        "parameters_json": "[1,2]"
+      },
+      {
+        "case_id": "unsafe-integer-rejected",
+        "parameters_json": "{\"count\":9007199254740992}"
+      }
+    ]
+  },
+  "expected": {
+    "cases": {
+      "property-order-and-integral-number": {
+        "accepted": true,
+        "canonical_json": "{\"a\":1,\"nested\":{\"a\":1,\"b\":2},\"z\":1}",
+        "fingerprint": "sha256:e73d8c941d2a77827a64392988926072590d3aae19c412c0dc14d5ba65216a62"
+      },
+      "equivalent-property-order-and-number-form": {
+        "accepted": true,
+        "canonical_json": "{\"a\":1,\"nested\":{\"a\":1,\"b\":2},\"z\":1}",
+        "fingerprint": "sha256:e73d8c941d2a77827a64392988926072590d3aae19c412c0dc14d5ba65216a62"
+      },
+      "utf16-key-order-and-string-escaping": {
+        "accepted": true,
+        "canonical_json": "{\"𐀀\":\"é\",\"\":\"line\\nquote\\\"slash\\\\\"}",
+        "fingerprint": "sha256:2fc6d65710a743cc1f38e64f155599618cb8f520ce2674cfa8cf722e009a5f5f"
+      },
+      "number-formatting": {
+        "accepted": true,
+        "canonical_json": "{\"negative_zero\":0,\"small\":1e-7,\"threshold\":0.000001}",
+        "fingerprint": "sha256:ccc01052ec34ae1837d16e307209fd6e9463eb31fa5638728d9396594076f392"
+      },
+      "duplicate-members-rejected": {
+        "accepted": false,
+        "canonical_json": "",
+        "fingerprint": ""
+      },
+      "top-level-array-rejected": {
+        "accepted": false,
+        "canonical_json": "",
+        "fingerprint": ""
+      },
+      "unsafe-integer-rejected": {
+        "accepted": false,
+        "canonical_json": "",
+        "fingerprint": ""
+      }
+    }
+  },
+  "side_effect_expectation": "none"
+}

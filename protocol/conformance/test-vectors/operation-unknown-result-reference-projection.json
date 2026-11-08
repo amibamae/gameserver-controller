@@ -1,0 +1,187 @@
+{
+  "fixture_id": "operations.unknown-result-reference-projection",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "operations.reconciliation",
+  "purpose": "Normalize references from uncertain adapter results into the durable operation step without persisting capability output, and fail closed on conflicting references.",
+  "input": {
+    "capability_output_schema_id": "urn:gameserver-controller:0.21.0-draft:game:backup-capture-output",
+    "base_adapter_response": {
+      "jsonrpc": "2.0",
+      "id": "request-backup-capture-004",
+      "result": {
+        "outcome": "outcome_unknown",
+        "output": {
+          "target": {
+            "server_id": "minecraft-demo",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-demo-01"
+            }
+          },
+          "release_id": "paper-1.21.11-build-3",
+          "backup_id": "backup-demo-004",
+          "data_generation_id": "generation-demo-004",
+          "preparation_id": "prep-demo-004-world",
+          "data_set_id": "world",
+          "capture_id": "operation-backup-004-capture-world",
+          "consistency_mode": "offline",
+          "outcome": "outcome_unknown",
+          "reconciliation_ref": {
+            "adapter_id": "game.minecraft-paper",
+            "environment_id": "staging",
+            "resource_kind": "capture",
+            "external_id": "capture-operation-004"
+          },
+          "observed_at": "2026-11-07T10:01:00Z"
+        },
+        "observed_at": "2026-11-07T10:01:00Z"
+      }
+    },
+    "base_operation": {
+      "operation_id": "operation-backup-004",
+      "operation_type": "server.backup",
+      "protocol_version": "0.21.0-draft",
+      "target": {
+        "server_id": "minecraft-demo",
+        "environment_id": "staging"
+      },
+      "status": "reconciling",
+      "current_step_id": "capture-world",
+      "actor_id": "operator-example",
+      "correlation_id": "operation-backup-004",
+      "request_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "request_snapshot": {
+        "operation_type": "server.backup",
+        "parameters": {
+          "backup_id": "backup-demo-004"
+        }
+      },
+      "created_at": "2026-11-07T10:00:00Z",
+      "updated_at": "2026-11-07T10:01:00Z",
+      "steps": [
+        {
+          "step_id": "capture-world",
+          "step_type": "adapter.invoke",
+          "status": "outcome_unknown",
+          "attempt": 1,
+          "adapter_id": "game.minecraft-paper",
+          "capability_name": "game.backup.capture",
+          "capability_version": "1",
+          "input": {
+            "backup_id": "backup-demo-004",
+            "capture_id": "operation-backup-004-capture-world"
+          },
+          "started_at": "2026-11-07T10:00:30Z"
+        }
+      ]
+    },
+    "evaluations": [
+      {
+        "case_id": "capability-reference-is-normalized",
+        "adapter_response_overrides": {}
+      },
+      {
+        "case_id": "matching-envelope-reference-is-normalized",
+        "adapter_response_overrides": {
+          "result": {
+            "external_operation_ref": {
+              "adapter_id": "game.minecraft-paper",
+              "environment_id": "staging",
+              "resource_kind": "capture",
+              "external_id": "capture-operation-004"
+            }
+          }
+        }
+      },
+      {
+        "case_id": "conflicting-envelope-reference-requires-operator",
+        "adapter_response_overrides": {
+          "result": {
+            "external_operation_ref": {
+              "adapter_id": "game.minecraft-paper",
+              "environment_id": "staging",
+              "resource_kind": "capture",
+              "external_id": "capture-other"
+            }
+          }
+        }
+      },
+      {
+        "case_id": "invalid-capability-output-requires-operator",
+        "adapter_response_overrides": {},
+        "output_remove": [
+          "target"
+        ]
+      },
+      {
+        "case_id": "missing-adapter-output-requires-operator",
+        "adapter_response_overrides": {},
+        "adapter_result_remove": [
+          "output"
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "cases": {
+      "capability-reference-is-normalized": {
+        "response_schema_valid": true,
+        "capability_output_schema_valid": true,
+        "references_consistent": true,
+        "reference_normalized": true,
+        "output_persisted": false,
+        "operation_schema_valid": true,
+        "operation_status": "reconciling",
+        "operator_review_required": false,
+        "retry_permitted": false
+      },
+      "matching-envelope-reference-is-normalized": {
+        "response_schema_valid": true,
+        "capability_output_schema_valid": true,
+        "references_consistent": true,
+        "reference_normalized": true,
+        "output_persisted": false,
+        "operation_schema_valid": true,
+        "operation_status": "reconciling",
+        "operator_review_required": false,
+        "retry_permitted": false
+      },
+      "conflicting-envelope-reference-requires-operator": {
+        "response_schema_valid": true,
+        "capability_output_schema_valid": true,
+        "references_consistent": false,
+        "reference_normalized": false,
+        "output_persisted": false,
+        "operation_schema_valid": true,
+        "operation_status": "needs_operator",
+        "operator_review_required": true,
+        "retry_permitted": false
+      },
+      "invalid-capability-output-requires-operator": {
+        "response_schema_valid": true,
+        "capability_output_schema_valid": false,
+        "references_consistent": true,
+        "reference_normalized": false,
+        "output_persisted": false,
+        "operation_schema_valid": true,
+        "operation_status": "needs_operator",
+        "operator_review_required": true,
+        "retry_permitted": false
+      },
+      "missing-adapter-output-requires-operator": {
+        "response_schema_valid": false,
+        "capability_output_schema_valid": false,
+        "reference_normalized": false,
+        "output_persisted": false,
+        "operation_schema_valid": true,
+        "operation_status": "needs_operator",
+        "operator_review_required": true,
+        "retry_permitted": false
+      }
+    }
+  },
+  "side_effect_expectation": "none"
+}

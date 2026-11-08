@@ -103,12 +103,24 @@
       "id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-start-output"
     },
     {
+      "path": "game/backup-capture-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:game:backup-capture-input"
+    },
+    {
+      "path": "game/backup-capture-output.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:game:backup-capture-output"
+    },
+    {
       "path": "game/backup-prepare-input.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:game:backup-prepare-input"
     },
     {
       "path": "game/backup-prepare-output.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:game:backup-prepare-output"
+    },
+    {
+      "path": "game/backup-write-watermark.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:game:backup-write-watermark"
     },
     {
       "path": "game/backup-validate-input.schema.json",

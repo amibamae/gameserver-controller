@@ -328,7 +328,7 @@ Permitted transitions:
 - `outcome_unknown` -> `running`, `waiting`, `succeeded`, or `failed`, but only after reconciliation establishes the safe next state.
 - Terminal step statuses never transition again.
 
-A step marked `succeeded` MUST have its postcondition evidence persisted. An `outcome_unknown` step MUST NOT be blindly re-dispatched.
+A step marked `succeeded` MUST have its postcondition evidence persisted. An `outcome_unknown` step MUST NOT be blindly re-dispatched. Its `output` is not durable completion evidence and MUST NOT be persisted; retain the immutable input and any normalized reconciliation reference in `external_operation_ref`. A capability-level `reconciliation_ref` or `external_operation_ref` is copied to that field. If the adapter envelope and capability output both supply a reference, they MUST match exactly or the result is untrusted and requires operator review. When calling `adapter.reconcile`, the controller computes `request_fingerprint` as SHA-256 of RFC 8785 JCS bytes for the persisted capability input; transient request context, stream handles, outputs, and resolved secret values are excluded.
 
 
 

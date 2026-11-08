@@ -139,9 +139,11 @@ A normal stop from `ready` follows `draining` -> `stopping` -> `stopped`. The ga
 
 ### 5.4 Backup
 
-A backup while running follows `ready` -> `draining` -> `stopping` -> `backing_up`. A stopped server follows `stopped` -> `backing_up`. Online/low-downtime backup is an optional capability and MUST declare its consistency guarantees; it MUST NOT be assumed by the core. A snapshot captured while writes continue MUST identify a verifiable data generation and write watermark that proves which writes it contains. Without such evidence, the backup MAY be used for recovery but MUST NOT authorize destruction after the runtime resumes writing; the conservative offline generation rule in §6 applies.
+A backup while running follows `ready` -> `draining` -> `stopping` -> `backing_up`. A stopped server follows `stopped` -> `backing_up`. Online/low-downtime backup is an optional capability and MUST declare its consistency guarantees; it MUST NOT be assumed by the core. A snapshot captured while writes continue SHOULD record a game-specific data generation and write watermark for recovery diagnostics. This 0.21 draft defines no standard watermark verifier, so the watermark does not establish freshness or authorize destruction; use the conservative offline generation rule in §6.
 
-The backup operation MUST capture a manifest that identifies the logical server, environment, source instance/runtime, game and world versions, selected data paths, creation time, checksum algorithm and values, and source operation. A storage upload acknowledgment is not proof of a verified backup.
+The controller requests `game.backup.capture` for each exact data set from a completed `game.backup.prepare` result. It sends the one-use adapter-to-controller handle only in transient `request_context.stream_transfers` immediately before dispatch; the durable step input contains the stable capture intent and ID. The stream is operation/step/capability/target/generation/data-set bound, expiring, and byte limited. The controller independently measures and hashes each completed stream before upload. Captured byte counts and SHA-256 values MUST match the actual stream before the workflow can continue. Unknown capture outcomes require inspection or operator review; they MUST NOT trigger blind replay.
+
+The backup operation MUST capture a manifest that identifies the logical server, environment, source instance/runtime, game and world versions, selected data paths, creation time, checksum algorithm and values, and source operation. An online write watermark MAY be recorded as informational evidence in the manifest. A storage upload acknowledgment is not proof of a verified backup.
 
 The operation MUST verify object presence, size, manifest, and configured integrity evidence before returning to `starting`, `stopped`, or `destroying`.
 
@@ -178,11 +180,11 @@ To determine whether a backup represents the current persistent data before dest
 - Before a stopped server is started again, the controller MUST assign a new generation ID. This conservatively makes the prior backup non-current once the game can write again.
 - A restore, migration, release operation that changes persistent data, or approved external data modification MUST assign a new generation ID before the runtime is started.
 - If an out-of-band change or an unknown runtime outcome means the current generation cannot be established, generation status becomes `unknown`; no prior backup may authorize destruction until a new consistent backup is captured and verified.
-- An online/game-native snapshot MAY be used for restore or recovery, but MUST NOT authorize destruction after the runtime has continued writing unless the game adapter provides a verifiable write-watermark/generation guarantee. The conservative default is that resuming the runtime advances the generation and makes that backup non-current.
+- An online/game-native snapshot MAY be used for restore or recovery. This draft defines no interoperable write-watermark verifier, so such a snapshot MUST NOT authorize destruction. The conservative default is that resuming the runtime advances the generation and makes an earlier backup non-current.
 
 A backup is eligible to authorize destruction only when it is integrity-verified, belongs to the same logical server and environment, and its `data_generation_id` exactly matches the current known generation. Backup age alone is not sufficient.
 
-The generation ID is an opaque identity token for one persistent-data write epoch, not a timestamp, age, or player-visible counter. It MUST NOT be reused for a later write epoch. It MUST be recorded in the logical server record, backup manifest, operation result, and audit evidence. Freshness means exact equality with the current known generation (or a separately verified game-native write watermark); age alone never establishes freshness. The protocol does not prescribe UUID/ULID generation.
+The generation ID is an opaque identity token for one persistent-data write epoch, not a timestamp, age, or player-visible counter. It MUST NOT be reused for a later write epoch. It MUST be recorded in the logical server record, backup manifest, operation result, and audit evidence. Freshness means exact equality with the current known generation; this draft defines no game-native watermark verifier, and age alone never establishes freshness. The protocol does not prescribe UUID/ULID generation.
 
 ## 7. Readiness and routing
 
@@ -237,8 +239,8 @@ A lifecycle-conforming implementation MUST:
 The following decisions close the lifecycle review items for this draft:
 
 - **Forced stop:** It remains a separately authorized and auditable fallback within `stopping`; no additional public lifecycle state is introduced (§5.3).
-- **Online backups:** They are optional adapter capabilities. They authorize destruction after resumed writes only when the adapter proves the captured write generation/watermark; otherwise the offline generation rule applies (§5.4 and §6).
-- **Generation identity and freshness:** A generation ID identifies one write epoch and is never reused. A backup is current only when its verified generation exactly matches the current known generation, or a separately verified native watermark proves coverage (§6).
+- **Online backups:** They are optional adapter capabilities, but this draft defines no interoperable watermark-verifier contract. A game-native watermark is informational and cannot authorize destruction; the offline generation rule applies (§5.4 and §6).
+- **Generation identity and freshness:** A generation ID identifies one write epoch and is never reused. A backup is current only when its verified generation exactly matches the current known generation. A future watermark-verifier contract requires a separate protocol change (§6).
 - **Permanent retirement:** Deleting the logical server record or backup metadata is an administrative/data-retention lifecycle outside this protocol. `destroyed` means the infrastructure instance is confirmed absent; logical identity and backup references remain (§3 and §5.5).
 - **Readiness:** Every game adapter declares the versioned check set for its release and environment. The controller requires one fresh, target-bound passing result per check; no universal per-game checklist is imposed by the core (§3.1 and §7).
 

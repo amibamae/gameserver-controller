@@ -15,7 +15,11 @@
     "game.save",
     "game.release.inspect",
     "game.inspect",
-    "runtime.inspect"
+    "runtime.inspect",
+    "game.backup"
+  ],
+  "stream_transport_profiles": [
+    "local-unix-stream-v1"
   ],
   "capabilities": [
     {
@@ -44,6 +48,70 @@
       "constraints": {
         "verify_all_artifact_checksums_before_execution": true,
         "idempotent_for_same_release": true
+      }
+    },
+    {
+      "name": "game.data.describe",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:data-describe-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:data-describe-output",
+      "required_permissions": [
+        "game.inspect"
+      ],
+      "constraints": {
+        "persistent_data_sets": [
+          {
+            "game_release_id": "paper-1.21.11-build-3",
+            "data_set_ids": ["world"],
+            "supported_consistency_modes": ["offline"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "game.backup.prepare",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:backup-prepare-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:backup-prepare-output",
+      "required_permissions": [
+        "game.backup"
+      ],
+      "constraints": {
+        "consistency_modes": ["offline"],
+        "requires_exact_data_generation_and_data_set_binding": true
+      }
+    },
+    {
+      "name": "game.backup.capture",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:backup-capture-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:backup-capture-output",
+      "required_permissions": [
+        "game.backup"
+      ],
+      "constraints": {
+        "consistency_modes": ["offline"],
+        "stream_transfer_direction": "adapter_to_controller",
+        "maximum_transfer_lifetime_seconds": 300,
+        "reports_stream_byte_count_and_sha256": true,
+        "stable_capture_id_required_for_reconciliation": true
+      }
+    },
+    {
+      "name": "game.backup.validate",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:backup-validate-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:game:backup-validate-output",
+      "required_permissions": [
+        "game.inspect"
+      ],
+      "constraints": {
+        "validates_exact_manifest_objects": true,
+        "unknown_result_blocks_backup_verification": true
       }
     },
     {

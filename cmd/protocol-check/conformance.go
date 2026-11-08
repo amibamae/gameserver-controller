@@ -60,8 +60,14 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return evaluateGameReleaseDescription(pkg, fixture)
 	case "game.install.release-binding-and-reconciliation":
 		return evaluateGameInstallContract(pkg, fixture)
+	case "game.backup.capture.binding-and-stream-integrity":
+		return evaluateBackupCapture(pkg, fixture)
 	case "operations.type-binding":
 		return evaluateOperationTypeBinding(pkg, fixture)
+	case "operations.unknown-result-reference-projection":
+		return evaluateUnknownResultReferenceProjection(pkg, fixture)
+	case "operations.request-fingerprint-jcs":
+		return evaluateRequestFingerprintJCS(fixture)
 	case "integration.proxy.backend.drain-unregister-state-confirmation":
 		return evaluateProxyBackendDrainUnregisterState(pkg, fixture)
 	case "integration.proxy.inspect.target-state-and-routability":

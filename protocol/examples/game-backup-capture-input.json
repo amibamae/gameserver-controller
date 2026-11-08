@@ -1,0 +1,19 @@
+{
+  "target": {
+    "server_id": "minecraft-demo",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.vultr",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-demo-01"
+    }
+  },
+  "release_id": "paper-1.21.11-build-3",
+  "backup_id": "backup-demo-004",
+  "data_generation_id": "generation-demo-004",
+  "preparation_id": "prep-demo-004-world",
+  "data_set_id": "world",
+  "capture_id": "operation-demo-004-capture-world",
+  "consistency_mode": "offline"
+}

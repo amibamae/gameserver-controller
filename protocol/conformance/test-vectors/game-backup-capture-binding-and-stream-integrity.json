@@ -1,0 +1,685 @@
+{
+  "fixture_id": "game.backup.capture.binding-and-stream-integrity",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "game.backup.capture",
+  "capability": "game.backup.capture",
+  "purpose": "Exercise exact preparation and target binding, one-use transfer authorization, transfer expiry and limits, streamed SHA-256 verification, reconciliation, and generation behavior after runtime resume.",
+  "input": {
+    "now": "2026-11-07T10:00:00Z",
+    "adapter_id": "game.minecraft-paper",
+    "request_context": {
+      "request_id": "request-backup-004-capture-world",
+      "correlation_id": "operation-backup-004",
+      "operation_id": "operation-backup-004",
+      "step_id": "capture-world",
+      "server_id": "minecraft-demo",
+      "environment_id": "staging",
+      "deadline": "2026-11-07T10:06:00Z",
+      "stream_transfers": [
+        {
+          "transfer_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "direction": "adapter_to_controller",
+          "maximum_bytes": 3,
+          "expires_at": "2026-11-07T10:05:00Z"
+        }
+      ]
+    },
+    "base_request": {
+      "target": {
+        "server_id": "minecraft-demo",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.vultr",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-demo-01"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3",
+      "backup_id": "backup-demo-004",
+      "data_generation_id": "generation-demo-004",
+      "preparation_id": "prep-demo-004-world",
+      "data_set_id": "world",
+      "capture_id": "operation-backup-004-capture-world",
+      "consistency_mode": "offline"
+    },
+    "base_preparation_result": {
+      "target": {
+        "server_id": "minecraft-demo",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.vultr",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-demo-01"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3",
+      "backup_id": "backup-demo-004",
+      "data_generation_id": "generation-demo-004",
+      "data_set_ids": [
+        "world",
+        "plugins"
+      ],
+      "consistency_mode": "offline",
+      "outcome": "prepared",
+      "preparation_id": "prep-demo-004-world",
+      "consistency_evidence": "Runtime stopped and selected data sets are stable for capture.",
+      "observed_at": "2026-11-07T10:00:30Z"
+    },
+    "base_output": {
+      "target": {
+        "server_id": "minecraft-demo",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.vultr",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-demo-01"
+        }
+      },
+      "release_id": "paper-1.21.11-build-3",
+      "backup_id": "backup-demo-004",
+      "data_generation_id": "generation-demo-004",
+      "preparation_id": "prep-demo-004-world",
+      "data_set_id": "world",
+      "capture_id": "operation-backup-004-capture-world",
+      "consistency_mode": "offline",
+      "outcome": "captured",
+      "stream_completed": true,
+      "size_bytes": 3,
+      "checksum": {
+        "algorithm": "sha256",
+        "digest": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+      },
+      "observed_at": "2026-11-07T10:01:00Z"
+    },
+    "base_transfer_scope": {
+      "transfer_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "direction": "adapter_to_controller",
+      "maximum_bytes": 3,
+      "expires_at": "2026-11-07T10:05:00Z",
+      "operation_id": "operation-backup-004",
+      "step_id": "capture-world",
+      "capability": "game.backup.capture",
+      "adapter_id": "game.minecraft-paper",
+      "target": {
+        "server_id": "minecraft-demo",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.vultr",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-demo-01"
+        }
+      },
+      "data_generation_id": "generation-demo-004",
+      "data_set_id": "world",
+      "capture_id": "operation-backup-004-capture-world",
+      "consumed": false
+    },
+    "evaluations": [
+      {
+        "case_id": "valid-offline-capture",
+        "stream_bytes": "abc"
+      },
+      {
+        "case_id": "wrong-transfer-direction",
+        "stream_bytes": "abc",
+        "request_context_overrides": {
+          "stream_transfers": [
+            {
+              "transfer_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "direction": "controller_to_adapter",
+              "maximum_bytes": 3,
+              "expires_at": "2026-11-07T10:05:00Z"
+            }
+          ]
+        }
+      },
+      {
+        "case_id": "input-target-expansion",
+        "stream_bytes": "abc",
+        "request_overrides": {
+          "target": {
+            "environment_id": "production"
+          }
+        }
+      },
+      {
+        "case_id": "result-target-mismatch",
+        "stream_bytes": "abc",
+        "output_overrides": {
+          "target": {
+            "instance_ref": {
+              "external_id": "instance-other"
+            }
+          }
+        }
+      },
+      {
+        "case_id": "preparation-mismatch",
+        "stream_bytes": "abc",
+        "output_overrides": {
+          "preparation_id": "prep-other"
+        }
+      },
+      {
+        "case_id": "generation-mismatch",
+        "stream_bytes": "abc",
+        "output_overrides": {
+          "data_generation_id": "generation-other"
+        }
+      },
+      {
+        "case_id": "data-set-mismatch",
+        "stream_bytes": "abc",
+        "output_overrides": {
+          "data_set_id": "plugins"
+        }
+      },
+      {
+        "case_id": "capture-id-mismatch",
+        "stream_bytes": "abc",
+        "output_overrides": {
+          "capture_id": "capture-other"
+        }
+      },
+      {
+        "case_id": "broker-data-set-scope-mismatch",
+        "stream_bytes": "abc",
+        "transfer_scope_overrides": {
+          "data_set_id": "plugins"
+        }
+      },
+      {
+        "case_id": "broker-capability-scope-mismatch",
+        "stream_bytes": "abc",
+        "transfer_scope_overrides": {
+          "capability": "game.backup.prepare"
+        }
+      },
+      {
+        "case_id": "stream-exceeds-authorized-byte-limit",
+        "stream_bytes": "abc",
+        "request_context_overrides": {
+          "stream_transfers": [
+            {
+              "transfer_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "direction": "adapter_to_controller",
+              "maximum_bytes": 2,
+              "expires_at": "2026-11-07T10:05:00Z"
+            }
+          ]
+        },
+        "transfer_scope_overrides": {
+          "maximum_bytes": 2
+        }
+      },
+      {
+        "case_id": "adapter-reports-wrong-byte-count",
+        "stream_bytes": "abc",
+        "output_overrides": {
+          "size_bytes": 4
+        }
+      },
+      {
+        "case_id": "stream-checksum-mismatch",
+        "stream_bytes": "abc",
+        "output_overrides": {
+          "checksum": {
+            "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        }
+      },
+      {
+        "case_id": "incomplete-captured-stream",
+        "stream_bytes": "abc",
+        "output_overrides": {
+          "stream_completed": false
+        }
+      },
+      {
+        "case_id": "transport-observed-truncation",
+        "stream_bytes": "abc",
+        "stream_transport_complete": false
+      },
+      {
+        "case_id": "capture-outcome-unknown",
+        "stream_bytes": "",
+        "output_overrides": {
+          "outcome": "outcome_unknown",
+          "reconciliation_ref": {
+            "adapter_id": "game.minecraft-paper",
+            "environment_id": "staging",
+            "resource_kind": "capture",
+            "external_id": "capture-operation-004"
+          }
+        },
+        "output_remove": [
+          "stream_completed",
+          "size_bytes",
+          "checksum"
+        ]
+      },
+      {
+        "case_id": "already-consumed-transfer-cannot-replay",
+        "stream_bytes": "abc",
+        "transfer_scope_overrides": {
+          "consumed": true
+        }
+      },
+      {
+        "case_id": "expired-transfer-cannot-replay",
+        "stream_bytes": "abc",
+        "request_context_overrides": {
+          "stream_transfers": [
+            {
+              "transfer_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "direction": "adapter_to_controller",
+              "maximum_bytes": 3,
+              "expires_at": "2026-11-07T09:59:00Z"
+            }
+          ]
+        },
+        "transfer_scope_overrides": {
+          "expires_at": "2026-11-07T09:59:00Z"
+        }
+      },
+      {
+        "case_id": "transfer-lifetime-exceeds-policy",
+        "stream_bytes": "abc",
+        "request_context_overrides": {
+          "stream_transfers": [
+            {
+              "transfer_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "direction": "adapter_to_controller",
+              "maximum_bytes": 3,
+              "expires_at": "2026-11-07T10:06:00Z"
+            }
+          ]
+        },
+        "transfer_scope_overrides": {
+          "expires_at": "2026-11-07T10:06:00Z"
+        }
+      },
+      {
+        "case_id": "transfer-expires-after-invocation-deadline",
+        "stream_bytes": "abc",
+        "request_context_overrides": {
+          "deadline": "2026-11-07T10:03:00Z",
+          "stream_transfers": [
+            {
+              "transfer_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "direction": "adapter_to_controller",
+              "maximum_bytes": 3,
+              "expires_at": "2026-11-07T10:04:00Z"
+            }
+          ]
+        },
+        "transfer_scope_overrides": {
+          "expires_at": "2026-11-07T10:04:00Z"
+        }
+      },
+      {
+        "case_id": "game-native-watermark-does-not-survive-resume",
+        "stream_bytes": "abc",
+        "request_overrides": {
+          "consistency_mode": "game_native"
+        },
+        "output_overrides": {
+          "consistency_mode": "game_native",
+          "write_watermark": {
+            "data_generation_id": "generation-demo-004",
+            "value": "paper-save-sequence-64",
+            "observed_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "runtime_resumed": true,
+        "current_generation_id": "generation-demo-005",
+        "preparation_result_overrides": {
+          "consistency_mode": "game_native"
+        }
+      },
+      {
+        "case_id": "game-native-watermark-is-informational-without-standard-verifier",
+        "stream_bytes": "abc",
+        "request_overrides": {
+          "consistency_mode": "game_native"
+        },
+        "output_overrides": {
+          "consistency_mode": "game_native",
+          "write_watermark": {
+            "data_generation_id": "generation-demo-004",
+            "value": "paper-save-sequence-64",
+            "observed_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "current_generation_id": "generation-demo-004",
+        "preparation_result_overrides": {
+          "consistency_mode": "game_native"
+        }
+      },
+      {
+        "case_id": "game-native-without-watermark-is-recovery-only",
+        "stream_bytes": "abc",
+        "request_overrides": {
+          "consistency_mode": "game_native"
+        },
+        "output_overrides": {
+          "consistency_mode": "game_native"
+        },
+        "preparation_result_overrides": {
+          "consistency_mode": "game_native"
+        }
+      },
+      {
+        "case_id": "offline-backup-is-not-current-after-runtime-resumes",
+        "stream_bytes": "abc",
+        "runtime_resumed": true,
+        "current_generation_id": "generation-demo-005"
+      },
+      {
+        "case_id": "preparation-result-id-mismatch",
+        "stream_bytes": "abc",
+        "preparation_result_overrides": {
+          "preparation_id": "prep-other"
+        }
+      },
+      {
+        "case_id": "preparation-result-does-not-include-data-set",
+        "stream_bytes": "abc",
+        "preparation_result_overrides": {
+          "data_set_ids": [
+            "plugins"
+          ]
+        }
+      },
+      {
+        "case_id": "preparation-was-rejected",
+        "stream_bytes": "abc",
+        "preparation_result_overrides": {
+          "outcome": "rejected",
+          "reason_code": "quiesce_failed"
+        }
+      },
+      {
+        "case_id": "invalid-request-context-with-captured-claim",
+        "stream_bytes": "abc",
+        "request_context_remove": [
+          "request_id"
+        ]
+      },
+      {
+        "case_id": "rejected-capture-with-received-bytes",
+        "stream_bytes": "abc",
+        "output_overrides": {"outcome": "rejected", "reason_code": "capture.rejected"},
+        "output_remove": ["stream_completed", "size_bytes", "checksum"]
+      },
+      {
+        "case_id": "valid-rejected-capture",
+        "stream_bytes": "",
+        "output_overrides": {
+          "outcome": "rejected",
+          "reason_code": "capture_not_supported"
+        },
+        "output_remove": [
+          "stream_completed",
+          "size_bytes",
+          "checksum"
+        ]
+      },
+      {
+        "case_id": "rejected-capture-with-mismatched-target",
+        "stream_bytes": "",
+        "output_overrides": {
+          "outcome": "rejected",
+          "reason_code": "capture_not_supported",
+          "target": {
+            "instance_ref": {
+              "external_id": "instance-other"
+            }
+          }
+        },
+        "output_remove": [
+          "stream_completed",
+          "size_bytes",
+          "checksum"
+        ]
+      },
+      {
+        "case_id": "rejected-capture-with-invalid-result",
+        "stream_bytes": "",
+        "output_overrides": {
+          "outcome": "rejected",
+          "reason_code": "capture_not_supported"
+        },
+        "output_remove": [
+          "stream_completed",
+          "size_bytes",
+          "checksum",
+          "reason_code"
+        ]
+      },
+      {
+        "case_id": "invalid-result-missing-outcome",
+        "stream_bytes": "abc",
+        "output_remove": [
+          "outcome"
+        ]
+      },
+      {
+        "case_id": "transfer-handle-leaked-in-result",
+        "stream_bytes": "abc",
+        "output_overrides": {
+          "transfer_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "cases": {
+      "valid-offline-capture": {
+        "schemas_valid": true,
+        "binding_exact": true,
+        "transfer_authorized": true,
+        "transfer_handle_in_durable_input": false,
+        "transfer_handle_in_invocation_context": true,
+        "transfer_handle_in_result": false,
+        "stream_within_bounds": true,
+        "checksum_valid": true,
+        "capture_accepted": true,
+        "requires_reconciliation": false,
+        "retry_permitted": false,
+        "destruction_current_generation_proven": true
+      },
+      "wrong-transfer-direction": {
+        "schemas_valid": true,
+        "transfer_authorized": false,
+        "capture_accepted": false,
+        "retry_permitted": false
+      },
+      "input-target-expansion": {
+        "request_target_bound": false,
+        "transfer_authorized": false,
+        "capture_accepted": false
+      },
+      "result-target-mismatch": {
+        "binding_exact": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "preparation-mismatch": {
+        "binding_exact": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "generation-mismatch": {
+        "binding_exact": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "data-set-mismatch": {
+        "binding_exact": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "capture-id-mismatch": {
+        "binding_exact": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "broker-data-set-scope-mismatch": {
+        "transfer_authorized": false,
+        "capture_accepted": false
+      },
+      "broker-capability-scope-mismatch": {
+        "transfer_authorized": false,
+        "capture_accepted": false
+      },
+      "stream-exceeds-authorized-byte-limit": {
+        "transfer_authorized": true,
+        "stream_within_bounds": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "adapter-reports-wrong-byte-count": {
+        "stream_within_bounds": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "stream-checksum-mismatch": {
+        "stream_within_bounds": true,
+        "checksum_valid": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "incomplete-captured-stream": {
+        "schemas_valid": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "transport-observed-truncation": {
+        "schemas_valid": true,
+        "stream_completed": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "capture-outcome-unknown": {
+        "schemas_valid": true,
+        "transfer_handle_in_durable_input": false,
+        "transfer_handle_in_invocation_context": true,
+        "transfer_handle_in_result": false,
+        "requires_reconciliation": true,
+        "retry_permitted": false,
+        "capture_accepted": false
+      },
+      "already-consumed-transfer-cannot-replay": {
+        "transfer_authorized": false,
+        "capture_accepted": false,
+        "retry_permitted": false
+      },
+      "expired-transfer-cannot-replay": {
+        "transfer_authorized": false,
+        "capture_accepted": false,
+        "retry_permitted": false
+      },
+      "transfer-lifetime-exceeds-policy": {
+        "transfer_authorized": false,
+        "capture_accepted": false
+      },
+      "game-native-watermark-does-not-survive-resume": {
+        "capture_accepted": true,
+        "write_watermark_bound": true,
+        "destruction_current_generation_proven": false
+      },
+      "game-native-watermark-is-informational-without-standard-verifier": {
+        "capture_accepted": true,
+        "write_watermark_bound": true,
+        "destruction_current_generation_proven": false
+      },
+      "game-native-without-watermark-is-recovery-only": {
+        "capture_accepted": true,
+        "write_watermark_bound": false,
+        "destruction_current_generation_proven": false
+      },
+      "offline-backup-is-not-current-after-runtime-resumes": {
+        "capture_accepted": true,
+        "destruction_current_generation_proven": false
+      },
+      "preparation-result-id-mismatch": {
+        "preparation_result_schema_valid": true,
+        "preparation_bound": false,
+        "dispatch_permitted": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "preparation-result-does-not-include-data-set": {
+        "preparation_result_schema_valid": true,
+        "preparation_bound": false,
+        "dispatch_permitted": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "preparation-was-rejected": {
+        "preparation_result_schema_valid": true,
+        "preparation_bound": false,
+        "dispatch_permitted": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "invalid-request-context-with-captured-claim": {
+        "schemas_valid": false,
+        "preparation_bound": true,
+        "dispatch_permitted": false,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "rejected-capture-with-received-bytes": {
+        "schemas_valid": true,
+        "dispatch_permitted": true,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "valid-rejected-capture": {
+        "schemas_valid": true,
+        "preparation_bound": true,
+        "dispatch_permitted": true,
+        "capture_accepted": false,
+        "requires_reconciliation": false
+      },
+      "rejected-capture-with-mismatched-target": {
+        "schemas_valid": true,
+        "binding_exact": false,
+        "dispatch_permitted": true,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "rejected-capture-with-invalid-result": {
+        "schemas_valid": false,
+        "dispatch_permitted": true,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "transfer-expires-after-invocation-deadline": {
+        "transfer_authorized": false,
+        "dispatch_permitted": false,
+        "capture_accepted": false
+      },
+      "invalid-result-missing-outcome": {
+        "schemas_valid": false,
+        "dispatch_permitted": true,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      },
+      "transfer-handle-leaked-in-result": {
+        "schemas_valid": false,
+        "transfer_handle_in_result": true,
+        "capture_accepted": false,
+        "requires_reconciliation": true
+      }
+    }
+  },
+  "side_effect_expectation": "simulated",
+  "notes": "The fixture models controller-owned transfer authorization and completed preparation separately from adapter input. The stream bytes are synthetic; a capture claim is accepted only when preparation and broker bindings are exact and the independent byte count/checksum agree. A rejected result avoids reconciliation only when its schema, invocation, and target binding are trustworthy."
+}
