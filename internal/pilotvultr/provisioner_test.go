@@ -2,6 +2,9 @@ package pilotvultr
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -54,9 +57,11 @@ type scriptedProvider struct {
 	createCalls int
 	getCalls    int
 	listCalls   int
+	scriptCalls int
 	create      func(context.Context, []byte, vultrapi.CreateInstanceRequest) (vultrapi.Instance, error)
 	get         func(context.Context, []byte, string) (vultrapi.Instance, error)
 	list        func(context.Context, []byte, string) ([]vultrapi.Instance, error)
+	script      func(context.Context, []byte, string) (vultrapi.StartupScript, error)
 }
 
 func (p *scriptedProvider) CreateInstance(ctx context.Context, token []byte, request vultrapi.CreateInstanceRequest) (vultrapi.Instance, error) {
@@ -81,6 +86,14 @@ func (p *scriptedProvider) ListInstancesByLabel(ctx context.Context, token []byt
 	list := p.list
 	p.mu.Unlock()
 	return list(ctx, token, label)
+}
+
+func (p *scriptedProvider) GetStartupScript(ctx context.Context, token []byte, id string) (vultrapi.StartupScript, error) {
+	p.mu.Lock()
+	p.scriptCalls++
+	get := p.script
+	p.mu.Unlock()
+	return get(ctx, token, id)
 }
 
 func (p *scriptedProvider) counts() (create, get, list int) {
@@ -129,14 +142,19 @@ func successfulProvider() *scriptedProvider {
 		return vultrapi.Instance{ID: id, Label: label, Status: "pending", DateCreated: time.Now().UTC().Format(time.RFC3339Nano)}, nil
 	}
 	provider.list = func(context.Context, []byte, string) ([]vultrapi.Instance, error) { return nil, nil }
+	provider.script = func(_ context.Context, _ []byte, _ string) (vultrapi.StartupScript, error) {
+		return vultrapi.StartupScript{ID: "script-123", Type: "boot", Script: base64.StdEncoding.EncodeToString([]byte("bootstrap"))}, nil
+	}
 	return provider
 }
 
 func request(operationID, serverID, environment string) CreateRequest {
+	scriptDigest := sha256.Sum256([]byte("bootstrap"))
 	return CreateRequest{
 		OperationID: operationID, ServerID: serverID, Environment: environment,
 		Region: "ewr", Plan: "vc2-1c-2gb", OSID: "362", Hostname: "pilot.example.invalid",
-		SSHKeyIDs: []string{"sshkey-123"},
+		SSHKeyIDs:       []string{"sshkey-123"},
+		StartupScriptID: "script-123", StartupScriptSHA256: hex.EncodeToString(scriptDigest[:]),
 	}
 }
 
@@ -151,6 +169,9 @@ func TestProvisionReservesBeforeCreateAndIsIdempotent(t *testing.T) {
 	}
 	if reservation.State != store.CapacityActive || reservation.ProviderInstanceID != "instance-1" {
 		t.Fatalf("unexpected reservation: %+v", reservation)
+	}
+	if provider.scriptCalls != 1 {
+		t.Fatalf("verified startup script %d times; want once before the create", provider.scriptCalls)
 	}
 	if reservation.ProvisionedAt.IsZero() || reservation.ProvisionedAt.Before(reservation.CreatedAt) || reservation.ProvisionedAt.After(reservation.UpdatedAt) {
 		t.Fatalf("provider creation time was not persisted: %+v", reservation)
@@ -182,6 +203,119 @@ func TestProvisionReservesBeforeCreateAndIsIdempotent(t *testing.T) {
 	changed.Plan = "vc2-2c-4gb"
 	if _, err := provisioner.Provision(context.Background(), changed); !errors.Is(err, store.ErrCapacityConflict) {
 		t.Fatalf("same operation with changed plan returned %v, want ErrCapacityConflict", err)
+	}
+	changed = input
+	changed.StartupScriptID = "script-other"
+	if _, err := provisioner.Provision(context.Background(), changed); !errors.Is(err, store.ErrCapacityConflict) {
+		t.Fatalf("same operation with changed startup-script ID returned %v, want ErrCapacityConflict", err)
+	}
+}
+
+func TestProvisionRejectsUnverifiedStartupScriptBeforeCapacityOrCreate(t *testing.T) {
+	provider := successfulProvider()
+	provisioner, repository, _ := newTestProvisioner(t, provider)
+	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	input.StartupScriptSHA256 = strings.Repeat("0", 64)
+	if _, err := provisioner.Provision(context.Background(), input); !errors.Is(err, ErrBootstrapScript) {
+		t.Fatalf("mismatched startup script digest returned %v", err)
+	}
+	created, _, _ := provider.counts()
+	if created != 0 {
+		t.Fatalf("unverified bootstrap sent %d VM create requests", created)
+	}
+	reservations, err := repository.ListCapacityReservations()
+	if err != nil || len(reservations) != 0 {
+		t.Fatalf("unverified bootstrap reserved capacity: reservations=%+v err=%v", reservations, err)
+	}
+}
+
+func TestProvisionRejectsWrongStartupScriptIDBeforeCapacityOrCreate(t *testing.T) {
+	provider := successfulProvider()
+	provisioner, repository, _ := newTestProvisioner(t, provider)
+	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	input.StartupScriptID = "script-other"
+	if _, err := provisioner.Provision(context.Background(), input); !errors.Is(err, ErrBootstrapScript) {
+		t.Fatalf("wrong startup script ID returned %v", err)
+	}
+	created, _, _ := provider.counts()
+	reservations, storeErr := repository.ListCapacityReservations()
+	if created != 0 || storeErr != nil || len(reservations) != 0 {
+		t.Fatalf("wrong startup script was used: create=%d reservations=%+v storeErr=%v", created, reservations, storeErr)
+	}
+}
+
+func TestProvisionReconcilesLegacyUnknownCreateWithoutRecreatingIt(t *testing.T) {
+	provider := successfulProvider()
+	provider.list = func(context.Context, []byte, string) ([]vultrapi.Instance, error) { return nil, nil }
+	provisioner, repository, _ := newTestProvisioner(t, provider)
+	legacy := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	legacy.StartupScriptID, legacy.StartupScriptSHA256 = "", ""
+	_, reservation, err := provisioner.prepare(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := repository.ReserveCapacity(reservation, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.MarkCapacityCreateSent(reservation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	current := request(legacy.OperationID, legacy.ServerID, legacy.Environment)
+	result, err := provisioner.Provision(context.Background(), current)
+	if !errors.Is(err, ErrOutcomeUnknown) || result.State != store.CapacityCreateOutcomeUnknown {
+		t.Fatalf("legacy create reconciliation = %+v, %v", result, err)
+	}
+	created, _, listed := provider.counts()
+	if created != 0 || listed != 1 || provider.scriptCalls != 0 {
+		t.Fatalf("legacy unknown create was not reconciled safely: create=%d list=%d script-check=%d", created, listed, provider.scriptCalls)
+	}
+}
+
+func TestProvisionReleasesLegacyReservedOperationBeforeBootstrappedCreate(t *testing.T) {
+	provider := successfulProvider()
+	provisioner, repository, _ := newTestProvisioner(t, provider)
+	legacy := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	legacy.StartupScriptID, legacy.StartupScriptSHA256 = "", ""
+	_, reservation, err := provisioner.prepare(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := repository.ReserveCapacity(reservation, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	current := request(legacy.OperationID, legacy.ServerID, legacy.Environment)
+	result, err := provisioner.Provision(context.Background(), current)
+	if err != nil || result.State != store.CapacityActive {
+		t.Fatalf("bootstrapped create after releasing legacy reservation = %+v, %v", result, err)
+	}
+	if result.ResourceKey == reservation.ResourceKey {
+		t.Fatal("new create reused the legacy fingerprint without the bootstrap ID and digest")
+	}
+}
+
+func TestProvisionReleasesUnsentReservationWhenBootstrapDigestFails(t *testing.T) {
+	provider := successfulProvider()
+	provider.script = func(_ context.Context, _ []byte, id string) (vultrapi.StartupScript, error) {
+		return vultrapi.StartupScript{ID: id, Type: "boot", Script: base64.StdEncoding.EncodeToString([]byte("changed"))}, nil
+	}
+	provisioner, repository, _ := newTestProvisioner(t, provider)
+	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	_, reservation, err := provisioner.prepare(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := repository.ReserveCapacity(reservation, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provisioner.Provision(context.Background(), input); !errors.Is(err, ErrBootstrapScript) {
+		t.Fatalf("mismatched script returned %v", err)
+	}
+	if _, err := repository.GetCapacityReservation(input.OperationID); !errors.Is(err, store.ErrCapacityNotFound) {
+		t.Fatalf("unsent reservation was not released: %v", err)
+	}
+	created, _, _ := provider.counts()
+	if created != 0 {
+		t.Fatalf("mismatched script dispatched %d VM creates", created)
 	}
 }
 

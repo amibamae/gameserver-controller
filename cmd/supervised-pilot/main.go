@@ -37,6 +37,7 @@ const (
 var safeSSHHost = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.@:-]*$`)
 var safeOperationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var safeInvocationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
+var safeStartupScriptDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var safePilotServerID = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 var safeCredentialRef = regexp.MustCompile(`^systemd-credential://[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 var safePilotTarget = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}@(production|staging|testing)$`)
@@ -97,6 +98,8 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 	hostname := flags.String("hostname", "", "optional VM hostname")
 	credentialRef := flags.String("credential-ref", defaultVultrCredential, "systemd credential reference for the Vultr API key")
 	operationID := flags.String("operation-id", "", "reuse the exact operation ID to reconcile a create or repeat an adoption")
+	startupScriptID := flags.String("startup-script-id", "", "exact Vultr bootstrap startup-script ID")
+	startupScriptSHA256 := flags.String("startup-script-sha256", "", "expected SHA-256 digest printed by gsc-bootstrap")
 	var sshKeyIDs stringListFlag
 	flags.Var(&sshKeyIDs, "ssh-key-id", "Vultr SSH key ID; repeat for multiple keys (required for provisioning)")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -139,7 +142,7 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		}
 		return backup(*host, *execute, *confirmHost, *timeout, stdout, stderr)
 	case "provision":
-		if err := allowOnlyFlags(flags, "execute", "confirm-create", "timeout", "server-id", "environment", "region", "plan", "os-id", "hostname", "credential-ref", "operation-id", "ssh-key-id"); err != nil {
+		if err := allowOnlyFlags(flags, "execute", "confirm-create", "timeout", "server-id", "environment", "region", "plan", "os-id", "hostname", "credential-ref", "operation-id", "ssh-key-id", "startup-script-id", "startup-script-sha256"); err != nil {
 			return err
 		}
 		policy, err := pilotcapacity.LoadEmbeddedPolicy()
@@ -150,7 +153,7 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if err != nil {
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
-		return provisionVultr(*execute, *confirmCreate, *timeout, policy, statePath, *serverID, *environmentID, *region, *plan, *osID, *hostname, sshKeyIDs, *credentialRef, *operationID, stdout, stderr)
+		return provisionVultr(*execute, *confirmCreate, *timeout, policy, statePath, *serverID, *environmentID, *region, *plan, *osID, *hostname, sshKeyIDs, *startupScriptID, *startupScriptSHA256, *credentialRef, *operationID, stdout, stderr)
 	case "adopt":
 		if err := allowOnlyFlags(flags, "execute", "confirm-adopt", "timeout", "server-id", "environment", "instance-id", "expected-ip", "region", "plan", "os-id", "os-name", "credential-ref", "operation-id"); err != nil {
 			return err
@@ -253,13 +256,13 @@ func usage(w io.Writer) error {
 	fmt.Fprintln(w, "  gsc-pilot backup --host <ssh-alias> [--execute --confirm-host <same-alias>]")
 	fmt.Fprintln(w, "  gsc-pilot history")
 	fmt.Fprintln(w, "  gsc-pilot boot-status --server-id <id> --environment <environment>")
-	fmt.Fprintln(w, "  gsc-pilot provision --server-id <id> --environment staging --region <id> --plan <id> --os-id <id> --ssh-key-id <id>")
+	fmt.Fprintln(w, "  gsc-pilot provision --server-id <id> --environment staging --region <id> --plan <id> --os-id <id> --ssh-key-id <id> --startup-script-id <id> --startup-script-sha256 <digest>")
 	fmt.Fprintln(w, "  gsc-pilot adopt --server-id <id> --environment <environment> --instance-id <id> --expected-ip <IPv4> --region <id> --plan <id> --os-id <id> --os-name <name>")
 	fmt.Fprintln(w, "  gsc-pilot capacity")
 	return errors.New("an action is required")
 }
 
-func provisionVultr(execute bool, confirmation string, timeout time.Duration, policy pilotcapacity.Policy, statePath, serverID, environment, region, plan, osID, hostname string, sshKeyIDs []string, credentialRef, operationID string, stdout, stderr io.Writer) error {
+func provisionVultr(execute bool, confirmation string, timeout time.Duration, policy pilotcapacity.Policy, statePath, serverID, environment, region, plan, osID, hostname string, sshKeyIDs []string, startupScriptID, startupScriptSHA256, credentialRef, operationID string, stdout, stderr io.Writer) error {
 	if timeout <= 0 || timeout > 24*time.Hour {
 		return errors.New("--timeout must be greater than zero and no more than 24h")
 	}
@@ -268,6 +271,9 @@ func provisionVultr(execute bool, confirmation string, timeout time.Duration, po
 	}
 	if len(sshKeyIDs) == 0 {
 		return errors.New("at least one --ssh-key-id is required so the VM is reachable")
+	}
+	if startupScriptID == "" || !safeStartupScriptDigest.MatchString(startupScriptSHA256) {
+		return errors.New("--startup-script-id and a 64-character lowercase --startup-script-sha256 are required")
 	}
 	if !safeCredentialRef.MatchString(credentialRef) {
 		return errors.New("--credential-ref must use systemd-credential://NAME")
@@ -285,7 +291,7 @@ func provisionVultr(execute bool, confirmation string, timeout time.Duration, po
 	}
 	validation := vultrapi.CreateInstanceRequest{
 		Region: region, Plan: plan, OSID: providerOSID, Label: "gsc-managed-dry-run",
-		Hostname: hostname, SSHKeyIDs: append([]string(nil), sshKeyIDs...),
+		Hostname: hostname, SSHKeyIDs: append([]string(nil), sshKeyIDs...), StartupScriptID: startupScriptID,
 	}
 	if err := vultrapi.ValidateCreateInstanceRequest(validation); err != nil {
 		return errors.New("region, plan, hostname, or SSH key ID is invalid")
@@ -300,6 +306,7 @@ func provisionVultr(execute bool, confirmation string, timeout time.Duration, po
 		}
 		fmt.Fprintln(stdout, "Dry run: no provider API call, credential read, or capacity reservation was made.")
 		fmt.Fprintf(stdout, "Would create one managed Vultr VM: server=%s environment=%s group=%s region=%s plan=%s os_id=%d\n", serverID, environment, groupID, region, plan, providerOSID)
+		fmt.Fprintf(stdout, "Bootstrap startup script ID: %s\nBootstrap SHA-256: %s\n", startupScriptID, startupScriptSHA256)
 		fmt.Fprintf(stdout, "Configured hard limit: %d controller-owned VM(s).\n", policy.MaxInstancesTotal)
 		fmt.Fprintf(stdout, "To create it, add --execute --confirm-create %s.\n", expectedConfirmation)
 		return nil
@@ -320,7 +327,7 @@ func provisionVultr(execute bool, confirmation string, timeout time.Duration, po
 		return fmt.Errorf("resolve audit log path: %w", err)
 	}
 	auditTarget := serverID + "@" + environment
-	auditDetail := fmt.Sprintf("region=%s plan=%s os_id=%d", region, plan, providerOSID)
+	auditDetail := fmt.Sprintf("region=%s plan=%s os_id=%d startup_script_id=%s startup_script_sha256=%s", region, plan, providerOSID, startupScriptID, startupScriptSHA256)
 	if err := appendAuditEvent(auditPath, operationID, "provision_requested", "provision", auditTarget, "vultr.instance.create", auditDetail); err != nil {
 		return fmt.Errorf("Vultr create not started: could not persist the audit event: %w", err)
 	}
@@ -346,7 +353,8 @@ func provisionVultr(execute bool, confirmation string, timeout time.Duration, po
 	input := pilotvultr.CreateRequest{
 		OperationID: operationID, ServerID: serverID, Environment: environment,
 		Region: region, Plan: plan, OSID: osID, Hostname: hostname,
-		SSHKeyIDs: append([]string(nil), sshKeyIDs...),
+		SSHKeyIDs: append([]string(nil), sshKeyIDs...), StartupScriptID: startupScriptID,
+		StartupScriptSHA256: startupScriptSHA256,
 	}
 	fmt.Fprintf(stdout, "Operation ID: %s\n", operationID)
 	fmt.Fprintf(stdout, "Submitting capacity-checked Vultr create for %s in %s.\n", serverID, environment)

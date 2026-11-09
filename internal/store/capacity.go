@@ -158,6 +158,34 @@ func (s *BoltStore) MarkCapacityCreateSent(operationID string) (CapacityReservat
 	})
 }
 
+// ReleaseUnsentCapacityReservation removes a reservation only while it is
+// still in the pre-dispatch state. Once a create may have reached the
+// provider, the reservation must remain for reconciliation.
+func (s *BoltStore) ReleaseUnsentCapacityReservation(operationID, resourceKey string) error {
+	if !validCapacityIdentifier(operationID, 200) || !validCapacityIdentifier(resourceKey, 240) {
+		return ErrCapacityNotFound
+	}
+	return s.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(capacityReservationsBucket)
+		key := []byte(operationID)
+		value := bucket.Get(key)
+		if value == nil {
+			return ErrCapacityNotFound
+		}
+		current, err := decodeCapacityReservation(value)
+		if err != nil {
+			return err
+		}
+		if current.ResourceKey != resourceKey {
+			return ErrCapacityConflict
+		}
+		if current.State != CapacityReserved {
+			return ErrCapacityTransition
+		}
+		return bucket.Delete(key)
+	})
+}
+
 // MarkCapacityDestroySent is a one-time dispatch claim. Callers must claim it
 // immediately before sending the provider destroy request; a repeated claim
 // fails so a retry cannot accidentally dispatch the same destroy again.

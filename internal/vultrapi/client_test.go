@@ -20,9 +20,9 @@ func testCreateInput() CreateInstanceRequest {
 	return CreateInstanceRequest{
 		Region: "ewr", Plan: "vc2-1c-2gb", OSID: 362,
 		Label: "gsc-pilot-staging-001", Hostname: "staging-001.example.invalid",
-		SSHKeyIDs: []string{"sshkey-123"},
-		UserData:  base64.StdEncoding.EncodeToString([]byte("#cloud-config\n")),
-		Tags:      []string{"managed-by-gsc", "environment-staging"},
+		SSHKeyIDs: []string{"sshkey-123"}, StartupScriptID: "script-123",
+		UserData: base64.StdEncoding.EncodeToString([]byte("#cloud-config\n")),
+		Tags:     []string{"managed-by-gsc", "environment-staging"},
 	}
 }
 
@@ -84,6 +84,9 @@ func TestCreateInstanceSendsOneAuthenticatedRequest(t *testing.T) {
 		}
 		if got := body["sshkey_id"].([]any); len(got) != 1 || got[0] != "sshkey-123" {
 			t.Errorf("unexpected sshkey_id: %#v", body["sshkey_id"])
+		}
+		if body["script_id"] != "script-123" {
+			t.Errorf("unexpected startup script ID: %#v", body["script_id"])
 		}
 		if got := body["tags"].([]any); len(got) != 2 {
 			t.Errorf("unexpected tags: %#v", body["tags"])
@@ -279,12 +282,13 @@ func TestInvalidCreateRequestsDoNotReachProvider(t *testing.T) {
 		w.WriteHeader(http.StatusAccepted)
 	})
 	cases := map[string]func(*CreateInstanceRequest){
-		"missing plan":      func(input *CreateInstanceRequest) { input.Plan = " " },
-		"invalid os id":     func(input *CreateInstanceRequest) { input.OSID = 0 },
-		"invalid label":     func(input *CreateInstanceRequest) { input.Label = "bad\nlabel" },
-		"invalid SSH key":   func(input *CreateInstanceRequest) { input.SSHKeyIDs = []string{"bad/key"} },
-		"invalid user data": func(input *CreateInstanceRequest) { input.UserData = "not base64" },
-		"duplicate tag":     func(input *CreateInstanceRequest) { input.Tags = []string{"same", "same"} },
+		"missing plan":              func(input *CreateInstanceRequest) { input.Plan = " " },
+		"invalid os id":             func(input *CreateInstanceRequest) { input.OSID = 0 },
+		"invalid label":             func(input *CreateInstanceRequest) { input.Label = "bad\nlabel" },
+		"invalid SSH key":           func(input *CreateInstanceRequest) { input.SSHKeyIDs = []string{"bad/key"} },
+		"invalid startup script ID": func(input *CreateInstanceRequest) { input.StartupScriptID = "../script" },
+		"invalid user data":         func(input *CreateInstanceRequest) { input.UserData = "not base64" },
+		"duplicate tag":             func(input *CreateInstanceRequest) { input.Tags = []string{"same", "same"} },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
