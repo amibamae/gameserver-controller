@@ -8,12 +8,13 @@ credential name referenced by the validated config, prompts twice with
 `systemd-ask-password`, and stores the value with `systemd-creds` in
 `/etc/credstore.encrypted`. It runs only on Debian/systemd with local
 administrator privileges, requires exact name confirmation to replace an
-existing value, and never prints the credential. A first authenticated HTTP
-handler can inspect durable operation records with exact server and environment
-scopes. It is not connected to a listener. Setup apply, the remaining
+existing value, and never prints the credential. `controller serve` can run a
+disabled-by-default HTTPS listener for the authenticated operation-inspection
+route. It requires a fixed audience and a TLS certificate/private-key pair; the
+current API exposes no lifecycle mutation routes. Setup apply, the remaining
 management API routes, password login, and session issuance are not implemented.
-A local root-only API-key issue/revoke command exists, but it does not enable
-remote management. This document does not authorize live installation.
+The example configuration keeps the listener disabled. This document does not
+authorize live installation.
 
 Run the preview from a checkout with:
 
@@ -24,6 +25,21 @@ go run ./cmd/controller-setup plan --config configs/controller.example.yaml --js
 The example configuration contains placeholder provider references and is
 intended to show the plan shape. The output reports supported-target blockers
 and fixed destination paths; it does not claim that setup can be applied yet.
+
+The `controller serve` command runs only when `controller.management_api.enabled`
+is explicitly set to `true`. Configure an IP address, controller audience, and
+absolute certificate/key paths first. The TLS private key must be a regular
+file that is not group-writable and has no permissions for other users. The
+listener requires TLS 1.2 or newer, applies bounded HTTP timeouts, and authenticates
+every request before routing it. Use a trusted certificate for clients outside
+the local test environment.
+
+```sh
+go run ./cmd/controller serve --config /etc/gameserver-controller/controller.yaml
+```
+
+This runtime currently supports `GET /v1/operations/{operation_id}` only. It is
+not ready to operate game-server lifecycles or replace the supervised pilot.
 
 To store one of the credential names already referenced by your validated
 configuration, use:
