@@ -76,6 +76,7 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 
 - [x] Add a read-only Go setup planner for an existing Debian/systemd machine; it validates configuration and prints a redacted JSON plan without host changes or provider access.
 - [x] Add local-only entry for configured provider credentials, encrypted as named systemd credentials with explicit replacement confirmation.
+- [x] Add a local root-only API-key issuance and revocation CLI backed by a reusable authorized application service; the command requires an existing private store, exact scopes, explicit expiry, one-time token output, and exact revocation confirmation.
 - [ ] Implement [controller setup on an existing machine](CONTROLLER_SETUP.md) in Go, with secure Vultr/Wasabi credential input and a redacted installation plan.
 - [ ] Implement scoped, expiring, revocable controller API keys and enforce authentication and authorization before enabling a remote management listener.
 - Preserve password-backed sessions and delegated controller access as the future panel's integration contract; panel implementation remains out of scope.

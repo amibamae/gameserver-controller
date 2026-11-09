@@ -13,12 +13,17 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/amibamae/gameserver-controller/internal/authkey"
 	"github.com/amibamae/gameserver-controller/internal/config"
 	"github.com/amibamae/gameserver-controller/internal/controllersetup"
+	"github.com/amibamae/gameserver-controller/internal/keyadmin"
+	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
 func main() {
@@ -29,6 +34,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) error {
+	if len(args) > 0 && args[0] == "keys" {
+		return runKeyCommand(args[1:], stdout, stderr, os.Geteuid() == 0, os.Geteuid())
+	}
 	if len(args) > 0 && args[0] == "credentials" {
 		host := inspectHost()
 		if host.OSReleaseID != "debian" || !host.Systemd {
@@ -37,6 +45,159 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runCredentialCommand(args[1:], stdout, stderr, os.Geteuid() == 0, askPassword, controllersetup.SystemdEncryptor{}, "/etc/credstore.encrypted")
 	}
 	return runWithHost(args, stdout, stderr, inspectHost())
+}
+
+type scopeFlags []string
+
+func (s *scopeFlags) String() string { return strings.Join(*s, ",") }
+func (s *scopeFlags) Set(value string) error {
+	*s = append(*s, value)
+	return nil
+}
+
+type localAdminAuthorizer struct{ isRoot bool }
+
+func (a localAdminAuthorizer) AuthorizeIssue(context.Context, string, keyadmin.IssueRequest) error {
+	if !a.isRoot {
+		return errors.New("local administrator privileges are required")
+	}
+	return nil
+}
+
+func (a localAdminAuthorizer) AuthorizeRevoke(context.Context, string, string) error {
+	if !a.isRoot {
+		return errors.New("local administrator privileges are required")
+	}
+	return nil
+}
+
+type keyIssueOutput struct {
+	ID        string          `json:"id"`
+	Token     string          `json:"token"`
+	ActorID   string          `json:"actor_id"`
+	Audience  string          `json:"audience"`
+	Scopes    []authkey.Scope `json:"scopes"`
+	CreatedAt time.Time       `json:"created_at"`
+	ExpiresAt time.Time       `json:"expires_at"`
+}
+
+func runKeyCommand(args []string, stdout, stderr io.Writer, isRoot bool, uid int) error {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: controller-setup keys {issue|revoke} [options]")
+		return errors.New("invalid command")
+	}
+	operation := args[0]
+	flags := flag.NewFlagSet("controller-setup keys "+operation, flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	databasePath := flags.String("database", "", "existing configured bbolt database")
+	actorID := flags.String("actor", "", "actor identity assigned to the new key")
+	audience := flags.String("audience", "", "exact controller audience for the key")
+	expiresIn := flags.String("expires-in", "", "required key lifetime (1m through 90d)")
+	keyID := flags.String("key-id", "", "key identifier to revoke")
+	confirmKeyID := flags.String("confirm-key-id", "", "repeat the exact key identifier to confirm revocation")
+	var scopes scopeFlags
+	flags.Var(&scopes, "scope", "exact permission:environment:resource scope; repeat for multiple scopes")
+	if err := flags.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if flags.NArg() != 0 || strings.TrimSpace(*databasePath) == "" {
+		return errors.New("--database must name the existing controller database")
+	}
+	var issueRequest keyadmin.IssueRequest
+	switch operation {
+	case "issue":
+		if *keyID != "" || *confirmKeyID != "" {
+			return errors.New("issue does not accept revocation flags")
+		}
+		if strings.TrimSpace(*actorID) == "" || strings.TrimSpace(*audience) == "" || *expiresIn == "" || len(scopes) == 0 {
+			return errors.New("issue requires --actor, --audience, --expires-in, and at least one --scope")
+		}
+		lifetime, err := time.ParseDuration(*expiresIn)
+		if err != nil {
+			return errors.New("--expires-in must be a Go duration between 1m and 90d")
+		}
+		parsedScopes := make([]authkey.Scope, 0, len(scopes))
+		for _, value := range scopes {
+			parts := strings.Split(value, ":")
+			if len(parts) != 3 {
+				return errors.New("each --scope must be permission:environment:resource")
+			}
+			parsedScopes = append(parsedScopes, authkey.Scope{Permission: parts[0], Environment: parts[1], Resource: parts[2]})
+		}
+		issueRequest = keyadmin.IssueRequest{ActorID: *actorID, Audience: *audience, Scopes: parsedScopes, Lifetime: lifetime}
+	case "revoke":
+		if *actorID != "" || *audience != "" || *expiresIn != "" || len(scopes) != 0 {
+			return errors.New("revoke does not accept issuance flags")
+		}
+		if *keyID == "" || *confirmKeyID != *keyID {
+			return errors.New("revoke requires --key-id and --confirm-key-id with the exact same identifier")
+		}
+	default:
+		fmt.Fprintln(stderr, "usage: controller-setup keys {issue|revoke} [options]")
+		return errors.New("invalid command")
+	}
+	if !isRoot {
+		return errors.New("key administration requires local administrator privileges")
+	}
+	if err := requireExistingDatabase(*databasePath); err != nil {
+		return err
+	}
+	db, err := store.OpenBolt(filepath.Clean(*databasePath))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	manager, err := authkey.NewManager(db)
+	if err != nil {
+		return err
+	}
+	service, err := keyadmin.NewService(manager, localAdminAuthorizer{isRoot: isRoot}, time.Now)
+	if err != nil {
+		return err
+	}
+	requesterID := "uid-" + strconv.Itoa(uid)
+	if operation == "issue" {
+		issued, err := service.Issue(context.Background(), requesterID, issueRequest)
+		if err != nil {
+			return err
+		}
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(keyIssueOutput{ID: issued.ID, Token: issued.Secret, ActorID: issued.ActorID,
+			Audience: issued.Audience, Scopes: issued.Scopes, CreatedAt: issued.CreatedAt, ExpiresAt: issued.ExpiresAt}); err != nil {
+			return fmt.Errorf("could not write newly issued key %s; it may have been created, revoke it before retrying", issued.ID)
+		}
+		return nil
+	}
+	if err := service.Revoke(context.Background(), requesterID, *keyID); err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, "API key revoked.")
+	return nil
+}
+
+func requireExistingDatabase(path string) error {
+	directory, err := os.Lstat(filepath.Dir(path))
+	if err != nil || directory.Mode()&os.ModeSymlink != 0 || !directory.IsDir() {
+		return errors.New("controller database directory must be an existing directory, not a symlink")
+	}
+	if directory.Mode().Perm()&0o022 != 0 {
+		return errors.New("controller database directory must not be writable by group or other users")
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return errors.New("controller database must already exist; check --database")
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return errors.New("controller database must be a regular file, not a symlink")
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return errors.New("controller database has group or world permissions; restrict it before managing keys")
+	}
+	return nil
 }
 
 type passwordPrompt func(context.Context, string) ([]byte, error)
