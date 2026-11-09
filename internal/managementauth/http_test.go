@@ -101,6 +101,9 @@ func TestAuthenticationRejectsInvalidCredentialsGenerically(t *testing.T) {
 			if !strings.Contains(response.Header().Get("WWW-Authenticate"), "Bearer") || strings.Contains(response.Body.String(), issued.Secret) {
 				t.Fatalf("authentication response leaked token or omitted challenge: headers=%v body=%q", response.Header(), response.Body.String())
 			}
+			if response.Header().Get("Content-Type") != "application/problem+json" || response.Header().Get("Cache-Control") != "no-store" || !strings.Contains(response.Body.String(), `"status":401`) {
+				t.Fatalf("authentication response is not a non-cacheable problem response: headers=%v body=%q", response.Header(), response.Body.String())
+			}
 		})
 	}
 }
