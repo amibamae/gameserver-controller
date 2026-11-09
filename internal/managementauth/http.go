@@ -4,6 +4,7 @@ package managementauth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
@@ -110,5 +111,12 @@ func clonePrincipal(principal authkey.Principal) authkey.Principal {
 
 func unauthorized(w http.ResponseWriter) {
 	w.Header().Set("WWW-Authenticate", "Bearer")
-	http.Error(w, "unauthorized", http.StatusUnauthorized)
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(struct {
+		Type   string `json:"type"`
+		Title  string `json:"title"`
+		Status int    `json:"status"`
+	}{Type: "about:blank", Title: "Unauthorized", Status: http.StatusUnauthorized})
 }

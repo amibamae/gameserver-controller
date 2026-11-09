@@ -8,11 +8,12 @@ credential name referenced by the validated config, prompts twice with
 `systemd-ask-password`, and stores the value with `systemd-creds` in
 `/etc/credstore.encrypted`. It runs only on Debian/systemd with local
 administrator privileges, requires exact name confirmation to replace an
-existing value, and never prints the credential. The setup apply command,
-management API/listener integration, password login, and session issuance are
-not implemented. A local root-only API-key issue/revoke command now exists, but
-it does not enable remote management. This document does not authorize live
-installation.
+existing value, and never prints the credential. A first authenticated HTTP
+handler can inspect durable operation records with exact server and environment
+scopes. It is not connected to a listener. Setup apply, the remaining
+management API routes, password login, and session issuance are not implemented.
+A local root-only API-key issue/revoke command exists, but it does not enable
+remote management. This document does not authorize live installation.
 
 Run the preview from a checkout with:
 
@@ -128,6 +129,18 @@ This local command is not a replacement for authenticated, scoped key
 administration through a future management API. A future panel must use a
 separate authenticated application boundary and cannot assert a requester ID
 from browser input.
+
+## HTTP operation inspection
+
+The Go management API package currently implements only
+`GET /v1/operations/{operation_id}`. It authenticates the bearer token against
+one configured audience before reading the operation store, then requires the
+exact `server.inspect` scope for that operation's environment and server. A
+missing operation and an inaccessible operation both return the same 404
+response. Storage failures return a generic 500 response without database
+diagnostics. The handler does not start a listener; TLS configuration, runtime
+composition, and the remaining API routes are still required before remote
+management is available.
 
 ## Controller API keys
 
