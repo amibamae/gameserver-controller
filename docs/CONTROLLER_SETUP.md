@@ -9,8 +9,10 @@ credential name referenced by the validated config, prompts twice with
 `/etc/credstore.encrypted`. It runs only on Debian/systemd with local
 administrator privileges, requires exact name confirmation to replace an
 existing value, and never prints the credential. The setup apply command,
-management authentication runtime, password login, and session issuance are
-not implemented. This document does not authorize live installation.
+management API/listener integration, password login, and session issuance are
+not implemented. A local root-only API-key issue/revoke command now exists, but
+it does not enable remote management. This document does not authorize live
+installation.
 
 Run the preview from a checkout with:
 
@@ -84,6 +86,48 @@ For a future panel, authenticated credential submission may call the same
 application service over TLS, subject to an explicit credential-management
 permission. Provider secrets remain on the controller and are never returned
 to a client. A remote setup route cannot bootstrap its own authorization.
+
+## Local controller API key administration
+
+The first key-management client is a local, root-only `controller-setup keys`
+command backed by an application service. It operates only on an existing
+private bbolt database and does not start or enable a remote listener. The
+service receives the requester identity from its trusted boundary, checks
+authorization before issuing or revoking, and records that requester as the
+creator or revoker.
+
+Issue a key with an explicit actor, controller audience, expiry, and one or more
+exact scopes:
+
+```sh
+sudo controller-setup keys issue \
+  --database /var/lib/gameserver-controller/controller.db \
+  --actor backup-automation \
+  --audience controller-instance-1 \
+  --expires-in 720h \
+  --scope storage.backup.write:staging:test-server
+```
+
+The lifetime is required, ranges from one minute to 90 days, and uses Go
+duration syntax. The command prints the bearer token once as JSON on standard
+output. Protect that output as a secret. The database keeps only the verifier.
+The command has no key-list operation, does not accept token values as
+arguments, and rejects wildcard scopes.
+
+Revoke a key by repeating its exact identifier:
+
+```sh
+KEY_ID="replace-with-key-id"
+sudo controller-setup keys revoke \
+  --database /var/lib/gameserver-controller/controller.db \
+  --key-id "$KEY_ID" \
+  --confirm-key-id "$KEY_ID"
+```
+
+This local command is not a replacement for authenticated, scoped key
+administration through a future management API. A future panel must use a
+separate authenticated application boundary and cannot assert a requester ID
+from browser input.
 
 ## Controller API keys
 
