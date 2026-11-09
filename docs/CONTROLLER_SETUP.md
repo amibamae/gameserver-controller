@@ -1,9 +1,11 @@
 # Controller setup and management access
 
-**Status:** Accepted implementation direction. `controller-setup plan` validates
-configuration and emits a redacted, read-only plan for an existing Debian/
-systemd machine. It does not install or modify files, contact providers, or read
-credential contents. `controller-setup credentials set` accepts only a
+**Status:** The Go CLI can preview and apply the initial local installation on
+an existing Debian/systemd machine. Apply installs a controller binary, a
+validated configuration, a hardened systemd unit, and private state
+directories. It does not enable, start, or stop the service, contact providers,
+or overwrite different existing files. `controller-setup plan` remains
+read-only and redacted. `controller-setup credentials set` accepts only a
 credential name referenced by the validated config, prompts twice with
 `systemd-ask-password`, and stores the value with `systemd-creds` in
 `/etc/credstore.encrypted`. It runs only on Debian/systemd with local
@@ -11,10 +13,12 @@ administrator privileges, requires exact name confirmation to replace an
 existing value, and never prints the credential. `controller serve` can run a
 disabled-by-default HTTPS listener for the authenticated operation-inspection
 route. It requires a fixed audience and a TLS certificate/private-key pair; the
-current API exposes no lifecycle mutation routes. Setup apply, the remaining
-management API routes, password login, and session issuance are not implemented.
-The example configuration keeps the listener disabled. This document does not
-authorize live installation.
+current API exposes no lifecycle mutation routes. Provider credential
+installation is a separate command. Provider credential checks, audit
+integration, remaining management API routes, password login, and session
+issuance are not implemented. The example configuration keeps the listener
+disabled. These instructions document behavior; they do not authorize applying
+it to a live host.
 
 Run the preview from a checkout with:
 
@@ -24,7 +28,39 @@ go run ./cmd/controller-setup plan --config configs/controller.example.yaml --js
 
 The example configuration contains placeholder provider references and is
 intended to show the plan shape. The output reports supported-target blockers
-and fixed destination paths; it does not claim that setup can be applied yet.
+and fixed destination paths. Applying that example would install placeholders,
+not working provider credentials.
+
+To apply a reviewed configuration on the target machine, build both Go
+executables for that Linux machine, inspect the plan, then run the explicit
+confirmation command as root:
+
+```sh
+go build -o /tmp/controller ./cmd/controller
+go build -o /tmp/controller-setup ./cmd/controller-setup
+/tmp/controller-setup plan --config /path/to/controller.yaml --json
+sudo /tmp/controller-setup apply \
+  --config /path/to/controller.yaml \
+  --binary /tmp/controller \
+  --confirm INSTALL-GAMESERVER-CONTROLLER
+```
+
+Apply validates that the binary is a Go build of this project for Linux and
+the current machine architecture. It requires Debian/systemd and local
+administrator privileges. It creates the dedicated service account and private
+directories, installs files without replacing differing files, then reloads
+systemd. It does not enable, start, or stop the service. If installation fails,
+new files are rolled back when possible; the service account or directories
+created earlier in the attempt may remain. Review the host before retrying.
+
+After installing a real configuration, store each configured provider
+credential with `controller-setup credentials set` as described below. That
+command uses hidden input and encrypted systemd credentials. If the management
+API is enabled in the configuration, valid TLS files must already be present
+at the configured paths and readable by the dedicated service account. A
+private key can be installed as `root:gameserver-controller` mode `0640`, with
+its parent directories traversable by the service group. The setup command does
+not create TLS certificates or enable the listener.
 
 The `controller serve` command runs only when `controller.management_api.enabled`
 is explicitly set to `true`. Configure an IP address, controller audience, and
@@ -67,24 +103,19 @@ Those services must remain usable by a future management client. Do not build a
 web panel as part of this work. A hosted panel remains optional, and the
 controller must work without one.
 
-The proposed CLI flow is:
+The implemented local setup flow currently covers:
 
-1. Inspect the machine and validate a local configuration without reading secrets
-   or changing services. Report missing prerequisites and exact planned paths.
-2. Collect Vultr and Wasabi credentials through hidden interactive input or a
-   protected input stream. Never accept literal secret values as command-line
-   options or place them in process environment variables.
-3. Prepare encrypted systemd credentials and configuration containing named
-   `systemd-credential://` references. Show a redacted installation plan before
-   applying it. Preserve existing configuration and credentials unless an
-   explicit replacement was requested.
-4. Install the approved configuration and service under a dedicated account,
-   with private state, restricted credentials, and local audit enabled. Initial
-   setup uses local OS authorization; it cannot expose an anonymous remote
-   setup or administrator-registration endpoint.
-5. Optionally test provider credentials with bounded read-only calls. Report
-   what was actually checked. A successful read does not prove create/delete
-   permissions or authorize a billable or destructive operation.
+1. Inspect the machine and validate a local configuration without reading
+   secrets or changing services. Report missing prerequisites and exact paths.
+2. Install the controller binary, configuration, hardened service unit, and
+   private directories after an explicit local confirmation. Existing differing
+   files are preserved and cause failure.
+3. Enter configured provider credentials separately through hidden prompts and
+   store them as encrypted systemd credentials.
+
+Provider credential checks, local audit integration, and a complete controller
+runtime remain future work. Setup uses local OS authorization; it does not
+expose an anonymous remote setup or administrator-registration endpoint.
 
 Keep Wasabi access-key IDs and secret-access keys out of source, generated
 bootstrap scripts, user data, release artifacts, operation records, and logs.
