@@ -265,9 +265,7 @@ func (a *Adapter) put(ctx context.Context, request adapter.InvokeRequest) (any, 
 		return nil, sideEffectError("Wasabi upload failed")
 	}
 	ref := objectReference{objectTarget: input.Target}
-	if result.VersionID != nil {
-		ref.VersionID = *result.VersionID
-	}
+	ref.VersionID, _ = confirmedVersion("", result.VersionID)
 	if a.config.RequireVersionIDs && (ref.VersionID == "" || ref.VersionID == "null") {
 		return nil, sideEffectError("Wasabi did not return the required immutable object version")
 	}
@@ -350,13 +348,9 @@ func (a *Adapter) get(ctx context.Context, request adapter.InvokeRequest) (any, 
 		return nil, errors.New("Wasabi object checksum does not match the backup manifest")
 	}
 	ref := input.ObjectRef
-	if result.VersionId != nil && *result.VersionId != "" {
-		if ref.VersionID != "" && ref.VersionID != *result.VersionId {
-			return nil, errors.New("Wasabi returned a different object version")
-		}
-		ref.VersionID = *result.VersionId
-	} else if input.ObjectRef.VersionID != "" {
-		return nil, errors.New("Wasabi did not confirm the requested object version")
+	ref.VersionID, err = confirmedVersion(input.ObjectRef.VersionID, result.VersionId)
+	if err != nil {
+		return nil, err
 	}
 	if a.config.RequireVersionIDs && (ref.VersionID == "" || ref.VersionID == "null") {
 		return nil, errors.New("Wasabi object did not resolve to an immutable version")
@@ -381,19 +375,15 @@ func (a *Adapter) head(ctx context.Context, request adapter.InvokeRequest) (any,
 	result, err := client.HeadObject(ctx, head)
 	if err != nil {
 		var missing interface{ ErrorCode() string }
-		if errors.As(err, &missing) && (missing.ErrorCode() == "NotFound" || missing.ErrorCode() == "NoSuchKey") {
+		if errors.As(err, &missing) && (missing.ErrorCode() == "NotFound" || missing.ErrorCode() == "NoSuchKey" || missing.ErrorCode() == "NoSuchVersion") {
 			return map[string]any{"object_ref": input.ObjectRef, "object_state": "absent", "observed_at": time.Now().UTC().Format(time.RFC3339Nano)}, nil
 		}
 		return nil, errors.New("Wasabi object inspection failed")
 	}
 	ref := input.ObjectRef
-	if result.VersionId != nil && *result.VersionId != "" {
-		if ref.VersionID != "" && ref.VersionID != *result.VersionId {
-			return nil, errors.New("Wasabi returned a different object version")
-		}
-		ref.VersionID = *result.VersionId
-	} else if input.ObjectRef.VersionID != "" {
-		return nil, errors.New("Wasabi did not confirm the requested object version")
+	ref.VersionID, err = confirmedVersion(input.ObjectRef.VersionID, result.VersionId)
+	if err != nil {
+		return nil, err
 	}
 	if a.config.RequireVersionIDs && (ref.VersionID == "" || ref.VersionID == "null") {
 		return nil, errors.New("Wasabi object has no immutable version ID")
@@ -408,13 +398,29 @@ func (a *Adapter) head(ctx context.Context, request adapter.InvokeRequest) (any,
 	if result.LastModified != nil {
 		value["last_modified"] = result.LastModified.UTC().Format(time.RFC3339Nano)
 	}
-	if result.ChecksumSHA256 != nil {
+	if result.ChecksumType == types.ChecksumTypeFullObject && result.ChecksumSHA256 != nil {
 		decoded, decodeErr := base64.StdEncoding.DecodeString(*result.ChecksumSHA256)
 		if decodeErr == nil && len(decoded) == sha256.Size {
 			value["provider_checksum"] = checksum{Algorithm: "sha256", Digest: hex.EncodeToString(decoded)}
 		}
 	}
 	return value, nil
+}
+
+func confirmedVersion(requested string, observed *string) (string, error) {
+	if requested != "" && requested != "null" {
+		if observed == nil || *observed != requested {
+			return "", errors.New("Wasabi did not confirm the requested object version")
+		}
+		return requested, nil
+	}
+	if requested == "null" {
+		return "", errors.New("the mutable null object version is not accepted as an exact version")
+	}
+	if observed != nil && *observed != "" && *observed != "null" {
+		return *observed, nil
+	}
+	return "", nil
 }
 
 func (a *Adapter) validTarget(value objectTarget) bool {
