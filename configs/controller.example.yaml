@@ -5,6 +5,12 @@ controller:
   state_store:
     type: bbolt
     path: ./var/controller.db
+  management_api:
+    enabled: false
+    listen_address: 127.0.0.1:8443
+    audience: controller-instance-1
+    tls_certificate_file: /etc/gameserver-controller/tls.crt
+    tls_private_key_file: /etc/gameserver-controller/tls.key
   defaults:
     operation_timeout: 15m
     retry_limit: 2
