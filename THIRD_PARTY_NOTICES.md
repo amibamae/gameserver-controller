@@ -12,6 +12,24 @@ The embedded operation store uses [bbolt](https://github.com/etcd-io/bbolt), mai
 - Copyright: Copyright (c) 2013 Ben Johnson
 - Full upstream notice: [licenses/bbolt-LICENSE](licenses/bbolt-LICENSE)
 
+## AWS SDK for Go v2
+
+The Wasabi storage adapter uses the AWS SDK for Go v2, including its S3 client,
+transfer manager, credential provider, and event-stream modules.
+
+- Modules and versions: `github.com/aws/aws-sdk-go-v2 v1.39.4`,
+  `github.com/aws/aws-sdk-go-v2/credentials v1.18.19`,
+  `github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.0`,
+  `github.com/aws/aws-sdk-go-v2/service/s3 v1.88.7`, and
+  `github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.2`, pinned in
+  [go.mod](go.mod)
+- Upstream: [AWS SDK for Go v2](https://github.com/aws/aws-sdk-go-v2)
+- License: Apache License 2.0
+- Copyright: Copyright 2015 Amazon.com, Inc. or its affiliates. All Rights
+  Reserved. Copyright 2014-2015 Stripe, Inc.
+- Full license: [licenses/aws-sdk-go-v2-LICENSE](licenses/aws-sdk-go-v2-LICENSE)
+- Upstream notice: [licenses/aws-sdk-go-v2-NOTICE](licenses/aws-sdk-go-v2-NOTICE)
+
 ## github.com/dlclark/regexp2
 
 - Version: `v1.11.0`, pinned in [go.mod](go.mod)
