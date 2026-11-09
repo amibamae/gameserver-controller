@@ -70,6 +70,7 @@ func testLayout() Layout {
 	return Layout{
 		ConfigFile:    filepath.Join(root, "controller.yaml"),
 		ServiceFile:   filepath.Join(root, "service.unit"),
+		BinaryFile:    filepath.Join(root, "controller"),
 		StateDir:      filepath.Join(root, "state"),
 		CredentialDir: filepath.Join(root, "credentials"),
 	}

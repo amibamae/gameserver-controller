@@ -23,6 +23,8 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
+const buildIdentity = "gameserver-controller-runtime-v1"
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -33,6 +35,10 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	if len(args) == 1 && args[0] == "version" {
+		_, err := fmt.Fprintln(stdout, buildIdentity)
+		return err
+	}
 	if len(args) == 0 || args[0] != "serve" {
 		fmt.Fprintln(stderr, "usage: controller serve --config PATH")
 		return errors.New("unsupported command")

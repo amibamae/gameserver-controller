@@ -80,7 +80,7 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - [x] Add tested Go client operations to create, read, and update Vultr startup scripts without retrying ambiguous mutations.
 - [x] Add an authenticated Go HTTP handler for operation inspection with exact server/environment scope checks and indistinguishable missing/inaccessible responses.
 - [x] Add a disabled-by-default HTTPS runtime for operation inspection with fixed-audience bearer authentication, TLS 1.2+, private-key permission checks, and bounded HTTP timeouts.
-- [ ] Implement [controller setup on an existing machine](CONTROLLER_SETUP.md) in Go, with secure Vultr/Wasabi credential input and a redacted installation plan.
+- [ ] Complete [controller setup on an existing machine](CONTROLLER_SETUP.md) in Go. The CLI now installs a validated config, controller binary checked for Go build metadata and a runtime build identifier, hardened systemd unit, service account, and private state directories without changing service enablement or state; provider credential checks, local audit integration, rollback of all host changes, and end-to-end validation remain open.
 - [x] Implement scoped, expiring, revocable controller API keys and enforce authentication and exact authorization for the current management route before enabling its remote listener. Remaining API routes are still future work.
 - Preserve password-backed sessions and delegated controller access as the future panel's integration contract; panel implementation remains out of scope.
 - Implement the core and application services against the protocol.

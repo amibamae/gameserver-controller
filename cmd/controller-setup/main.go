@@ -1,11 +1,12 @@
-// Command controller-setup previews installation and manages configured
-// encrypted systemd credentials on an existing Debian host. Service setup is
-// not implemented yet.
+// Command controller-setup previews and applies local installation, manages
+// encrypted systemd credentials, and administers API keys on Debian hosts.
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
+	"debug/buildinfo"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -23,6 +24,7 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/config"
 	"github.com/amibamae/gameserver-controller/internal/controllersetup"
 	"github.com/amibamae/gameserver-controller/internal/keyadmin"
+	"github.com/amibamae/gameserver-controller/internal/managementapi"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
@@ -34,6 +36,9 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) error {
+	if len(args) > 0 && args[0] == "apply" {
+		return runApplyCommand(args[1:], stdout, stderr, os.Geteuid() == 0, inspectHost(), "/", controllersetup.SystemInstallerHost{})
+	}
 	if len(args) > 0 && args[0] == "keys" {
 		return runKeyCommand(args[1:], stdout, stderr, os.Geteuid() == 0, os.Geteuid())
 	}
@@ -45,6 +50,108 @@ func run(args []string, stdout, stderr io.Writer) error {
 		return runCredentialCommand(args[1:], stdout, stderr, os.Geteuid() == 0, askPassword, controllersetup.SystemdEncryptor{}, "/etc/credstore.encrypted")
 	}
 	return runWithHost(args, stdout, stderr, inspectHost())
+}
+
+func runApplyCommand(args []string, stdout, stderr io.Writer, isRoot bool, host controllersetup.Host, root string, operations controllersetup.InstallerHost) error {
+	flags := flag.NewFlagSet("controller-setup apply", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "", "validated controller configuration")
+	binaryPath := flags.String("binary", "", "built Linux controller executable")
+	confirmation := flags.String("confirm", "", "type INSTALL-GAMESERVER-CONTROLLER to confirm local installation")
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if flags.NArg() != 0 || strings.TrimSpace(*configPath) == "" || strings.TrimSpace(*binaryPath) == "" {
+		return errors.New("apply requires --config and --binary")
+	}
+	if *confirmation != "INSTALL-GAMESERVER-CONTROLLER" {
+		return errors.New("apply requires --confirm INSTALL-GAMESERVER-CONTROLLER")
+	}
+	if !isRoot {
+		return errors.New("controller installation requires local administrator privileges")
+	}
+	if operations == nil {
+		return errors.New("controller installation operations are unavailable")
+	}
+	value, err := config.Load(*configPath)
+	if err != nil {
+		return err
+	}
+	if value.Controller.ManagementAPI.Enabled {
+		if _, err := managementapi.LoadTLSConfig(value.Controller.ManagementAPI.TLSCertificate, value.Controller.ManagementAPI.TLSPrivateKey); err != nil {
+			return errors.New("enabled management API requires a valid, readable TLS certificate and protected private key before installation")
+		}
+	}
+	binary, err := loadControllerBinary(*binaryPath)
+	if err != nil {
+		return err
+	}
+	plan, err := controllersetup.BuildPlan(value, host, defaultLayout())
+	if err != nil {
+		return err
+	}
+	if !plan.TargetSupported {
+		return errors.New("installation target is unsupported; run the plan command to inspect blockers")
+	}
+	bundle, err := controllersetup.BuildInstallBundle(value, plan.Layout, binary)
+	if err != nil {
+		return err
+	}
+	if err := controllersetup.ApplyInstallBundle(context.Background(), root, host, bundle, operations); err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, "Controller files installed and systemd reloaded. The service was not enabled, started, or stopped.")
+	return nil
+}
+
+func loadControllerBinary(path string) ([]byte, error) {
+	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return nil, errors.New("controller binary path must be clean and absolute")
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o111 == 0 || info.Mode().Perm()&0o022 != 0 || info.Size() <= 0 || info.Size() > 128<<20 {
+		return nil, errors.New("controller binary must be a non-empty executable regular file no larger than 128 MiB")
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, errors.New("open controller binary")
+	}
+	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil || !os.SameFile(info, openedInfo) {
+		return nil, errors.New("controller binary changed while it was being inspected")
+	}
+	build, err := buildinfo.Read(file)
+	if err != nil {
+		return nil, errors.New("controller binary does not contain readable Go build metadata")
+	}
+	if build.Main.Path != "github.com/amibamae/gameserver-controller" {
+		return nil, errors.New("binary is not a Go build of this controller project")
+	}
+	settings := make(map[string]string, len(build.Settings))
+	for _, setting := range build.Settings {
+		settings[setting.Key] = setting.Value
+	}
+	if settings["GOOS"] != "linux" || settings["GOARCH"] != runtime.GOARCH {
+		return nil, errors.New("controller binary must target Linux and the current machine architecture")
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, errors.New("rewind controller binary")
+	}
+	binary, err := io.ReadAll(io.LimitReader(file, (128<<20)+1))
+	if err != nil {
+		return nil, errors.New("read controller binary")
+	}
+	if len(binary) == 0 || len(binary) > 128<<20 {
+		return nil, errors.New("controller binary size is outside the supported range")
+	}
+	if !bytes.Contains(binary, []byte("gameserver-controller-runtime-v1")) {
+		return nil, errors.New("Go executable is not the controller runtime binary")
+	}
+	return binary, nil
 }
 
 type scopeFlags []string
@@ -295,6 +402,7 @@ func defaultLayout() controllersetup.Layout {
 	return controllersetup.Layout{
 		ConfigFile:    "/etc/gameserver-controller/controller.yaml",
 		ServiceFile:   "/etc/systemd/system/gameserver-controller.service",
+		BinaryFile:    "/usr/local/bin/controller",
 		StateDir:      "/var/lib/gameserver-controller",
 		CredentialDir: "/etc/credstore.encrypted",
 	}

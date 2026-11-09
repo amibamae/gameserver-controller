@@ -46,7 +46,11 @@ func TestServeRunsOnlyConfiguredAuthenticatedHTTPSListener(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- serve(ctx, value, configPath, io.Discard) }()
+	var client *http.Client
 	defer func() {
+		if client != nil {
+			client.CloseIdleConnections()
+		}
 		cancel()
 		select {
 		case err := <-done:
@@ -58,7 +62,7 @@ func TestServeRunsOnlyConfiguredAuthenticatedHTTPSListener(t *testing.T) {
 		}
 	}()
 
-	client := testHTTPSClient(t, value.Controller.ManagementAPI.TLSCertificate)
+	client = testHTTPSClient(t, value.Controller.ManagementAPI.TLSCertificate)
 	response := requestUntilResponse(t, client, value.Controller.ManagementAPI.ListenAddress, "")
 	response.Body.Close()
 	if response.StatusCode != http.StatusUnauthorized || response.Header.Get("Content-Type") != "application/problem+json" {

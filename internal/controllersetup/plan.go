@@ -15,6 +15,7 @@ import (
 type Layout struct {
 	ConfigFile        string `json:"config_file"`
 	ServiceFile       string `json:"service_file"`
+	BinaryFile        string `json:"binary_file"`
 	StateDir          string `json:"state_dir"`
 	StateDatabaseFile string `json:"state_database_file"`
 	CredentialDir     string `json:"credential_dir"`
@@ -56,6 +57,7 @@ func BuildPlan(value config.Config, host Host, layout Layout) (Plan, error) {
 	for name, path := range map[string]string{
 		"config file":          layout.ConfigFile,
 		"service file":         layout.ServiceFile,
+		"controller binary":    layout.BinaryFile,
 		"state directory":      layout.StateDir,
 		"credential directory": layout.CredentialDir,
 	} {
@@ -84,7 +86,7 @@ func BuildPlan(value config.Config, host Host, layout Layout) (Plan, error) {
 			"install controller configuration with private permissions",
 			"prepare named encrypted systemd credentials from protected operator input",
 			"install the systemd service unit without enabling a remote listener",
-			"initialize private controller state and local audit storage",
+			"prepare the private controller state directory",
 		},
 	}
 	if host.OSReleaseID != "debian" {
