@@ -26,7 +26,8 @@ const (
 	keyVersionsBucketName          = "idempotency_key_versions"
 	logicalServersBucketName       = "logical_servers"
 	capacityReservationsBucketName = "capacity_reservations"
-	databaseSchema                 = "4"
+	managementAPIKeysBucketName    = "management_api_keys"
+	databaseSchema                 = "5"
 )
 
 var (
@@ -38,6 +39,7 @@ var (
 	keyVersionsBucket          = []byte(keyVersionsBucketName)
 	logicalServersBucket       = []byte(logicalServersBucketName)
 	capacityReservationsBucket = []byte(capacityReservationsBucketName)
+	managementAPIKeysBucket    = []byte(managementAPIKeysBucketName)
 	schemaKey                  = []byte("schema_version")
 )
 
@@ -78,7 +80,7 @@ func OpenBolt(path string) (*BoltStore, error) {
 		if _, err := tx.CreateBucketIfNotExists(operationsBucket); err != nil {
 			return err
 		}
-		for _, name := range [][]byte{idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket, capacityReservationsBucket} {
+		for _, name := range [][]byte{idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket, capacityReservationsBucket, managementAPIKeysBucket} {
 			if _, err := tx.CreateBucketIfNotExists(name); err != nil {
 				return err
 			}
@@ -104,6 +106,9 @@ func OpenBolt(path string) (*BoltStore, error) {
 			return meta.Put(schemaKey, []byte(databaseSchema))
 		}
 		if bytes.Equal(version, []byte("3")) {
+			return meta.Put(schemaKey, []byte(databaseSchema))
+		}
+		if bytes.Equal(version, []byte("4")) {
 			return meta.Put(schemaKey, []byte(databaseSchema))
 		}
 		if !bytes.Equal(version, []byte(databaseSchema)) {
