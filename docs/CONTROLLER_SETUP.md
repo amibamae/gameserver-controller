@@ -142,11 +142,13 @@ Persistent automation keys are created separately through an authorized action,
 shown once, scoped, expiring, and individually revocable. Login sessions and
 automation keys have separate lifecycle controls.
 
-The Go store and `internal/authkey` package now provide durable key issuance,
+The Go store and `internal/authkey` package provide durable key issuance,
 one-time secret return, verifier-only persistence, exact permission/resource/
-environment scopes, controller-audience binding, expiry, and revocation. This
-foundation is not yet connected to a management API, a key-management CLI, or
-request authorization; no remote listener is enabled.
+environment scopes, controller-audience binding, expiry, and revocation. The
+`internal/managementauth` package adds HTTP bearer authentication and exact
+route-scope checks. These components are not yet connected to a management API
+or an authorized key-management application service/CLI. TLS termination, rate
+limiting, and audit integration are also outstanding; no listener is enabled.
 
 ## Implementation gates
 
