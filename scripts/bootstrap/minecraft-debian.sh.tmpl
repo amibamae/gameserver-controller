@@ -1,0 +1,596 @@
+#!/usr/bin/env bash
+# Vultr Debian bootstrap template. Render and upload with the Go bootstrap tool.
+set -Eeuo pipefail
+
+# Rendered values are validated by cmd/vultr-bootstrap before upload.
+
+LOG="/var/log/minecraft-bootstrap.log"
+STATE_DIR="/var/lib/minecraft-bootstrap"
+
+mkdir -p "$STATE_DIR"
+exec > >(tee -a "$LOG") 2>&1
+
+on_error() {
+    local rc=$?
+    echo
+    echo "============================================================"
+    echo "MINECRAFT BOOTSTRAP FAILED"
+    echo "exit code : $rc"
+    echo "line      : ${BASH_LINENO[0]}"
+    echo "command   : ${BASH_COMMAND}"
+    echo "log       : $LOG"
+    echo "============================================================"
+    echo "$rc" > "$STATE_DIR/bootstrap-failed"
+    exit "$rc"
+}
+
+trap on_error ERR
+
+MINECRAFT_USER="minecraft"
+ADMIN_USER="minecraft-admin"
+
+MINECRAFT_DIR="/opt/minecraft/vanilla_no_grief"
+
+INTERSERVER_CIDR="@@INTERSERVER_CIDR@@"
+MINECRAFT_PORT="@@MINECRAFT_PORT@@"
+VOICE_CHAT_PORT="@@VOICE_CHAT_PORT@@"
+
+RCLONE_CONFIG="/root/.config/rclone/rclone.conf"
+WASABI_REMOTE="wasabi:@@WASABI_REMOTE_PATH@@"
+
+RESTORE_MARKER="$STATE_DIR/restore-complete"
+BOOTSTRAP_MARKER="$STATE_DIR/bootstrap-complete"
+
+ADMIN_FINALIZER="/usr/local/sbin/minecraft-finalize-security"
+RCLONE_INSTALLER="/usr/local/sbin/minecraft-install-rclone-config"
+
+section() {
+    echo
+    echo "============================================================"
+    echo "$1"
+    echo "============================================================"
+}
+
+section "Bootstrap starting"
+
+date --iso-8601=seconds
+uname -a
+
+section "Waiting for Vultr SSH key injection"
+
+ROOT_AUTH_KEYS="/root/.ssh/authorized_keys"
+
+for i in $(seq 1 120); do
+    if [[ -s "$ROOT_AUTH_KEYS" ]]; then
+        break
+    fi
+    sleep 1
+done
+
+[[ -s "$ROOT_AUTH_KEYS" ]]
+
+section "Checking operating system"
+
+[[ $EUID -eq 0 ]]
+
+. /etc/os-release
+
+[[ "${ID:-}" == "debian" ]]
+
+section "Updating Debian"
+
+apt-get update
+
+DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+
+section "Installing required packages"
+
+DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    ca-certificates \
+    curl \
+    openjdk-25-jre-headless \
+    rclone \
+    ufw \
+    fail2ban \
+    openssh-server \
+    sudo \
+    rsync
+
+section "Disabling unattended upgrades"
+
+systemctl disable --now unattended-upgrades.service 2>/dev/null || true
+systemctl mask unattended-upgrades.service 2>/dev/null || true
+
+section "Recording system information"
+
+mkdir -p "$STATE_DIR"
+
+dpkg-query -W -f='${binary:Package}\t${Version}\n' \
+    > "$STATE_DIR/package-manifest.txt"
+
+{
+    echo "bootstrap timestamp: $(date --iso-8601=seconds)"
+    echo
+
+    echo "OS:"
+    cat /etc/os-release
+
+    echo
+    echo "Kernel:"
+    uname -a
+
+    echo
+    echo "Java:"
+    java -version 2>&1
+
+    echo
+    echo "rclone:"
+    rclone version
+} > "$STATE_DIR/system-information.txt"
+
+section "Creating Minecraft account"
+
+if ! getent group "$MINECRAFT_USER" >/dev/null; then
+    groupadd --system "$MINECRAFT_USER"
+fi
+
+if ! id "$MINECRAFT_USER" >/dev/null 2>&1; then
+    useradd \
+        --system \
+        --home-dir "$MINECRAFT_DIR" \
+        --shell /usr/sbin/nologin \
+        --gid "$MINECRAFT_USER" \
+        "$MINECRAFT_USER"
+fi
+
+section "Creating administration account"
+
+if ! id "$ADMIN_USER" >/dev/null 2>&1; then
+    useradd \
+        --create-home \
+        --shell /bin/bash \
+        "$ADMIN_USER"
+fi
+
+passwd -l "$ADMIN_USER" >/dev/null 2>&1 || true
+
+install \
+    -d \
+    -m 0700 \
+    -o "$ADMIN_USER" \
+    -g "$ADMIN_USER" \
+    "/home/$ADMIN_USER/.ssh"
+
+section "Installing Vultr controller SSH key"
+
+mapfile -t ED25519_KEYS < <(
+    awk '$1 == "ssh-ed25519" {print}' "$ROOT_AUTH_KEYS"
+)
+
+if [[ ${#ED25519_KEYS[@]} -ne 1 ]]; then
+    echo "Expected exactly one ssh-ed25519 key in $ROOT_AUTH_KEYS"
+    echo "Found: ${#ED25519_KEYS[@]}"
+    exit 1
+fi
+
+KEY="${ED25519_KEYS[0]}"
+
+printf '%s\n' "$KEY" | ssh-keygen -lf - >/dev/null
+
+printf '%s\n' "$KEY" \
+    > "/home/$ADMIN_USER/.ssh/authorized_keys"
+
+chown \
+    "$ADMIN_USER:$ADMIN_USER" \
+    "/home/$ADMIN_USER/.ssh/authorized_keys"
+
+chmod 0600 \
+    "/home/$ADMIN_USER/.ssh/authorized_keys"
+
+section "Preparing Minecraft directories"
+
+install \
+    -d \
+    -m 0755 \
+    -o "$MINECRAFT_USER" \
+    -g "$MINECRAFT_USER" \
+    "$MINECRAFT_DIR"
+
+install -d -m 0755 -o root -g root /usr/local/sbin
+
+section "Creating Minecraft startup script"
+
+cat > /usr/local/sbin/minecraft-start.sh <<'EOF_START'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+cd /opt/minecraft/vanilla_no_grief
+
+mapfile -t JARS < <(
+    find . \
+        -maxdepth 1 \
+        -type f \
+        -name 'paper-*.jar' \
+        -printf '%f\n' |
+    sort
+)
+
+if [[ ${#JARS[@]} -ne 1 ]]; then
+    echo "Expected exactly one paper-*.jar; found ${#JARS[@]}" >&2
+    exit 1
+fi
+
+exec /usr/bin/java \
+    -Xms1G \
+    -Xmx2G \
+    -jar "${JARS[0]}" \
+    --nogui
+EOF_START
+
+chmod 0755 /usr/local/sbin/minecraft-start.sh
+
+section "Creating Wasabi restore script"
+
+cat > /usr/local/sbin/minecraft-restore.sh <<'EOF_RESTORE'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+STATE_DIR="/var/lib/minecraft-bootstrap"
+MINECRAFT_DIR="/opt/minecraft/vanilla_no_grief"
+RCLONE_CONFIG="/root/.config/rclone/rclone.conf"
+WASABI_REMOTE="wasabi:@@WASABI_REMOTE_PATH@@"
+
+MARKER="$STATE_DIR/restore-complete"
+
+if [[ -f "$MARKER" ]]; then
+    exit 0
+fi
+
+echo "Waiting for rclone configuration..."
+
+for i in $(seq 1 240); do
+    if [[ -s "$RCLONE_CONFIG" ]]; then
+        break
+    fi
+
+    sleep 1
+done
+
+[[ -s "$RCLONE_CONFIG" ]]
+
+chmod 0600 "$RCLONE_CONFIG"
+
+echo "Testing Wasabi configuration..."
+
+rclone lsd \
+    --config "$RCLONE_CONFIG" \
+    $WASABI_REMOTE \
+    >/dev/null
+
+echo "Restoring Minecraft data from Wasabi..."
+
+rclone copy \
+    --config "$RCLONE_CONFIG" \
+    "$WASABI_REMOTE" \
+    "$MINECRAFT_DIR" \
+    --checksum \
+    --create-empty-src-dirs
+
+echo "Checking Paper JAR..."
+
+mapfile -t JARS < <(
+    find "$MINECRAFT_DIR" \
+        -maxdepth 1 \
+        -type f \
+        -name 'paper-*.jar' \
+        -printf '%f\n' |
+    sort
+)
+
+if [[ ${#JARS[@]} -ne 1 ]]; then
+    echo "Expected exactly one paper-*.jar after restore; found ${#JARS[@]}" >&2
+    exit 1
+fi
+
+echo "Selected Paper JAR: ${JARS[0]}"
+
+chown -R minecraft:minecraft "$MINECRAFT_DIR"
+
+touch "$MARKER"
+
+echo "Wasabi restore completed successfully."
+EOF_RESTORE
+
+chmod 0755 /usr/local/sbin/minecraft-restore.sh
+
+section "Creating Wasabi sync script"
+
+cat > /usr/local/sbin/minecraft-sync.sh <<'EOF_SYNC'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+MINECRAFT_DIR="/opt/minecraft/vanilla_no_grief"
+RCLONE_CONFIG="/root/.config/rclone/rclone.conf"
+WASABI_REMOTE="wasabi:@@WASABI_REMOTE_PATH@@"
+
+echo "Checking Minecraft service state..."
+
+if systemctl is-active --quiet minecraft-vanilla.service; then
+    echo "ERROR: minecraft-vanilla.service is still active." >&2
+    echo "Stop Minecraft before synchronizing to Wasabi." >&2
+    exit 1
+fi
+
+[[ -d "$MINECRAFT_DIR" ]]
+[[ -s "$RCLONE_CONFIG" ]]
+
+echo "Testing Wasabi configuration..."
+rclone lsd     --config "$RCLONE_CONFIG"     $WASABI_REMOTE     >/dev/null
+
+echo "Synchronizing Minecraft data to Wasabi..."
+rclone sync     --config "$RCLONE_CONFIG"     "$MINECRAFT_DIR/"     "$WASABI_REMOTE/"     --checksum
+
+echo "Verifying Wasabi synchronization..."
+rclone check     --config "$RCLONE_CONFIG"     "$MINECRAFT_DIR/"     "$WASABI_REMOTE/"     --checksum
+
+echo "Wasabi synchronization completed and verified successfully."
+EOF_SYNC
+
+chmod 0755 /usr/local/sbin/minecraft-sync.sh
+
+section "Creating Wasabi restore service"
+
+cat > /etc/systemd/system/minecraft-restore.service <<'EOF_RESTORE_UNIT'
+[Unit]
+Description=Restore Vanilla No Grief Minecraft data from Wasabi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/minecraft-restore.sh
+RemainAfterExit=yes
+EOF_RESTORE_UNIT
+
+section "Creating Minecraft systemd service"
+
+cat > /etc/systemd/system/minecraft-vanilla.service <<'EOF_MC_UNIT'
+[Unit]
+Description=Vanilla No Grief Minecraft Paper Server
+After=network-online.target minecraft-restore.service
+Wants=network-online.target
+Requires=minecraft-restore.service
+
+[Service]
+Type=simple
+User=minecraft
+Group=minecraft
+WorkingDirectory=/opt/minecraft/vanilla_no_grief
+
+ExecStart=/usr/local/sbin/minecraft-start.sh
+
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=120
+SuccessExitStatus=0 143
+
+NoNewPrivileges=true
+PrivateTmp=true=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/minecraft/vanilla_no_grief
+
+[Install]
+WantedBy=multi-user.target
+EOF_MC_UNIT
+
+section "Configuring Fail2Ban"
+
+cat > /etc/fail2ban/jail.d/minecraft-sshd.local <<EOF_F2B
+[sshd]
+enabled = true
+backend = systemd
+port = ssh
+filter = sshd
+maxretry = 5
+findtime = 10m
+bantime = 1h
+ignoreip = 127.0.0.1/8 ::1 $INTERSERVER_CIDR
+banaction = nftables-multiport
+EOF_F2B
+
+fail2ban-client -t
+
+systemctl enable fail2ban
+systemctl restart fail2ban
+
+section "Creating rclone installer"
+
+cat > "$RCLONE_INSTALLER" <<'EOF_RCLONE_INSTALL'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SRC="/home/minecraft-admin/rclone.conf"
+DST="/root/.config/rclone/rclone.conf"
+
+[[ -f "$SRC" ]]
+
+install \
+    -d \
+    -m 0700 \
+    -o root \
+    -g root \
+    /root/.config/rclone
+
+install \
+    -m 0600 \
+    -o root \
+    -g root \
+    "$SRC" \
+    "$DST"
+
+rm -f "$SRC"
+
+rclone listremotes --config "$DST" >/dev/null
+
+echo "rclone configuration installed successfully."
+
+echo "Starting Wasabi restore..."
+systemctl start minecraft-restore.service
+echo "Wasabi restore service started."
+EOF_RCLONE_INSTALL
+
+chmod 0755 "$RCLONE_INSTALLER"
+
+section "Creating SSH security finalizer"
+
+cat > "$ADMIN_FINALIZER" <<EOF_FINALIZER
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+cat > /etc/ssh/sshd_config.d/99-minecraft-security.conf <<'EOF_SSH'
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AllowUsers minecraft-admin
+EOF_SSH
+
+sshd -t
+
+ufw --force reset
+
+ufw default deny incoming
+ufw default allow outgoing
+
+ufw allow \
+    from $INTERSERVER_CIDR \
+    to any port 22 \
+    proto tcp
+
+ufw allow \
+    from $INTERSERVER_CIDR \
+    to any port $MINECRAFT_PORT \
+    proto tcp
+
+# Simple Voice Chat backend: allow UDP only from the Velocity proxy.
+ufw allow \
+    from $INTERSERVER_CIDR \
+    to any port $VOICE_CHAT_PORT \
+    proto udp
+
+ufw --force enable
+
+fail2ban-client -t
+
+systemctl enable fail2ban
+systemctl restart fail2ban
+
+systemctl reload ssh
+
+echo "SSH and firewall security finalized."
+EOF_FINALIZER
+
+chmod 0755 "$ADMIN_FINALIZER"
+
+section "Configuring restricted sudo"
+
+cat > /etc/sudoers.d/minecraft-admin <<EOF_SUDO
+minecraft-admin ALL=(root) NOPASSWD: $ADMIN_FINALIZER
+minecraft-admin ALL=(root) NOPASSWD: $RCLONE_INSTALLER
+minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl start minecraft-vanilla.service
+minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl stop minecraft-vanilla.service
+minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl restart minecraft-vanilla.service
+minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl status minecraft-vanilla.service
+minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl is-active minecraft-vanilla.service
+minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl start minecraft-restore.service
+minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl status minecraft-restore.service
+minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl is-active minecraft-restore.service
+minecraft-admin ALL=(root) NOPASSWD: /usr/local/sbin/minecraft-sync.sh
+EOF_SUDO
+
+chmod 0440 /etc/sudoers.d/minecraft-admin
+
+visudo -cf /etc/sudoers.d/minecraft-admin
+
+section "Configuring initial firewall"
+
+ufw --force reset
+
+ufw default deny incoming
+ufw default allow outgoing
+
+# Temporary SSH access so the controller can test minecraft-admin.
+# The finalizer later restricts this to InterServer only.
+ufw allow 22/tcp
+
+# Minecraft is restricted to InterServer immediately.
+ufw allow \
+    from "$INTERSERVER_CIDR" \
+    to any port "$MINECRAFT_PORT" \
+    proto tcp
+
+# Simple Voice Chat backend: allow UDP only from the Velocity proxy.
+ufw allow \
+    from "$INTERSERVER_CIDR" \
+    to any port "$VOICE_CHAT_PORT" \
+    proto udp
+
+ufw --force enable
+
+section "Enabling services"
+
+systemctl daemon-reload
+
+systemctl enable minecraft-restore.service
+
+# Do not start Minecraft yet.
+# Wasabi credentials have not been transferred yet.
+systemctl disable minecraft-vanilla.service >/dev/null 2>&1 || true
+
+section "Final validation"
+
+id "$MINECRAFT_USER"
+id "$ADMIN_USER"
+
+test -f "/home/$ADMIN_USER/.ssh/authorized_keys"
+
+sshd -t
+fail2ban-client -t
+test -x /usr/local/sbin/minecraft-sync.sh
+visudo -cf /etc/sudoers.d/minecraft-admin >/dev/null
+
+echo
+echo "Minecraft admin SSH key:"
+ssh-keygen -lf "/home/$ADMIN_USER/.ssh/authorized_keys"
+
+echo
+echo "UFW:"
+ufw status verbose
+
+echo
+echo "Systemd services:"
+systemctl is-enabled fail2ban
+systemctl is-enabled minecraft-restore.service
+
+echo
+echo "Bootstrap complete."
+
+cat > "$BOOTSTRAP_MARKER" <<EOF_MARKER
+bootstrap-complete $(date --iso-8601=seconds)
+EOF_MARKER
+
+chmod 0644 "$BOOTSTRAP_MARKER"
+
+section "BOOTSTRAP COMPLETE"
+
+echo "The VM is intentionally NOT running Minecraft yet."
+echo "Next steps:"
+echo "1. Test minecraft-admin SSH from InterServer."
+echo "2. Transfer the Vultr-only Wasabi rclone config."
+echo "3. Run the security finalizer."
+echo "4. Run the rclone installer; it will automatically start the Wasabi restore."
+echo "5. Wait for minecraft-restore.service to complete successfully."
+echo "6. Start Minecraft with: sudo -n /usr/bin/systemctl start minecraft-vanilla.service"
+echo "7. Verify Paper reaches Done."
+echo "8. After gameplay, stop Minecraft and run: sudo -n /usr/local/sbin/minecraft-sync.sh"
