@@ -19,7 +19,7 @@ func TestBackupTransferReferencesStayInTransientRequestContext(t *testing.T) {
 	operation := store.OperationRecord{
 		OperationID: "backup-stream-test", OperationType: "server.backup",
 		RequestSnapshot: store.RequestSnapshot{OperationType: "server.backup", Parameters: stableInput},
-		Steps: []store.OperationStep{{StepID: "upload-world", Input: stableInput, ResolvedInput: stableInput}},
+		Steps:           []store.OperationStep{{StepID: "upload-world", Input: stableInput, ResolvedInput: stableInput}},
 	}
 	encodedOperation, err := json.Marshal(operation)
 	if err != nil {
