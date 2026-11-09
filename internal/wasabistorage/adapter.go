@@ -48,6 +48,8 @@ type Config struct {
 	AdapterID          string
 	StorageProfileID   string
 	EnvironmentID      string
+	Container          string
+	KeyPrefix          string
 	Region             string
 	EndpointURL        string
 	AccessKeyIDRef     string
@@ -97,8 +99,8 @@ func newAdapter(config Config, protocolVersion string, resolver CredentialResolv
 }
 
 func validateConfig(config Config) error {
-	if !adapterIDPattern.MatchString(config.AdapterID) || !strings.HasPrefix(config.AdapterID, "storage.") || config.StorageProfileID == "" || config.EnvironmentID == "" || !regionPattern.MatchString(config.Region) {
-		return errors.New("storage profile, environment, and Wasabi region are required")
+	if !adapterIDPattern.MatchString(config.AdapterID) || !strings.HasPrefix(config.AdapterID, "storage.") || config.StorageProfileID == "" || config.EnvironmentID == "" || config.Container == "" || len(config.Container) > 500 || !strings.HasSuffix(config.KeyPrefix, "/") || len(config.KeyPrefix) > 2048 || !regionPattern.MatchString(config.Region) {
+		return errors.New("storage profile, environment, container, key prefix, and Wasabi region are required")
 	}
 	if config.MaxObjectBytes < 1 || config.MaxObjectBytes > maxS3ObjectSize || config.MaxObjectBytes > maxPartSize*maxMultipartParts {
 		return errors.New("maximum object size must be between 1 byte and the bounded multipart limit")
@@ -151,22 +153,28 @@ func (a *Adapter) Invoke(ctx context.Context, request adapter.InvokeRequest) (ad
 	if ctx == nil || a == nil {
 		return adapter.InvokeResponse{}, errors.New("storage adapter and invocation context are required")
 	}
+	deadline := request.Params.RequestContext.Deadline
+	if deadline.IsZero() || !deadline.After(time.Now()) {
+		return adapter.InvokeResponse{}, errors.New("a future operation deadline is required")
+	}
+	callContext, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
 	var output any
 	switch request.Params.Capability {
 	case "storage.object.put":
-		value, err := a.put(ctx, request)
+		value, err := a.put(callContext, request)
 		if err != nil {
 			return adapter.InvokeResponse{}, err
 		}
 		output = value
 	case "storage.object.get":
-		value, err := a.get(ctx, request)
+		value, err := a.get(callContext, request)
 		if err != nil {
 			return adapter.InvokeResponse{}, err
 		}
 		output = value
 	case "storage.object.head":
-		value, err := a.head(ctx, request)
+		value, err := a.head(callContext, request)
 		if err != nil {
 			return adapter.InvokeResponse{}, err
 		}
@@ -347,6 +355,8 @@ func (a *Adapter) get(ctx context.Context, request adapter.InvokeRequest) (any, 
 			return nil, errors.New("Wasabi returned a different object version")
 		}
 		ref.VersionID = *result.VersionId
+	} else if input.ObjectRef.VersionID != "" {
+		return nil, errors.New("Wasabi did not confirm the requested object version")
 	}
 	if a.config.RequireVersionIDs && (ref.VersionID == "" || ref.VersionID == "null") {
 		return nil, errors.New("Wasabi object did not resolve to an immutable version")
@@ -382,6 +392,8 @@ func (a *Adapter) head(ctx context.Context, request adapter.InvokeRequest) (any,
 			return nil, errors.New("Wasabi returned a different object version")
 		}
 		ref.VersionID = *result.VersionId
+	} else if input.ObjectRef.VersionID != "" {
+		return nil, errors.New("Wasabi did not confirm the requested object version")
 	}
 	if a.config.RequireVersionIDs && (ref.VersionID == "" || ref.VersionID == "null") {
 		return nil, errors.New("Wasabi object has no immutable version ID")
@@ -406,7 +418,7 @@ func (a *Adapter) head(ctx context.Context, request adapter.InvokeRequest) (any,
 }
 
 func (a *Adapter) validTarget(value objectTarget) bool {
-	return value.AdapterID == a.config.AdapterID && value.StorageProfile == a.config.StorageProfileID && value.EnvironmentID == a.config.EnvironmentID && value.Container != "" && value.Key != ""
+	return value.AdapterID == a.config.AdapterID && value.StorageProfile == a.config.StorageProfileID && value.EnvironmentID == a.config.EnvironmentID && value.Container == a.config.Container && strings.HasPrefix(value.Key, a.config.KeyPrefix)
 }
 
 func (a *Adapter) validRequestEnvironment(request adapter.InvokeRequest) bool {
@@ -475,7 +487,7 @@ func newS3Client(region, endpoint, accessKeyID, secretAccessKey string) s3Client
 	configuration := aws.Config{
 		Region:      region,
 		Credentials: aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, "")),
-		HTTPClient:  &http.Client{Timeout: 2 * time.Minute},
+		HTTPClient:  http.DefaultClient,
 	}
 	return s3.NewFromConfig(configuration, func(options *s3.Options) {
 		options.BaseEndpoint = aws.String(endpoint)

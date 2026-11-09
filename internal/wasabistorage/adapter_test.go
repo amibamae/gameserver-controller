@@ -116,11 +116,50 @@ func TestObjectOperationsRejectWrongEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	input := headInput{ObjectRef: objectReference{objectTarget: objectTarget{AdapterID: testAdapterID,
-		StorageProfile: "staging-storage", EnvironmentID: "staging", Container: "backups", Key: "world.tar"}}}
+		StorageProfile: "staging-storage", EnvironmentID: "staging", Container: "backups", Key: "server/world.tar"}}}
 	request := requestFor("storage.object.head", input, time.Now().Add(time.Minute), "", 0)
 	request.Params.RequestContext.EnvironmentID = "production"
 	if _, err := impl.Invoke(context.Background(), request); err == nil {
 		t.Fatal("accepted a request from outside the configured environment")
+	}
+}
+
+func TestObjectOperationsRejectBucketAndKeyOutsideProfile(t *testing.T) {
+	provider := &memoryS3{objects: map[string][]byte{}, uploads: map[string]memoryUpload{}}
+	impl, err := newAdapter(testConfig(), testProtocolVersion, testCredentials{}, func(_, _, _, _ string) s3Client { return provider })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []objectTarget{
+		{AdapterID: testAdapterID, StorageProfile: "staging-storage", EnvironmentID: "staging", Container: "other-bucket", Key: "server/world.tar"},
+		{AdapterID: testAdapterID, StorageProfile: "staging-storage", EnvironmentID: "staging", Container: "backups", Key: "production/world.tar"},
+	} {
+		input := headInput{ObjectRef: objectReference{objectTarget: target}}
+		request := requestFor("storage.object.head", input, time.Now().Add(time.Minute), "", 0)
+		if _, err := impl.Invoke(context.Background(), request); err == nil {
+			t.Fatalf("accepted object outside configured bucket/prefix: %#v", target)
+		}
+	}
+}
+
+func TestGetRequiresProviderConfirmationOfRequestedVersion(t *testing.T) {
+	provider := &memoryS3{objects: map[string][]byte{"backups/server/world.tar": []byte("world")}, uploads: map[string]memoryUpload{}, omitVersion: true}
+	config := testConfig()
+	config.RequireVersionIDs = true
+	impl, err := newAdapter(config, testProtocolVersion, testCredentials{}, func(_, _, _, _ string) s3Client { return provider })
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := []byte("world")
+	digest := sha256.Sum256(content)
+	input := getInput{ObjectRef: objectReference{objectTarget: objectTarget{AdapterID: testAdapterID,
+		StorageProfile: config.StorageProfileID, EnvironmentID: config.EnvironmentID, Container: config.Container,
+		Key: "server/world.tar"}, VersionID: "version-1"}, ExpectedSizeBytes: int64(len(content)),
+		ExpectedChecksum: checksum{Algorithm: "sha256", Digest: hex.EncodeToString(digest[:])}}
+	request := requestFor("storage.object.get", input, time.Now().Add(time.Minute), "adapter_to_controller", int64(len(content)))
+	request.Params.RequestContext.SetStreamDestinations(map[string]io.WriteCloser{testTransferID(): nopWriteCloser{io.Discard}})
+	if _, err := impl.Invoke(context.Background(), request); err == nil {
+		t.Fatal("accepted a versioned read without provider confirmation")
 	}
 }
 
@@ -148,7 +187,7 @@ func TestMultipartUploadKeepsBoundedPartSizeAndReturnsVersion(t *testing.T) {
 	content := bytes.Repeat([]byte("w"), int(minPartSize+1))
 	digest := sha256.Sum256(content)
 	input := putInput{Target: objectTarget{AdapterID: testAdapterID, StorageProfile: config.StorageProfileID,
-		EnvironmentID: config.EnvironmentID, Container: "backups", Key: "large/world.tar"},
+		EnvironmentID: config.EnvironmentID, Container: "backups", Key: "server/large/world.tar"},
 		ExpectedSizeBytes: int64(len(content)), ExpectedChecksum: checksum{Algorithm: "sha256", Digest: hex.EncodeToString(digest[:])}}
 	deadline := time.Now().Add(3 * time.Minute)
 	request := requestFor("storage.object.put", input, deadline, "controller_to_adapter", int64(len(content)))
@@ -157,7 +196,7 @@ func TestMultipartUploadKeepsBoundedPartSizeAndReturnsVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("multipart upload: %v", err)
 	}
-	if len(provider.objects) != 1 || !bytes.Equal(provider.objects["backups/large/world.tar"], content) {
+	if len(provider.objects) != 1 || !bytes.Equal(provider.objects["backups/server/large/world.tar"], content) {
 		t.Fatalf("multipart upload did not preserve object data; objects=%d", len(provider.objects))
 	}
 	var result map[string]any
@@ -177,14 +216,14 @@ func TestPutAcceptsVerifiedEmptyObject(t *testing.T) {
 	}
 	emptyDigest := sha256.Sum256(nil)
 	input := putInput{Target: objectTarget{AdapterID: testAdapterID, StorageProfile: "staging-storage", EnvironmentID: "staging",
-		Container: "backups", Key: "empty"}, ExpectedSizeBytes: 0,
+		Container: "backups", Key: "server/empty"}, ExpectedSizeBytes: 0,
 		ExpectedChecksum: checksum{Algorithm: "sha256", Digest: hex.EncodeToString(emptyDigest[:])}}
 	request := requestFor("storage.object.put", input, time.Now().Add(time.Minute), "controller_to_adapter", 1)
 	request.Params.RequestContext.SetStreamSources(map[string]io.ReadCloser{testTransferID(): io.NopCloser(bytes.NewReader(nil))})
 	if _, err := impl.Invoke(context.Background(), request); err != nil {
 		t.Fatalf("empty object upload: %v", err)
 	}
-	if value, exists := provider.objects["backups/empty"]; !exists || len(value) != 0 {
+	if value, exists := provider.objects["backups/server/empty"]; !exists || len(value) != 0 {
 		t.Fatalf("empty object was not uploaded: %#v", provider.objects)
 	}
 }
@@ -222,7 +261,7 @@ func requestFor(capability string, input any, deadline time.Time, direction stri
 func testTransferID() string { return strings.Repeat("a", 64) }
 
 func testConfig() Config {
-	return Config{AdapterID: testAdapterID, StorageProfileID: "staging-storage", EnvironmentID: "staging", Region: "us-west-1",
+	return Config{AdapterID: testAdapterID, StorageProfileID: "staging-storage", EnvironmentID: "staging", Container: "backups", KeyPrefix: "server/", Region: "us-west-1",
 		EndpointURL: "https://s3.us-west-1.wasabisys.com", AccessKeyIDRef: "systemd-credential://wasabi-staging-access",
 		SecretAccessKeyRef: "systemd-credential://wasabi-staging-secret", MaxObjectBytes: 1 << 30}
 }
@@ -237,8 +276,9 @@ func (testCredentials) WithCredential(reference string, use func([]byte) error) 
 }
 
 type memoryS3 struct {
-	objects map[string][]byte
-	uploads map[string]memoryUpload
+	objects     map[string][]byte
+	uploads     map[string]memoryUpload
+	omitVersion bool
 }
 
 type memoryUpload struct {
@@ -300,7 +340,11 @@ func (m *memoryS3) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...f
 	if !ok {
 		return nil, errors.New("missing object")
 	}
-	return &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(value)), VersionId: aws.String("version-1")}, nil
+	result := &s3.GetObjectOutput{Body: io.NopCloser(bytes.NewReader(value))}
+	if !m.omitVersion {
+		result.VersionId = aws.String("version-1")
+	}
+	return result, nil
 }
 
 func (m *memoryS3) HeadObject(_ context.Context, input *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {

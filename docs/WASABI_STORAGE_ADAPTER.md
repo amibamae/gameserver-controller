@@ -32,6 +32,8 @@ wasabistorage.Config{
     AdapterID:          "storage.wasabi-staging",
     StorageProfileID:   "wasabi-staging",
     EnvironmentID:      "staging",
+    Container:          "example-staging-backups",
+    KeyPrefix:          "server/",
     Region:             "us-west-1",
     EndpointURL:        "https://s3.us-west-1.wasabisys.com",
     AccessKeyIDRef:     "systemd-credential://wasabi-staging-access-key-id",
@@ -47,6 +49,12 @@ neither value belongs in YAML, command arguments, process environment, operation
 records, or logs. Keep production and staging references distinct. The adapter
 only resolves the two references pinned in its profile and requires both to be
 present in the invocation context.
+
+`Container` and slash-terminated `KeyPrefix` fence every object operation to
+one configured bucket and key namespace. The invocation environment must also
+match the profile. Cross-environment reads, including staging restore from a
+production backup, need a separate explicit authorization path and are not
+implemented.
 
 `MaxObjectBytes` is a required profile bound. It cannot exceed the S3
 10,000-part limit with a maximum 128 MiB part. The adapter limits each stream
