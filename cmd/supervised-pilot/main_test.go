@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/user"
@@ -89,11 +91,13 @@ func runPilotWithState(t *testing.T, statePath string, args ...string) (string, 
 }
 
 func provisionArgs() []string {
+	digest := sha256.Sum256([]byte("bootstrap"))
 	return []string{
 		"provision",
 		"--server-id", "pilot-test", "--environment", "staging",
 		"--region", "ewr", "--plan", "vc2-1c-2gb", "--os-id", "362",
 		"--hostname", "pilot-test.example.invalid", "--ssh-key-id", "sshkey-123",
+		"--startup-script-id", "script-123", "--startup-script-sha256", hex.EncodeToString(digest[:]),
 	}
 }
 
@@ -110,6 +114,19 @@ func TestVultrProvisionDefaultsToDryRunWithoutCredentialOrDatabase(t *testing.T)
 	}
 	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
 		t.Fatalf("dry run created the state database: %v", err)
+	}
+}
+
+func TestVultrProvisionRequiresBootstrapIDAndDigest(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state", "pilot.db")
+	args := provisionArgs()
+	args = args[:len(args)-4]
+	output, err := runPilotWithState(t, statePath, args...)
+	if err == nil || !strings.Contains(err.Error(), "--startup-script-id") {
+		t.Fatalf("provision without an approved bootstrap was accepted: %v (%s)", err, output)
+	}
+	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
+		t.Fatalf("missing bootstrap reference created the state database: %v", err)
 	}
 }
 

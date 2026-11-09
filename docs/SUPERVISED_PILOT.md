@@ -11,7 +11,7 @@ The pilot is a local CLI for inspecting the existing server, running its backup 
 - The pilot sends no script path, script body, or custom unit arguments.
 - `gsc-pilot history` reads the local audit log and makes no SSH connection.
 - `gsc-pilot boot-status --server-id <id> --environment <environment>` reads local timing records and makes no provider API or credential call.
-- `gsc-pilot provision ...` defaults to a dry run. With explicit confirmation and a systemd credential, it reserves capacity and creates one Vultr VM; it does not install a game or claim readiness.
+- `gsc-pilot provision ...` defaults to a dry run. It requires an exact Vultr startup-script ID and SHA-256 digest. With explicit confirmation and a systemd credential, it verifies the provider script content, reserves capacity, and creates one Vultr VM with that script attached; it does not claim game readiness.
 - `gsc-pilot capacity` reports the policy limit and durable local reservations.
 
 The SSH account needs non-interactive sudo permission for the pilot's `systemctl show` and `systemctl start --wait` commands.
@@ -40,7 +40,7 @@ The two owned slots support a staged rollout. First use the shared staging/testi
 
 After the trial passes, take a fresh backup from the current live server of the world you intend to migrate, verify the backup and its contents, and restore it onto a newly created VM using the more expensive production plan. Keep the existing live server untouched until the new VM is ready and an operator approves the traffic cutover. Only controller-owned VMs count toward the two-slot cap; the existing unmanaged production server does not. You do not need to adopt the old server as part of this rollout.
 
-This is the intended rollout, not a workflow the current CLI can complete. The pilot can provision a VM, but it does not install Paper, restore a world, verify backup artifacts, run readiness checks, or switch DNS or proxy traffic. The `backup --execute` success event proves only that systemd ran the service successfully. Both the first real backup on the isolated test server and the fresh migration backup require a supervised operator handoff.
+This is the intended rollout, not a workflow the current CLI can complete. The pilot can provision a VM and attach the reviewed bootstrap, which installs the configured server services and attempts its Wasabi restore. The CLI does not wait for bootstrap completion, verify the restored world or backup artifacts, run game readiness checks, or switch DNS or proxy traffic. The startup-script ID and digest are checked before provider create, but Vultr does not pin script content between that check and VM startup. The `backup --execute` success event proves only that systemd ran the service successfully. Both the first real backup on the isolated test server and the fresh migration backup require a supervised operator handoff.
 
 To change the limit, edit `max_instances_total` and the affected `capacity_groups` in `internal/pilotcapacity/capacity-policy.json`. Leave `policy_version` unchanged for a limit-only change. Run `go run ./cmd/pilot-capacity-check` and `go test ./internal/pilotcapacity ./cmd/supervised-pilot`, then rebuild `gsc-pilot` before using the updated limit; changing the source file does not change an already-built executable.
 
@@ -50,10 +50,14 @@ Provisioning is dry-run by default. For example:
 gsc-pilot provision \
   --server-id pilot-test --environment staging \
   --region <vultr-region-id> --plan <vultr-plan-id> --os-id <vultr-os-id> \
-  --ssh-key-id <vultr-ssh-key-id>
+  --ssh-key-id <vultr-ssh-key-id> \
+  --startup-script-id <id-from-gsc-bootstrap> \
+  --startup-script-sha256 <digest-from-gsc-bootstrap>
 ```
 
-Only after reviewing the dry run, an operator may add `--execute --confirm-create pilot-test@staging`. The command checks the source-controlled policy, durably reserves capacity before provider dispatch, and verifies the returned instance by exact ID and managed label. A confirmed create occupies the slot. An uncertain outcome also occupies it; rerun with the printed `--operation-id` and identical parameters to reconcile. The pilot never resends an uncertain create. A definitively rejected create releases its reservation.
+Create the startup script with `gsc-bootstrap upload` first. Record its exact provider ID and SHA-256 digest from the upload result. The dry run prints those values and makes no provider call. The execute path reads the saved script by exact ID, requires its type to be `boot`, hashes the decoded script, and refuses to create a VM if the digest differs. It then includes Vultr's `script_id` in the one-shot create request. Keep the uploaded script unchanged between verification and provider processing; Vultr references the saved script by ID, and the provider API does not pin a content version.
+
+Only after reviewing the dry run, an operator may add `--execute --confirm-create pilot-test@staging`. The command checks the source-controlled policy, durably reserves capacity before provider dispatch, and verifies the returned instance by exact ID and managed label. A confirmed create occupies the slot. An uncertain outcome also occupies it; rerun with the printed `--operation-id` and identical parameters, including the script ID and digest, to reconcile. The pilot never resends an uncertain create. A definitively rejected create releases its reservation.
 
 The provider key is read only through the configured systemd credential reference, defaulting to `systemd-credential://vultr-pilot-api-token`. Execute the command from a systemd-managed process that receives this named credential through `LoadCredentialEncrypted`; do not pass the key in arguments, environment variables, config, or logs. See [secret management](SECRET_MANAGEMENT.md). The repository does not yet include an operator unit or automate credential provisioning, so do not run the billable command until the host-side systemd credential setup has been reviewed.
 

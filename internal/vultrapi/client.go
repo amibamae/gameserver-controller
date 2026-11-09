@@ -59,14 +59,15 @@ type Instance struct {
 }
 
 type CreateInstanceRequest struct {
-	Region    string
-	Plan      string
-	OSID      int
-	Label     string
-	Hostname  string
-	SSHKeyIDs []string
-	UserData  string // Base64-encoded, non-secret cloud-init data.
-	Tags      []string
+	Region          string
+	Plan            string
+	OSID            int
+	Label           string
+	Hostname        string
+	SSHKeyIDs       []string
+	StartupScriptID string
+	UserData        string // Base64-encoded, non-secret cloud-init data.
+	Tags            []string
 }
 
 type createInstanceBody struct {
@@ -76,6 +77,7 @@ type createInstanceBody struct {
 	Label     string   `json:"label"`
 	Hostname  string   `json:"hostname,omitempty"`
 	SSHKeyIDs []string `json:"sshkey_id,omitempty"`
+	ScriptID  string   `json:"script_id,omitempty"`
 	UserData  string   `json:"user_data,omitempty"`
 	Tags      []string `json:"tags,omitempty"`
 }
@@ -141,7 +143,7 @@ func (c *Client) CreateInstance(ctx context.Context, token []byte, input CreateI
 	}
 	body, err := json.Marshal(createInstanceBody{
 		Region: input.Region, Plan: input.Plan, OSID: input.OSID, Label: input.Label,
-		Hostname: input.Hostname, SSHKeyIDs: cloneStrings(input.SSHKeyIDs),
+		Hostname: input.Hostname, SSHKeyIDs: cloneStrings(input.SSHKeyIDs), ScriptID: input.StartupScriptID,
 		UserData: input.UserData, Tags: cloneStrings(input.Tags),
 	})
 	if err != nil {
@@ -277,6 +279,9 @@ func ValidateCreateInstanceRequest(input CreateInstanceRequest) error {
 	if !validShortField(input.Region, 200) || !validShortField(input.Plan, 200) || input.OSID <= 0 ||
 		!validLabel(input.Label) || (input.Hostname != "" && !validHostname(input.Hostname)) {
 		return fmt.Errorf("%w: region, plan, os_id, label, or hostname is invalid", ErrInvalidRequest)
+	}
+	if input.StartupScriptID != "" && !validResourceID(input.StartupScriptID) {
+		return fmt.Errorf("%w: invalid startup script ID", ErrInvalidRequest)
 	}
 	if len(input.SSHKeyIDs) > 100 {
 		return fmt.Errorf("%w: too many SSH key IDs", ErrInvalidRequest)

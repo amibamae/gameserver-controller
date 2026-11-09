@@ -146,6 +146,33 @@ func TestReserveCapacityIsIdempotentAndRejectsOccupiedSlot(t *testing.T) {
 	}
 }
 
+func TestReleaseUnsentReservationOnlyReleasesExactReservedOperation(t *testing.T) {
+	store := openTestStore(t)
+	reservation, _, err := store.ReserveCapacity(capacityRequest("op-release", "server-release", "staging", "shared_nonproduction"), 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReleaseUnsentCapacityReservation(reservation.OperationID, "other-resource"); !errors.Is(err, ErrCapacityConflict) {
+		t.Fatalf("release with wrong resource key = %v", err)
+	}
+	if err := store.ReleaseUnsentCapacityReservation(reservation.OperationID, reservation.ResourceKey); err != nil {
+		t.Fatalf("release reserved operation: %v", err)
+	}
+	if _, err := store.GetCapacityReservation(reservation.OperationID); !errors.Is(err, ErrCapacityNotFound) {
+		t.Fatalf("released reservation lookup = %v, want not found", err)
+	}
+	reservation, _, err = store.ReserveCapacity(capacityRequest("op-release", "server-release", "staging", "shared_nonproduction"), 1, 1)
+	if err != nil {
+		t.Fatalf("reserve again after safe release: %v", err)
+	}
+	if _, err := store.MarkCapacityCreateSent(reservation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ReleaseUnsentCapacityReservation(reservation.OperationID, reservation.ResourceKey); !errors.Is(err, ErrCapacityTransition) {
+		t.Fatalf("released a possibly dispatched create: %v", err)
+	}
+}
+
 func TestUnresolvedCreateAndDestroyKeepCapacityUntilProviderObservation(t *testing.T) {
 	store := openTestStore(t)
 	reservation, _, err := store.ReserveCapacity(capacityRequest("op-create", "server-1", "staging", "shared_nonproduction"), 1, 1)

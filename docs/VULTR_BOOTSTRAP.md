@@ -22,8 +22,9 @@ gsc-bootstrap upload \
   --wasabi-remote-path <bucket-or-bucket-prefix>
 ```
 
-After review, add `--execute --confirm-upload gsc-minecraft-debian` to upload
-one new immutable version. The exact name confirmation is required. Supply the
+After review, add `--execute --confirm-upload gsc-minecraft-debian` to create
+one new script record. Choose a new name for each approved revision. The exact
+name confirmation is required. Supply the
 Vultr key through the `systemd-credential://vultr-bootstrap-api-token`
 credential reference in `CREDENTIALS_DIRECTORY`; never pass the key as an
 argument or environment variable. If the create result is unknown, inspect the
@@ -32,12 +33,14 @@ not automatically retried.
 
 The upload command prints the provider script ID and SHA-256 digest, but not
 the rendered script or Wasabi path. Record those values with the deployment
-configuration. This upload step does not attach the script to a VM. The
-capacity-backed provision command must be extended to verify the recorded
-script ID and digest and send `script_id` before new VMs can run this bootstrap.
+configuration. `gsc-pilot provision` now requires both values, retrieves the
+saved script by exact ID, verifies it is a boot script and its decoded content
+matches the digest, then sends the ID as Vultr's `script_id` on VM creation.
+The provider API does not pin a content version, so do not change the saved
+script between verification and provider processing.
 
 The template carries forward the operator-provided bootstrap behavior. A
 successful upload does not prove that a host booted successfully or that the
 game, restore, firewall, and backup services work together. Validate the
-rendered asset in an isolated disposable environment before attaching it to a
-real provision flow.
+rendered asset in an isolated disposable environment before using it for a
+real deployment.
