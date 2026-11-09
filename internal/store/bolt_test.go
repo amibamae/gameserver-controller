@@ -588,14 +588,17 @@ func TestOpenMigratesSchemaV2ToLogicalServerCatalog(t *testing.T) {
 	}
 	defer store.Close()
 	if err := store.db.View(func(tx *bolt.Tx) error {
-		if got := string(tx.Bucket(metadataBucket).Get(schemaKey)); got != "4" {
-			t.Fatalf("schema version was not advanced: got %q, want 4", got)
+		if got := string(tx.Bucket(metadataBucket).Get(schemaKey)); got != "5" {
+			t.Fatalf("schema version was not advanced: got %q, want 5", got)
 		}
 		if tx.Bucket(logicalServersBucket) == nil {
 			t.Fatal("logical server bucket was not created")
 		}
 		if tx.Bucket(capacityReservationsBucket) == nil {
 			t.Fatal("capacity reservation bucket was not created")
+		}
+		if tx.Bucket(managementAPIKeysBucket) == nil {
+			t.Fatal("management API key bucket was not created")
 		}
 		return nil
 	}); err != nil {
@@ -632,11 +635,59 @@ func TestOpenMigratesSchemaV3ToCapacityReservations(t *testing.T) {
 	}
 	defer store.Close()
 	if err := store.db.View(func(tx *bolt.Tx) error {
-		if got := string(tx.Bucket(metadataBucket).Get(schemaKey)); got != "4" {
-			t.Fatalf("schema version was not advanced: got %q, want 4", got)
+		if got := string(tx.Bucket(metadataBucket).Get(schemaKey)); got != "5" {
+			t.Fatalf("schema version was not advanced: got %q, want 5", got)
 		}
 		if tx.Bucket(capacityReservationsBucket) == nil {
 			t.Fatal("capacity reservation bucket was not created")
+		}
+		if tx.Bucket(managementAPIKeysBucket) == nil {
+			t.Fatal("management API key bucket was not created")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOpenMigratesSchemaV4ToManagementAPIKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "schema-v4.db")
+	db, err := bolt.Open(path, 0o600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Update(func(tx *bolt.Tx) error {
+		meta, err := tx.CreateBucket(metadataBucket)
+		if err != nil {
+			return err
+		}
+		if err := meta.Put(schemaKey, []byte("4")); err != nil {
+			return err
+		}
+		for _, name := range [][]byte{operationsBucket, idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket, capacityReservationsBucket} {
+			if _, err := tx.CreateBucket(name); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	opened, err := OpenBolt(path)
+	if err != nil {
+		t.Fatalf("open schema v4 database: %v", err)
+	}
+	defer opened.Close()
+	if err := opened.db.View(func(tx *bolt.Tx) error {
+		if got := string(tx.Bucket(metadataBucket).Get(schemaKey)); got != "5" {
+			t.Fatalf("schema version was not advanced: got %q, want 5", got)
+		}
+		if tx.Bucket(managementAPIKeysBucket) == nil {
+			t.Fatal("management API key bucket was not created")
 		}
 		return nil
 	}); err != nil {
