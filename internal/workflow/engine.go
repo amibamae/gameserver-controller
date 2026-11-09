@@ -439,37 +439,73 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 		streamTransfers = transfers
 	}
 	streamSources := make(map[string]io.ReadCloser, len(streamTransfers))
+	streamDestinations := make(map[string]io.WriteCloser, len(streamTransfers))
+	seenTransferIDs := make(map[string]struct{}, len(streamTransfers))
 	streamRefs := make([]capturestream.Reference, len(streamTransfers))
 	for index, transfer := range streamTransfers {
-		if transfer.Source == nil || transfer.Verify == nil || transfer.Reference.TransferID == "" || transfer.Reference.Direction != "controller_to_adapter" {
+		validBinding := false
+		switch transfer.Reference.Direction {
+		case "controller_to_adapter":
+			validBinding = transfer.Source != nil && transfer.Sink == nil
+		case "adapter_to_controller":
+			validBinding = transfer.Sink != nil && transfer.Source == nil
+		}
+		if !validBinding || transfer.Verify == nil || transfer.Reference.TransferID == "" || transfer.Reference.MaximumBytes < 1 {
 			for _, prepared := range streamTransfers {
 				if prepared.Source != nil {
 					_ = prepared.Source.Close()
+				}
+				if prepared.Sink != nil {
+					_ = prepared.Sink.Close()
 				}
 			}
 			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
 				"core.workflow.stream_transfer_failed",
 				"The controller could not prepare the bounded stream inputs required by this adapter step.", "safety_blocked")
 		}
-		if _, duplicate := streamSources[transfer.Reference.TransferID]; duplicate {
+		if _, duplicate := seenTransferIDs[transfer.Reference.TransferID]; duplicate {
 			for _, prepared := range streamTransfers {
 				if prepared.Source != nil {
 					_ = prepared.Source.Close()
+				}
+				if prepared.Sink != nil {
+					_ = prepared.Sink.Close()
 				}
 			}
 			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
 				"core.workflow.stream_transfer_failed",
 				"The controller could not prepare the bounded stream inputs required by this adapter step.", "safety_blocked")
 		}
+		seenTransferIDs[transfer.Reference.TransferID] = struct{}{}
 		streamRefs[index] = transfer.Reference
-		streamSources[transfer.Reference.TransferID] = transfer.Source
+		if transfer.Source != nil {
+			streamSources[transfer.Reference.TransferID] = transfer.Source
+		} else {
+			streamDestinations[transfer.Reference.TransferID] = transfer.Sink
+		}
+	}
+	streamsClosed := false
+	closeStreams := func() error {
+		if streamsClosed {
+			return nil
+		}
+		streamsClosed = true
+		var closeErr error
+		for _, transfer := range streamTransfers {
+			var err error
+			if transfer.Source != nil {
+				err = transfer.Source.Close()
+			} else if transfer.Sink != nil {
+				err = transfer.Sink.Close()
+			}
+			if err != nil && closeErr == nil {
+				closeErr = err
+			}
+		}
+		return closeErr
 	}
 	defer func() {
-		for _, transfer := range streamTransfers {
-			if transfer.Source != nil {
-				_ = transfer.Source.Close()
-			}
-		}
+		_ = closeStreams()
 	}()
 	request := adapter.InvokeRequest{
 		JSONRPC: "2.0",
@@ -488,9 +524,13 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 		},
 	}
 	request.Params.RequestContext.SetStreamSources(streamSources)
+	request.Params.RequestContext.SetStreamDestinations(streamDestinations)
 	callContext, cancel := context.WithDeadline(ctx, deadline)
 	response, invokeErr := e.adapters.Invoke(callContext, step.AdapterID, request)
 	cancel()
+	if closeErr := closeStreams(); invokeErr == nil && closeErr != nil {
+		invokeErr = &adapter.InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("controller-provided stream could not be closed cleanly")}
+	}
 	if invokeErr == nil {
 		for _, transfer := range streamTransfers {
 			if err := transfer.Verify(); err != nil {

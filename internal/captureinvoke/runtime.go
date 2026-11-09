@@ -200,7 +200,7 @@ func (r *Runtime) Invoke(ctx context.Context, adapterID string, request adapter.
 	if request.Params.Capability != "game.backup.capture" {
 		return r.adapters.Invoke(ctx, adapterID, request)
 	}
-	if ctx == nil || ctx.Err() != nil || len(request.Params.RequestContext.StreamTransfers) != 0 {
+	if ctx == nil || ctx.Err() != nil || len(request.Params.RequestContext.StreamTransfers) > 1 {
 		return adapter.InvokeResponse{}, errors.New("invalid capture dispatch context")
 	}
 	c := request.Params.RequestContext
@@ -247,6 +247,16 @@ func (r *Runtime) Invoke(ctx context.Context, adapterID string, request adapter.
 	if json.Unmarshal(request.Params.Input, &input) != nil || input.Target.ServerID != c.ServerID || input.Target.EnvironmentID != c.EnvironmentID || !sameJSON(input.Target.InstanceRef, op.Target.InstanceRef) {
 		return adapter.InvokeResponse{}, errors.New("capture target does not match durable operation")
 	}
+	var mirror io.Writer
+	if len(c.StreamTransfers) == 1 {
+		external := c.StreamTransfers[0]
+		now := time.Now()
+		if external.TransferID == "" || external.Direction != "adapter_to_controller" || external.MaximumBytes < 1 || external.MaximumBytes > r.maximum ||
+			!external.ExpiresAt.After(now) || external.ExpiresAt.After(c.Deadline) || external.ExpiresAt.After(now.Add(5*time.Minute)) ||
+			!c.HasStreamDestination(external.TransferID) {
+			return adapter.InvokeResponse{}, errors.New("capture destination is not a valid controller-bound stream")
+		}
+	}
 	var instance struct {
 		AdapterID     string `json:"adapter_id"`
 		EnvironmentID string `json:"environment_id"`
@@ -264,7 +274,16 @@ func (r *Runtime) Invoke(ctx context.Context, adapterID string, request adapter.
 	if err != nil || stage == nil {
 		return adapter.InvokeResponse{}, errors.New("capture staging is unavailable")
 	}
-	counted := &countingSink{sink: stage}
+	if len(c.StreamTransfers) == 1 {
+		mirror, err = c.CreateStream(c.StreamTransfers[0].TransferID)
+		if err != nil {
+			if stage.Discard() != nil {
+				return adapter.InvokeResponse{}, errors.New("capture staging cleanup failed before dispatch")
+			}
+			return adapter.InvokeResponse{}, errors.New("capture destination could not be claimed")
+		}
+	}
+	counted := &countingSink{sink: stage, mirror: mirror}
 	expiry := time.Now().Add(5 * time.Minute)
 	if c.Deadline.Before(expiry) {
 		expiry = c.Deadline
@@ -337,12 +356,23 @@ func (r *Runtime) Invoke(ctx context.Context, adapterID string, request adapter.
 }
 
 type countingSink struct {
-	sink io.Writer
-	size atomic.Int64
+	sink   io.Writer
+	mirror io.Writer
+	size   atomic.Int64
 }
 
 func (w *countingSink) Write(p []byte) (int, error) {
 	n, err := w.sink.Write(p)
+	if err == nil && n == len(p) && w.mirror != nil {
+		var mirrored int
+		mirrored, err = w.mirror.Write(p)
+		if err == nil && mirrored != len(p) {
+			err = io.ErrShortWrite
+		}
+		if err != nil {
+			return mirrored, err
+		}
+	}
 	if n > 0 && n <= len(p) {
 		w.size.Add(int64(n))
 	}

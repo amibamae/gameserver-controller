@@ -72,6 +72,10 @@ func (a implementation) Descriptor() adapter.Descriptor { return a.d }
 func (a implementation) Invoke(_ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
 	return a.invoke(r)
 }
+
+type closeBuffer struct{ bytes.Buffer }
+
+func (*closeBuffer) Close() error { return nil }
 func example(t *testing.T, path string, v any) {
 	t.Helper()
 	data, err := os.ReadFile("../../protocol/examples/" + path)
@@ -84,7 +88,7 @@ func example(t *testing.T, path string, v any) {
 }
 
 func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
-	for _, scenario := range []string{"success", "digest", "size", "binding", "incomplete", "no-stream", "rejected-empty", "rejected-bytes", "unknown", "seal-error", "changed-input", "missing-lock", "wrong-version", "cleanup-error", "unknown-reference", "existing-stage"} {
+	for _, scenario := range []string{"success", "success-external-destination", "digest", "size", "binding", "incomplete", "no-stream", "rejected-empty", "rejected-bytes", "unknown", "seal-error", "changed-input", "missing-lock", "wrong-version", "cleanup-error", "unknown-reference", "existing-stage"} {
 		t.Run(scenario, func(t *testing.T) {
 			schemas, err := schemaregistry.Load()
 			if err != nil {
@@ -98,6 +102,14 @@ func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
 			example(t, "game-backup-capture-invocation.json", &request)
 			request.Params.RequestContext.StreamTransfers = nil
 			request.Params.RequestContext.Deadline = time.Now().Add(2 * time.Minute)
+			external := &closeBuffer{}
+			if scenario == "success-external-destination" {
+				request.Params.RequestContext.StreamTransfers = []capturestream.Reference{{
+					TransferID: "workflow-transfer", Direction: "adapter_to_controller",
+					MaximumBytes: 8, ExpiresAt: time.Now().Add(time.Minute),
+				}}
+				request.Params.RequestContext.SetStreamDestinations(map[string]io.WriteCloser{"workflow-transfer": external})
+			}
 			var in capture
 			if err = json.Unmarshal(request.Params.Input, &in); err != nil {
 				t.Fatal(err)
@@ -181,7 +193,7 @@ func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
 				t.Fatal(err)
 			}
 			response, err := runtime.Invoke(context.Background(), descriptor.AdapterID, request)
-			success := scenario == "success"
+			success := scenario == "success" || scenario == "success-external-destination"
 			definitive := scenario == "rejected-empty"
 			unknown := scenario == "unknown"
 			predispatch := scenario == "changed-input" || scenario == "missing-lock" || scenario == "wrong-version" || scenario == "existing-stage"
@@ -199,6 +211,9 @@ func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
 			}
 			if success && (sink.String() != "abc" || sink.receipt.Scope != scope) {
 				t.Fatal("incorrect staged evidence")
+			}
+			if scenario == "success-external-destination" && external.String() != "abc" {
+				t.Fatalf("workflow destination received %q, want captured bytes", external.String())
 			}
 			if success && !json.Valid(sink.output) {
 				t.Fatal("original validated adapter response was not staged")
@@ -231,7 +246,8 @@ func TestCaptureDispatchUsesDurableScopeAndIndependentEvidence(t *testing.T) {
 					t.Fatal("failure could bypass reconciliation")
 				}
 			}
-			if len(request.Params.RequestContext.StreamTransfers) != 0 {
+			wantExternalRef := scenario == "success-external-destination"
+			if (wantExternalRef && len(request.Params.RequestContext.StreamTransfers) != 1) || (!wantExternalRef && len(request.Params.RequestContext.StreamTransfers) != 0) {
 				t.Fatal("transient handle mutated caller request")
 			}
 		})

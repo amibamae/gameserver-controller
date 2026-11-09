@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -113,6 +114,42 @@ func TestCaptureAdapterConsumesTransientBrokerStream(t *testing.T) {
 		t.Fatal("capture did not reach private staging sink")
 	}
 }
+
+func TestRequestContextDestinationIsTransientAndOneUse(t *testing.T) {
+	destination := &closeBuffer{}
+	requestContext := adapter.RequestContext{}
+	requestContext.SetStreamDestinations(map[string]io.WriteCloser{"opaque-transfer-id": destination})
+	if !requestContext.HasStreamDestination("opaque-transfer-id") {
+		t.Fatal("trusted destination was not visible before claim")
+	}
+	writer, err := requestContext.CreateStream("opaque-transfer-id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requestContext.HasStreamDestination("opaque-transfer-id") {
+		t.Fatal("claimed destination remained claimable")
+	}
+	if _, err := writer.Write([]byte("backup")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := requestContext.CreateStream("opaque-transfer-id"); err == nil {
+		t.Fatal("destination was claimed more than once")
+	}
+	encoded, err := json.Marshal(requestContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encoded, []byte("opaque-transfer-id")) || bytes.Contains(encoded, []byte("backup")) {
+		t.Fatal("transient stream handle or bytes leaked into request context JSON")
+	}
+	if destination.String() != "backup" {
+		t.Fatalf("destination received %q", destination.String())
+	}
+}
+
+type closeBuffer struct{ bytes.Buffer }
+
+func (*closeBuffer) Close() error { return nil }
 
 func TestStreamValidationAndErrorsDoNotExposeHandles(t *testing.T) {
 	for _, scenario := range []string{"missing", "undeclared", "direction", "expired", "duplicate", "input-leak", "adapter-error", "response-leak", "escaped-response-leak"} {
