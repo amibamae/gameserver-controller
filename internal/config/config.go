@@ -5,10 +5,12 @@ package config
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,10 +39,21 @@ type Config struct {
 }
 
 type Controller struct {
-	Mode       string     `yaml:"mode"`
-	StateStore StateStore `yaml:"state_store"`
-	Defaults   Defaults   `yaml:"defaults"`
-	Audit      Audit      `yaml:"audit"`
+	Mode          string        `yaml:"mode"`
+	StateStore    StateStore    `yaml:"state_store"`
+	Defaults      Defaults      `yaml:"defaults"`
+	Audit         Audit         `yaml:"audit"`
+	ManagementAPI ManagementAPI `yaml:"management_api"`
+}
+
+// ManagementAPI configures the optional remote HTTPS management listener.
+// Disabled is the zero value, so existing configurations remain offline.
+type ManagementAPI struct {
+	Enabled        bool   `yaml:"enabled"`
+	ListenAddress  string `yaml:"listen_address"`
+	Audience       string `yaml:"audience"`
+	TLSCertificate string `yaml:"tls_certificate_file"`
+	TLSPrivateKey  string `yaml:"tls_private_key_file"`
 }
 
 type StateStore struct {
@@ -153,6 +166,7 @@ func Validate(value Config) error {
 	add(value.Controller.Defaults.RetryLimit != nil && *value.Controller.Defaults.RetryLimit >= 0 && *value.Controller.Defaults.RetryLimit <= 10, "controller.defaults.retry_limit must be explicitly set between 0 and 10")
 	add(value.Controller.Audit.Enabled, "controller.audit.enabled must be true")
 	add(value.Controller.Audit.Destination == "local", "controller.audit.destination must be local")
+	validateManagementAPI(&problems, value.Controller.ManagementAPI)
 	add(len(value.Adapters) > 0, "at least one adapter profile is required")
 	add(len(value.Environments) > 0, "at least one environment is required")
 	add(len(value.Servers) > 0, "at least one server profile is required")
@@ -230,6 +244,31 @@ func Validate(value Config) error {
 		return fmt.Errorf("configuration is invalid:\n - %s", strings.Join(problems, "\n - "))
 	}
 	return nil
+}
+
+func validateManagementAPI(problems *[]string, value ManagementAPI) {
+	if !value.Enabled {
+		return
+	}
+	host, portText, err := net.SplitHostPort(value.ListenAddress)
+	port, portErr := strconv.Atoi(portText)
+	if err != nil || host == "" || net.ParseIP(host) == nil || portErr != nil || port < 1 || port > 65535 {
+		*problems = append(*problems, "controller.management_api.listen_address must be an IP address and TCP port")
+	}
+	if !identifierPattern.MatchString(value.Audience) {
+		*problems = append(*problems, "controller.management_api.audience must be a lower-case identifier")
+	}
+	for field, path := range map[string]string{
+		"tls_certificate_file": value.TLSCertificate,
+		"tls_private_key_file": value.TLSPrivateKey,
+	} {
+		if strings.TrimSpace(path) == "" || strings.ContainsRune(path, '\x00') || strings.Contains(path, "://") || !filepath.IsAbs(path) {
+			*problems = append(*problems, "controller.management_api."+field+" must be an absolute local path")
+		}
+	}
+	if value.TLSCertificate != "" && value.TLSCertificate == value.TLSPrivateKey {
+		*problems = append(*problems, "controller.management_api TLS certificate and private-key paths must differ")
+	}
 }
 
 func validateSecretReference(problems *[]string, label, name string, reference SecretReference) {

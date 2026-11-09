@@ -87,6 +87,46 @@ func TestParseValidConfig(t *testing.T) {
 	}
 }
 
+func TestManagementAPIIsDisabledByDefaultAndRequiresExplicitTLSConfiguration(t *testing.T) {
+	value, err := Parse(strings.NewReader(validConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.Controller.ManagementAPI.Enabled {
+		t.Fatal("remote management API must default to disabled")
+	}
+	configured := strings.Replace(validConfig, "  audit:\n", "  management_api:\n    enabled: true\n    listen_address: 127.0.0.1:8443\n    audience: controller-instance-1\n    tls_certificate_file: /etc/gameserver-controller/tls.crt\n    tls_private_key_file: /etc/gameserver-controller/tls.key\n  audit:\n", 1)
+	value, err = Parse(strings.NewReader(configured))
+	if err != nil {
+		t.Fatalf("valid HTTPS listener configuration rejected: %v", err)
+	}
+	if !value.Controller.ManagementAPI.Enabled || value.Controller.ManagementAPI.ListenAddress != "127.0.0.1:8443" {
+		t.Fatalf("management API configuration not decoded: %#v", value.Controller.ManagementAPI)
+	}
+}
+
+func TestManagementAPIRejectsInvalidListenerConfiguration(t *testing.T) {
+	base := "  management_api:\n    enabled: true\n    listen_address: 127.0.0.1:8443\n    audience: controller-instance-1\n    tls_certificate_file: /etc/gameserver-controller/tls.crt\n    tls_private_key_file: /etc/gameserver-controller/tls.key\n"
+	cases := []struct{ name, before, after, want string }{
+		{"wildcard bind requires an explicit IP", "127.0.0.1:8443", ":8443", "listen_address"},
+		{"hostname bind rejected", "127.0.0.1:8443", "controller.local:8443", "listen_address"},
+		{"invalid port", "127.0.0.1:8443", "127.0.0.1:0", "listen_address"},
+		{"invalid audience", "audience: controller-instance-1", "audience: '*'", "audience"},
+		{"relative certificate path", "/etc/gameserver-controller/tls.crt", "tls.crt", "tls_certificate_file"},
+		{"same cert and key", "/etc/gameserver-controller/tls.crt", "/etc/gameserver-controller/tls.key", "paths must differ"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			listener := strings.Replace(base, test.before, test.after, 1)
+			input := strings.Replace(validConfig, "  audit:\n", listener+"  audit:\n", 1)
+			_, err := Parse(strings.NewReader(input))
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Parse error = %v, want substring %q", err, test.want)
+			}
+		})
+	}
+}
+
 func TestBackupPolicyDefaultsAndOverrides(t *testing.T) {
 	value, err := Parse(strings.NewReader(validConfig))
 	if err != nil {
