@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/amibamae/gameserver-controller/internal/config"
+	"github.com/amibamae/gameserver-controller/internal/controllerruntime"
 )
 
 func main() {
@@ -24,6 +25,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 	}
 	value, err := config.Load(args[1])
 	if err != nil {
+		return err
+	}
+	if err := controllerruntime.Validate(value); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "configuration valid (schema v%d, %d adapter profiles, %d environments, %d servers)\n",

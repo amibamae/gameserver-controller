@@ -72,10 +72,50 @@ type Audit struct {
 	Destination string `yaml:"destination"`
 }
 
+// AdapterProfile declares one adapter. Implementation is optional: when it is
+// empty the adapter is declared for cross-reference checks but the controller
+// runtime does not start it.
 type AdapterProfile struct {
-	ID         string                     `yaml:"id"`
-	Category   string                     `yaml:"category"`
-	SecretRefs map[string]SecretReference `yaml:"secret_refs"`
+	ID             string                     `yaml:"id"`
+	Category       string                     `yaml:"category"`
+	SecretRefs     map[string]SecretReference `yaml:"secret_refs"`
+	Implementation string                     `yaml:"implementation"`
+	Wasabi         *WasabiProfile             `yaml:"wasabi"`
+	Process        *ProcessProfile            `yaml:"process"`
+}
+
+const (
+	ImplementationWasabi  = "wasabi"
+	ImplementationProcess = "process"
+
+	// WasabiAccessKeyIDSecret and WasabiSecretAccessKeySecret are the
+	// secret_refs names a Wasabi adapter profile must define.
+	WasabiAccessKeyIDSecret     = "access_key_id"
+	WasabiSecretAccessKeySecret = "secret_access_key"
+)
+
+// WasabiProfile holds the non-secret settings for the built-in Wasabi storage
+// adapter. Keys come from the profile's secret_refs.
+type WasabiProfile struct {
+	StorageProfileID  string `yaml:"storage_profile_id"`
+	EnvironmentID     string `yaml:"environment_id"`
+	Container         string `yaml:"container"`
+	KeyPrefix         string `yaml:"key_prefix"`
+	Region            string `yaml:"region"`
+	EndpointURL       string `yaml:"endpoint_url"`
+	MaxObjectBytes    int64  `yaml:"max_object_bytes"`
+	RequireVersionIDs bool   `yaml:"require_version_ids"`
+}
+
+// ProcessProfile starts an adapter executable over jsonrpc-stdio-v1. Env is
+// the complete environment; nothing is inherited from the controller.
+type ProcessProfile struct {
+	Path             string   `yaml:"path"`
+	Args             []string `yaml:"args"`
+	Env              []string `yaml:"env"`
+	WorkingDirectory string   `yaml:"working_directory"`
+	StartTimeout     string   `yaml:"start_timeout"`
+	StopTimeout      string   `yaml:"stop_timeout"`
 }
 
 type SecretReference struct {
@@ -247,6 +287,9 @@ func Validate(value Config) error {
 		}
 	}
 	add(hasProduction, "at least one production environment is required")
+	for i, profile := range value.Adapters {
+		validateImplementation(&problems, fmt.Sprintf("adapters[%d]", i), profile, environmentByID)
+	}
 
 	serverIDs := make(map[string]struct{}, len(value.Servers))
 	for i, server := range value.Servers {
@@ -262,6 +305,9 @@ func Validate(value Config) error {
 		}
 		checkServerAdapter(&problems, label+".adapters.hosting", server.Adapters.Hosting, "hosting", adapterByID, true)
 		checkServerAdapter(&problems, label+".adapters.storage", server.Adapters.Storage, "storage", adapterByID, true)
+		if storage, ok := adapterByID[server.Adapters.Storage]; ok && storage.Wasabi != nil && storage.Wasabi.EnvironmentID != server.EnvironmentID {
+			problems = append(problems, label+".adapters.storage must use a Wasabi profile in the same environment as the server")
+		}
 		checkServerAdapter(&problems, label+".adapters.execution", server.Adapters.Execution, "execution", adapterByID, true)
 		checkServerAdapter(&problems, label+".adapters.game", server.Adapters.Game, "game", adapterByID, true)
 		checkServerAdapter(&problems, label+".adapters.integration", server.Adapters.Integration, "integration", adapterByID, false)
@@ -311,6 +357,67 @@ func validateManagementAPI(problems *[]string, value ManagementAPI) {
 	}
 	if value.TLSCertificate != "" && value.TLSCertificate == value.TLSPrivateKey {
 		*problems = append(*problems, "controller.management_api TLS certificate and private-key paths must differ")
+	}
+}
+
+var envNamePattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,127}$`)
+
+func validateImplementation(problems *[]string, label string, profile AdapterProfile, environments map[string]Environment) {
+	add := func(ok bool, message string) {
+		if !ok {
+			*problems = append(*problems, label+message)
+		}
+	}
+	switch profile.Implementation {
+	case "":
+		add(profile.Wasabi == nil && profile.Process == nil, " has wasabi or process settings but no implementation")
+	case ImplementationWasabi:
+		add(profile.Category == "storage", ".implementation wasabi requires category storage")
+		add(profile.Process == nil, " must not have process settings with implementation wasabi")
+		if profile.Wasabi == nil {
+			*problems = append(*problems, label+".wasabi is required with implementation wasabi")
+			return
+		}
+		w := profile.Wasabi
+		_, hasAccess := profile.SecretRefs[WasabiAccessKeyIDSecret]
+		_, hasSecret := profile.SecretRefs[WasabiSecretAccessKeySecret]
+		add(len(profile.SecretRefs) == 2 && hasAccess && hasSecret, ".secret_refs must define exactly access_key_id and secret_access_key for implementation wasabi")
+		add(strings.TrimSpace(w.StorageProfileID) != "" && len(w.StorageProfileID) <= 200, ".wasabi.storage_profile_id is required")
+		_, knownEnvironment := environments[w.EnvironmentID]
+		add(knownEnvironment, ".wasabi.environment_id must name a configured environment")
+		add(w.Container != "" && len(w.Container) <= 500, ".wasabi.container is required")
+		add(strings.HasSuffix(w.KeyPrefix, "/") && len(w.KeyPrefix) <= 2048, ".wasabi.key_prefix must end with /")
+		add(w.Region != "", ".wasabi.region is required")
+		add(strings.HasPrefix(w.EndpointURL, "https://"), ".wasabi.endpoint_url must be an HTTPS URL")
+		add(w.MaxObjectBytes > 0, ".wasabi.max_object_bytes must be positive")
+	case ImplementationProcess:
+		add(profile.Wasabi == nil, " must not have wasabi settings with implementation process")
+		if profile.Process == nil {
+			*problems = append(*problems, label+".process is required with implementation process")
+			return
+		}
+		p := profile.Process
+		add(filepath.IsAbs(p.Path) && !strings.ContainsRune(p.Path, '\x00'), ".process.path must be an absolute executable path")
+		add(p.WorkingDirectory == "" || filepath.IsAbs(p.WorkingDirectory), ".process.working_directory must be absolute when set")
+		for _, arg := range p.Args {
+			add(!strings.ContainsRune(arg, '\x00'), ".process.args must not contain NUL")
+		}
+		seen := map[string]bool{}
+		for _, entry := range p.Env {
+			name, _, found := strings.Cut(entry, "=")
+			add(found && envNamePattern.MatchString(name), ".process.env entries must be NAME=value with an upper-case name")
+			add(!seen[name], ".process.env must not repeat "+name)
+			seen[name] = true
+		}
+		for field, text := range map[string]string{"start_timeout": p.StartTimeout, "stop_timeout": p.StopTimeout} {
+			if text == "" {
+				continue
+			}
+			duration, err := time.ParseDuration(text)
+			add(err == nil && duration > 0 && duration <= 10*time.Minute, ".process."+field+" must be greater than zero and no more than 10m")
+		}
+	default:
+		*problems = append(*problems, label+".implementation must be wasabi or process when set")
 	}
 }
 

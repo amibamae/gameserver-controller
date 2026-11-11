@@ -1,5 +1,7 @@
-// Command controller runs the configured management API over HTTPS. The
-// listener is disabled by default and currently serves operation inspection.
+// Command controller builds the controller runtime (state store, adapter
+// registry with configured adapters, and workflow engine) and runs the
+// management API over HTTPS. The listener is disabled by default and
+// currently serves operation inspection.
 package main
 
 import (
@@ -19,8 +21,8 @@ import (
 
 	"github.com/amibamae/gameserver-controller/internal/authkey"
 	"github.com/amibamae/gameserver-controller/internal/config"
+	"github.com/amibamae/gameserver-controller/internal/controllerruntime"
 	"github.com/amibamae/gameserver-controller/internal/managementapi"
-	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
 const buildIdentity = "gameserver-controller-runtime-v1"
@@ -74,17 +76,19 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 	if err != nil {
 		return err
 	}
-	databasePath := config.ResolveStateStorePath(configPath, value.Controller.StateStore.Path)
-	database, err := store.OpenBolt(databasePath)
+	runtime, err := controllerruntime.Build(ctx, value, configPath, controllerruntime.Options{
+		CredentialDirectory: os.Getenv("CREDENTIALS_DIRECTORY"),
+		ControllerVersion:   buildIdentity,
+	})
 	if err != nil {
 		return err
 	}
-	defer database.Close()
-	keyManager, err := authkey.NewManager(database)
+	defer runtime.Close()
+	keyManager, err := authkey.NewManager(runtime.Store)
 	if err != nil {
 		return err
 	}
-	handler, err := managementapi.NewHandler(database, keyManager, management.Audience, nil)
+	handler, err := managementapi.NewHandler(runtime.Store, keyManager, management.Audience, nil)
 	if err != nil {
 		return err
 	}
@@ -106,6 +110,9 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 		serveResult <- server.Serve(tls.NewListener(listener, tlsConfig))
 	}()
 	if stdout != nil {
+		if adapters := runtime.AdapterIDs(); len(adapters) > 0 {
+			_, _ = fmt.Fprintf(stdout, "Registered adapters: %s\n", strings.Join(adapters, ", "))
+		}
 		_, _ = fmt.Fprintf(stdout, "Management HTTPS listener ready at %s\n", management.ListenAddress)
 	}
 	select {

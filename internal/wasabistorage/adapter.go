@@ -111,6 +111,9 @@ func newAdapter(config Config, protocolVersion string, resolver CredentialResolv
 	return impl, nil
 }
 
+// ValidateConfig checks a profile without contacting Wasabi or resolving credentials.
+func ValidateConfig(config Config) error { return validateConfig(config) }
+
 func validateConfig(config Config) error {
 	if !adapterIDPattern.MatchString(config.AdapterID) || !strings.HasPrefix(config.AdapterID, "storage.") || config.StorageProfileID == "" || config.EnvironmentID == "" || config.Container == "" || len(config.Container) > 500 || !strings.HasSuffix(config.KeyPrefix, "/") || len(config.KeyPrefix) > 2048 || !regionPattern.MatchString(config.Region) {
 		return errors.New("storage profile, environment, container, key prefix, and Wasabi region are required")

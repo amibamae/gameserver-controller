@@ -441,3 +441,103 @@ func TestScalingPolicy(t *testing.T) {
 		t.Fatalf("invalid scaling accepted: %v", err)
 	}
 }
+
+// implementedConfig turns storage.staging into a Wasabi profile and
+// execution.local into a process adapter.
+var implementedConfig = strings.NewReplacer(
+	`  - id: storage.staging
+    category: storage
+    secret_refs:
+      production_reader:
+        secret_ref: systemd-credential://wasabi-staging-production-reader
+        purpose: read selected production backup
+      backup_writer:
+        secret_ref: systemd-credential://wasabi-staging-writer
+        purpose: staging backup writer
+`, `  - id: storage.staging
+    category: storage
+    implementation: wasabi
+    secret_refs:
+      access_key_id:
+        secret_ref: systemd-credential://wasabi-staging-access-key-id
+        purpose: staging Wasabi access key ID
+      secret_access_key:
+        secret_ref: systemd-credential://wasabi-staging-secret-access-key
+        purpose: staging Wasabi secret access key
+    wasabi:
+      storage_profile_id: wasabi-staging
+      environment_id: staging
+      container: example-staging-backups
+      key_prefix: server/
+      region: us-west-1
+      endpoint_url: https://s3.us-west-1.wasabisys.com
+      max_object_bytes: 1073741824
+      require_version_ids: true
+`,
+	`  - id: execution.local
+    category: execution
+`, `  - id: execution.local
+    category: execution
+    implementation: process
+    process:
+      path: /usr/lib/gameserver-controller/execution-adapter
+      args: [--profile, local]
+      env: [LANG=C.UTF-8]
+      start_timeout: 10s
+`).Replace(validConfig)
+
+func TestParseImplementedAdapterProfiles(t *testing.T) {
+	if !strings.Contains(implementedConfig, "implementation: wasabi") || !strings.Contains(implementedConfig, "implementation: process") {
+		t.Fatal("test fixture replacement did not apply")
+	}
+	value, err := Parse(strings.NewReader(implementedConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wasabi, process *AdapterProfile
+	for i := range value.Adapters {
+		switch value.Adapters[i].ID {
+		case "storage.staging":
+			wasabi = &value.Adapters[i]
+		case "execution.local":
+			process = &value.Adapters[i]
+		}
+	}
+	if wasabi == nil || wasabi.Wasabi == nil || wasabi.Wasabi.Container != "example-staging-backups" || !wasabi.Wasabi.RequireVersionIDs {
+		t.Fatalf("wasabi profile not decoded: %+v", wasabi)
+	}
+	if process == nil || process.Process == nil || process.Process.Path != "/usr/lib/gameserver-controller/execution-adapter" || len(process.Process.Args) != 2 {
+		t.Fatalf("process profile not decoded: %+v", process)
+	}
+}
+
+func TestValidateRejectsInvalidImplementedAdapterProfiles(t *testing.T) {
+	tests := []struct {
+		name, before, after, want string
+	}{
+		{"unknown implementation", "implementation: process", "implementation: docker", "implementation must be wasabi or process"},
+		{"wasabi on non-storage", "implementation: process", "implementation: wasabi", "requires category storage"},
+		{"settings without implementation", "    implementation: process\n", "", "has wasabi or process settings but no implementation"},
+		{"wrong secret names", "      access_key_id:\n", "      access_key:\n", "exactly access_key_id and secret_access_key"},
+		{"unknown wasabi environment", "      environment_id: staging\n", "      environment_id: testing\n", "must name a configured environment"},
+		{"cross-environment storage", "      environment_id: staging\n", "      environment_id: production\n", "same environment as the server"},
+		{"key prefix", "key_prefix: server/", "key_prefix: server", "key_prefix must end with /"},
+		{"plain http endpoint", "https://s3.us-west-1", "http://s3.us-west-1", "endpoint_url must be an HTTPS URL"},
+		{"relative process path", "path: /usr/lib/gameserver-controller/execution-adapter", "path: execution-adapter", "process.path must be an absolute"},
+		{"env without equals", "env: [LANG=C.UTF-8]", "env: [LANG]", "process.env entries must be NAME=value"},
+		{"lower-case env name", "env: [LANG=C.UTF-8]", "env: [lang=C]", "process.env entries must be NAME=value"},
+		{"long start timeout", "start_timeout: 10s", "start_timeout: 1h", "start_timeout must be"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := strings.Replace(implementedConfig, test.before, test.after, 1)
+			if input == implementedConfig {
+				t.Fatalf("replacement %q did not apply", test.before)
+			}
+			_, err := Parse(strings.NewReader(input))
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Parse error = %v, want substring %q", err, test.want)
+			}
+		})
+	}
+}

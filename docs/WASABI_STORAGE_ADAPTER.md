@@ -5,10 +5,11 @@ adapter. It advertises `storage.object.put`, `storage.object.get`,
 `storage.object.head`, `storage.object.list`, `storage.object.copy`,
 `storage.object.delete`, `storage.object.versioning.inspect`, and
 `storage.object.retention.inspect`. It does not advertise
-`storage.object.verify_checksum`. The management runtime does not
-construct or register this adapter yet, and the configuration loader does not
-parse its provider-specific fields. Treat the package as an implementation
-stage, not as a deployable Wasabi integration.
+`storage.object.verify_checksum`. A configuration profile with
+`implementation: wasabi` (see [configuration](CONFIGURATION.md)) makes
+`controller serve` build and register this adapter. No workflow that uses
+storage is registered in the runtime yet, so nothing calls it in a deployed
+controller. Treat it as not yet validated against a live Wasabi account.
 
 The adapter uses AWS SDK for Go v2 with a regional Wasabi S3 endpoint. It only
 accepts HTTPS hosts under `wasabisys.com`, uses path-style bucket addressing,
