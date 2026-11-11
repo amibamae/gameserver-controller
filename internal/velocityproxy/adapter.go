@@ -86,6 +86,8 @@ type BackendObservation struct {
 	// Routable reports whether the proxy would send new connections to the
 	// backend. It is ignored unless Registration is Registered.
 	Routable bool
+	// Address is the host:port the proxy connects to for this backend.
+	Address string
 	// ActiveSessions is the number of connected sessions, when known.
 	ActiveSessions *int64
 	ObservedAt     time.Time
@@ -115,13 +117,21 @@ type SessionObservation struct {
 // their errors must not embed session identifiers.
 type Bridge interface {
 	InspectBackend(ctx context.Context, backendID string) (BackendObservation, error)
-	RegisterBackend(ctx context.Context, target BackendTarget) error
+	// RegisterBackend binds the backend name to the instance and the
+	// host:port address the proxy should connect to.
+	RegisterBackend(ctx context.Context, target BackendTarget, address string) error
 	DrainBackend(ctx context.Context, target BackendTarget) error
 	UnregisterBackend(ctx context.Context, target BackendTarget) error
 	InspectSession(ctx context.Context, sessionID string) (SessionObservation, error)
 	// TransferSession moves one connected session to the destination backend
 	// and returns nil only after the proxy confirms the connection.
 	TransferSession(ctx context.Context, sessionID, destinationBackendID string) error
+}
+
+// AddressResolver returns the current host:port address the proxy should use
+// to reach a backend's instance. See ConfiguredAddresses.
+type AddressResolver interface {
+	ResolveBackendAddress(ctx context.Context, target BackendTarget) (string, error)
 }
 
 // Config contains the non-secret settings for one Velocity proxy instance.
@@ -137,16 +147,17 @@ type Adapter struct {
 	config          Config
 	protocolVersion string
 	bridge          Bridge
+	addresses       AddressResolver
 	now             func() time.Time
 }
 
 // New constructs a Velocity adapter. protocolVersion must match the loaded
 // protocol registry.
-func New(config Config, protocolVersion string, bridge Bridge) (*Adapter, error) {
-	return newAdapter(config, protocolVersion, bridge, time.Now)
+func New(config Config, protocolVersion string, bridge Bridge, addresses AddressResolver) (*Adapter, error) {
+	return newAdapter(config, protocolVersion, bridge, addresses, time.Now)
 }
 
-func newAdapter(config Config, protocolVersion string, bridge Bridge, now func() time.Time) (*Adapter, error) {
+func newAdapter(config Config, protocolVersion string, bridge Bridge, addresses AddressResolver, now func() time.Time) (*Adapter, error) {
 	if !adapterIDPattern.MatchString(config.AdapterID) || config.EnvironmentID == "" || len(config.EnvironmentID) > 200 {
 		return nil, errors.New("an integration adapter ID and environment are required")
 	}
@@ -154,10 +165,10 @@ func newAdapter(config Config, protocolVersion string, bridge Bridge, now func()
 	if ref.AdapterID != config.AdapterID || ref.EnvironmentID != config.EnvironmentID || ref.ResourceKind != proxyInstanceKind || ref.ExternalID == "" || len(ref.ExternalID) > 1024 {
 		return nil, errors.New("proxy instance reference must name this adapter, its environment, and a proxy-instance ID")
 	}
-	if protocolVersion == "" || bridge == nil || now == nil {
-		return nil, errors.New("protocol version and proxy bridge are required")
+	if protocolVersion == "" || bridge == nil || addresses == nil || now == nil {
+		return nil, errors.New("protocol version, proxy bridge, and backend address resolver are required")
 	}
-	return &Adapter{config: config, protocolVersion: protocolVersion, bridge: bridge, now: now}, nil
+	return &Adapter{config: config, protocolVersion: protocolVersion, bridge: bridge, addresses: addresses, now: now}, nil
 }
 
 // Descriptor advertises the proxy backend lifecycle, session inspection, and
@@ -297,9 +308,10 @@ func (a *Adapter) checkTarget(target BackendTarget) error {
 }
 
 // boundState maps a proxy observation to the protocol state of the exact
-// requested instance. A backend name bound to another instance never reports
-// the requested instance as routable.
-func boundState(target BackendTarget, observed BackendObservation) (RegistrationState, string) {
+// requested instance. A backend name bound to another instance, or to an
+// address that no longer matches the instance's current address, never
+// reports the requested instance as routable.
+func (a *Adapter) boundState(ctx context.Context, target BackendTarget, observed BackendObservation) (RegistrationState, string) {
 	switch observed.Registration {
 	case Unregistered:
 		return Unregistered, "not_routable"
@@ -310,10 +322,18 @@ func boundState(target BackendTarget, observed BackendObservation) (Registration
 		if observed.Registration == Draining {
 			return Draining, "not_routable"
 		}
-		if observed.Routable {
-			return Registered, "routable"
+		if !observed.Routable {
+			return Registered, "not_routable"
 		}
-		return Registered, "not_routable"
+		current, err := a.addresses.ResolveBackendAddress(ctx, target)
+		if err != nil {
+			return Unknown, "unknown"
+		}
+		if !sameAddress(observed.Address, current) {
+			// The instance's address changed since registration.
+			return Unknown, "not_routable"
+		}
+		return Registered, "routable"
 	default:
 		return Unknown, "unknown"
 	}
@@ -338,7 +358,7 @@ func (a *Adapter) inspectBackend(ctx context.Context, raw json.RawMessage) (any,
 	if err != nil {
 		return backendStateOutput{Target: input.Target, RegistrationState: string(Unknown), Routability: "unknown", ObservedAt: a.now().UTC()}, adapter.OutcomeCompleted, nil
 	}
-	state, routability := boundState(input.Target, observed)
+	state, routability := a.boundState(ctx, input.Target, observed)
 	output := backendStateOutput{Target: input.Target, RegistrationState: string(state), Routability: routability, ObservedAt: a.observedAt(observed.ObservedAt)}
 	if (state == Registered || state == Draining) && observed.ActiveSessions != nil && *observed.ActiveSessions >= 0 {
 		count := *observed.ActiveSessions
@@ -377,7 +397,14 @@ func (a *Adapter) registerBackend(ctx context.Context, raw json.RawMessage) (any
 	if reason := a.readinessProblem(input.ReadinessAssertion, input.Target.ServerID, input.Target.EnvironmentID, input.Target.InstanceRef); reason != "" {
 		return a.rejected(ctx, input.Target, reason), adapter.OutcomeCompleted, nil
 	}
-	return a.applyAndConfirm(ctx, input.Target, a.bridge.RegisterBackend, Registered)
+	address, err := a.addresses.ResolveBackendAddress(ctx, input.Target)
+	if err != nil {
+		return a.rejected(ctx, input.Target, "backend_address_unavailable"), adapter.OutcomeCompleted, nil
+	}
+	register := func(ctx context.Context, target BackendTarget) error {
+		return a.bridge.RegisterBackend(ctx, target, address)
+	}
+	return a.applyAndConfirm(ctx, input.Target, register, Registered)
 }
 
 func (a *Adapter) changeBackend(ctx context.Context, raw json.RawMessage, action func(context.Context, BackendTarget) error, want RegistrationState) (any, adapter.Outcome, error) {
@@ -396,7 +423,7 @@ func (a *Adapter) changeBackend(ctx context.Context, raw json.RawMessage, action
 func (a *Adapter) rejected(ctx context.Context, target BackendTarget, reason string) backendActionOutput {
 	output := backendActionOutput{Target: target, RequestOutcome: "rejected", RegistrationState: string(Unknown), Routability: "unknown", ObservedAt: a.now().UTC(), ReasonCode: reason}
 	if observed, err := a.bridge.InspectBackend(ctx, target.BackendID); err == nil {
-		state, routability := boundState(target, observed)
+		state, routability := a.boundState(ctx, target, observed)
 		output.RegistrationState, output.Routability, output.ObservedAt = string(state), routability, a.observedAt(observed.ObservedAt)
 	}
 	return output
@@ -415,7 +442,7 @@ func (a *Adapter) applyAndConfirm(ctx context.Context, target BackendTarget, act
 	if err != nil {
 		return backendActionOutput{Target: target, RequestOutcome: "accepted", RegistrationState: string(Unknown), Routability: "unknown", ObservedAt: a.now().UTC(), ReasonCode: "confirmation_unavailable"}, adapter.OutcomeAccepted, nil
 	}
-	state, routability := boundState(target, observed)
+	state, routability := a.boundState(ctx, target, observed)
 	output := backendActionOutput{Target: target, RegistrationState: string(state), Routability: routability, ObservedAt: a.observedAt(observed.ObservedAt)}
 	confirmed := state == want && (want != Registered || routability == "routable")
 	if confirmed {
@@ -445,7 +472,7 @@ func (a *Adapter) inspectPlayers(ctx context.Context, raw json.RawMessage) (any,
 	if err != nil || observed.ActiveSessions == nil || *observed.ActiveSessions < 0 || observed.ObservedAt.IsZero() {
 		return unknown, adapter.OutcomeCompleted, nil
 	}
-	if state, _ := boundState(input.Target, observed); state != Registered && state != Draining {
+	if state, _ := a.boundState(ctx, input.Target, observed); state != Registered && state != Draining {
 		return unknown, adapter.OutcomeCompleted, nil
 	}
 	if !a.fresh(observed.ObservedAt, input.MaximumAgeSeconds) {

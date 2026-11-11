@@ -129,7 +129,7 @@ func (a *Adapter) transferPlayers(ctx context.Context, raw json.RawMessage) (any
 			rejectAll(errDestinationUnknown, outcomeFailed)
 			break
 		}
-		if state, routability := boundState(destination, observed); state != Registered || routability != "routable" {
+		if state, routability := a.boundState(ctx, destination, observed); state != Registered || routability != "routable" {
 			rejectAll(errDestinationRouting, outcomeRejected)
 			break
 		}

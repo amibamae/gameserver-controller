@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/netip"
 	"os"
 	"reflect"
 	"strings"
@@ -31,8 +32,10 @@ type fakeBridge struct {
 	actionErr     error
 	transferErrs  map[string]error
 	actionApplies bool
-	actions       []string
-	transfers     []string
+	// registeredAddress is the address passed to the last register call.
+	registeredAddress string
+	actions           []string
+	transfers         []string
 }
 
 func newFakeBridge() *fakeBridge {
@@ -49,26 +52,30 @@ func (b *fakeBridge) InspectBackend(_ context.Context, backendID string) (Backen
 	return BackendObservation{Registration: Unregistered, ObservedAt: testNow}, nil
 }
 
-func (b *fakeBridge) act(name string, target BackendTarget, state RegistrationState, routable bool) error {
+func (b *fakeBridge) act(name string, target BackendTarget, address string, state RegistrationState, routable bool) error {
 	b.actions = append(b.actions, name)
 	if b.actionErr != nil {
 		return b.actionErr
 	}
 	if b.actionApplies {
 		ref := target.InstanceRef
-		b.backends[target.BackendID] = BackendObservation{Registration: state, InstanceRef: &ref, Routable: routable, ObservedAt: testNow}
+		if address == "" {
+			address = b.backends[target.BackendID].Address
+		}
+		b.backends[target.BackendID] = BackendObservation{Registration: state, InstanceRef: &ref, Address: address, Routable: routable, ObservedAt: testNow}
 	}
 	return nil
 }
 
-func (b *fakeBridge) RegisterBackend(_ context.Context, t BackendTarget) error {
-	return b.act("register", t, Registered, true)
+func (b *fakeBridge) RegisterBackend(_ context.Context, t BackendTarget, address string) error {
+	b.registeredAddress = address
+	return b.act("register", t, address, Registered, true)
 }
 func (b *fakeBridge) DrainBackend(_ context.Context, t BackendTarget) error {
-	return b.act("drain", t, Draining, false)
+	return b.act("drain", t, "", Draining, false)
 }
 func (b *fakeBridge) UnregisterBackend(_ context.Context, t BackendTarget) error {
-	return b.act("unregister", t, Unregistered, false)
+	return b.act("unregister", t, "", Unregistered, false)
 }
 
 func (b *fakeBridge) InspectSession(_ context.Context, id string) (SessionObservation, error) {
@@ -89,8 +96,14 @@ func (b *fakeBridge) TransferSession(_ context.Context, id, destination string) 
 	return nil
 }
 
+// backendIP is the current IP of instance-test-001 in the fake provider.
+var backendIP = netip.MustParseAddr("203.0.113.20")
+
+const backendAddress = "203.0.113.20:25565"
+
 type harness struct {
 	t        *testing.T
+	ips      map[string]netip.Addr
 	bridge   *fakeBridge
 	adapter  *Adapter
 	registry *adapter.Registry
@@ -107,14 +120,25 @@ func newHarness(t *testing.T) *harness {
 		t.Fatal(err)
 	}
 	bridge := newFakeBridge()
-	impl, err := newAdapter(Config{AdapterID: "integration.velocity", EnvironmentID: "test", ProxyInstanceRef: proxyInstance}, schemas.ProtocolVersion(), bridge, func() time.Time { return testNow })
+	ips := map[string]netip.Addr{instance.ExternalID: backendIP, otherInstance.ExternalID: netip.MustParseAddr("203.0.113.21")}
+	addresses := ConfiguredAddresses{
+		Backends: map[string]BackendAddressConfig{"paper-main": {Mode: AddressInstanceIP, Port: 25565}},
+		LookupIP: func(_ context.Context, ref ResourceRef) (netip.Addr, error) {
+			ip, ok := ips[ref.ExternalID]
+			if !ok {
+				return netip.Addr{}, errors.New("no such instance")
+			}
+			return ip, nil
+		},
+	}
+	impl, err := newAdapter(Config{AdapterID: "integration.velocity", EnvironmentID: "test", ProxyInstanceRef: proxyInstance}, schemas.ProtocolVersion(), bridge, addresses, func() time.Time { return testNow })
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := registry.Register(impl); err != nil {
 		t.Fatal(err)
 	}
-	return &harness{t: t, bridge: bridge, adapter: impl, registry: registry}
+	return &harness{t: t, ips: ips, bridge: bridge, adapter: impl, registry: registry}
 }
 
 // invoke calls through the registry, which validates input and output
@@ -156,7 +180,7 @@ func readiness(expires time.Time) ReadinessAssertion {
 }
 
 func registered(ref ResourceRef, routable bool) BackendObservation {
-	return BackendObservation{Registration: Registered, InstanceRef: &ref, Routable: routable, ObservedAt: testNow}
+	return BackendObservation{Registration: Registered, InstanceRef: &ref, Address: backendAddress, Routable: routable, ObservedAt: testNow}
 }
 
 func expectState(t *testing.T, output map[string]any, outcome, registration, routability string) {
@@ -199,12 +223,15 @@ func TestNewRejectsInvalidConfig(t *testing.T) {
 		"proxy ref missing name": {AdapterID: "integration.velocity", EnvironmentID: "test", ProxyInstanceRef: ResourceRef{AdapterID: "integration.velocity", EnvironmentID: "test", ResourceKind: "proxy-instance"}},
 	}
 	for name, config := range cases {
-		if _, err := New(config, "0.21.0-draft", bridge); err == nil {
+		if _, err := New(config, "0.21.0-draft", bridge, ConfiguredAddresses{}); err == nil {
 			t.Errorf("%s: config was accepted", name)
 		}
 	}
-	if _, err := New(Config{AdapterID: "integration.velocity", EnvironmentID: "test", ProxyInstanceRef: proxyInstance}, "0.21.0-draft", nil); err == nil {
+	if _, err := New(Config{AdapterID: "integration.velocity", EnvironmentID: "test", ProxyInstanceRef: proxyInstance}, "0.21.0-draft", nil, ConfiguredAddresses{}); err == nil {
 		t.Error("nil bridge was accepted")
+	}
+	if _, err := New(Config{AdapterID: "integration.velocity", EnvironmentID: "test", ProxyInstanceRef: proxyInstance}, "0.21.0-draft", bridge, nil); err == nil {
+		t.Error("nil address resolver was accepted")
 	}
 }
 
@@ -307,7 +334,7 @@ func TestInspectBindsStateToExactInstance(t *testing.T) {
 		registration, routability string
 		wantCount                 bool
 	}{
-		"routable":           {observed: BackendObservation{Registration: Registered, InstanceRef: &instance, Routable: true, ActiveSessions: &count, ObservedAt: testNow}, registration: "registered", routability: "routable", wantCount: true},
+		"routable":           {observed: BackendObservation{Registration: Registered, InstanceRef: &instance, Address: backendAddress, Routable: true, ActiveSessions: &count, ObservedAt: testNow}, registration: "registered", routability: "routable", wantCount: true},
 		"registered not yet": {observed: registered(instance, false), registration: "registered", routability: "not_routable"},
 		"other instance":     {observed: BackendObservation{Registration: Registered, InstanceRef: &otherInstance, Routable: true, ActiveSessions: &count, ObservedAt: testNow}, registration: "unknown", routability: "not_routable"},
 		"draining":           {observed: BackendObservation{Registration: Draining, InstanceRef: &instance, ObservedAt: testNow}, registration: "draining", routability: "not_routable"},
@@ -348,7 +375,7 @@ func TestBackendCallsRejectOtherEnvironment(t *testing.T) {
 func TestPlayersInspectRequiresFreshBoundCount(t *testing.T) {
 	count := int64(3)
 	at := func(offset time.Duration) BackendObservation {
-		return BackendObservation{Registration: Registered, InstanceRef: &instance, Routable: true, ActiveSessions: &count, ObservedAt: testNow.Add(offset)}
+		return BackendObservation{Registration: Registered, InstanceRef: &instance, Address: backendAddress, Routable: true, ActiveSessions: &count, ObservedAt: testNow.Add(offset)}
 	}
 	cases := map[string]struct {
 		observed BackendObservation
@@ -542,5 +569,96 @@ func TestValidateTransferResultInvariants(t *testing.T) {
 		if err := validateTransferResult(request, result); err == nil {
 			t.Errorf("%s: invalid result accepted", name)
 		}
+	}
+}
+
+func TestRegisterSendsResolvedInstanceAddress(t *testing.T) {
+	h := newHarness(t)
+	h.mustInvoke("integration.proxy.backend.register", registerInput{Target: target, ReadinessAssertion: readiness(testNow.Add(time.Minute))})
+	if h.bridge.registeredAddress != backendAddress {
+		t.Fatalf("registered address = %q, want %q", h.bridge.registeredAddress, backendAddress)
+	}
+
+	// Vultr reports 0.0.0.0 until an IP is assigned; registration must wait.
+	h = newHarness(t)
+	h.ips[instance.ExternalID] = netip.IPv4Unspecified()
+	_, output := h.mustInvoke("integration.proxy.backend.register", registerInput{Target: target, ReadinessAssertion: readiness(testNow.Add(time.Minute))})
+	expectState(t, output, "rejected", "unregistered", "not_routable")
+	if output["reason_code"] != "backend_address_unavailable" || len(h.bridge.actions) != 0 {
+		t.Fatalf("unassigned IP: output %v, actions %v", output, h.bridge.actions)
+	}
+}
+
+func TestInstanceIPChangeMakesBackendNotRoutable(t *testing.T) {
+	h := newHarness(t)
+	h.bridge.backends["paper-main"] = registered(instance, true)
+	_, output := h.mustInvoke("integration.proxy.backend.inspect", backendInput{Target: target})
+	expectState(t, output, "", "registered", "routable")
+
+	h.ips[instance.ExternalID] = netip.MustParseAddr("203.0.113.99")
+	_, output = h.mustInvoke("integration.proxy.backend.inspect", backendInput{Target: target})
+	expectState(t, output, "", "unknown", "not_routable")
+
+	// Transfers refuse a destination whose address is stale.
+	h.connect("s-1", "velocity-lobby", "cohort-001")
+	_, output = h.mustInvoke("integration.velocity.players.transfer", transferInput("s-1"))
+	if got := resultsByID(t, output)["s-1"]; got["outcome"] != "rejected" || len(h.bridge.transfers) != 0 {
+		t.Fatalf("stale destination: %v, transfers %v", got, h.bridge.transfers)
+	}
+
+	// Re-registering with a fresh readiness assertion picks up the new IP.
+	_, output = h.mustInvoke("integration.proxy.backend.register", registerInput{Target: target, ReadinessAssertion: readiness(testNow.Add(time.Minute))})
+	expectState(t, output, "confirmed", "registered", "routable")
+	if h.bridge.registeredAddress != "203.0.113.99:25565" {
+		t.Fatalf("re-registered address = %q", h.bridge.registeredAddress)
+	}
+}
+
+func TestConfiguredAddresses(t *testing.T) {
+	lookup := func(_ context.Context, _ ResourceRef) (netip.Addr, error) {
+		return netip.MustParseAddr("2001:db8::5"), nil
+	}
+	addresses := ConfiguredAddresses{
+		Backends: map[string]BackendAddressConfig{
+			"by-ip":   {Mode: AddressInstanceIP, Port: 25565},
+			"by-name": {Mode: AddressHostname, Hostname: "Paper-Main.Backends.Example.com.", Port: 25566},
+		},
+		LookupIP: lookup,
+	}
+	if err := addresses.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	resolve := func(backend string) string {
+		t.Helper()
+		value, err := addresses.ResolveBackendAddress(context.Background(), BackendTarget{BackendID: backend, InstanceRef: instance})
+		if err != nil {
+			t.Fatalf("%s: %v", backend, err)
+		}
+		return value
+	}
+	if got := resolve("by-ip"); got != "[2001:db8::5]:25565" {
+		t.Errorf("by-ip = %q", got)
+	}
+	if got := resolve("by-name"); got != "paper-main.backends.example.com:25566" {
+		t.Errorf("by-name = %q", got)
+	}
+	if _, err := addresses.ResolveBackendAddress(context.Background(), BackendTarget{BackendID: "missing"}); err == nil {
+		t.Error("backend without a setting resolved")
+	}
+	invalid := []ConfiguredAddresses{
+		{},
+		{Backends: map[string]BackendAddressConfig{"a": {Mode: AddressInstanceIP, Port: 25565}}},
+		{Backends: map[string]BackendAddressConfig{"a": {Mode: AddressHostname, Hostname: "203.0.113.5", Port: 25565}}},
+		{Backends: map[string]BackendAddressConfig{"a": {Mode: AddressHostname, Hostname: "bad_name.example.com", Port: 25565}}},
+		{Backends: map[string]BackendAddressConfig{"a": {Mode: AddressHostname, Hostname: "ok.example.com"}}},
+		{Backends: map[string]BackendAddressConfig{"a": {Mode: "dns", Port: 25565}}, LookupIP: lookup},
+	}
+	for i, config := range invalid {
+		if err := config.Validate(); err == nil {
+			t.Errorf("invalid config %d accepted", i)
+		}
+	}
+	if !sameAddress("PAPER.example.com.:25565", "paper.example.com:25565") || sameAddress("203.0.113.1:25565", "203.0.113.1:25566") || !sameAddress("[::ffff:203.0.113.1]:25565", "203.0.113.1:25565") {
+		t.Error("sameAddress comparison is wrong")
 	}
 }
