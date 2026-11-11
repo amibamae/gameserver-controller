@@ -112,6 +112,10 @@ type ServerNetwork struct {
 	DNS string `yaml:"dns"`
 	// JoinHostname is the name players join through in direct_dns mode.
 	JoinHostname string `yaml:"join_hostname"`
+	// BackendHostnameTemplate gives every hostname backend its own DNS name
+	// from one scheme, such as "{backend}.{environment}.mc.example.com".
+	// Placeholders: {backend} (required), {server}, and {environment}.
+	BackendHostnameTemplate string `yaml:"backend_hostname_template"`
 	// Backends are the proxy backends for this server (proxy mode only).
 	Backends []NetworkBackend `yaml:"backends"`
 }
@@ -120,7 +124,8 @@ type ServerNetwork struct {
 type NetworkBackend struct {
 	ID string `yaml:"id"`
 	// AddressMode is "instance_ip" (the instance's current public IP) or
-	// "hostname" (a managed DNS name kept pointed at the instance).
+	// "hostname" (a managed DNS name kept pointed at the instance). It
+	// defaults to "hostname" when the profile sets a hostname template.
 	AddressMode string `yaml:"address_mode"`
 	Hostname    string `yaml:"hostname"`
 	Port        int    `yaml:"port"`
@@ -268,6 +273,7 @@ func Validate(value Config) error {
 		add(server.Lifecycle.RequireApprovalForDestroy, label+".lifecycle.require_approval_for_destroy must be true")
 	}
 	validateStorageSecretIsolation(&problems, value.Servers, environmentByID, adapterByID)
+	validateUniqueBackendHostnames(&problems, value.Servers)
 
 	if len(problems) > 0 {
 		sort.Strings(problems)
@@ -372,6 +378,28 @@ var (
 	numericHostPattern = regexp.MustCompile(`^[0-9.]+$`)
 )
 
+var templatePlaceholder = regexp.MustCompile(`\{[^}]*\}`)
+
+// BackendHostname returns the DNS name for a hostname-mode backend: its
+// explicit hostname, or the profile's template filled in for this server.
+func (n ServerNetwork) BackendHostname(serverID, environmentID string, backend NetworkBackend) (string, bool) {
+	if backend.effectiveAddressMode(n) != "hostname" {
+		return "", false
+	}
+	if n.BackendHostnameTemplate == "" {
+		return backend.Hostname, backend.Hostname != ""
+	}
+	name := strings.NewReplacer("{backend}", backend.ID, "{server}", serverID, "{environment}", environmentID).Replace(n.BackendHostnameTemplate)
+	return name, true
+}
+
+func (b NetworkBackend) effectiveAddressMode(n ServerNetwork) string {
+	if b.AddressMode == "" && n.BackendHostnameTemplate != "" {
+		return "hostname"
+	}
+	return b.AddressMode
+}
+
 func validDNSHostname(value string) bool {
 	return len(value) <= 253 && dnsHostnamePattern.MatchString(value) && !numericHostPattern.MatchString(value)
 }
@@ -391,7 +419,15 @@ func validateServerNetwork(problems *[]string, label string, server ServerProfil
 	}
 	usesHostname := false
 	for _, backend := range network.Backends {
-		usesHostname = usesHostname || backend.AddressMode == "hostname"
+		usesHostname = usesHostname || backend.effectiveAddressMode(*network) == "hostname"
+	}
+	if template := network.BackendHostnameTemplate; template != "" {
+		placeholdersOK := strings.Contains(template, "{backend}")
+		for _, placeholder := range templatePlaceholder.FindAllString(template, -1) {
+			placeholdersOK = placeholdersOK && (placeholder == "{backend}" || placeholder == "{server}" || placeholder == "{environment}")
+		}
+		add(placeholdersOK, ".backend_hostname_template must contain {backend} and may only use {backend}, {server}, and {environment}")
+		add(network.JoinMode == "proxy", ".backend_hostname_template is only used with join_mode proxy")
 	}
 	switch network.JoinMode {
 	case "proxy":
@@ -424,13 +460,42 @@ func validateServerNetwork(problems *[]string, label string, server ServerProfil
 		add(!seen[backend.ID], entry+".id is a duplicate")
 		seen[backend.ID] = true
 		add(backend.Port >= 1 && backend.Port <= 65535, entry+".port must be between 1 and 65535")
-		switch backend.AddressMode {
+		switch backend.effectiveAddressMode(*network) {
 		case "instance_ip":
 			add(backend.Hostname == "", entry+".hostname is only used with address_mode hostname")
 		case "hostname":
-			add(validDNSHostname(backend.Hostname), entry+".hostname must be a lower-case DNS hostname")
+			if network.BackendHostnameTemplate != "" {
+				add(backend.Hostname == "", entry+".hostname must not be set when backend_hostname_template is set")
+				name, _ := network.BackendHostname(server.ID, server.EnvironmentID, backend)
+				add(validDNSHostname(name), entry+" hostname from backend_hostname_template is not a valid lower-case DNS hostname")
+			} else {
+				add(validDNSHostname(backend.Hostname), entry+".hostname must be a lower-case DNS hostname")
+			}
 		default:
 			add(false, entry+".address_mode must be instance_ip or hostname")
+		}
+	}
+}
+
+// validateUniqueBackendHostnames requires every backend hostname to belong to
+// exactly one backend, so each backend server has its own domain.
+func validateUniqueBackendHostnames(problems *[]string, servers []ServerProfile) {
+	owners := map[string]string{}
+	for i, server := range servers {
+		if server.Network == nil {
+			continue
+		}
+		for j, backend := range server.Network.Backends {
+			name, ok := server.Network.BackendHostname(server.ID, server.EnvironmentID, backend)
+			if !ok || name == "" {
+				continue
+			}
+			label := fmt.Sprintf("servers[%d].network.backends[%d]", i, j)
+			if owner, taken := owners[name]; taken {
+				*problems = append(*problems, label+" hostname is already used by "+owner)
+				continue
+			}
+			owners[name] = label
 		}
 	}
 }

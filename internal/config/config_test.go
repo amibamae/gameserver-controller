@@ -362,3 +362,67 @@ func TestNetworkProfileRejectsMissingOrInconsistentSettings(t *testing.T) {
 		t.Fatalf("legacy mismatch: %v", err)
 	}
 }
+
+func TestBackendHostnameTemplate(t *testing.T) {
+	network := `    network:
+      join_mode: proxy
+      proxy: integration.velocity
+      dns: integration.cloudflare-dns
+      backend_hostname_template: "{backend}.{environment}.mc.example.com"
+      backends:
+        - id: paper-main
+          port: 25565
+        - id: paper-creative
+          port: 25566
+        - id: paper-lobby-ip
+          address_mode: instance_ip
+          port: 25567
+`
+	config, err := Parse(strings.NewReader(withNetwork(network)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := config.Servers[1]
+	want := map[string]string{"paper-main": "paper-main.staging.mc.example.com", "paper-creative": "paper-creative.staging.mc.example.com"}
+	for _, backend := range server.Network.Backends {
+		name, ok := server.Network.BackendHostname(server.ID, server.EnvironmentID, backend)
+		if expected, hasName := want[backend.ID]; hasName != ok || name != expected {
+			t.Errorf("%s: hostname %q (%v), want %q", backend.ID, name, ok, expected)
+		}
+	}
+
+	tests := map[string]struct{ from, to, want string }{
+		"explicit hostname with template":  {"        - id: paper-main\n          port: 25565\n", "        - id: paper-main\n          hostname: custom.example.com\n          port: 25565\n", "must not be set when backend_hostname_template is set"},
+		"template without backend":         {`"{backend}.{environment}.mc.example.com"`, `"{environment}.mc.example.com"`, "must contain {backend}"},
+		"unknown placeholder":              {`"{backend}.{environment}.mc.example.com"`, `"{backend}.{region}.mc.example.com"`, "may only use {backend}, {server}, and {environment}"},
+		"invalid generated hostname":       {"        - id: paper-main\n", "        - id: paper_main\n", "hostname from backend_hostname_template is not a valid"},
+		"scheme without environment is ok": {`"{backend}.{environment}.mc.example.com"`, `"{backend}.mc.example.com"`, ""},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			input := strings.Replace(withNetwork(network), test.from, test.to, 1)
+			_, err := Parse(strings.NewReader(input))
+			if test.want == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Parse error = %v, want substring %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestBackendHostnamesAreUniqueAcrossServers(t *testing.T) {
+	network := "    network:\n      join_mode: proxy\n      proxy: integration.velocity\n      dns: integration.cloudflare-dns\n" +
+		"      backends:\n        - id: paper-main\n          address_mode: hostname\n          hostname: paper-main.mc.example.com\n          port: 25565\n"
+	input := withNetwork(network)
+	// Give the production server a backend with the same hostname.
+	input = strings.Replace(input, "    lifecycle:\n      require_verified_backup_before_destroy: true\n      require_approval_for_destroy: true\n  - id: staging-server",
+		"    lifecycle:\n      require_verified_backup_before_destroy: true\n      require_approval_for_destroy: true\n"+network+"  - id: staging-server", 1)
+	if _, err := Parse(strings.NewReader(input)); err == nil || !strings.Contains(err.Error(), "hostname is already used by servers[0].network.backends[0]") {
+		t.Fatalf("duplicate hostname: %v", err)
+	}
+}

@@ -48,6 +48,23 @@ network:
       port: 25565
 ```
 
+To give every backend its own domain from one naming scheme, set `backend_hostname_template` instead of per-backend hostnames. It must contain `{backend}` and may also use `{server}` and `{environment}`. Backends then default to `address_mode: hostname`, and setting `hostname` by hand is rejected so every name follows the scheme:
+
+```yaml
+network:
+  join_mode: proxy
+  proxy: integration.velocity
+  dns: integration.cloudflare-dns
+  backend_hostname_template: "{backend}.{environment}.mc.example.com"
+  backends:
+    - id: paper-main        # paper-main.production.mc.example.com
+      port: 25565
+    - id: paper-creative    # paper-creative.production.mc.example.com
+      port: 25566
+```
+
+Every backend hostname, from a template or set by hand, must be unique across all servers in the file. The DNS adapter profile must manage each generated name.
+
 The older `adapters.integration` field is still accepted. If it is set together with `network.proxy`, they must name the same adapter. The validator checks these settings; the controller runtime does not use them yet.
 
 Environments are `production`, `staging`, or `testing`. Production declares `production_backup_access: read_write`; staging and testing may declare `none` or `read_only`, never `read_write`. The validator checks these policy declarations but does not enforce access at the storage service. A server must list verified backup and operator approval as destroy prerequisites. The validator checks an optional idle-shutdown duration but does not schedule it.

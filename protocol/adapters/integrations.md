@@ -82,7 +82,7 @@ The initial batch limit is 100 sessions per invocation. A controller MAY split a
 
 ## 5. DNS records
 
-DNS integration adapters manage individual A and AAAA records in DNS zones they are configured to own. The contracts are [inspect](../schemas/integrations/dns-record-inspect-input.schema.json), [upsert](../schemas/integrations/dns-record-upsert-input.schema.json), and [delete](../schemas/integrations/dns-record-delete-input.schema.json), each with an output schema, and the shared [record target](../schemas/integrations/dns-record-target.schema.json). The illustrative [Cloudflare DNS descriptor](../examples/adapter-descriptor.cloudflare-dns.json) shows a planned adapter; no implementation exists yet.
+DNS integration adapters manage individual A and AAAA records in DNS zones they are configured to own. The contracts are [inspect](../schemas/integrations/dns-record-inspect-input.schema.json), [upsert](../schemas/integrations/dns-record-upsert-input.schema.json), and [delete](../schemas/integrations/dns-record-delete-input.schema.json), each with an output schema, and the shared [record target](../schemas/integrations/dns-record-target.schema.json). The illustrative [Cloudflare DNS descriptor](../examples/adapter-descriptor.cloudflare-dns.json) matches the initial Cloudflare adapter.
 
 A DNS adapter MUST:
 - Change only records explicitly configured as managed for the environment, and refuse any other name in the zone.
@@ -112,7 +112,7 @@ A server's network profile (`network_profile` in the [server definition](../sche
 | `direct_dns` | `integration.dns.record.inspect`, `.upsert`, `.delete` for the join hostname (`direct_join` and `fallback` purposes) |
 | `none` | None; the operator gives players the address directly |
 
-Independently of the join mode, a profile MAY give each backend a managed `backend_address` hostname. The proxy then reaches the backend by name, so an instance IP change updates DNS instead of the proxy configuration. Such a profile requires the DNS record capabilities as well.
+Independently of the join mode, a profile MAY give each backend a managed `backend_address` hostname, either per backend or from one naming scheme for all backends. The proxy then reaches the backend by name, so an instance IP change updates DNS instead of the proxy configuration. Such a profile requires the DNS record capabilities as well. Each backend hostname MUST belong to exactly one backend: two backends MUST NOT share a hostname, so one backend's DNS update cannot redirect another backend's traffic.
 
 The controller MUST resolve a server's network profile before planning operations for it, and MUST reject planning when a required capability is not advertised by an adapter registered for that environment. It MUST NOT skip a required routing or DNS step because the adapter is missing, and MUST NOT emulate a missing capability. A profile that requires no integration capabilities MUST NOT cause the controller to call one.
 
