@@ -106,7 +106,7 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - Wire the [Cloudflare DNS adapter](CLOUDFLARE_DNS_ADAPTER.md) into the controller runtime: direct-join records for games without a proxy, and optional per-backend hostnames that follow instance IP changes for proxied servers.
 - Reject planning when a server's network profile requires an integration capability that no registered adapter advertises. The local configuration already validates the per-server `network` block (join mode, proxy and DNS adapters, backend address mode and hostname); the runtime does not use it yet.
 - Record provision-to-Paper-ready duration locally for estimates and an advisory progress bar; offer separate owner-enabled sharing of boot-time averages to the hosted lobby/DNS service, with extra rejoin buffer and no provider credentials exposed.
-- Detect when the backend is idle.
+- Detect when the backend is idle. Treat `idle_shutdown` as a minimum and keep the server until its billing decision window (by default minutes 58 to 59 of each hour since creation) before backing up and destroying it; time added capacity the same way. The decision logic is in `internal/scalingpolicy`; the scheduler that applies it is future work.
 - Stop Paper, back up and verify the world, then destroy the VM.
 - Fail closed if save, upload, verification, authorization, or cleanup checks fail.
 - Reconcile unclear provider results and recover interrupted work safely.
