@@ -2,7 +2,8 @@
 
 **Status:** Draft. Implemented by the Velocity plugin in
 [`plugins/velocity`](../plugins/velocity) and the Go client in
-`internal/velocityproxy`.
+`internal/velocityproxy`. Joining and routing rules follow
+[the integration contract](../protocol/adapters/integrations.md#31-join-routing-and-fallback).
 
 The controller's proxy integration adapter does not talk to Velocity's
 internals. It talks to a small HTTP API served by a plugin running inside the
@@ -105,7 +106,7 @@ Replies `200` with the backend state.
 ### `POST /v1/backends/{backend_id}/drain`
 
 Stops new players being routed to the backend. Connected players stay.
-Replies `200` with the backend state (`draining`, not routable).
+Replies `200` with the backend state (`draining`, not routable). A backend that is not registered replies `404 backend_not_found`.
 
 ### `DELETE /v1/backends/{backend_id}`
 

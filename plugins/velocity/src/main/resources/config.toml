@@ -1,0 +1,32 @@
+# GSC Velocity bridge configuration.
+# The bridge API is documented in docs/PROXY_BRIDGE_API.md of the
+# gameserver-controller repository.
+
+[bridge]
+# Loopback only. The controller runs on the same host as the proxy.
+bind = "127.0.0.1"
+port = 25580
+# File containing the bearer token the controller sends. Keep it readable
+# only by the Velocity service user.
+token-file = "/etc/gsc/velocity-bridge.token"
+# Must match the proxy_instance_ref external_id configured in the controller.
+proxy-instance-id = "velocity-edge-001"
+
+[routing]
+# Managed backends new players are sent to, in order, when the controller has
+# registered them and they pass the health check. Leave empty to keep
+# Velocity's own "try" list behavior.
+join-backends = []
+# Statically configured server players wait on when no join backend is
+# routable, or when their backend goes down. Usually the lobby.
+fallback = "lobby"
+# Send players back to the fallback (instead of disconnecting them) when a
+# managed backend kicks them because it went down.
+fallback-on-kick = true
+# Seconds between backend health checks.
+health-check-seconds = 5
+
+# Per-hostname join backends. Players who connect through one of these
+# hostnames use this list instead of join-backends.
+[routing.forced-hosts]
+# "survival.example.com" = ["paper-main"]
