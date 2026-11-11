@@ -329,7 +329,9 @@
     "backup_result_bound": true,
     "restore_result_bound": true,
     "destroy_result_bound": true,
-    "all_results_bound": true
+    "all_results_bound": true,
+    "restore_backup_owner_bound": true,
+    "restore_data_generation_rotated": true
   },
   "side_effect_expectation": "none",
   "notes": "The provision result binds its newly created instance through readiness evidence; backup, restore, and destroy bind their exact instance references to the stored target."

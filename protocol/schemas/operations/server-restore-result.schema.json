@@ -31,15 +31,18 @@
             "backup_id": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 200
+              "maxLength": 200,
+              "description": "The exact selected, verified backup. Its manifest server_id and environment_id must match the logical restore target."
             },
             "target_instance_ref": {
-              "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+              "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref",
+              "description": "Exact physical restore target. It may differ from the source_instance_ref in the backup manifest when restoring onto a replacement instance of the same logical server."
             },
             "data_generation_id": {
               "type": "string",
               "minLength": 1,
-              "maxLength": 200
+              "maxLength": 200,
+              "description": "New target data generation assigned for the restored data. It must differ from the source backup's data_generation_id before the target runtime can write."
             },
             "restore_verified": {
               "const": true

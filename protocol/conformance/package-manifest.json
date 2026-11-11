@@ -2,8 +2,8 @@
   "manifest_version": 1,
   "protocol_version": "0.21.0-draft",
   "digest_algorithm": "sha256-path-filehash-v1",
-  "schema_registry_digest": "sha256:c484f017dc2a329d5e7d45a9918c49fd4b8e4f51401c799e88d0b8d70a7849a8",
-  "fixture_suite_digest": "sha256:6a9c7179aa6c3935818674c6d927e9a5d742676f497eb0a4f4e061bb155adc7c",
+  "schema_registry_digest": "sha256:0fa9ff093c2b7340d00798fe3ff6eaff32f39d3f479c318262d2a420795c8043",
+  "fixture_suite_digest": "sha256:306965c2660793eea14d672394e038674b4ddab6b9d83422279811b178d72654",
   "schema_count": 148,
-  "fixture_count": 170
+  "fixture_count": 171
 }
