@@ -31,7 +31,7 @@ ADMIN_USER="minecraft-admin"
 
 MINECRAFT_DIR="/opt/minecraft/vanilla_no_grief"
 
-INTERSERVER_CIDR="@@INTERSERVER_CIDR@@"
+CONTROLLER_IP="@@CONTROLLER_IP@@"
 MINECRAFT_PORT="@@MINECRAFT_PORT@@"
 VOICE_CHAT_PORT="@@VOICE_CHAT_PORT@@"
 
@@ -395,7 +395,7 @@ filter = sshd
 maxretry = 5
 findtime = 10m
 bantime = 1h
-ignoreip = 127.0.0.1/8 ::1 $INTERSERVER_CIDR
+ignoreip = 127.0.0.1/8 ::1 $CONTROLLER_IP
 banaction = nftables-multiport
 EOF_F2B
 
@@ -464,18 +464,18 @@ ufw default deny incoming
 ufw default allow outgoing
 
 ufw allow \
-    from $INTERSERVER_CIDR \
+    from $CONTROLLER_IP \
     to any port 22 \
     proto tcp
 
 ufw allow \
-    from $INTERSERVER_CIDR \
+    from $CONTROLLER_IP \
     to any port $MINECRAFT_PORT \
     proto tcp
 
 # Simple Voice Chat backend: allow UDP only from the Velocity proxy.
 ufw allow \
-    from $INTERSERVER_CIDR \
+    from $CONTROLLER_IP \
     to any port $VOICE_CHAT_PORT \
     proto udp
 
@@ -521,18 +521,18 @@ ufw default deny incoming
 ufw default allow outgoing
 
 # Temporary SSH access so the controller can test minecraft-admin.
-# The finalizer later restricts this to InterServer only.
+# The finalizer later restricts this to the controller IP only.
 ufw allow 22/tcp
 
-# Minecraft is restricted to InterServer immediately.
+# Minecraft is restricted to the controller IP immediately.
 ufw allow \
-    from "$INTERSERVER_CIDR" \
+    from "$CONTROLLER_IP" \
     to any port "$MINECRAFT_PORT" \
     proto tcp
 
 # Simple Voice Chat backend: allow UDP only from the Velocity proxy.
 ufw allow \
-    from "$INTERSERVER_CIDR" \
+    from "$CONTROLLER_IP" \
     to any port "$VOICE_CHAT_PORT" \
     proto udp
 
@@ -586,7 +586,7 @@ section "BOOTSTRAP COMPLETE"
 
 echo "The VM is intentionally NOT running Minecraft yet."
 echo "Next steps:"
-echo "1. Test minecraft-admin SSH from InterServer."
+echo "1. Test minecraft-admin SSH from the controller IP."
 echo "2. Transfer the Vultr-only Wasabi rclone config."
 echo "3. Run the security finalizer."
 echo "4. Run the rclone installer; it will automatically start the Wasabi restore."

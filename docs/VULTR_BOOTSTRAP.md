@@ -7,8 +7,12 @@ deployment IP, Wasabi bucket or prefix, or provider credential. The Go
 in memory, and creates a new Vultr startup script. It does not update or delete
 existing startup scripts and does not create a VM.
 
-The command requires a public IPv4 CIDR no broader than `/16`, two distinct
-valid ports, and a safe Wasabi bucket or prefix. It defaults to a dry run. A dry run prints the startup-script name,
+The command requires the controller IP (the controller's public IPv4 address,
+or a public IPv4 CIDR no broader than `/16`), two distinct valid ports, and a
+safe Wasabi bucket or prefix. The rendered firewall allows Minecraft and voice
+chat traffic only from the controller IP, and the security finalizer restricts
+SSH to it as well. It defaults
+to a dry run. A dry run prints the startup-script name,
 SHA-256 digest, and rendered size. It does not read the Vultr credential or
 call the provider. Review the checked-in template and the deployment settings
 before running the explicit upload command:
@@ -16,7 +20,7 @@ before running the explicit upload command:
 ```text
 gsc-bootstrap upload \
   --name gsc-minecraft-debian \
-  --interserver-cidr <public-ipv4-cidr> \
+  --controller-ip <controller-public-ipv4-or-cidr> \
   --minecraft-port <port> \
   --voice-chat-port <port> \
   --wasabi-remote-path <bucket-or-bucket-prefix>

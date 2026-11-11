@@ -72,5 +72,5 @@ func TestUploadReadsSystemdCredentialAndPrintsOnlyMetadata(t *testing.T) {
 }
 
 func validArgs() []string {
-	return []string{"upload", "--name", "gsc-minecraft-debian", "--interserver-cidr", "203.0.113.10/32", "--minecraft-port", "25565", "--voice-chat-port", "24454", "--wasabi-remote-path", "example-bucket/backups"}
+	return []string{"upload", "--name", "gsc-minecraft-debian", "--controller-ip", "203.0.113.10", "--minecraft-port", "25565", "--voice-chat-port", "24454", "--wasabi-remote-path", "example-bucket/backups"}
 }

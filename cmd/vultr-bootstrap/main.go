@@ -43,7 +43,7 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 	execute := flags.Bool("execute", false, "upload the rendered script; default is a local dry run")
 	confirm := flags.String("confirm-upload", "", "repeat the exact startup-script name to approve one create request")
 	name := flags.String("name", "gsc-minecraft-debian", "new Vultr startup-script name")
-	cidr := flags.String("interserver-cidr", "", "public IPv4 CIDR allowed by the rendered firewall rules")
+	controllerIP := flags.String("controller-ip", "", "public IPv4 address or CIDR of the controller allowed by the rendered firewall rules")
 	minecraftPort := flags.Uint("minecraft-port", 0, "Minecraft server port")
 	voicePort := flags.Uint("voice-chat-port", 0, "voice chat port")
 	wasabiPath := flags.String("wasabi-remote-path", "", "Wasabi bucket or bucket/prefix used by the bootstrap")
@@ -58,7 +58,7 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
 	}
-	if err := allowFlags(flags, "execute", "confirm-upload", "name", "interserver-cidr", "minecraft-port", "voice-chat-port", "wasabi-remote-path", "credential-ref", "timeout"); err != nil {
+	if err := allowFlags(flags, "execute", "confirm-upload", "name", "controller-ip", "minecraft-port", "voice-chat-port", "wasabi-remote-path", "credential-ref", "timeout"); err != nil {
 		return err
 	}
 	if !safeScriptName.MatchString(*name) {
@@ -68,7 +68,7 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 		return errors.New("ports must be between 1 and 65535")
 	}
 	settings := bootstrap.Settings{
-		InterserverCIDR: *cidr, MinecraftPort: uint16(*minecraftPort),
+		ControllerIP: *controllerIP, MinecraftPort: uint16(*minecraftPort),
 		VoiceChatPort: uint16(*voicePort), WasabiRemotePath: *wasabiPath,
 	}
 	script, err := bootstrap.Render(settings)
@@ -134,7 +134,7 @@ func allowFlags(flags *flag.FlagSet, permitted ...string) error {
 
 func usage(w io.Writer) error {
 	fmt.Fprintln(w, "Upload a reviewed Minecraft bootstrap to Vultr")
-	fmt.Fprintln(w, "  gsc-bootstrap upload --name <name> --interserver-cidr <CIDR> --minecraft-port <port> --voice-chat-port <port> --wasabi-remote-path <bucket/prefix>")
+	fmt.Fprintln(w, "  gsc-bootstrap upload --name <name> --controller-ip <ip-or-CIDR> --minecraft-port <port> --voice-chat-port <port> --wasabi-remote-path <bucket/prefix>")
 	fmt.Fprintln(w, "  add --execute --confirm-upload <same-name> to create the startup script")
 	return errors.New("an action is required")
 }

@@ -23,7 +23,7 @@ var (
 // Settings contains deployment values that are intentionally absent from the
 // checked-in bootstrap template.
 type Settings struct {
-	InterserverCIDR  string
+	ControllerIP     string
 	MinecraftPort    uint16
 	VoiceChatPort    uint16
 	WasabiRemotePath string
@@ -39,7 +39,7 @@ func Render(settings Settings) ([]byte, error) {
 		return nil, fmt.Errorf("read embedded bootstrap template: %w", err)
 	}
 	values := map[string]string{
-		"@@INTERSERVER_CIDR@@":   settings.InterserverCIDR,
+		"@@CONTROLLER_IP@@":      settings.ControllerIP,
 		"@@MINECRAFT_PORT@@":     strconv.Itoa(int(settings.MinecraftPort)),
 		"@@VOICE_CHAT_PORT@@":    strconv.Itoa(int(settings.VoiceChatPort)),
 		"@@WASABI_REMOTE_PATH@@": settings.WasabiRemotePath,
@@ -59,12 +59,12 @@ func Render(settings Settings) ([]byte, error) {
 // Validate rejects values that could alter shell syntax or direct firewall
 // rules and storage operations to an unintended target.
 func (s Settings) Validate() error {
-	_, network, err := net.ParseCIDR(s.InterserverCIDR)
-	if err != nil || network == nil || network.IP.To4() == nil || !network.IP.IsGlobalUnicast() || network.IP.IsPrivate() || network.IP.IsLoopback() || network.IP.IsLinkLocalUnicast() {
-		return fmt.Errorf("%w: interserver CIDR must be a public IPv4 CIDR", ErrInvalidSettings)
+	network, err := parseControllerIP(s.ControllerIP)
+	if err != nil || network.IP.To4() == nil || !network.IP.IsGlobalUnicast() || network.IP.IsPrivate() || network.IP.IsLoopback() || network.IP.IsLinkLocalUnicast() {
+		return fmt.Errorf("%w: controller IP must be a public IPv4 address or CIDR", ErrInvalidSettings)
 	}
 	if prefix, _ := network.Mask.Size(); prefix < 16 {
-		return fmt.Errorf("%w: interserver CIDR must be /16 or narrower", ErrInvalidSettings)
+		return fmt.Errorf("%w: controller IP CIDR must be /16 or narrower", ErrInvalidSettings)
 	}
 	if s.MinecraftPort == 0 || s.VoiceChatPort == 0 || s.MinecraftPort == s.VoiceChatPort {
 		return fmt.Errorf("%w: Minecraft and voice chat ports must be distinct nonzero ports", ErrInvalidSettings)
@@ -74,4 +74,20 @@ func (s Settings) Validate() error {
 		return fmt.Errorf("%w: Wasabi remote path must be a bucket name with an optional safe prefix", ErrInvalidSettings)
 	}
 	return nil
+}
+
+// parseControllerIP accepts a bare IPv4 address (treated as /32) or a CIDR.
+func parseControllerIP(value string) (*net.IPNet, error) {
+	if !strings.Contains(value, "/") {
+		ip := net.ParseIP(value).To4()
+		if ip == nil {
+			return nil, errors.New("not an IPv4 address")
+		}
+		return &net.IPNet{IP: ip, Mask: net.CIDRMask(32, 32)}, nil
+	}
+	_, network, err := net.ParseCIDR(value)
+	if err != nil {
+		return nil, err
+	}
+	return network, nil
 }
