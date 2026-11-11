@@ -17,6 +17,7 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 const testProtocolVersion = "0.21.0-draft"
@@ -279,6 +280,14 @@ type memoryS3 struct {
 	objects     map[string][]byte
 	uploads     map[string]memoryUpload
 	omitVersion bool
+	// Fields used by the list/copy/delete/inspection tests.
+	versioning  types.BucketVersioningStatus
+	retention   *types.ObjectLockRetention
+	legalHold   types.ObjectLockLegalHoldStatus
+	noLock      bool
+	corruptCopy bool
+	deletes     int
+	copies      int
 }
 
 type memoryUpload struct {
@@ -350,7 +359,7 @@ func (m *memoryS3) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...f
 func (m *memoryS3) HeadObject(_ context.Context, input *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 	value, ok := m.objects[aws.ToString(input.Bucket)+"/"+aws.ToString(input.Key)]
 	if !ok {
-		return nil, errors.New("missing object")
+		return nil, codedError("NotFound")
 	}
 	return &s3.HeadObjectOutput{ContentLength: aws.Int64(int64(len(value))), ETag: aws.String("\"fake-etag\""), VersionId: aws.String("version-1")}, nil
 }
