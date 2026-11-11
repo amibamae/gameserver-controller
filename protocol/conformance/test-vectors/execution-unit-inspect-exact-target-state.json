@@ -1,0 +1,151 @@
+{
+  "fixture_id": "execution.unit.inspect.exact-target-state",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "execution.unit.inspect",
+  "purpose": "Unit state observations bind to the exact requested unit; unknown and mismatched observations cannot confirm a running or stopped state.",
+  "input": {
+    "evaluations": [
+      {
+        "case_id": "exact-running-state-is-bound",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          }
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "state": "running",
+          "observed_at": "2026-11-07T19:30:00Z",
+          "release_ref": "paper-1.21.11-build-3",
+          "runtime_id": "paper-runtime-017",
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          }
+        }
+      },
+      {
+        "case_id": "exact-stopped-state-is-bound",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          }
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "state": "stopped",
+          "observed_at": "2026-11-07T19:31:00Z"
+        }
+      },
+      {
+        "case_id": "unknown-state-is-not-running-or-stopped",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          }
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          },
+          "state": "unknown",
+          "observed_at": "2026-11-07T19:32:00Z"
+        }
+      },
+      {
+        "case_id": "mismatched-unit-state-is-untrusted",
+        "request": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-server"
+          }
+        },
+        "response": {
+          "unit_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "other-server"
+          },
+          "state": "running",
+          "observed_at": "2026-11-07T19:33:00Z"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "exact-running-state-is-bound",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "unit_bound": true,
+        "observation_conclusive": true,
+        "observation_unknown": false,
+        "safe_to_treat_as_running": true,
+        "safe_to_treat_as_stopped": false
+      },
+      {
+        "case_id": "exact-stopped-state-is-bound",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "unit_bound": true,
+        "observation_conclusive": true,
+        "observation_unknown": false,
+        "safe_to_treat_as_running": false,
+        "safe_to_treat_as_stopped": true
+      },
+      {
+        "case_id": "unknown-state-is-not-running-or-stopped",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "unit_bound": true,
+        "observation_conclusive": false,
+        "observation_unknown": true,
+        "safe_to_treat_as_running": false,
+        "safe_to_treat_as_stopped": false
+      },
+      {
+        "case_id": "mismatched-unit-state-is-untrusted",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "unit_bound": false,
+        "observation_conclusive": false,
+        "observation_unknown": false,
+        "safe_to_treat_as_running": false,
+        "safe_to_treat_as_stopped": false
+      }
+    ]
+  },
+  "side_effect_expected": "none"
+}
