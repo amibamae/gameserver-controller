@@ -8,19 +8,24 @@ func evaluateOperationTypeBinding(pkg *protocolPackage, fixture map[string]any) 
 		return nil, fmt.Errorf("operation type-binding fixture must include operations")
 	}
 
+	evaluations := make([]any, 0, len(operations))
+	schemasValid := true
 	snapshotTypesMatch := true
 	resultTypesMatch := true
 	snapshotMismatchDetected := false
 	resultMismatchDetected := false
+	missingResultTypeDetected := false
 	matchingPartialFailureKept := false
 	matchingPartialCancellationKept := false
+	matchingPartialWithoutOperationDataKept := false
 	for index, rawOperation := range operations {
 		operation := asObject(rawOperation)
 		if operation == nil {
 			return nil, fmt.Errorf("operation %d must be an object", index)
 		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation); err != nil {
-			return nil, fmt.Errorf("operation %d does not match schema: %w", index, err)
+		schemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation) == nil
+		if !schemaValid {
+			schemasValid = false
 		}
 
 		operationType := stringValue(operation, "operation_type")
@@ -34,27 +39,46 @@ func evaluateOperationTypeBinding(pkg *protocolPackage, fixture map[string]any) 
 		if result == nil {
 			continue
 		}
-		if stringValue(result, "operation_type") != operationType {
+		resultType := stringValue(result, "operation_type")
+		bindingsMatch := stringValue(requestSnapshot, "operation_type") == operationType && resultType == operationType
+		partialAccepted := schemaValid && bindingsMatch && boolValue(result, "partial")
+		evaluation := map[string]any{}
+		evaluation["operation_id"] = stringValue(operation, "operation_id")
+		evaluation["schema_valid"] = schemaValid
+		evaluation["type_bindings_match"] = bindingsMatch
+		evaluation["partial_result_accepted"] = partialAccepted
+		evaluations = append(evaluations, evaluation)
+		if resultType == "" {
+			missingResultTypeDetected = true
+		}
+		if resultType != operationType {
 			resultTypesMatch = false
 			resultMismatchDetected = true
 			continue
 		}
-		if boolValue(result, "partial") && stringValue(operation, "status") == "failed" {
+		if partialAccepted && stringValue(operation, "status") == "failed" {
 			matchingPartialFailureKept = true
 		}
-		if boolValue(result, "partial") && stringValue(operation, "status") == "cancelled" {
+		if partialAccepted && stringValue(operation, "status") == "cancelled" {
 			matchingPartialCancellationKept = true
+		}
+		if partialAccepted && result["operation_data"] == nil {
+			matchingPartialWithoutOperationDataKept = true
 		}
 	}
 
-	return map[string]any{
-		"schemas_valid":                      true,
-		"request_snapshot_types_match":       snapshotTypesMatch,
-		"result_types_match":                 resultTypesMatch,
-		"snapshot_mismatch_detected":         snapshotMismatchDetected,
-		"result_mismatch_detected":           resultMismatchDetected,
-		"matching_partial_failure_kept":      matchingPartialFailureKept,
-		"matching_partial_cancellation_kept": matchingPartialCancellationKept,
-		"all_operation_type_bindings_match":  snapshotTypesMatch && resultTypesMatch,
-	}, nil
+	result := map[string]any{
+		"schemas_valid":                                schemasValid,
+		"request_snapshot_types_match":                 snapshotTypesMatch,
+		"result_types_match":                           resultTypesMatch,
+		"snapshot_mismatch_detected":                   snapshotMismatchDetected,
+		"result_mismatch_detected":                     resultMismatchDetected,
+		"missing_result_type_detected":                 missingResultTypeDetected,
+		"matching_partial_failure_kept":                matchingPartialFailureKept,
+		"matching_partial_cancellation_kept":           matchingPartialCancellationKept,
+		"matching_partial_without_operation_data_kept": matchingPartialWithoutOperationDataKept,
+		"all_operation_type_bindings_match":            snapshotTypesMatch && resultTypesMatch,
+	}
+	result["evaluations"] = evaluations
+	return result, nil
 }
