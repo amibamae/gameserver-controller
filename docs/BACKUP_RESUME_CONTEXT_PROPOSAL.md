@@ -1,0 +1,43 @@
+# Backup resume context proposal
+
+Status: Draft design record. The schema and conformance slice is in PR #123, stacked on PR #120. This document records the design rationale; it does not implement a controller workflow.
+
+## Problem
+
+The lifecycle permits backup from ready, degraded, and stopped states. The operation catalog defines resume behavior for ready and stopped servers, but leaves degraded behavior unspecified. The operation resource has no standard field that preserves the state before backup changes it.
+
+The final result cannot establish the starting state. After a restart, observing stopped also cannot distinguish a server that was already stopped from one that backup stopped temporarily.
+
+## Recommended contract
+
+Add core-owned `backup_initial_lifecycle_state` metadata to a server.backup operation, with values ready, degraded, or stopped. Capture it while holding the operation's server lock, immediately before the first backup-related lifecycle transition or adapter dispatch. Persist it before either happens and preserve it unchanged through retries and restart.
+
+The field belongs to the read-only operation resource. Clients and adapters cannot supply or replace it. It describes the exact server, environment, and instance in the durable operation target; a changed target requires reconciliation rather than reinterpreting the context.
+
+Resolve the requested final state from the original parameters and this metadata:
+
+| Initial state | Resume omitted | Resume false | Resume true |
+|---|---|---|---|
+| ready | ready | stopped | ready |
+| stopped | stopped | stopped | stopped |
+| degraded | stopped | stopped | ready, subject to current policy and fresh readiness |
+
+For degraded servers, explicit true expresses an intentional request to try returning to service. It does not treat the prior degraded runtime as ready. Every ready result still requires a fresh readiness assertion bound to the exact target. Before any resumed runtime can write, the controller must assign a new data generation under the existing lifecycle rules; resuming must not make the captured generation current for later destruction.
+
+The current unconditional `default: true` annotation on `resume_after_backup` must be replaced with the conditional rules above. The core must preserve whether the caller omitted the field; applying a generic JSON Schema default before resolving this policy would erase that distinction.
+
+An operation missing trustworthy starting-state context after dispatch remains reconciling or needs_operator. It cannot infer the initial state from the current server state, automatically start the runtime, or claim success without proving its final-state policy. Existing locks and partial-effect evidence remain durable.
+
+## Implementation and conformance scope
+
+PR #123 adds the operation field and requires it for successful backup results. Normative text requires persistence before the first transition or dispatch, even though a response schema alone cannot prove write ordering or immutability.
+
+Language-neutral fixtures should cover all nine table cells, unknown/missing context, contradictory final states, and readiness binding/freshness. A Go fake implementation exercise should additionally record the context commit and attempted effects, restart between backup and resume, reject context mutation, and prove that missing context dispatches no startup call.
+
+Do not change controller or infrastructure code as part of the protocol design slice.
+
+## Selected policy
+
+The project owner selected explicit resume from degraded under current policy and fresh readiness checks. Omitted or false resume leaves a degraded server stopped. Carry this decision into the catalog, parameter schema description, and conformance matrix before claiming complete backup resume coverage.
+
+Related contracts: [operation catalog](../protocol/operation-catalog.md), [lifecycle](../protocol/lifecycle.md), [durable operations](../protocol/operations.md), and [backup parameters](../protocol/schemas/operations/backup-parameters.schema.json).
