@@ -248,6 +248,14 @@ func (r *Registry) ValidateJSON(id string, data []byte) error {
 	return r.Validate(id, value)
 }
 
+// ParseStrictJSON parses one JSON value, rejecting duplicate object members
+// and trailing data. Numbers are returned as json.Number.
+func ParseStrictJSON(data []byte) (any, error) { return parseJSON(data) }
+
+// DecodeStrictJSON decodes one JSON value into destination, rejecting
+// duplicate object members, unknown fields, and trailing data.
+func DecodeStrictJSON(data []byte, destination any) error { return decodeStrictJSON(data, destination) }
+
 func decodeStrictJSON(data []byte, destination any) error {
 	value, err := parseJSON(data)
 	if err != nil {
@@ -326,7 +334,8 @@ func parseJSONValue(decoder *json.Decoder) (any, error) {
 		}
 		return object, nil
 	case '[':
-		var array []any
+		// A non-nil empty slice keeps [] from re-encoding as null in DecodeStrictJSON.
+		array := []any{}
 		for decoder.More() {
 			value, err := parseJSONValue(decoder)
 			if err != nil {
