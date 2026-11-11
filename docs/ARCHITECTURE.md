@@ -20,7 +20,7 @@ Adapter Contracts
    | Hosting     | Storage      | Execution      | Game
    | Vultr       | Wasabi       | systemd        | Minecraft/Paper
         |
-Integrations: Velocity, DNS (Cloudflare, planned), monitoring, notifications
+Integrations: Velocity, DNS (Cloudflare), monitoring, notifications
 ~~~
 
 ## What the core owns

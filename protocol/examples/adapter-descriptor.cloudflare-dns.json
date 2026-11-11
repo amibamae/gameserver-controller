@@ -2,7 +2,7 @@
   "adapter_id": "integration.cloudflare-dns",
   "category": "integration",
   "display_name": "Cloudflare DNS integration",
-  "implementation_version": "0.0.0-planned",
+  "implementation_version": "0.1.0",
   "protocol_versions": [
     "0.21.0-draft"
   ],
