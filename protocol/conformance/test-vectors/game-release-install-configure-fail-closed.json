@@ -120,7 +120,7 @@
       "application_started": false,
       "configuration_digest": {
         "algorithm": "sha256",
-        "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        "digest": "c5ba2a6f5106ab16d440e82cae16e5e521dbfc20949a4f885c57975e0fb72909"
       },
       "issues": [
         {

@@ -2,7 +2,7 @@
   "fixture_id": "game.configure.pinned-schema-and-result-binding",
   "protocol_version": "0.21.0-draft",
   "contract_area": "game.configure",
-  "purpose": "Validate pinned configuration schema identity, exact result binding, validation before application, and unknown-outcome reconciliation without fetching arbitrary schemas or applying configuration.",
+  "purpose": "Validate pinned configuration schema identity, exact result binding, configuration and secret-reference digest binding, validation before application, and unknown-outcome reconciliation without fetching arbitrary schemas or applying configuration.",
   "input": {
     "release": {
       "game_adapter_id": "game.minecraft-paper",
@@ -89,7 +89,7 @@
         "application_started": true,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
@@ -136,7 +136,7 @@
         "application_started": false,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
@@ -183,7 +183,7 @@
         "application_started": false,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [
           {
@@ -236,7 +236,7 @@
         "application_started": false,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
@@ -283,7 +283,7 @@
         "application_started": true,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
@@ -330,7 +330,7 @@
         "application_started": true,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
@@ -377,7 +377,7 @@
         "application_started": true,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
@@ -424,7 +424,7 @@
         "application_started": true,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
@@ -471,7 +471,7 @@
         "application_started": true,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
@@ -518,7 +518,7 @@
         "application_started": true,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
@@ -565,7 +565,7 @@
         "application_started": true,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
@@ -612,7 +612,7 @@
         "application_started": true,
         "configuration_digest": {
           "algorithm": "sha256",
-          "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "digest": "211d35a08a826425b99c7a175efb897ea21643411704c2503839e096ae7e345f"
         },
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
@@ -666,6 +666,316 @@
         "issues": [],
         "observed_at": "2026-11-06T09:16:00Z"
       }
+    },
+    {
+      "case_id": "valid-secret-reference-binding",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {
+          "rcon.password": {
+            "secret_ref": "vault://games/minecraft-test/rcon",
+            "purpose": "rcon-password",
+            "permission_scope": [
+              "game.configure"
+            ],
+            "version_ref": "v1"
+          }
+        }
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "2fa1a51e4ebbbc81ab3008fd42b2e2e3ea83196091ea97e42c0120a142721bb7"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "valid-changed-configuration",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25566
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "cefde1a7b14582d6f89d75ca756c40831985bfbef12c165c62e08ee3a6c66060"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "configuration-digest-mismatch",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "server-port": 25565
+        },
+        "secret_bindings": {}
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "rfc8785-canonicalization-cross-language",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "numbers": [
+            333333333.33333329,
+            4.50,
+            2e-3,
+            0.000000000000000000000000001
+          ],
+          "rfc_string": "€$\u000f\nA'B\"\\\\\"/",
+          "literals": [
+            null,
+            true,
+            false
+          ],
+          "order": [
+            "first",
+            "second"
+          ],
+          "unicode_keys": {
+            "1": "One",
+            "\r": "Carriage Return",
+            "": "Control",
+            "ö": "Latin Small Letter O With Diaeresis",
+            "€": "Euro Sign",
+            "😀": "Emoji: Grinning Face",
+            "דּ": "Hebrew Letter Dalet With Dagesh"
+          }
+        },
+        "secret_bindings": {
+          "rcon.password": {
+            "secret_ref": "vault://games/minecraft-test/rcon",
+            "purpose": "rcon-password",
+            "permission_scope": [
+              "game.configure"
+            ],
+            "version_ref": "v1"
+          }
+        }
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "dd530be9ff4ae61b3431e9636f1f017c3c04a43390d3493f3d1d4d8563a11560"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
+    },
+    {
+      "case_id": "rfc8785-permuted-member-order",
+      "request": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "configuration_schema_uri": "urn:game.minecraft-paper:configuration:paper-1.21.11-build-3",
+        "configuration_schema_checksum": {
+          "algorithm": "sha256",
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "configuration": {
+          "unicode_keys": {
+            "1": "One",
+            "דּ": "Hebrew Letter Dalet With Dagesh",
+            "😀": "Emoji: Grinning Face",
+            "€": "Euro Sign",
+            "ö": "Latin Small Letter O With Diaeresis",
+            "": "Control",
+            "\r": "Carriage Return"
+          },
+          "order": [
+            "first",
+            "second"
+          ],
+          "literals": [
+            null,
+            true,
+            false
+          ],
+          "rfc_string": "€$\u000f\nA'B\"\\\\\"/",
+          "numbers": [
+            333333333.33333329,
+            4.50,
+            2e-3,
+            0.000000000000000000000000001
+          ]
+        },
+        "secret_bindings": {
+          "rcon.password": {
+            "version_ref": "v1",
+            "permission_scope": [
+              "game.configure"
+            ],
+            "purpose": "rcon-password",
+            "secret_ref": "vault://games/minecraft-test/rcon"
+          }
+        }
+      },
+      "output": {
+        "target": {
+          "server_id": "minecraft-test",
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-test-001"
+          }
+        },
+        "release_id": "paper-1.21.11-build-3",
+        "outcome": "applied",
+        "validation_result": "valid",
+        "application_started": true,
+        "configuration_digest": {
+          "algorithm": "sha256",
+          "digest": "dd530be9ff4ae61b3431e9636f1f017c3c04a43390d3493f3d1d4d8563a11560"
+        },
+        "issues": [],
+        "observed_at": "2026-11-06T09:16:00Z"
+      }
     }
   ],
   "expected": {
@@ -681,7 +991,8 @@
         "result_target_bound": true,
         "validation_before_application": true,
         "configuration_confirmed": true,
-        "must_reconcile_before_retry": false
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "valid-unchanged",
@@ -694,7 +1005,8 @@
         "result_target_bound": true,
         "validation_before_application": true,
         "configuration_confirmed": true,
-        "must_reconcile_before_retry": false
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "invalid-rejected",
@@ -707,7 +1019,8 @@
         "result_target_bound": true,
         "validation_before_application": true,
         "configuration_confirmed": false,
-        "must_reconcile_before_retry": false
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "unknown-validation-not-applied",
@@ -720,7 +1033,8 @@
         "result_target_bound": true,
         "validation_before_application": true,
         "configuration_confirmed": false,
-        "must_reconcile_before_retry": false
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "unknown-validation-started",
@@ -733,7 +1047,8 @@
         "result_target_bound": true,
         "validation_before_application": false,
         "configuration_confirmed": false,
-        "must_reconcile_before_retry": true
+        "must_reconcile_before_retry": true,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "unknown-application-after-validation",
@@ -746,7 +1061,8 @@
         "result_target_bound": true,
         "validation_before_application": true,
         "configuration_confirmed": false,
-        "must_reconcile_before_retry": true
+        "must_reconcile_before_retry": true,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "schema-uri-mismatch",
@@ -759,7 +1075,8 @@
         "result_target_bound": true,
         "validation_before_application": true,
         "configuration_confirmed": false,
-        "must_reconcile_before_retry": false
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "schema-checksum-mismatch",
@@ -772,7 +1089,8 @@
         "result_target_bound": true,
         "validation_before_application": true,
         "configuration_confirmed": false,
-        "must_reconcile_before_retry": false
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "request-release-mismatch",
@@ -785,7 +1103,8 @@
         "result_target_bound": true,
         "validation_before_application": true,
         "configuration_confirmed": false,
-        "must_reconcile_before_retry": false
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "result-release-mismatch",
@@ -798,7 +1117,8 @@
         "result_target_bound": false,
         "validation_before_application": true,
         "configuration_confirmed": false,
-        "must_reconcile_before_retry": true
+        "must_reconcile_before_retry": true,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "result-instance-mismatch",
@@ -811,7 +1131,8 @@
         "result_target_bound": false,
         "validation_before_application": true,
         "configuration_confirmed": false,
-        "must_reconcile_before_retry": true
+        "must_reconcile_before_retry": true,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "request-environment-mismatch",
@@ -824,7 +1145,8 @@
         "result_target_bound": false,
         "validation_before_application": true,
         "configuration_confirmed": false,
-        "must_reconcile_before_retry": false
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
       },
       {
         "case_id": "invalid-secret-reference",
@@ -837,7 +1159,78 @@
         "result_target_bound": true,
         "validation_before_application": true,
         "configuration_confirmed": false,
-        "must_reconcile_before_retry": false
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": false
+      },
+      {
+        "case_id": "valid-secret-reference-binding",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": true,
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
+      },
+      {
+        "case_id": "valid-changed-configuration",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": true,
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
+      },
+      {
+        "case_id": "configuration-digest-mismatch",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": false,
+        "must_reconcile_before_retry": true,
+        "configuration_digest_matches": false
+      },
+      {
+        "case_id": "rfc8785-canonicalization-cross-language",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": true,
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
+      },
+      {
+        "case_id": "rfc8785-permuted-member-order",
+        "request_schema_valid": true,
+        "request_target_consistent": true,
+        "schema_pin_matches": true,
+        "release_bound": true,
+        "dispatch_allowed": true,
+        "result_schema_valid": true,
+        "result_target_bound": true,
+        "validation_before_application": true,
+        "configuration_confirmed": true,
+        "must_reconcile_before_retry": false,
+        "configuration_digest_matches": true
       }
     ]
   },

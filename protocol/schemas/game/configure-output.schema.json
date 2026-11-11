@@ -44,7 +44,7 @@
     },
     "configuration_digest": {
       "$ref": "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum",
-      "description": "SHA-256 of the RFC 8785 canonical JSON configuration, including only secret references."
+      "description": "SHA-256 of RFC 8785 JCS bytes for an object with exactly two members: configuration (the request configuration) and secret_bindings (the request secret-reference map). Secret reference objects are included as provided; resolved secret values are never included. Both members satisfy the protocol's I-JSON profile, preserve Unicode without normalization, and encode integers outside the safe-integer range as strings."
     },
     "issues": {
       "type": "array",

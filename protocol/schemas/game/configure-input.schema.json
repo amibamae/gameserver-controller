@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:gameserver-controller:0.21.0-draft:game:configure-input",
   "title": "Game configure input",
-  "description": "Validate and apply non-secret configuration against the schema pinned by the exact release. Secret values are supplied only as references.",
+  "description": "Validate and apply non-secret configuration against the schema pinned by the exact release. Secret values are supplied only as references. The hashed configuration and secret_bindings members MUST satisfy the protocol's I-JSON profile: object member names are unique, Unicode strings are preserved without normalization, and integers outside the safe-integer range are represented as strings.",
   "type": "object",
   "additionalProperties": false,
   "required": [

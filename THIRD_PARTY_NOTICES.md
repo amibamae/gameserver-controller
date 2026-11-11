@@ -54,6 +54,19 @@ transfer manager, credential provider, and event-stream modules.
 - Upstream source: [github.com/santhosh-tekuri/jsonschema](https://github.com/santhosh-tekuri/jsonschema/tree/v6.0.3)
 - Full license: [licenses/jsonschema-LICENSE](licenses/jsonschema-LICENSE)
 
+## github.com/gowebpki/jcs
+
+This project uses the Go implementation of RFC 8785 JSON Canonicalization Scheme for protocol conformance checks.
+
+- Module: `github.com/gowebpki/jcs`
+- Version: `v1.0.2`, pinned in [go.mod](go.mod) and [go.sum](go.sum)
+- License: Apache-2.0
+- Copyright: Copyright 2021-2026 Bret Jordan & Benedikt Thoma; Copyright 2006-2019 WebPKI.org
+- Full upstream license: [licenses/gowebpki-jcs-LICENSE](licenses/gowebpki-jcs-LICENSE)
+- Upstream NOTICE file: none at `v1.0.2`
+
+Include this notice and the full Apache 2.0 license with source or binary distributions that contain this module. Preserve upstream copyright notices when copying or modifying its source.
+
 ## Go runtime and standard library
 
 Built Go executables include the Go runtime and the standard-library packages they use.
