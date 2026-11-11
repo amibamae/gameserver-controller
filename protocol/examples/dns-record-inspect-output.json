@@ -1,0 +1,18 @@
+{
+  "record": {
+    "zone_ref": {
+      "adapter_id": "integration.cloudflare-dns",
+      "environment_id": "test",
+      "resource_kind": "dns-zone",
+      "external_id": "zone-example-com"
+    },
+    "name": "paper-main.backends.example.com",
+    "record_type": "A"
+  },
+  "observation_state": "present",
+  "values": [
+    "203.0.113.20"
+  ],
+  "ttl_seconds": 60,
+  "observed_at": "2026-11-07T10:00:00Z"
+}

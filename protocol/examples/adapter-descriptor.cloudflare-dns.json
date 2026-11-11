@@ -1,0 +1,58 @@
+{
+  "adapter_id": "integration.cloudflare-dns",
+  "category": "integration",
+  "display_name": "Cloudflare DNS integration",
+  "implementation_version": "0.0.0-planned",
+  "protocol_versions": [
+    "0.21.0-draft"
+  ],
+  "contract_versions": [
+    "integration.dns.v1-draft"
+  ],
+  "required_permissions": [
+    "dns.record.inspect",
+    "dns.record.manage"
+  ],
+  "capabilities": [
+    {
+      "name": "integration.dns.record.delete",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-delete-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-delete-output",
+      "required_permissions": [
+        "dns.record.manage"
+      ]
+    },
+    {
+      "name": "integration.dns.record.inspect",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-inspect-output",
+      "required_permissions": [
+        "dns.record.inspect"
+      ]
+    },
+    {
+      "name": "integration.dns.record.upsert",
+      "version": "1",
+      "mutating": true,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-upsert-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-upsert-output",
+      "required_permissions": [
+        "dns.record.manage"
+      ]
+    }
+  ],
+  "constraints": {
+    "dns_provider": "Cloudflare",
+    "record_types": [
+      "A",
+      "AAAA"
+    ],
+    "proxied_records": false,
+    "minimum_ttl_seconds": 60,
+    "managed_records_only": true
+  }
+}

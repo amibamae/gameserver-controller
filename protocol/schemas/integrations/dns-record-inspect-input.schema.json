@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-inspect-input",
+  "title": "DNS record inspect input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record",
+    "environment_id"
+  ],
+  "properties": {
+    "record": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-target"
+    },
+    "environment_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  }
+}

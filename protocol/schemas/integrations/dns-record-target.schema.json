@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-target",
+  "title": "DNS record target",
+  "description": "One exact record name and type in one adapter-owned DNS zone.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "zone_ref",
+    "name",
+    "record_type"
+  ],
+  "properties": {
+    "zone_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
+    },
+    "record_type": {
+      "enum": [
+        "A",
+        "AAAA"
+      ]
+    }
+  }
+}

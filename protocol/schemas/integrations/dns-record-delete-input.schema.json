@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-delete-input",
+  "title": "DNS record delete input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record",
+    "environment_id"
+  ],
+  "properties": {
+    "record": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-target"
+    },
+    "environment_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "expected_values": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 2,
+        "maxLength": 45,
+        "anyOf": [
+          {
+            "format": "ipv4"
+          },
+          {
+            "format": "ipv6"
+          }
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "record": {
+            "properties": {
+              "record_type": {
+                "const": "A"
+              }
+            },
+            "required": [
+              "record_type"
+            ]
+          }
+        },
+        "required": [
+          "record"
+        ]
+      },
+      "then": {
+        "properties": {
+          "values": {
+            "items": {
+              "format": "ipv4"
+            }
+          },
+          "expected_values": {
+            "items": {
+              "format": "ipv4"
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "record": {
+            "properties": {
+              "record_type": {
+                "const": "AAAA"
+              }
+            },
+            "required": [
+              "record_type"
+            ]
+          }
+        },
+        "required": [
+          "record"
+        ]
+      },
+      "then": {
+        "properties": {
+          "values": {
+            "items": {
+              "format": "ipv6"
+            }
+          },
+          "expected_values": {
+            "items": {
+              "format": "ipv6"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
