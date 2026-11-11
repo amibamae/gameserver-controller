@@ -259,6 +259,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [execution-unit-start-unknown-requires-inspection.json](test-vectors/execution-unit-start-unknown-requires-inspection.json)
 - [execution-unit-start-target-mismatch.json](test-vectors/execution-unit-start-target-mismatch.json)
 - [execution-unit-graceful-stop-completed-stopped.json](test-vectors/execution-unit-graceful-stop-completed-stopped.json)
+- [execution-unit-graceful-stop-unknown-requires-inspection.json](test-vectors/execution-unit-graceful-stop-unknown-requires-inspection.json)
 - [execution-unit-force-stop-approval-required.json](test-vectors/execution-unit-force-stop-approval-required.json)
 - [execution-unit-force-stop-approval-scope-denied.json](test-vectors/execution-unit-force-stop-approval-scope-denied.json)
 - [execution-unit-force-stop-completed-stopped.json](test-vectors/execution-unit-force-stop-completed-stopped.json)
