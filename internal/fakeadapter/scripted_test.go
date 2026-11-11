@@ -32,7 +32,7 @@ func TestScriptedAdaptersRunThroughSchemasForEveryCategory(t *testing.T) {
 		{adapter.CategoryStorage, "storage.fake", "storage.fake.inspect"},
 		{adapter.CategoryExecution, "execution.fake", "execution.fake.inspect"},
 		{adapter.CategoryGame, "game.fake", "game.fake.inspect"},
-		{adapter.CategoryIntegration, "integration.fake", "integrations.fake.inspect"},
+		{adapter.CategoryIntegration, "integration.fake", "integration.fake.inspect"},
 	}
 	for _, test := range categories {
 		t.Run(string(test.category), func(t *testing.T) {

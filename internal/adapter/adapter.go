@@ -486,7 +486,7 @@ func capabilityPrefix(category Category) (string, bool) {
 	case CategoryGame:
 		return "game.", true
 	case CategoryIntegration:
-		return "integrations.", true
+		return "integration.", true
 	default:
 		return "", false
 	}
