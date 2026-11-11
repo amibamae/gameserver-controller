@@ -117,14 +117,13 @@ The DNS integration contract is now part of the protocol:
 [the integration contract](../protocol/adapters/integrations.md#5-dns-records).
 The join hostname uses the `direct_join` purpose, which requires a current
 readiness assertion for the exact instance, and the `fallback` purpose when
-pointing back at the lobby. The first DNS adapter is planned for Cloudflare
-(`integration.cloudflare-dns`, see the
-[illustrative descriptor](../protocol/examples/adapter-descriptor.cloudflare-dns.json))
-and is not implemented yet. The same adapter can also keep per-backend
+pointing back at the lobby. The first DNS adapter is the
+[Cloudflare adapter](CLOUDFLARE_DNS_ADAPTER.md) (`integration.cloudflare-dns`),
+which is implemented but not yet wired into the controller runtime. The same adapter can also keep per-backend
 hostnames pointed at instance IPs for proxied servers (`backend_address`
 purpose).
 
-The future implementation still needs the Cloudflare adapter; an authenticated wake API; local provision-to-Paper
+The future implementation still needs runtime wiring for the Cloudflare adapter; an authenticated wake API; local provision-to-Paper
 readiness timing and advisory progress; and separately owner-enabled shared
 boot-duration averages with bounded retention. Tests must cover duplicate
 requests, boot failure, readiness failure, sharing opt-in/opt-out, DNS update

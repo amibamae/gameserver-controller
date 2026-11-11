@@ -68,3 +68,12 @@ servers:
           unit: hours
         retention:
           keep_last: 5
+    # Optional network profile; see docs/CONFIGURATION.md. Requires the
+    # referenced integration adapter profiles above.
+    # network:
+    #   join_mode: proxy
+    #   proxy: integration.velocity
+    #   backends:
+    #     - id: paper-main
+    #       address_mode: instance_ip
+    #       port: 25565

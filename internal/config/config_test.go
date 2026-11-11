@@ -268,3 +268,161 @@ func TestResolveStateStorePath(t *testing.T) {
 		t.Fatalf("absolute path resolved to %q", got)
 	}
 }
+
+// withNetwork adds integration adapters and a network block to the staging
+// server of validConfig.
+func withNetwork(network string) string {
+	input := strings.Replace(validConfig, "environments:\n", `  - id: integration.velocity
+    category: integration
+  - id: integration.cloudflare-dns
+    category: integration
+environments:
+`, 1)
+	return strings.Replace(input, "      idle_shutdown: 30m\n      require_verified_backup_before_destroy: true\n      require_approval_for_destroy: true\n",
+		"      idle_shutdown: 30m\n      require_verified_backup_before_destroy: true\n      require_approval_for_destroy: true\n"+network, 1)
+}
+
+func TestNetworkProfiles(t *testing.T) {
+	valid := map[string]string{
+		"proxy with instance IP": `    network:
+      join_mode: proxy
+      proxy: integration.velocity
+      backends:
+        - id: paper-main
+          address_mode: instance_ip
+          port: 25565
+`,
+		"proxy with managed hostname": `    network:
+      join_mode: proxy
+      proxy: integration.velocity
+      dns: integration.cloudflare-dns
+      backends:
+        - id: paper-main
+          address_mode: hostname
+          hostname: paper-main.backends.example.com
+          port: 25565
+`,
+		"direct dns": `    network:
+      join_mode: direct_dns
+      dns: integration.cloudflare-dns
+      join_hostname: play.example.com
+`,
+		"none": `    network:
+      join_mode: none
+`,
+	}
+	for name, network := range valid {
+		t.Run(name, func(t *testing.T) {
+			config, err := Parse(strings.NewReader(withNetwork(network)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if config.Servers[1].Network == nil {
+				t.Fatal("network block was not parsed")
+			}
+		})
+	}
+	config, err := Parse(strings.NewReader(validConfig))
+	if err != nil || config.Servers[0].Network != nil {
+		t.Fatalf("a server without a network block must stay unset: %v", err)
+	}
+}
+
+func TestNetworkProfileRejectsMissingOrInconsistentSettings(t *testing.T) {
+	proxyBackend := "      backends:\n        - id: paper-main\n          address_mode: instance_ip\n          port: 25565\n"
+	tests := map[string]struct{ network, want string }{
+		"unknown join mode":               {"    network:\n      join_mode: dns\n", "join_mode must be proxy, direct_dns, or none"},
+		"proxy without adapter":           {"    network:\n      join_mode: proxy\n" + proxyBackend, "network.proxy is required"},
+		"proxy adapter of wrong category": {"    network:\n      join_mode: proxy\n      proxy: game.paper\n" + proxyBackend, "network.proxy must reference a integration adapter"},
+		"proxy without backends":          {"    network:\n      join_mode: proxy\n      proxy: integration.velocity\n", "must list at least one backend"},
+		"hostname backend without dns":    {"    network:\n      join_mode: proxy\n      proxy: integration.velocity\n      backends:\n        - id: paper-main\n          address_mode: hostname\n          hostname: paper-main.backends.example.com\n          port: 25565\n", "network.dns is required"},
+		"bad hostname":                    {"    network:\n      join_mode: proxy\n      proxy: integration.velocity\n      dns: integration.cloudflare-dns\n      backends:\n        - id: paper-main\n          address_mode: hostname\n          hostname: Paper_Main.example.com\n          port: 25565\n", "hostname must be a lower-case DNS hostname"},
+		"numeric hostname":                {"    network:\n      join_mode: direct_dns\n      dns: integration.cloudflare-dns\n      join_hostname: 203.0.113.5\n", "join_hostname must be a lower-case DNS hostname"},
+		"bad port":                        {"    network:\n      join_mode: proxy\n      proxy: integration.velocity\n      backends:\n        - id: paper-main\n          address_mode: instance_ip\n          port: 70000\n", "port must be between 1 and 65535"},
+		"duplicate backend":               {"    network:\n      join_mode: proxy\n      proxy: integration.velocity\n" + proxyBackend + "        - id: paper-main\n          address_mode: instance_ip\n          port: 25566\n", "id is a duplicate"},
+		"bad address mode":                {"    network:\n      join_mode: proxy\n      proxy: integration.velocity\n      backends:\n        - id: paper-main\n          address_mode: dns\n          port: 25565\n", "address_mode must be instance_ip or hostname"},
+		"direct dns without adapter":      {"    network:\n      join_mode: direct_dns\n      join_hostname: play.example.com\n", "network.dns is required"},
+		"direct dns with backends":        {"    network:\n      join_mode: direct_dns\n      dns: integration.cloudflare-dns\n      join_hostname: play.example.com\n" + proxyBackend, "backends are only used with join_mode proxy"},
+		"none with settings":              {"    network:\n      join_mode: none\n      proxy: integration.velocity\n", "must not set proxy"},
+		"unused dns adapter":              {"    network:\n      join_mode: proxy\n      proxy: integration.velocity\n      dns: integration.cloudflare-dns\n" + proxyBackend, "dns is only used with"},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := Parse(strings.NewReader(withNetwork(test.network)))
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Parse error = %v, want substring %q", err, test.want)
+			}
+		})
+	}
+
+	// The legacy single integration field must agree with network.proxy.
+	input := withNetwork("    network:\n      join_mode: proxy\n      proxy: integration.velocity\n" + proxyBackend)
+	input = strings.Replace(input, "      game: game.paper\n    lifecycle:\n      idle_shutdown", "      game: game.paper\n      integration: integration.cloudflare-dns\n    lifecycle:\n      idle_shutdown", 1)
+	if _, err := Parse(strings.NewReader(input)); err == nil || !strings.Contains(err.Error(), "must match adapters.integration") {
+		t.Fatalf("legacy mismatch: %v", err)
+	}
+}
+
+func TestBackendHostnameTemplate(t *testing.T) {
+	network := `    network:
+      join_mode: proxy
+      proxy: integration.velocity
+      dns: integration.cloudflare-dns
+      backend_hostname_template: "{backend}.{environment}.mc.example.com"
+      backends:
+        - id: paper-main
+          port: 25565
+        - id: paper-creative
+          port: 25566
+        - id: paper-lobby-ip
+          address_mode: instance_ip
+          port: 25567
+`
+	config, err := Parse(strings.NewReader(withNetwork(network)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := config.Servers[1]
+	want := map[string]string{"paper-main": "paper-main.staging.mc.example.com", "paper-creative": "paper-creative.staging.mc.example.com"}
+	for _, backend := range server.Network.Backends {
+		name, ok := server.Network.BackendHostname(server.ID, server.EnvironmentID, backend)
+		if expected, hasName := want[backend.ID]; hasName != ok || name != expected {
+			t.Errorf("%s: hostname %q (%v), want %q", backend.ID, name, ok, expected)
+		}
+	}
+
+	tests := map[string]struct{ from, to, want string }{
+		"explicit hostname with template":  {"        - id: paper-main\n          port: 25565\n", "        - id: paper-main\n          hostname: custom.example.com\n          port: 25565\n", "must not be set when backend_hostname_template is set"},
+		"template without backend":         {`"{backend}.{environment}.mc.example.com"`, `"{environment}.mc.example.com"`, "must contain {backend}"},
+		"unknown placeholder":              {`"{backend}.{environment}.mc.example.com"`, `"{backend}.{region}.mc.example.com"`, "may only use {backend}, {server}, and {environment}"},
+		"invalid generated hostname":       {"        - id: paper-main\n", "        - id: paper_main\n", "hostname from backend_hostname_template is not a valid"},
+		"scheme without environment is ok": {`"{backend}.{environment}.mc.example.com"`, `"{backend}.mc.example.com"`, ""},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			input := strings.Replace(withNetwork(network), test.from, test.to, 1)
+			_, err := Parse(strings.NewReader(input))
+			if test.want == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Parse error = %v, want substring %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestBackendHostnamesAreUniqueAcrossServers(t *testing.T) {
+	network := "    network:\n      join_mode: proxy\n      proxy: integration.velocity\n      dns: integration.cloudflare-dns\n" +
+		"      backends:\n        - id: paper-main\n          address_mode: hostname\n          hostname: paper-main.mc.example.com\n          port: 25565\n"
+	input := withNetwork(network)
+	// Give the production server a backend with the same hostname.
+	input = strings.Replace(input, "    lifecycle:\n      require_verified_backup_before_destroy: true\n      require_approval_for_destroy: true\n  - id: staging-server",
+		"    lifecycle:\n      require_verified_backup_before_destroy: true\n      require_approval_for_destroy: true\n"+network+"  - id: staging-server", 1)
+	if _, err := Parse(strings.NewReader(input)); err == nil || !strings.Contains(err.Error(), "hostname is already used by servers[0].network.backends[0]") {
+		t.Fatalf("duplicate hostname: %v", err)
+	}
+}

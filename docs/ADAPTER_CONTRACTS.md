@@ -75,7 +75,7 @@ A DNS adapter inspects, sets, and deletes individual managed A/AAAA records. A r
 
 A profile may also give each backend a managed backend hostname that points at its instance, so the proxy reaches it by name and an IP change only updates DNS. That also requires the DNS capabilities.
 
-The controller refuses to plan operations for a server whose profile requires a capability no registered adapter provides. It never skips a required routing or DNS step. The normative rules are in [the integration contract](../protocol/adapters/integrations.md#6-network-profile-requirements). The local configuration does not yet have a network profile block; that is planned work.
+The controller refuses to plan operations for a server whose profile requires a capability no registered adapter provides. It never skips a required routing or DNS step. The normative rules are in [the integration contract](../protocol/adapters/integrations.md#6-network-profile-requirements). The local configuration validates a per-server [network profile](CONFIGURATION.md#network-profile); the runtime does not use it yet.
 
 ## Request and result shape
 
@@ -110,6 +110,6 @@ Use fake adapters for core tests. Test production adapters only against isolated
 | Storage | Wasabi through its S3-compatible API | Other object stores |
 | Execution | systemd on Debian VM | Containers, Kubernetes |
 | Game | Minecraft Java with Paper | Terraria, Valheim, ARK |
-| Integration | Velocity proxy; Cloudflare DNS (planned) | Other proxies and DNS providers, monitoring, notifications |
+| Integration | Velocity proxy; [Cloudflare DNS](CLOUDFLARE_DNS_ADAPTER.md) | Other proxies and DNS providers, monitoring, notifications |
 
 These are the first design targets, not a promise that providers or games expose identical capabilities.
