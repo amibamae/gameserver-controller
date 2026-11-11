@@ -106,6 +106,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - A partial transfer remains visible as a partial result rather than being reported as full success.
 - An `outcome_unknown` session is inspected at the proxy before a retry is attempted.
 - Transfer messages and logs do not require or expose player UUIDs, account names, IP addresses, or chat.
+- Go vectors use synthetic canaries in requests, protocol-error messages/details, and diagnostic logs; schema-valid leaks still fail the privacy case.
 
 ### Storage and security
 - Every advertised storage capability validates against its registered input and output schemas.

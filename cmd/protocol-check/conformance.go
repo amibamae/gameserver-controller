@@ -2131,6 +2131,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		}, nil
 	case "velocity-transfer-outcome-unknown-reconciliation":
 		return evaluateVelocityTransferUnknownReconciliation(pkg, fixture)
+	case "velocity-transfer-privacy-canaries":
+		return evaluateVelocityTransferPrivacy(pkg, fixture)
 	case "velocity-transfer-partial-results", "velocity-transfer-count-mismatch", "velocity-transfer-context-mismatch", "velocity-transfer-duplicate-session-result", "velocity-transfer-target-mismatch":
 		request := asObject(input["transfer_request"])
 		result := asObject(input["transfer_result"])
