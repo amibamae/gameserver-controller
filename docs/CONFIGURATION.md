@@ -90,6 +90,47 @@ Shutting down includes stopping the game, backing up, verifying, and destroying 
 
 Each server may define `lifecycle.backups.schedule` and `lifecycle.backups.retention`. The defaults are every 9 hours and keep the newest five verified backups. Schedule units are `minutes`, `hours`, `days`, `weeks`, `months`, or `years`; month and year intervals use calendar units, anchored to the original schedule date. If a month lacks that day, the occurrence uses that month's last day and later occurrences return to the original day. Set `keep_last: 0` to retain backups indefinitely. The configuration validator checks this policy, but scheduled execution and retention cleanup are not wired into a controller runtime yet. Cleanup must run only after a new backup is verified and must use the normal exact-object authorization and retention checks.
 
+### Adapter implementations
+
+An adapter profile may set `implementation` to tell the controller runtime to start it. Without `implementation`, the profile is declared for cross-reference checks only and the runtime does not start it.
+
+- `implementation: wasabi` builds the built-in Wasabi storage adapter (category `storage` only). The `wasabi:` block holds non-secret settings, and `secret_refs` must define exactly `access_key_id` and `secret_access_key`. A server that uses this adapter must be in the same environment as `wasabi.environment_id`. See [the Wasabi adapter](WASABI_STORAGE_ADAPTER.md) for the meaning of each field.
+- `implementation: process` starts an adapter executable over [`jsonrpc-stdio-v1`](../protocol/rpc/transport.md). The executable must report the configured adapter ID and category, or startup fails. `env` is the complete environment for the child; nothing is inherited from the controller, so put only non-secret settings there. Process adapters cannot use the storage byte-stream profile yet.
+
+```yaml
+adapters:
+  - id: storage.wasabi-staging
+    category: storage
+    implementation: wasabi
+    secret_refs:
+      access_key_id:
+        secret_ref: systemd-credential://wasabi-staging-access-key-id
+        purpose: staging Wasabi access key ID
+      secret_access_key:
+        secret_ref: systemd-credential://wasabi-staging-secret-access-key
+        purpose: staging Wasabi secret access key
+    wasabi:
+      storage_profile_id: wasabi-staging
+      environment_id: staging
+      container: example-staging-backups
+      key_prefix: server/
+      region: us-west-1
+      endpoint_url: https://s3.us-west-1.wasabisys.com
+      max_object_bytes: 1073741824
+      require_version_ids: true
+  - id: execution.local
+    category: execution
+    implementation: process
+    process:
+      path: /usr/lib/gameserver-controller/execution-adapter
+      args: [--profile, local]
+      env: [LANG=C.UTF-8]
+      start_timeout: 10s   # optional, default 10s, at most 10m
+      stop_timeout: 10s    # optional, default 10s, at most 10m
+```
+
+`config-check validate` also checks the Wasabi settings with the adapter's own rules and confirms that each process path is an executable file. It never contacts Wasabi or reads credentials.
+
 Relative state-store paths are resolved against the configuration file by `ResolveStateStorePath`; absolute local paths remain absolute. The validator does not create parent directories, canonicalize symlinks, or stop a separate runtime from opening a path.
 
 ## Secret references
@@ -103,8 +144,9 @@ reference names a credential loaded for the controller service; it does not
 contain or encrypt the credential value.
 
 The `internal/credential` package provides a bounded accessor for named
-systemd credentials, but the controller runtime and provider adapters do not
-call it yet. Runtime integration must reject missing or unauthorized
+systemd credentials. The controller runtime uses it for Wasabi adapter
+profiles, reading `CREDENTIALS_DIRECTORY` at startup and the values only at
+invocation time. Runtime integration must reject missing or unauthorized
 credentials, never print resolved values, load them only when needed, and fail
 closed. For the initial Debian/systemd deployment, store values as encrypted
 systemd credentials and load only the named values needed by the controller
@@ -125,4 +167,4 @@ bounds.
 
 It does not yet check provider endpoints, network destinations, filesystem symlink or traversal policy, runtime authorization, config migrations, or redacted change plans. Passing validation does not authorize an operation.
 
-The initial operation store uses bbolt; SQLite from the earlier proposal is superseded. Runtime config loading, environment-isolation enforcement, approval identity, and provider adapters remain future work. See the [roadmap](ROADMAP.md) for the current Phase 2 gate.
+The initial operation store uses bbolt; SQLite from the earlier proposal is superseded. `controller serve` now builds its runtime from this configuration (see [architecture](ARCHITECTURE.md)); environment-isolation enforcement at the storage service, approval identity, and most provider adapters remain future work. See the [roadmap](ROADMAP.md) for the current Phase 2 gate.

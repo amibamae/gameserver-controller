@@ -4,6 +4,7 @@ package wasabistorage
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -68,18 +69,26 @@ type s3Client interface {
 	manager.UploadAPIClient
 	GetObject(context.Context, *s3.GetObjectInput, ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 	HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
+	ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
+	CopyObject(context.Context, *s3.CopyObjectInput, ...func(*s3.Options)) (*s3.CopyObjectOutput, error)
+	DeleteObject(context.Context, *s3.DeleteObjectInput, ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
+	GetBucketVersioning(context.Context, *s3.GetBucketVersioningInput, ...func(*s3.Options)) (*s3.GetBucketVersioningOutput, error)
+	GetObjectRetention(context.Context, *s3.GetObjectRetentionInput, ...func(*s3.Options)) (*s3.GetObjectRetentionOutput, error)
+	GetObjectLegalHold(context.Context, *s3.GetObjectLegalHoldInput, ...func(*s3.Options)) (*s3.GetObjectLegalHoldOutput, error)
 }
 
 type clientFactory func(region, endpoint, accessKeyID, secretAccessKey string) s3Client
 
-// Adapter advertises only put, get, and head. Listing, deletion, copying,
-// versioning policy, and retention inspection remain unimplemented and are
-// deliberately not advertised.
+// Adapter advertises put, get, head, list, copy, exact-version delete, and
+// versioning and retention inspection for one storage profile. Checksum
+// verification without a transfer is not advertised.
 type Adapter struct {
 	config          Config
 	protocolVersion string
 	credentials     CredentialResolver
 	newClient       clientFactory
+	// tokenKey signs list continuation tokens; tokens do not survive a restart.
+	tokenKey [32]byte
 }
 
 // New constructs an adapter using the systemd credential resolver and the AWS
@@ -95,8 +104,15 @@ func newAdapter(config Config, protocolVersion string, resolver CredentialResolv
 	if protocolVersion == "" || resolver == nil || factory == nil {
 		return nil, errors.New("protocol version, credential resolver, and S3 client factory are required")
 	}
-	return &Adapter{config: config, protocolVersion: protocolVersion, credentials: resolver, newClient: factory}, nil
+	impl := &Adapter{config: config, protocolVersion: protocolVersion, credentials: resolver, newClient: factory}
+	if _, err := rand.Read(impl.tokenKey[:]); err != nil {
+		return nil, errors.New("could not create a continuation-token key")
+	}
+	return impl, nil
 }
+
+// ValidateConfig checks a profile without contacting Wasabi or resolving credentials.
+func ValidateConfig(config Config) error { return validateConfig(config) }
 
 func validateConfig(config Config) error {
 	if !adapterIDPattern.MatchString(config.AdapterID) || !strings.HasPrefix(config.AdapterID, "storage.") || config.StorageProfileID == "" || config.EnvironmentID == "" || config.Container == "" || len(config.Container) > 500 || !strings.HasSuffix(config.KeyPrefix, "/") || len(config.KeyPrefix) > 2048 || !regionPattern.MatchString(config.Region) {
@@ -126,6 +142,14 @@ func validateConfig(config Config) error {
 
 func (a *Adapter) Descriptor() adapter.Descriptor {
 	version := a.protocolVersion
+	plain := func(name, schema string, mutating bool) adapter.Capability {
+		return adapter.Capability{
+			Name: name, Version: contractVersion, Mutating: mutating,
+			InputSchemaURI:      "urn:gameserver-controller:" + version + ":storage:" + schema + "-input",
+			OutputSchemaURI:     "urn:gameserver-controller:" + version + ":storage:" + schema + "-output",
+			RequiredPermissions: []string{},
+		}
+	}
 	capability := func(name, schema string, mutating bool, direction string) adapter.Capability {
 		return adapter.Capability{
 			Name: name, Version: contractVersion, Mutating: mutating,
@@ -142,9 +166,12 @@ func (a *Adapter) Descriptor() adapter.Descriptor {
 		Capabilities: []adapter.Capability{
 			capability("storage.object.put", "object-put", true, "controller_to_adapter"),
 			capability("storage.object.get", "object-get", false, "adapter_to_controller"),
-			{Name: "storage.object.head", Version: contractVersion, Mutating: false,
-				InputSchemaURI:  "urn:gameserver-controller:" + version + ":storage:object-head-input",
-				OutputSchemaURI: "urn:gameserver-controller:" + version + ":storage:object-head-output", RequiredPermissions: []string{}},
+			plain("storage.object.head", "object-head", false),
+			plain("storage.object.list", "object-list", false),
+			plain("storage.object.copy", "object-copy", true),
+			plain("storage.object.delete", "object-delete", true),
+			plain("storage.object.versioning.inspect", "object-versioning-inspect", false),
+			plain("storage.object.retention.inspect", "object-retention-inspect", false),
 		},
 	}
 }
@@ -159,28 +186,18 @@ func (a *Adapter) Invoke(ctx context.Context, request adapter.InvokeRequest) (ad
 	}
 	callContext, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
-	var output any
-	switch request.Params.Capability {
-	case "storage.object.put":
-		value, err := a.put(callContext, request)
-		if err != nil {
-			return adapter.InvokeResponse{}, err
-		}
-		output = value
-	case "storage.object.get":
-		value, err := a.get(callContext, request)
-		if err != nil {
-			return adapter.InvokeResponse{}, err
-		}
-		output = value
-	case "storage.object.head":
-		value, err := a.head(callContext, request)
-		if err != nil {
-			return adapter.InvokeResponse{}, err
-		}
-		output = value
-	default:
+	handlers := map[string]func(context.Context, adapter.InvokeRequest) (any, error){
+		"storage.object.put": a.put, "storage.object.get": a.get, "storage.object.head": a.head,
+		"storage.object.list": a.list, "storage.object.copy": a.copyObject, "storage.object.delete": a.deleteObject,
+		"storage.object.versioning.inspect": a.inspectVersioning, "storage.object.retention.inspect": a.inspectRetention,
+	}
+	handler, ok := handlers[request.Params.Capability]
+	if !ok {
 		return adapter.InvokeResponse{}, errors.New("unsupported Wasabi storage capability")
+	}
+	output, err := handler(callContext, request)
+	if err != nil {
+		return adapter.InvokeResponse{}, err
 	}
 	encoded, err := json.Marshal(output)
 	if err != nil {

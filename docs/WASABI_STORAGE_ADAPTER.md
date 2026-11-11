@@ -1,11 +1,15 @@
 # Wasabi storage adapter
 
 `internal/wasabistorage` is the first Go implementation of the Wasabi storage
-adapter. It currently advertises only `storage.object.put`,
-`storage.object.get`, and `storage.object.head`. The management runtime does not
-construct or register this adapter yet, and the configuration loader does not
-parse its provider-specific fields. Treat the package as an implementation
-stage, not as a deployable Wasabi integration.
+adapter. It advertises `storage.object.put`, `storage.object.get`,
+`storage.object.head`, `storage.object.list`, `storage.object.copy`,
+`storage.object.delete`, `storage.object.versioning.inspect`, and
+`storage.object.retention.inspect`. It does not advertise
+`storage.object.verify_checksum`. A configuration profile with
+`implementation: wasabi` (see [configuration](CONFIGURATION.md)) makes
+`controller serve` build and register this adapter. No workflow that uses
+storage is registered in the runtime yet, so nothing calls it in a deployed
+controller. Treat it as not yet validated against a live Wasabi account.
 
 The adapter uses AWS SDK for Go v2 with a regional Wasabi S3 endpoint. It only
 accepts HTTPS hosts under `wasabisys.com`, uses path-style bucket addressing,
@@ -63,17 +67,42 @@ the storage policy requires an immutable
 provider version; upload, head, and get then fail closed if Wasabi returns no
 real version ID. Enable bucket versioning before using this setting.
 
-Give each backup a unique object key. The current adapter does not implement a
-conditional write, delete, copy, list, versioning inspection, or retention
-inspection capability. It does not implement controller policy itself. In
-particular, a write to a reused key can replace the current object when bucket
-versioning is disabled. The core must allocate exact backup keys and perform
-readback verification before marking a backup complete.
+Give each backup a unique object key. The adapter does not implement
+controller policy itself. In particular, an upload to a reused key can replace
+the current object when bucket versioning is disabled. The core must allocate
+exact backup keys and perform readback verification before marking a backup
+complete.
+
+## List, copy, delete, and inspection
+
+- **List** returns one page of current objects under a prefix that must start
+  with the profile's `KeyPrefix`. It does not list old versions. Continuation
+  tokens wrap the provider token with an HMAC bound to the adapter instance,
+  environment, container, and prefix; a token from another prefix, another
+  adapter instance, or an earlier process is rejected. A truncated provider
+  page without a usable token is reported as `unknown`.
+- **Copy** is a server-side copy within the same profile, limited to 5 GiB. It
+  checks the exact source version and size, refuses to overwrite an existing
+  destination, and reports `copied` only after reading the new object back and
+  matching the expected size and SHA-256. A copy that fails after the provider
+  call is reported as a possible side effect so the core reconciles it. The
+  existence check and the copy are not atomic; the core must still allocate
+  unique destination keys.
+- **Delete** removes exactly one version. Requests without a real version ID,
+  including the mutable `null` version, are rejected, so the adapter cannot
+  broaden a delete. An `if_match_etag` is compared against the exact version
+  before deletion. The result comes from inspecting the version afterwards.
+  Core authorization, retention checks, and audit remain the core's job.
+- **Versioning inspection** maps the bucket status to `enabled`, `suspended`, or
+  `disabled`; a failed call reports `unknown`.
+- **Retention inspection** reports object-lock mode, retain-until time, and
+  legal hold for one object version. A bucket without object lock reports
+  `none` and `off`; any other failure stays `unknown`.
 
 ## Validation status
 
-The package tests use an in-memory S3 API fake and the embedded protocol
-schemas. They do not contact Wasabi, validate a live key policy, or test a
+The package tests use an in-memory S3 API fake and validate every request and
+result against the embedded protocol schemas. They do not contact Wasabi, validate a live key policy, or test a
 real Wasabi account. Before wiring the adapter into a runtime, finish
 configuration and secret-reference integration, add lifecycle and
 cross-environment tests, and run an isolated staging upload/readback using a
