@@ -95,6 +95,35 @@ type ServerProfile struct {
 	EnvironmentID string          `yaml:"environment_id"`
 	Adapters      ServerAdapters  `yaml:"adapters"`
 	Lifecycle     ServerLifecycle `yaml:"lifecycle"`
+	Network       *ServerNetwork  `yaml:"network"`
+}
+
+// ServerNetwork is a server's network profile: how players reach it and
+// which integration adapters that requires. See
+// protocol/adapters/integrations.md section 6. A missing block means join
+// mode "none".
+type ServerNetwork struct {
+	// JoinMode is "proxy", "direct_dns", or "none".
+	JoinMode string `yaml:"join_mode"`
+	// Proxy is the proxy integration adapter; required for join mode proxy.
+	Proxy string `yaml:"proxy"`
+	// DNS is the DNS integration adapter; required for join mode direct_dns
+	// and for any backend that uses a managed hostname.
+	DNS string `yaml:"dns"`
+	// JoinHostname is the name players join through in direct_dns mode.
+	JoinHostname string `yaml:"join_hostname"`
+	// Backends are the proxy backends for this server (proxy mode only).
+	Backends []NetworkBackend `yaml:"backends"`
+}
+
+// NetworkBackend says how the proxy reaches one backend.
+type NetworkBackend struct {
+	ID string `yaml:"id"`
+	// AddressMode is "instance_ip" (the instance's current public IP) or
+	// "hostname" (a managed DNS name kept pointed at the instance).
+	AddressMode string `yaml:"address_mode"`
+	Hostname    string `yaml:"hostname"`
+	Port        int    `yaml:"port"`
 }
 
 type ServerAdapters struct {
@@ -227,6 +256,7 @@ func Validate(value Config) error {
 		checkServerAdapter(&problems, label+".adapters.execution", server.Adapters.Execution, "execution", adapterByID, true)
 		checkServerAdapter(&problems, label+".adapters.game", server.Adapters.Game, "game", adapterByID, true)
 		checkServerAdapter(&problems, label+".adapters.integration", server.Adapters.Integration, "integration", adapterByID, false)
+		validateServerNetwork(&problems, label, server, adapterByID)
 		if server.Lifecycle.IdleShutdown != "" {
 			idle, err := time.ParseDuration(server.Lifecycle.IdleShutdown)
 			add(err == nil && idle > 0 && idle <= 7*24*time.Hour, label+".lifecycle.idle_shutdown must be greater than zero and no more than 168h")
@@ -332,6 +362,75 @@ func validateStorageSecretIsolation(problems *[]string, servers []ServerProfile,
 		if usedByProduction && (usedByStaging || usedByTesting) {
 			*problems = append(*problems, "storage secret references must not be shared between production and staging/testing servers")
 			return
+		}
+	}
+}
+
+var (
+	backendIDPattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
+	dnsHostnamePattern = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	numericHostPattern = regexp.MustCompile(`^[0-9.]+$`)
+)
+
+func validDNSHostname(value string) bool {
+	return len(value) <= 253 && dnsHostnamePattern.MatchString(value) && !numericHostPattern.MatchString(value)
+}
+
+// validateServerNetwork checks a server's network profile and that every
+// integration adapter it requires is configured.
+func validateServerNetwork(problems *[]string, label string, server ServerProfile, adapters map[string]AdapterProfile) {
+	network := server.Network
+	if network == nil {
+		return
+	}
+	label += ".network"
+	add := func(ok bool, problem string) {
+		if !ok {
+			*problems = append(*problems, label+problem)
+		}
+	}
+	usesHostname := false
+	for _, backend := range network.Backends {
+		usesHostname = usesHostname || backend.AddressMode == "hostname"
+	}
+	switch network.JoinMode {
+	case "proxy":
+		checkServerAdapter(problems, label+".proxy", network.Proxy, "integration", adapters, true)
+		add(len(network.Backends) > 0, ".backends must list at least one backend for join_mode proxy")
+		add(network.JoinHostname == "", ".join_hostname is only used with join_mode direct_dns")
+		if legacy := server.Adapters.Integration; legacy != "" {
+			add(legacy == network.Proxy, ".proxy must match adapters.integration when both are set")
+		}
+	case "direct_dns":
+		add(network.Proxy == "", ".proxy is only used with join_mode proxy")
+		add(len(network.Backends) == 0, ".backends are only used with join_mode proxy")
+		add(validDNSHostname(network.JoinHostname), ".join_hostname must be a lower-case DNS hostname")
+	case "none":
+		add(network.Proxy == "" && network.DNS == "" && network.JoinHostname == "" && len(network.Backends) == 0,
+			" with join_mode none must not set proxy, dns, join_hostname, or backends")
+		return
+	default:
+		add(false, ".join_mode must be proxy, direct_dns, or none")
+		return
+	}
+	checkServerAdapter(problems, label+".dns", network.DNS, "integration", adapters, network.JoinMode == "direct_dns" || usesHostname)
+	if network.JoinMode == "proxy" && !usesHostname {
+		add(network.DNS == "", ".dns is only used with join_mode direct_dns or hostname backends")
+	}
+	seen := make(map[string]bool, len(network.Backends))
+	for i, backend := range network.Backends {
+		entry := fmt.Sprintf(".backends[%d]", i)
+		add(backendIDPattern.MatchString(backend.ID), entry+".id must be a proxy server name")
+		add(!seen[backend.ID], entry+".id is a duplicate")
+		seen[backend.ID] = true
+		add(backend.Port >= 1 && backend.Port <= 65535, entry+".port must be between 1 and 65535")
+		switch backend.AddressMode {
+		case "instance_ip":
+			add(backend.Hostname == "", entry+".hostname is only used with address_mode hostname")
+		case "hostname":
+			add(validDNSHostname(backend.Hostname), entry+".hostname must be a lower-case DNS hostname")
+		default:
+			add(false, entry+".address_mode must be instance_ip or hostname")
 		}
 	}
 }

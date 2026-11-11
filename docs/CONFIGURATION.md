@@ -21,6 +21,35 @@ The validator requires `schema_version: 1`, local controller mode, a bbolt state
 
 Adapter profiles use one of five protocol categories: `hosting`, `storage`, `execution`, `game`, or `integration`. Their IDs must use the matching category prefix. Each server points to an existing environment and hosting, storage, execution, and game profile. Integration is optional.
 
+### Network profile
+
+A server may add a `network` block saying how players reach it. It follows the [network profile requirements](../protocol/adapters/integrations.md#6-network-profile-requirements) in the protocol. Without the block the join mode is `none`.
+
+| `join_mode` | Required settings |
+|---|---|
+| `proxy` | `proxy`: an integration adapter such as `integration.velocity`; `backends`: at least one |
+| `direct_dns` | `dns`: an integration adapter such as `integration.cloudflare-dns`; `join_hostname` |
+| `none` | Nothing else may be set |
+
+Each proxy backend has an `id` (the proxy server name), a `port`, and an `address_mode`:
+
+- `instance_ip`: the proxy connects to the instance's current public IP from the hosting provider.
+- `hostname`: the proxy connects to `hostname`, a managed DNS name kept pointed at the instance, so an IP change only updates DNS. This also requires `dns`.
+
+```yaml
+network:
+  join_mode: proxy
+  proxy: integration.velocity
+  dns: integration.cloudflare-dns   # only needed for hostname backends
+  backends:
+    - id: paper-main
+      address_mode: hostname
+      hostname: paper-main.backends.example.com
+      port: 25565
+```
+
+The older `adapters.integration` field is still accepted. If it is set together with `network.proxy`, they must name the same adapter. The validator checks these settings; the controller runtime does not use them yet.
+
 Environments are `production`, `staging`, or `testing`. Production declares `production_backup_access: read_write`; staging and testing may declare `none` or `read_only`, never `read_write`. The validator checks these policy declarations but does not enforce access at the storage service. A server must list verified backup and operator approval as destroy prerequisites. The validator checks an optional idle-shutdown duration but does not schedule it.
 
 Each server may define `lifecycle.backups.schedule` and `lifecycle.backups.retention`. The defaults are every 9 hours and keep the newest five verified backups. Schedule units are `minutes`, `hours`, `days`, `weeks`, `months`, or `years`; month and year intervals use calendar units, anchored to the original schedule date. If a month lacks that day, the occurrence uses that month's last day and later occurrences return to the original day. Set `keep_last: 0` to retain backups indefinitely. The configuration validator checks this policy, but scheduled execution and retention cleanup are not wired into a controller runtime yet. Cleanup must run only after a new backup is verified and must use the normal exact-object authorization and retention checks.

@@ -104,7 +104,7 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - Route lobby players only after the backend passes readiness checks.
 - For games without a proxy, add the optional lobby wake and managed DNS handoff described in [the design](NO_PROXY_DNS_HANDOFF.md); players reconnect after readiness.
 - Implement the Cloudflare DNS integration adapter (`integration.cloudflare-dns`) for the protocol's `integration.dns.record.*` capabilities: direct-join records for games without a proxy, and optional per-backend hostnames that follow instance IP changes for proxied servers.
-- Add a per-server network profile to the local configuration (join mode, proxy and DNS adapters, backend address mode and hostname) and reject planning when a required integration capability is missing.
+- Reject planning when a server's network profile requires an integration capability that no registered adapter advertises. The local configuration already validates the per-server `network` block (join mode, proxy and DNS adapters, backend address mode and hostname); the runtime does not use it yet.
 - Record provision-to-Paper-ready duration locally for estimates and an advisory progress bar; offer separate owner-enabled sharing of boot-time averages to the hosted lobby/DNS service, with extra rejoin buffer and no provider credentials exposed.
 - Detect when the backend is idle.
 - Stop Paper, back up and verify the world, then destroy the VM.
