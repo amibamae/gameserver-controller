@@ -107,6 +107,8 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Go conformance validates both schemas, request/result target, cohort, and backend binding, the exact unique session set, and aggregate counts.
 - A partial transfer remains visible as a partial result rather than being reported as full success.
 - An `outcome_unknown` session is inspected at the proxy before a retry is attempted.
+- A proxy routes new connections on its own only to a backend registered and routable for the exact instance, stops when the backend drains, unregisters, or fails its health check, and never makes an unregistered backend routable.
+- Waiting-cohort membership is usable only when bound to the requested proxy instance and cohort, fresh for the requested maximum age, not future-dated, within `maximum_sessions`, and consistent with `session_count` and `truncated`. Membership never authorizes a transfer by itself. Go vectors cover freshness, future timestamps, target mismatch, truncation consistency, oversized lists, and unknown observations.
 - Transfer messages and logs do not require or expose player UUIDs, account names, IP addresses, or chat.
 - Go vectors use synthetic canaries in requests, protocol-error messages/details, and diagnostic logs; schema-valid leaks still fail the privacy case.
 
@@ -227,6 +229,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [velocity-transfer-context-mismatch.json](test-vectors/velocity-transfer-context-mismatch.json)
 - [velocity-transfer-duplicate-session-result.json](test-vectors/velocity-transfer-duplicate-session-result.json)
 - [velocity-transfer-target-mismatch.json](test-vectors/velocity-transfer-target-mismatch.json)
+- [proxy-cohort-inspect-binding-and-freshness.json](test-vectors/proxy-cohort-inspect-binding-and-freshness.json)
 - [storage-partial-upload-not-verified.json](test-vectors/storage-partial-upload-not-verified.json)
 - [storage-checksum-mismatch-blocks-restore.json](test-vectors/storage-checksum-mismatch-blocks-restore.json)
 - [storage-etag-is-not-checksum.json](test-vectors/storage-etag-is-not-checksum.json)

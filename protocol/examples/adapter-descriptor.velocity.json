@@ -65,6 +65,16 @@
       ]
     },
     {
+      "name": "integration.proxy.cohort.inspect",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-cohort-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-cohort-inspect-output",
+      "required_permissions": [
+        "proxy.session.inspect"
+      ]
+    },
+    {
       "name": "integration.proxy.session.inspect",
       "version": "1",
       "mutating": false,

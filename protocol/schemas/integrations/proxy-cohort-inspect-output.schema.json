@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-cohort-inspect-output",
+  "title": "Proxy waiting cohort inspect output",
+  "description": "Observed membership of one waiting cohort on an exact proxy instance. Membership is a selection hint; transfer still verifies each session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "proxy_instance_ref",
+    "waiting_cohort_id",
+    "observation_state"
+  ],
+  "properties": {
+    "proxy_instance_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
+    "waiting_cohort_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "observation_state": {
+      "enum": [
+        "observed",
+        "unknown"
+      ]
+    },
+    "session_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "player_session_ids": {
+      "type": "array",
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      }
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "observation_state": {
+            "const": "observed"
+          }
+        },
+        "required": [
+          "observation_state"
+        ]
+      },
+      "then": {
+        "required": [
+          "session_count",
+          "player_session_ids",
+          "truncated",
+          "observed_at"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "observation_state": {
+            "const": "unknown"
+          }
+        },
+        "required": [
+          "observation_state"
+        ]
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "session_count"
+              ]
+            },
+            {
+              "required": [
+                "player_session_ids"
+              ]
+            },
+            {
+              "required": [
+                "truncated"
+              ]
+            },
+            {
+              "required": [
+                "observed_at"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

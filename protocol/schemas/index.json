@@ -379,6 +379,14 @@
       "id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-output"
     },
     {
+      "path": "integrations/proxy-cohort-inspect-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-cohort-inspect-input"
+    },
+    {
+      "path": "integrations/proxy-cohort-inspect-output.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-cohort-inspect-output"
+    },
+    {
       "path": "integrations/proxy-session-inspect-input.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-session-inspect-input"
     },

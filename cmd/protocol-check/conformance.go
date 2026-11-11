@@ -76,6 +76,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return evaluateProxyBackendInspect(pkg, fixture)
 	case "integration.proxy.players.inspect.fresh-count-and-target-binding":
 		return evaluateProxyBackendPlayersInspect(pkg, fixture)
+	case "integration.proxy.cohort.inspect.binding-and-freshness":
+		return evaluateProxyCohortInspect(pkg, fixture)
 	case "game.configure.pinned-schema-and-result-binding":
 		return evaluateConfiguration(pkg, fixture)
 	case "lifecycle.reject.unlisted-transition":

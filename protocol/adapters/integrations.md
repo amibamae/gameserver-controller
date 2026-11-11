@@ -15,6 +15,7 @@ Integration adapters connect the controller to proxies, monitoring, notification
 | `integration.proxy.backend.drain` | Stop new sessions/players reaching a backend |
 | `integration.proxy.backend.unregister` | Remove a backend from routing |
 | `integration.proxy.backend.players.inspect` | Inspect active player/session count where supported |
+| `integration.proxy.cohort.inspect` | List the opaque sessions waiting in one proxy-defined waiting cohort |
 | `integration.proxy.session.inspect` | Inspect one proxy-scoped session's connection state and current backend |
 | `integration.velocity.players.transfer` | Transfer an explicit waiting cohort to one confirmed-ready Velocity backend |
 | `integration.monitoring.event.publish` | Publish an allowed operational event |
@@ -36,6 +37,18 @@ The core determines which server may be routed. The proxy adapter performs the r
 An inspect result permits routing only when it matches the requested backend and instance, the instance belongs to the requested environment, and the result says `registered` and `routable`. A draining or unregistered backend cannot be routable; unknown state never permits routing.
 
 The `integration.proxy.backend.players.inspect` capability reports only a count for the exact requested backend and instance. The request sets `maximum_age_seconds`. An `observed` result includes both `active_session_count` and `observed_at`; an `unknown` result includes neither. The core may use a count only when the response target matches the request, the timestamp is not in the future, and the timestamp is no older than the requested maximum age at evaluation time. Unknown, stale, future-dated, incomplete, or mismatched observations cannot prove zero sessions or confirm drain completion. Counts and diagnostics MUST NOT include player identities or session identifiers.
+
+### 3.1 Join routing and fallback
+
+Registration is the core's routing permission. A proxy MAY send new connections to a backend on its own, for example as the default destination for players who join, only while that backend is registered and routable for the exact instance the core registered. The proxy MUST stop sending new connections to a backend as soon as it is draining, unregistered, or failing the proxy's own health check, and MUST NOT make a backend routable that the core has not registered. A proxy health check can only remove routability; it never grants it. Join-routing preferences (which registered backends new players prefer, and per-hostname preferences) are proxy configuration owned by the operator, not protocol messages.
+
+A proxy MAY send a player to a configured fallback backend (normally an always-on lobby) when no preferred backend is routable, or when the player's backend fails. The fallback MUST be a backend the operator configured, not a backend inferred from player activity.
+
+### 3.2 Waiting cohorts
+
+A proxy MAY place players who are waiting for a backend into a proxy-defined waiting cohort, such as everyone sent to the fallback because the preferred backend was unavailable. The `integration.proxy.cohort.inspect` capability lists the opaque session IDs in one cohort on an exact proxy instance; its contracts are [proxy-cohort-inspect-input](../schemas/integrations/proxy-cohort-inspect-input.schema.json) and [proxy-cohort-inspect-output](../schemas/integrations/proxy-cohort-inspect-output.schema.json).
+
+The request names the proxy instance, the cohort, `maximum_sessions`, and `maximum_observation_age_seconds`. An `observed` result includes `session_count` (the total), `player_session_ids` (at most `maximum_sessions` unique IDs), `truncated`, and `observed_at`; an `unknown` result includes none of them. The core may use a membership list only when the response names the requested proxy instance and cohort, the timestamp is not in the future and is within the requested maximum age, the list is no longer than `maximum_sessions` or `session_count`, and `truncated` is true exactly when the list is shorter than `session_count`. Membership is a selection hint: it never authorizes a transfer by itself, and the transfer capability still verifies each session's cohort and source backend at the proxy. Results contain opaque proxy-scoped session IDs only, never player names, account UUIDs, or IP addresses.
 
 ## 4. Velocity player transfer
 

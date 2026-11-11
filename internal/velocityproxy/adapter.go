@@ -126,6 +126,8 @@ type Bridge interface {
 	// TransferSession moves one connected session to the destination backend
 	// and returns nil only after the proxy confirms the connection.
 	TransferSession(ctx context.Context, sessionID, destinationBackendID string) error
+	// WaitingCohort lists every session currently in one waiting cohort.
+	WaitingCohort(ctx context.Context, cohortID string) ([]string, time.Time, error)
 }
 
 // AddressResolver returns the current host:port address the proxy should use
@@ -205,6 +207,7 @@ func (a *Adapter) Descriptor() adapter.Descriptor {
 			capability("integration.proxy.backend.players.inspect", "proxy-backend-players-inspect", false, permissionBackendManage),
 			capability("integration.proxy.backend.register", "proxy-backend-register", true, permissionBackendManage),
 			capability("integration.proxy.backend.unregister", "proxy-backend-unregister", true, permissionBackendManage),
+			capability("integration.proxy.cohort.inspect", "proxy-cohort-inspect", false, permissionSessionInspect),
 			capability("integration.proxy.session.inspect", "proxy-session-inspect", false, permissionSessionInspect),
 			transfer,
 		},
@@ -236,6 +239,8 @@ func (a *Adapter) Invoke(ctx context.Context, request adapter.InvokeRequest) (ad
 		output, outcome, err = a.inspectPlayers(ctx, input)
 	case "integration.proxy.session.inspect":
 		output, outcome, err = a.inspectSession(ctx, input)
+	case "integration.proxy.cohort.inspect":
+		output, outcome, err = a.inspectCohort(ctx, input)
 	case "integration.velocity.players.transfer":
 		output, outcome, err = a.transferPlayers(ctx, input)
 	default:
@@ -541,4 +546,54 @@ func sameStrings(a, b []string) bool {
 		seen[value]--
 	}
 	return true
+}
+
+type cohortInput struct {
+	ProxyInstanceRef             ResourceRef `json:"proxy_instance_ref"`
+	WaitingCohortID              string      `json:"waiting_cohort_id"`
+	MaximumSessions              int         `json:"maximum_sessions"`
+	MaximumObservationAgeSeconds int         `json:"maximum_observation_age_seconds"`
+}
+
+type cohortOutput struct {
+	ProxyInstanceRef ResourceRef `json:"proxy_instance_ref"`
+	WaitingCohortID  string      `json:"waiting_cohort_id"`
+	ObservationState string      `json:"observation_state"`
+	SessionCount     *int        `json:"session_count,omitempty"`
+	PlayerSessionIDs *[]string   `json:"player_session_ids,omitempty"`
+	Truncated        *bool       `json:"truncated,omitempty"`
+	ObservedAt       *time.Time  `json:"observed_at,omitempty"`
+}
+
+func (a *Adapter) inspectCohort(ctx context.Context, raw json.RawMessage) (any, adapter.Outcome, error) {
+	var input cohortInput
+	if err := decode(raw, &input); err != nil {
+		return nil, "", err
+	}
+	if input.ProxyInstanceRef != a.config.ProxyInstanceRef {
+		return nil, "", errors.New("cohort inspection targets a different proxy instance")
+	}
+	unknown := cohortOutput{ProxyInstanceRef: input.ProxyInstanceRef, WaitingCohortID: input.WaitingCohortID, ObservationState: "unknown"}
+	ids, observedAt, err := a.bridge.WaitingCohort(ctx, input.WaitingCohortID)
+	if err != nil || !a.fresh(observedAt, input.MaximumObservationAgeSeconds) || input.MaximumSessions < 1 {
+		return unknown, adapter.OutcomeCompleted, nil
+	}
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id == "" || len(id) > 200 || seen[id] {
+			return unknown, adapter.OutcomeCompleted, nil
+		}
+		seen[id] = true
+	}
+	count := len(ids)
+	listed := ids
+	if len(listed) > input.MaximumSessions {
+		listed = listed[:input.MaximumSessions]
+	}
+	truncated := len(listed) < count
+	at := observedAt.UTC()
+	listedCopy := append([]string{}, listed...)
+	output := cohortOutput{ProxyInstanceRef: input.ProxyInstanceRef, WaitingCohortID: input.WaitingCohortID, ObservationState: "observed",
+		SessionCount: &count, PlayerSessionIDs: &listedCopy, Truncated: &truncated, ObservedAt: &at}
+	return output, adapter.OutcomeCompleted, nil
 }

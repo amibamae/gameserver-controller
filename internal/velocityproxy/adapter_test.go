@@ -26,12 +26,15 @@ var (
 
 // fakeBridge is an in-memory Velocity proxy.
 type fakeBridge struct {
-	backends      map[string]BackendObservation
-	sessions      map[string]SessionObservation
-	inspectErr    error
-	actionErr     error
-	transferErrs  map[string]error
-	actionApplies bool
+	backends         map[string]BackendObservation
+	sessions         map[string]SessionObservation
+	inspectErr       error
+	actionErr        error
+	transferErrs     map[string]error
+	actionApplies    bool
+	cohorts          map[string][]string
+	cohortObservedAt time.Time
+	cohortErr        error
 	// registeredAddress is the address passed to the last register call.
 	registeredAddress string
 	actions           []string
@@ -39,7 +42,7 @@ type fakeBridge struct {
 }
 
 func newFakeBridge() *fakeBridge {
-	return &fakeBridge{backends: map[string]BackendObservation{}, sessions: map[string]SessionObservation{}, transferErrs: map[string]error{}, actionApplies: true}
+	return &fakeBridge{backends: map[string]BackendObservation{}, sessions: map[string]SessionObservation{}, transferErrs: map[string]error{}, cohorts: map[string][]string{}, actionApplies: true}
 }
 
 func (b *fakeBridge) InspectBackend(_ context.Context, backendID string) (BackendObservation, error) {
@@ -83,6 +86,17 @@ func (b *fakeBridge) InspectSession(_ context.Context, id string) (SessionObserv
 		return observed, nil
 	}
 	return SessionObservation{State: Disconnected, ObservedAt: testNow}, nil
+}
+
+func (b *fakeBridge) WaitingCohort(_ context.Context, cohortID string) ([]string, time.Time, error) {
+	if b.cohortErr != nil {
+		return nil, time.Time{}, b.cohortErr
+	}
+	at := b.cohortObservedAt
+	if at.IsZero() {
+		at = testNow
+	}
+	return append([]string(nil), b.cohorts[cohortID]...), at, nil
 }
 
 func (b *fakeBridge) TransferSession(_ context.Context, id, destination string) error {
@@ -660,5 +674,42 @@ func TestConfiguredAddresses(t *testing.T) {
 	}
 	if !sameAddress("PAPER.example.com.:25565", "paper.example.com:25565") || sameAddress("203.0.113.1:25565", "203.0.113.1:25566") || !sameAddress("[::ffff:203.0.113.1]:25565", "203.0.113.1:25565") {
 		t.Error("sameAddress comparison is wrong")
+	}
+}
+
+func TestCohortInspect(t *testing.T) {
+	input := cohortInput{ProxyInstanceRef: proxyInstance, WaitingCohortID: "waiting-paper-main", MaximumSessions: 2, MaximumObservationAgeSeconds: 10}
+
+	h := newHarness(t)
+	h.bridge.cohorts["waiting-paper-main"] = []string{"s-1", "s-2", "s-3"}
+	_, output := h.mustInvoke("integration.proxy.cohort.inspect", input)
+	if output["observation_state"] != "observed" || output["session_count"] != float64(3) || output["truncated"] != true || len(output["player_session_ids"].([]any)) != 2 {
+		t.Fatalf("truncated cohort = %v", output)
+	}
+
+	h.bridge.cohorts["waiting-paper-main"] = nil
+	_, output = h.mustInvoke("integration.proxy.cohort.inspect", input)
+	if output["observation_state"] != "observed" || output["session_count"] != float64(0) || output["truncated"] != false || len(output["player_session_ids"].([]any)) != 0 {
+		t.Fatalf("empty cohort = %v", output)
+	}
+
+	for name, mutate := range map[string]func(*fakeBridge){
+		"stale":       func(b *fakeBridge) { b.cohortObservedAt = testNow.Add(-11 * time.Second) },
+		"future":      func(b *fakeBridge) { b.cohortObservedAt = testNow.Add(time.Second) },
+		"unreachable": func(b *fakeBridge) { b.cohortErr = errors.New("down") },
+		"duplicates":  func(b *fakeBridge) { b.cohorts["waiting-paper-main"] = []string{"s-1", "s-1"} },
+	} {
+		h := newHarness(t)
+		h.bridge.cohorts["waiting-paper-main"] = []string{"s-1"}
+		mutate(h.bridge)
+		_, output := h.mustInvoke("integration.proxy.cohort.inspect", input)
+		if output["observation_state"] != "unknown" || len(output) != 3 {
+			t.Errorf("%s: %v", name, output)
+		}
+	}
+
+	input.ProxyInstanceRef.ExternalID = "velocity-edge-002"
+	if _, _, err := h.invoke("integration.proxy.cohort.inspect", input); err == nil {
+		t.Fatal("cohort inspect for another proxy instance was accepted")
 	}
 }
