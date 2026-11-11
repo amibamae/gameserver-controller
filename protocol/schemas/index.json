@@ -111,6 +111,10 @@
       "id": "urn:gameserver-controller:0.21.0-draft:game:backup-capture-output"
     },
     {
+      "path": "game/artifact-verification.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:game:artifact-verification"
+    },
+    {
       "path": "game/backup-prepare-input.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:game:backup-prepare-input"
     },

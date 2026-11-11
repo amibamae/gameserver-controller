@@ -1964,15 +1964,16 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		bound := reflect.DeepEqual(installInput["target"], installOutput["target"]) &&
 			stringValue(installInput, "release_id") == stringValue(installOutput, "release_id") &&
 			stringValue(installInput, "release_id") == stringValue(input, "release_id")
-		requiredArtifacts := arrayValue(input, "required_artifact_ids")
-		verifiedArtifacts := arrayValue(installOutput, "verified_artifact_ids")
-		complete := uniqueStrings(requiredArtifacts) && uniqueStrings(verifiedArtifacts) && sameStringSet(requiredArtifacts, verifiedArtifacts)
+		requiredArtifacts := arrayValue(input, "required_artifacts")
+		artifactResults := arrayValue(installOutput, "artifact_results")
+		complete, checksumsVerified := compareArtifactVerifications(requiredArtifacts, artifactResults)
 		outcome, verification := stringValue(installOutput, "outcome"), stringValue(installOutput, "artifact_verification")
 		started := boolValue(installOutput, "installation_started")
 		outcomeConsistent := outcome == "installed" && started || outcome == "already_installed" && !started
-		accepted := bound && complete && verification == "verified" && outcomeConsistent
+		accepted := bound && complete && checksumsVerified && verification == "verified" && outcomeConsistent
 		return map[string]any{
 			"schema_valid": true, "target_bound": bound, "artifact_set_complete": complete,
+			"artifact_checksums_verified":       checksumsVerified,
 			"installation_result_accepted":      accepted,
 			"duplicate_install_started":         outcome == "already_installed" && started,
 			"operation_reconciliation_required": started && !accepted,

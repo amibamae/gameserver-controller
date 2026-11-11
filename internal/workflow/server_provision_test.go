@@ -567,7 +567,7 @@ func TestServerProvisionRunsDurablePlanAndProjectsReady(t *testing.T) {
 		t.Fatal(err)
 	}
 	target, _ := json.Marshal(map[string]any{"server_id": provisionTestServer, "environment_id": provisionTestEnv, "instance_ref": instance})
-	install, _ := json.Marshal(map[string]any{"target": json.RawMessage(target), "release_id": "paper-test-1", "outcome": "installed", "artifact_verification": "verified", "installation_started": true, "verified_artifact_ids": []string{"paper-server"}, "observed_at": observedAt})
+	install, _ := json.Marshal(map[string]any{"target": json.RawMessage(target), "release_id": "paper-test-1", "outcome": "installed", "artifact_verification": "verified", "installation_started": true, "artifact_results": []any{map[string]any{"artifact_id": "server-jar", "result": "verified", "expected_checksum": map[string]any{"algorithm": "sha256", "digest": strings.Repeat("a", 64)}, "observed_checksum": map[string]any{"algorithm": "sha256", "digest": strings.Repeat("a", 64)}}}, "observed_at": observedAt})
 	if err := f.game.SetScript("game.install", fakeadapter.Reply{Outcome: adapter.OutcomeCompleted, Output: install, ObservedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}

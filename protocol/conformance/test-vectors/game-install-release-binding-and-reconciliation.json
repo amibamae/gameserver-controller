@@ -85,17 +85,39 @@
           "outcome": "installed",
           "artifact_verification": "verified",
           "installation_started": true,
-          "verified_artifact_ids": [
-            "paper-server-jar",
-            "paper-plugin"
-          ],
           "installation_ref": {
             "adapter_id": "execution.systemd",
             "environment_id": "staging",
             "resource_kind": "installation",
             "external_id": "paper-install-001"
           },
-          "observed_at": "2026-11-07T18:00:00Z"
+          "observed_at": "2026-11-07T18:00:00Z",
+          "artifact_results": [
+            {
+              "artifact_id": "paper-server-jar",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            },
+            {
+              "artifact_id": "paper-plugin",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          ]
         }
       },
       {
@@ -128,17 +150,39 @@
           "outcome": "already_installed",
           "artifact_verification": "verified",
           "installation_started": false,
-          "verified_artifact_ids": [
-            "paper-server-jar",
-            "paper-plugin"
-          ],
           "installation_ref": {
             "adapter_id": "execution.systemd",
             "environment_id": "staging",
             "resource_kind": "installation",
             "external_id": "paper-install-001"
           },
-          "observed_at": "2026-11-07T18:00:00Z"
+          "observed_at": "2026-11-07T18:00:00Z",
+          "artifact_results": [
+            {
+              "artifact_id": "paper-server-jar",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            },
+            {
+              "artifact_id": "paper-plugin",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          ]
         }
       },
       {
@@ -171,16 +215,27 @@
           "outcome": "installed",
           "artifact_verification": "verified",
           "installation_started": true,
-          "verified_artifact_ids": [
-            "paper-server-jar"
-          ],
           "installation_ref": {
             "adapter_id": "execution.systemd",
             "environment_id": "staging",
             "resource_kind": "installation",
             "external_id": "paper-install-001"
           },
-          "observed_at": "2026-11-07T18:00:00Z"
+          "observed_at": "2026-11-07T18:00:00Z",
+          "artifact_results": [
+            {
+              "artifact_id": "paper-server-jar",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            }
+          ]
         }
       },
       {
@@ -213,18 +268,51 @@
           "outcome": "installed",
           "artifact_verification": "verified",
           "installation_started": true,
-          "verified_artifact_ids": [
-            "paper-server-jar",
-            "paper-plugin",
-            "unexpected-plugin"
-          ],
           "installation_ref": {
             "adapter_id": "execution.systemd",
             "environment_id": "staging",
             "resource_kind": "installation",
             "external_id": "paper-install-001"
           },
-          "observed_at": "2026-11-07T18:00:00Z"
+          "observed_at": "2026-11-07T18:00:00Z",
+          "artifact_results": [
+            {
+              "artifact_id": "paper-server-jar",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            },
+            {
+              "artifact_id": "paper-plugin",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            },
+            {
+              "artifact_id": "unexpected-plugin",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              }
+            }
+          ]
         }
       },
       {
@@ -257,17 +345,39 @@
           "outcome": "installed",
           "artifact_verification": "verified",
           "installation_started": true,
-          "verified_artifact_ids": [
-            "paper-server-jar",
-            "paper-plugin"
-          ],
           "installation_ref": {
             "adapter_id": "execution.systemd",
             "environment_id": "staging",
             "resource_kind": "installation",
             "external_id": "paper-install-001"
           },
-          "observed_at": "2026-11-07T18:00:00Z"
+          "observed_at": "2026-11-07T18:00:00Z",
+          "artifact_results": [
+            {
+              "artifact_id": "paper-server-jar",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            },
+            {
+              "artifact_id": "paper-plugin",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          ]
         }
       },
       {
@@ -300,17 +410,39 @@
           "outcome": "installed",
           "artifact_verification": "verified",
           "installation_started": true,
-          "verified_artifact_ids": [
-            "paper-server-jar",
-            "paper-plugin"
-          ],
           "installation_ref": {
             "adapter_id": "execution.systemd",
             "environment_id": "staging",
             "resource_kind": "installation",
             "external_id": "paper-install-001"
           },
-          "observed_at": "2026-11-07T18:00:00Z"
+          "observed_at": "2026-11-07T18:00:00Z",
+          "artifact_results": [
+            {
+              "artifact_id": "paper-server-jar",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            },
+            {
+              "artifact_id": "paper-plugin",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          ]
         }
       },
       {
@@ -343,8 +475,8 @@
           "outcome": "outcome_unknown",
           "artifact_verification": "unknown",
           "installation_started": false,
-          "verified_artifact_ids": [],
-          "observed_at": "2026-11-07T18:00:00Z"
+          "observed_at": "2026-11-07T18:00:00Z",
+          "artifact_results": []
         }
       },
       {
@@ -377,8 +509,151 @@
           "outcome": "rejected",
           "artifact_verification": "mismatch",
           "installation_started": false,
-          "verified_artifact_ids": [],
-          "observed_at": "2026-11-07T18:00:00Z"
+          "observed_at": "2026-11-07T18:00:00Z",
+          "artifact_results": [
+            {
+              "artifact_id": "paper-server-jar",
+              "result": "mismatch",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "case_id": "installed-claimed-verified-with-wrong-observed-checksum",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "release_id": "paper-1.21.11-build-3"
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "release_id": "paper-1.21.11-build-3",
+          "outcome": "installed",
+          "artifact_verification": "verified",
+          "installation_started": true,
+          "installation_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "installation",
+            "external_id": "paper-install-001"
+          },
+          "observed_at": "2026-11-07T18:00:00Z",
+          "artifact_results": [
+            {
+              "artifact_id": "paper-server-jar",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+              }
+            },
+            {
+              "artifact_id": "paper-plugin",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "case_id": "installed-claimed-verified-with-substituted-checksum",
+        "request": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "release_id": "paper-1.21.11-build-3"
+        },
+        "response": {
+          "target": {
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-test-001"
+            }
+          },
+          "release_id": "paper-1.21.11-build-3",
+          "outcome": "installed",
+          "artifact_verification": "verified",
+          "installation_started": true,
+          "installation_ref": {
+            "adapter_id": "execution.systemd",
+            "environment_id": "staging",
+            "resource_kind": "installation",
+            "external_id": "paper-install-001"
+          },
+          "observed_at": "2026-11-07T18:00:00Z",
+          "artifact_results": [
+            {
+              "artifact_id": "paper-server-jar",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              }
+            },
+            {
+              "artifact_id": "paper-plugin",
+              "result": "verified",
+              "expected_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              },
+              "observed_checksum": {
+                "algorithm": "sha256",
+                "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          ]
         }
       }
     ]
@@ -394,7 +669,8 @@
         "release_bound": true,
         "artifact_set_complete": true,
         "installation_result_accepted": true,
-        "reconciliation_required_before_retry": false
+        "reconciliation_required_before_retry": false,
+        "artifact_checksums_verified": true
       },
       {
         "case_id": "already-installed-without-restarting-work",
@@ -405,7 +681,8 @@
         "release_bound": true,
         "artifact_set_complete": true,
         "installation_result_accepted": true,
-        "reconciliation_required_before_retry": false
+        "reconciliation_required_before_retry": false,
+        "artifact_checksums_verified": true
       },
       {
         "case_id": "started-install-missing-pinned-artifact",
@@ -416,7 +693,8 @@
         "release_bound": true,
         "artifact_set_complete": false,
         "installation_result_accepted": false,
-        "reconciliation_required_before_retry": true
+        "reconciliation_required_before_retry": true,
+        "artifact_checksums_verified": false
       },
       {
         "case_id": "started-install-reports-unpinned-artifact",
@@ -427,7 +705,8 @@
         "release_bound": true,
         "artifact_set_complete": false,
         "installation_result_accepted": false,
-        "reconciliation_required_before_retry": true
+        "reconciliation_required_before_retry": true,
+        "artifact_checksums_verified": false
       },
       {
         "case_id": "response-release-mismatch-requires-reconciliation",
@@ -438,7 +717,8 @@
         "release_bound": false,
         "artifact_set_complete": true,
         "installation_result_accepted": false,
-        "reconciliation_required_before_retry": true
+        "reconciliation_required_before_retry": true,
+        "artifact_checksums_verified": true
       },
       {
         "case_id": "response-target-mismatch-requires-reconciliation",
@@ -449,7 +729,8 @@
         "release_bound": true,
         "artifact_set_complete": true,
         "installation_result_accepted": false,
-        "reconciliation_required_before_retry": true
+        "reconciliation_required_before_retry": true,
+        "artifact_checksums_verified": true
       },
       {
         "case_id": "unknown-outcome-requires-reconciliation-without-start-claim",
@@ -460,7 +741,8 @@
         "release_bound": true,
         "artifact_set_complete": false,
         "installation_result_accepted": false,
-        "reconciliation_required_before_retry": true
+        "reconciliation_required_before_retry": true,
+        "artifact_checksums_verified": false
       },
       {
         "case_id": "checksum-mismatch-rejected-before-installation",
@@ -471,7 +753,32 @@
         "release_bound": true,
         "artifact_set_complete": false,
         "installation_result_accepted": false,
-        "reconciliation_required_before_retry": false
+        "reconciliation_required_before_retry": false,
+        "artifact_checksums_verified": false
+      },
+      {
+        "case_id": "installed-claimed-verified-with-wrong-observed-checksum",
+        "release_schema_valid": true,
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "release_bound": true,
+        "artifact_set_complete": true,
+        "artifact_checksums_verified": false,
+        "installation_result_accepted": false,
+        "reconciliation_required_before_retry": true
+      },
+      {
+        "case_id": "installed-claimed-verified-with-substituted-checksum",
+        "release_schema_valid": true,
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "release_bound": true,
+        "artifact_set_complete": true,
+        "artifact_checksums_verified": false,
+        "installation_result_accepted": false,
+        "reconciliation_required_before_retry": true
       }
     ]
   },

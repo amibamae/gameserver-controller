@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:gameserver-controller:0.21.0-draft:game:install-output",
   "title": "Game install output",
-  "description": "Confirmed installation outcome for the exact release; successful outcomes list every verified release artifact.",
+  "description": "Installation outcome for the exact release. Each artifact result reports the checksum pinned by the release and the observed checksum.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,7 +11,7 @@
     "outcome",
     "artifact_verification",
     "installation_started",
-    "verified_artifact_ids",
+    "artifact_results",
     "observed_at"
   ],
   "properties": {
@@ -42,13 +42,11 @@
     "installation_started": {
       "type": "boolean"
     },
-    "verified_artifact_ids": {
+    "artifact_results": {
       "type": "array",
-      "uniqueItems": true,
+      "maxItems": 256,
       "items": {
-        "type": "string",
-        "minLength": 1,
-        "maxLength": 160
+        "$ref": "urn:gameserver-controller:0.21.0-draft:game:artifact-verification"
       }
     },
     "installation_ref": {
@@ -84,6 +82,9 @@
           },
           "installation_started": {
             "const": true
+          },
+          "artifact_results": {
+            "minItems": 1
           }
         }
       }
@@ -106,6 +107,9 @@
           },
           "installation_started": {
             "const": false
+          },
+          "artifact_results": {
+            "minItems": 1
           }
         }
       }
@@ -128,6 +132,19 @@
           },
           "installation_started": {
             "const": false
+          },
+          "artifact_results": {
+            "contains": {
+              "properties": {
+                "result": {
+                  "const": "mismatch"
+                }
+              },
+              "required": [
+                "result"
+              ]
+            },
+            "minContains": 1
           }
         }
       }
@@ -145,8 +162,17 @@
       },
       "then": {
         "properties": {
-          "verified_artifact_ids": {
-            "minItems": 1
+          "artifact_results": {
+            "items": {
+              "properties": {
+                "result": {
+                  "const": "verified"
+                }
+              },
+              "required": [
+                "result"
+              ]
+            }
           }
         }
       }
@@ -164,8 +190,17 @@
       },
       "then": {
         "properties": {
-          "verified_artifact_ids": {
-            "minItems": 1
+          "artifact_results": {
+            "items": {
+              "properties": {
+                "result": {
+                  "const": "verified"
+                }
+              },
+              "required": [
+                "result"
+              ]
+            }
           }
         }
       }
