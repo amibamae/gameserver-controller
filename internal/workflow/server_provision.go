@@ -690,11 +690,11 @@ func provisionInstallSucceeded(operation store.OperationRecord) bool {
 			EnvironmentID string          `json:"environment_id"`
 			InstanceRef   json.RawMessage `json:"instance_ref"`
 		} `json:"target"`
-		ReleaseID    string   `json:"release_id"`
-		Outcome      string   `json:"outcome"`
-		Verification string   `json:"artifact_verification"`
-		Started      bool     `json:"installation_started"`
-		Verified     []string `json:"verified_artifact_ids"`
+		ReleaseID       string                  `json:"release_id"`
+		Outcome         string                  `json:"outcome"`
+		Verification    string                  `json:"artifact_verification"`
+		Started         bool                    `json:"installation_started"`
+		ArtifactResults []installArtifactResult `json:"artifact_results"`
 	}
 	step := operationStep(operation, provisionInstallStep)
 	created, err := provisionCreateStepOutput(operation)
@@ -706,8 +706,28 @@ func provisionInstallSucceeded(operation store.OperationRecord) bool {
 		ReleaseID string `json:"release_id"`
 	}
 	return err == nil && step.Status == protocolstate.StepSucceeded && json.Unmarshal(step.Output, &out) == nil && json.Unmarshal(step.ResolvedInput, &expected) == nil &&
-		(out.Outcome == "installed" || out.Outcome == "already_installed") && out.Verification == "verified" && len(out.Verified) > 0 &&
+		(out.Outcome == "installed" || out.Outcome == "already_installed") && out.Verification == "verified" && installArtifactsVerified(out.ArtifactResults) &&
 		out.ReleaseID == expected.ReleaseID && out.Target.ServerID == expected.Target.ServerID && out.Target.EnvironmentID == expected.Target.EnvironmentID && equalJSON(out.Target.InstanceRef, created.InstanceRef)
+}
+
+type installArtifactResult struct {
+	ArtifactID string          `json:"artifact_id"`
+	Result     string          `json:"result"`
+	Expected   json.RawMessage `json:"expected_checksum"`
+	Observed   json.RawMessage `json:"observed_checksum"`
+}
+
+// installArtifactsVerified requires at least one artifact result, each verified with matching pinned and observed checksums.
+func installArtifactsVerified(results []installArtifactResult) bool {
+	if len(results) == 0 {
+		return false
+	}
+	for _, item := range results {
+		if item.ArtifactID == "" || item.Result != "verified" || len(item.Expected) == 0 || !equalJSON(item.Expected, item.Observed) {
+			return false
+		}
+	}
+	return true
 }
 func provisionUnitCreated(operation store.OperationRecord) bool {
 	var out struct {

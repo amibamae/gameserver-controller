@@ -766,8 +766,7 @@
         "artifact_set_complete": true,
         "artifact_checksums_verified": false,
         "installation_result_accepted": false,
-        "reconciliation_required_before_retry": true,
-        "release_schema_valid": true
+        "reconciliation_required_before_retry": true
       },
       {
         "case_id": "installed-claimed-verified-with-substituted-checksum",
@@ -779,8 +778,7 @@
         "artifact_set_complete": true,
         "artifact_checksums_verified": false,
         "installation_result_accepted": false,
-        "reconciliation_required_before_retry": true,
-        "release_schema_valid": true
+        "reconciliation_required_before_retry": true
       }
     ]
   },
