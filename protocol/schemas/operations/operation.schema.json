@@ -1098,6 +1098,167 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.define"
+          }
+        },
+        "required": [
+          "operation_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_type": {
+                "const": "server.define"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.provision"
+          }
+        },
+        "required": [
+          "operation_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_type": {
+                "const": "server.provision"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.start"
+          }
+        },
+        "required": [
+          "operation_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_type": {
+                "const": "server.start"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.stop"
+          }
+        },
+        "required": [
+          "operation_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_type": {
+                "const": "server.stop"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.backup"
+          }
+        },
+        "required": [
+          "operation_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_type": {
+                "const": "server.backup"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.restore"
+          }
+        },
+        "required": [
+          "operation_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_type": {
+                "const": "server.restore"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation_type": {
+            "const": "server.destroy"
+          }
+        },
+        "required": [
+          "operation_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "result": {
+            "properties": {
+              "operation_type": {
+                "const": "server.destroy"
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "description": "Read-only durable operation resource. Unknown optional properties MAY be added at this top level; nested objects remain closed."

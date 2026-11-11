@@ -70,7 +70,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 160,
-      "description": "Standard or namespaced operation whose terminal outcome this result records."
+      "description": "The enclosing standard or namespaced operation whose terminal outcome this result records. Every present result MUST carry the enclosing operation's exact operation_type, including partial results."
     },
     "operation_data": {
       "type": "object",
