@@ -10,7 +10,8 @@
     "integration.proxy.v1-draft"
   ],
   "required_permissions": [
-    "proxy.backend.manage"
+    "proxy.backend.manage",
+    "proxy.session.inspect"
   ],
   "capabilities": [
     {
@@ -61,6 +62,16 @@
       "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-output",
       "required_permissions": [
         "proxy.backend.manage"
+      ]
+    },
+    {
+      "name": "integration.proxy.session.inspect",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-session-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-session-inspect-output",
+      "required_permissions": [
+        "proxy.session.inspect"
       ]
     },
     {

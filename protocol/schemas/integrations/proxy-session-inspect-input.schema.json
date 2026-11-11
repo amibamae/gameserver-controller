@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-session-inspect-input",
+  "title": "Proxy session inspect input",
+  "description": "Inspect the current connection state and backend for one opaque session on an exact proxy instance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "proxy_instance_ref",
+    "proxy_session_id",
+    "maximum_observation_age_seconds"
+  ],
+  "properties": {
+    "proxy_instance_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
+    "proxy_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "maximum_observation_age_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 60
+    }
+  }
+}

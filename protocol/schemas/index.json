@@ -375,6 +375,14 @@
       "id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-output"
     },
     {
+      "path": "integrations/proxy-session-inspect-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-session-inspect-input"
+    },
+    {
+      "path": "integrations/proxy-session-inspect-output.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-session-inspect-output"
+    },
+    {
       "path": "integrations/velocity-player-transfer-request.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-request"
     },

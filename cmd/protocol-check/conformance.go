@@ -2129,6 +2129,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"error_code":           code,
 			"proxy_transfer_calls": calls,
 		}, nil
+	case "velocity-transfer-outcome-unknown-reconciliation":
+		return evaluateVelocityTransferUnknownReconciliation(pkg, fixture)
 	case "velocity-transfer-partial-results", "velocity-transfer-count-mismatch", "velocity-transfer-context-mismatch", "velocity-transfer-duplicate-session-result", "velocity-transfer-target-mismatch":
 		request := asObject(input["transfer_request"])
 		result := asObject(input["transfer_result"])
@@ -2546,6 +2548,115 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 	default:
 		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
 	}
+}
+
+func evaluateVelocityTransferUnknownReconciliation(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
+	input := asObject(fixture["input"])
+	request := asObject(input["transfer_request"])
+	result := asObject(input["transfer_result"])
+	transferState, err := evaluate(pkg, map[string]any{
+		"fixture_id": "velocity-transfer-partial-results",
+		"input": map[string]any{
+			"transfer_request": request,
+			"transfer_result":  result,
+			"validation_time":  input["transfer_validation_time"],
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	transferValid := boolValue(transferState, "result_valid_and_bound")
+	unknownSessions := make(map[string]bool)
+	for _, raw := range arrayValue(result, "results") {
+		item := asObject(raw)
+		if stringValue(item, "outcome") == "outcome_unknown" {
+			unknownSessions[stringValue(item, "proxy_session_id")] = true
+		}
+	}
+
+	caseResults := make([]any, 0, len(arrayValue(input, "reconciliation_cases")))
+	for _, rawCase := range arrayValue(input, "reconciliation_cases") {
+		reconciliation := asObject(rawCase)
+		inspectInput := asObject(reconciliation["inspection_request"])
+		inspectOutput := asObject(reconciliation["inspection_result"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-session-inspect-input", inspectInput); err != nil {
+			return nil, fmt.Errorf("session inspect request does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-session-inspect-output", inspectOutput); err != nil {
+			return nil, fmt.Errorf("session inspect result does not match schema: %w", err)
+		}
+		decisionTimeText := stringValue(reconciliation, "decision_time")
+		decisionTime, err := parseTime(decisionTimeText)
+		if err != nil {
+			return nil, err
+		}
+		observedAt, err := parseTime(stringValue(inspectOutput, "observed_at"))
+		if err != nil {
+			return nil, err
+		}
+		maximumAge, err := integerValue(inspectInput["maximum_observation_age_seconds"])
+		if err != nil {
+			return nil, err
+		}
+		age := decisionTime.Sub(observedAt)
+		fresh := age >= 0 && age <= time.Duration(maximumAge)*time.Second
+		proxyRef := asObject(inspectInput["proxy_instance_ref"])
+		sessionID := stringValue(inspectInput, "proxy_session_id")
+		bound := reflect.DeepEqual(inspectInput["proxy_instance_ref"], inspectOutput["proxy_instance_ref"]) &&
+			sessionID == stringValue(inspectOutput, "proxy_session_id") &&
+			unknownSessions[sessionID] &&
+			stringValue(proxyRef, "adapter_id") == "integration.velocity" &&
+			stringValue(proxyRef, "environment_id") == stringValue(request, "environment_id") &&
+			stringValue(proxyRef, "resource_kind") == "proxy-instance"
+
+		retryAssertion := asObject(reconciliation["retry_readiness_assertion"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:lifecycle:readiness-assertion", retryAssertion); err != nil {
+			return nil, fmt.Errorf("retry readiness assertion does not match schema: %w", err)
+		}
+		retryReadinessCurrent, err := readinessAssertionBindsAtCompletion(
+			retryAssertion,
+			decisionTimeText,
+			stringValue(request, "server_id"),
+			stringValue(request, "environment_id"),
+			request["expected_instance_ref"],
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		state := "unresolved"
+		if transferValid && bound && fresh {
+			switch stringValue(inspectOutput, "connection_state") {
+			case "connected":
+				switch stringValue(inspectOutput, "current_backend_id") {
+				case stringValue(request, "source_backend_id"):
+					state = "still_on_source"
+				case stringValue(request, "destination_backend_id"):
+					state = "already_at_destination"
+				default:
+					state = "other_backend"
+				}
+			case "disconnected":
+				state = "disconnected"
+			case "unknown":
+				state = "unknown"
+			}
+		}
+		retryPermitted := state == "still_on_source" && retryReadinessCurrent
+		caseResults = append(caseResults, map[string]any{
+			"case_id":                         stringValue(reconciliation, "case_id"),
+			"session_inspection_schema_valid": true,
+			"session_inspection_bound":        bound,
+			"session_inspection_fresh":        fresh,
+			"retry_readiness_current":         retryReadinessCurrent,
+			"reconciliation_state":            state,
+			"retry_permitted":                 retryPermitted,
+		})
+	}
+	return map[string]any{
+		"transfer_result_valid_and_bound": transferValid,
+		"reconciliation_cases":            caseResults,
+	}, nil
 }
 
 func readinessAssertionBindsAtCompletion(assertion map[string]any, completedAt, serverID, environmentID string, instanceRef any) (bool, error) {

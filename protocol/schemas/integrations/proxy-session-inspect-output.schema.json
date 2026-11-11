@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:proxy-session-inspect-output",
+  "title": "Proxy session inspect output",
+  "description": "Observed connection state for one exact proxy instance and opaque proxy-scoped session.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "proxy_instance_ref",
+    "proxy_session_id",
+    "connection_state",
+    "observed_at"
+  ],
+  "properties": {
+    "proxy_instance_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
+    "proxy_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "connection_state": {
+      "enum": [
+        "connected",
+        "disconnected",
+        "unknown"
+      ]
+    },
+    "current_backend_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "connection_state": {
+            "const": "connected"
+          }
+        },
+        "required": [
+          "connection_state"
+        ]
+      },
+      "then": {
+        "required": [
+          "current_backend_id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "connection_state": {
+            "enum": [
+              "disconnected",
+              "unknown"
+            ]
+          }
+        },
+        "required": [
+          "connection_state"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "current_backend_id"
+          ]
+        }
+      }
+    }
+  ]
+}

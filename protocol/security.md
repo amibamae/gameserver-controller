@@ -44,6 +44,7 @@ Permission scopes name an action, resource category, and environment. Examples:
 - `storage.backup.write`
 - `storage.backup.delete`
 - `proxy.backend.manage`
+- `proxy.session.inspect`
 
 An adapter capability describes what that adapter can do. It does not grant the caller permission. The core intersects caller authorization, environment policy, adapter capability, and available secret scopes.
 
