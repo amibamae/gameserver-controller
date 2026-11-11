@@ -4,7 +4,7 @@
 
 ## Objective
 
-Check that independently built implementations assign the same meaning to a pinned protocol package. Keep repository-owned validation and conformance tooling in Go.
+Check that independently built implementations assign the same meaning to a pinned protocol package. Keep repository-owned validation and conformance tooling in Go; the optional Rust consumer described below is the one exception.
 
 ## Package under test
 
@@ -67,7 +67,7 @@ Backup resume from its starting lifecycle state is covered by `operations.backup
 
 ## Independent implementation
 
-Use an implementation and validator runtime independent from the Go conformance evaluator. Generated bindings are acceptable when they come from the pinned schemas. The independent consumer may live outside this repository; do not add a second maintained protocol-check tool here, so repository-owned tooling remains Go. The independent implementation must consume the same package files and fixture inputs, without importing Go evaluator code or relying on Go-generated expected outputs.
+Use an implementation and validator runtime independent from the Go conformance evaluator. Generated bindings are acceptable when they come from the pinned schemas. The project owner decided that an optional independent consumer written in Rust may live in this repository under `conformance-rs/`. It reads the same package files, never imports Go code, runs in its own CI job, and is not a release gate. Do not add a second maintained protocol-check tool: repository-owned validation and release tooling remains Go. The independent implementation must consume the same package files and fixture inputs, without importing Go evaluator code or relying on Go-generated expected outputs.
 
 Compare parsed JSON values for ordinary protocol results. Require exact digest values for RFC 8785 vectors. A schema-valid message alone does not prove behavioral interoperability. Offline message vectors do not prove that an adapter avoids side effects. Verify that claim with an implementation harness that records attempted effects.
 
