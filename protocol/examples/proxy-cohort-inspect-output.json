@@ -1,0 +1,18 @@
+{
+  "proxy_instance_ref": {
+    "adapter_id": "integration.velocity",
+    "environment_id": "test",
+    "resource_kind": "proxy-instance",
+    "external_id": "velocity-edge-001"
+  },
+  "waiting_cohort_id": "waiting-paper-main",
+  "observation_state": "observed",
+  "session_count": 3,
+  "player_session_ids": [
+    "proxy-session-001",
+    "proxy-session-002",
+    "proxy-session-003"
+  ],
+  "truncated": false,
+  "observed_at": "2026-11-07T10:00:00Z"
+}

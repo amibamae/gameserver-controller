@@ -1,0 +1,564 @@
+{
+  "fixture_id": "integration.proxy.cohort.inspect.binding-and-freshness",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.proxy.cohort.inspect",
+  "purpose": "Waiting-cohort membership is usable only when bound to the requested proxy instance and cohort, fresh, not future-dated, and internally consistent; it never authorizes a transfer by itself.",
+  "input": {
+    "evaluations": [
+      {
+        "case_id": "fresh-bound-membership",
+        "evaluation_time": "2026-11-07T10:00:05Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "observed",
+          "session_count": 2,
+          "player_session_ids": [
+            "proxy-session-001",
+            "proxy-session-002"
+          ],
+          "truncated": false,
+          "observed_at": "2026-11-07T10:00:00Z"
+        }
+      },
+      {
+        "case_id": "maximum-age-boundary-is-inclusive",
+        "evaluation_time": "2026-11-07T10:00:10Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "observed",
+          "session_count": 2,
+          "player_session_ids": [
+            "proxy-session-001",
+            "proxy-session-002"
+          ],
+          "truncated": false,
+          "observed_at": "2026-11-07T10:00:00Z"
+        }
+      },
+      {
+        "case_id": "stale-membership-is-unusable",
+        "evaluation_time": "2026-11-07T10:00:11Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "observed",
+          "session_count": 2,
+          "player_session_ids": [
+            "proxy-session-001",
+            "proxy-session-002"
+          ],
+          "truncated": false,
+          "observed_at": "2026-11-07T10:00:00Z"
+        }
+      },
+      {
+        "case_id": "future-dated-membership-is-unusable",
+        "evaluation_time": "2026-11-07T10:00:05Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "observed",
+          "session_count": 2,
+          "player_session_ids": [
+            "proxy-session-001",
+            "proxy-session-002"
+          ],
+          "truncated": false,
+          "observed_at": "2026-11-07T10:00:06Z"
+        }
+      },
+      {
+        "case_id": "other-proxy-instance-is-unbound",
+        "evaluation_time": "2026-11-07T10:00:05Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-002"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "observed",
+          "session_count": 2,
+          "player_session_ids": [
+            "proxy-session-001",
+            "proxy-session-002"
+          ],
+          "truncated": false,
+          "observed_at": "2026-11-07T10:00:00Z"
+        }
+      },
+      {
+        "case_id": "other-cohort-is-unbound",
+        "evaluation_time": "2026-11-07T10:00:05Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-other",
+          "observation_state": "observed",
+          "session_count": 2,
+          "player_session_ids": [
+            "proxy-session-001",
+            "proxy-session-002"
+          ],
+          "truncated": false,
+          "observed_at": "2026-11-07T10:00:00Z"
+        }
+      },
+      {
+        "case_id": "truncated-list-is-consistent",
+        "evaluation_time": "2026-11-07T10:00:05Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "observed",
+          "session_count": 5,
+          "player_session_ids": [
+            "proxy-session-001",
+            "proxy-session-002"
+          ],
+          "truncated": true,
+          "observed_at": "2026-11-07T10:00:00Z"
+        }
+      },
+      {
+        "case_id": "truncation-flag-contradicts-count",
+        "evaluation_time": "2026-11-07T10:00:05Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "observed",
+          "session_count": 5,
+          "player_session_ids": [
+            "proxy-session-001",
+            "proxy-session-002"
+          ],
+          "truncated": false,
+          "observed_at": "2026-11-07T10:00:00Z"
+        }
+      },
+      {
+        "case_id": "list-longer-than-session-count",
+        "evaluation_time": "2026-11-07T10:00:05Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "observed",
+          "session_count": 1,
+          "player_session_ids": [
+            "proxy-session-001",
+            "proxy-session-002"
+          ],
+          "truncated": false,
+          "observed_at": "2026-11-07T10:00:00Z"
+        }
+      },
+      {
+        "case_id": "list-longer-than-requested-maximum",
+        "evaluation_time": "2026-11-07T10:00:05Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "observed",
+          "session_count": 3,
+          "player_session_ids": [
+            "proxy-session-001",
+            "proxy-session-002",
+            "proxy-session-003"
+          ],
+          "truncated": false,
+          "observed_at": "2026-11-07T10:00:00Z"
+        }
+      },
+      {
+        "case_id": "unknown-observation-is-unusable",
+        "evaluation_time": "2026-11-07T10:00:05Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "unknown"
+        }
+      },
+      {
+        "case_id": "unknown-with-membership-is-schema-invalid",
+        "evaluation_time": "2026-11-07T10:00:05Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "unknown",
+          "player_session_ids": [
+            "proxy-session-001"
+          ]
+        }
+      },
+      {
+        "case_id": "duplicate-session-ids-are-schema-invalid",
+        "evaluation_time": "2026-11-07T10:00:05Z",
+        "request": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "maximum_sessions": 2,
+          "maximum_observation_age_seconds": 10
+        },
+        "response": {
+          "proxy_instance_ref": {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "resource_kind": "proxy-instance",
+            "external_id": "velocity-edge-001"
+          },
+          "waiting_cohort_id": "waiting-paper-main",
+          "observation_state": "observed",
+          "session_count": 2,
+          "player_session_ids": [
+            "proxy-session-001",
+            "proxy-session-001"
+          ],
+          "truncated": false,
+          "observed_at": "2026-11-07T10:00:00Z"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "fresh-bound-membership",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "observation_fresh": true,
+        "membership_consistent": true,
+        "membership_usable": true
+      },
+      {
+        "case_id": "maximum-age-boundary-is-inclusive",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "observation_fresh": true,
+        "membership_consistent": true,
+        "membership_usable": true
+      },
+      {
+        "case_id": "stale-membership-is-unusable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "observation_fresh": false,
+        "membership_consistent": true,
+        "membership_usable": false
+      },
+      {
+        "case_id": "future-dated-membership-is-unusable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": false,
+        "observation_fresh": false,
+        "membership_consistent": true,
+        "membership_usable": false
+      },
+      {
+        "case_id": "other-proxy-instance-is-unbound",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": false,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "observation_fresh": true,
+        "membership_consistent": true,
+        "membership_usable": false
+      },
+      {
+        "case_id": "other-cohort-is-unbound",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": false,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "observation_fresh": true,
+        "membership_consistent": true,
+        "membership_usable": false
+      },
+      {
+        "case_id": "truncated-list-is-consistent",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "observation_fresh": true,
+        "membership_consistent": true,
+        "membership_usable": true
+      },
+      {
+        "case_id": "truncation-flag-contradicts-count",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "observation_fresh": true,
+        "membership_consistent": false,
+        "membership_usable": false
+      },
+      {
+        "case_id": "list-longer-than-session-count",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "observation_fresh": true,
+        "membership_consistent": false,
+        "membership_usable": false
+      },
+      {
+        "case_id": "list-longer-than-requested-maximum",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "observation_fresh": true,
+        "membership_consistent": false,
+        "membership_usable": false
+      },
+      {
+        "case_id": "unknown-observation-is-unusable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "target_bound": true,
+        "observation_state": "unknown",
+        "observation_time_valid": false,
+        "observation_fresh": false,
+        "membership_consistent": false,
+        "membership_usable": false
+      },
+      {
+        "case_id": "unknown-with-membership-is-schema-invalid",
+        "request_schema_valid": true,
+        "response_schema_valid": false,
+        "target_bound": true,
+        "observation_state": "unknown",
+        "observation_time_valid": false,
+        "observation_fresh": false,
+        "membership_consistent": false,
+        "membership_usable": false
+      },
+      {
+        "case_id": "duplicate-session-ids-are-schema-invalid",
+        "request_schema_valid": true,
+        "response_schema_valid": false,
+        "target_bound": true,
+        "observation_state": "observed",
+        "observation_time_valid": true,
+        "observation_fresh": true,
+        "membership_consistent": true,
+        "membership_usable": false
+      }
+    ]
+  },
+  "side_effect_expectation": "none"
+}

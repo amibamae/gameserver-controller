@@ -113,3 +113,14 @@ The four JSON resources in `cmd/protocol-check/openapi-schema/` are byte-for-byt
 - `oas-3.2-dialect-2026-02-26.json` corresponds to upstream `oas/3.2/dialect/2026-02-26`.
 - `oas-3.2-meta-2026-02-26.json` corresponds to upstream `oas/3.2/meta/2026-02-26`.
 
+
+## Velocity bridge plugin build dependencies
+
+The [Velocity bridge plugin](plugins/velocity) compiles against the Velocity
+API (`com.velocitypowered:velocity-api:3.4.0`, from the PaperMC Maven
+repository) as a `compileOnly` dependency. The running Velocity proxy
+provides the API and its libraries (including Gson, toml4j, Guice, and
+SLF4J), so the plugin jar bundles no third-party code. Its tests use JUnit 5
+(`org.junit:junit-bom:5.11.4`, Eclipse Public License 2.0), which is not
+included in the jar. Distributors of a Velocity proxy bundle follow
+Velocity's own license terms.

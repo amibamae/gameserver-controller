@@ -1,7 +1,10 @@
 # Optional direct-join wake flow
 
-This is a future option for games that do not use a proxy. It does not change
-the Velocity path. It assumes clients can connect directly to a game server
+This is a future option for games that do not use a proxy, such as FiveM. It
+does not change the Velocity path. A server uses it by selecting the
+`direct_dns` join mode in its network profile, which makes the DNS record
+capabilities required for that server (see
+[network profile requirements](../protocol/adapters/integrations.md#6-network-profile-requirements)). It assumes clients can connect directly to a game server
 using one join hostname and that the controller owns the relevant Cloudflare
 DNS records.
 
@@ -108,8 +111,20 @@ when sharing is disabled.
   [the provider credential policy](SECRET_MANAGEMENT.md), and never expose
   them to the lobby or player application.
 
-The future implementation needs a DNS integration contract for record inspect,
-update, and reconciliation; an authenticated wake API; local provision-to-Paper
+The DNS integration contract is now part of the protocol:
+`integration.dns.record.inspect`, `integration.dns.record.upsert`, and
+`integration.dns.record.delete`, defined in
+[the integration contract](../protocol/adapters/integrations.md#5-dns-records).
+The join hostname uses the `direct_join` purpose, which requires a current
+readiness assertion for the exact instance, and the `fallback` purpose when
+pointing back at the lobby. The first DNS adapter is planned for Cloudflare
+(`integration.cloudflare-dns`, see the
+[illustrative descriptor](../protocol/examples/adapter-descriptor.cloudflare-dns.json))
+and is not implemented yet. The same adapter can also keep per-backend
+hostnames pointed at instance IPs for proxied servers (`backend_address`
+purpose).
+
+The future implementation still needs the Cloudflare adapter; an authenticated wake API; local provision-to-Paper
 readiness timing and advisory progress; and separately owner-enabled shared
 boot-duration averages with bounded retention. Tests must cover duplicate
 requests, boot failure, readiness failure, sharing opt-in/opt-out, DNS update

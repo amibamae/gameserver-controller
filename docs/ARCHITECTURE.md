@@ -20,7 +20,7 @@ Adapter Contracts
    | Hosting     | Storage      | Execution      | Game
    | Vultr       | Wasabi       | systemd        | Minecraft/Paper
         |
-Integrations: Velocity, monitoring, notifications
+Integrations: Velocity, DNS (Cloudflare, planned), monitoring, notifications
 ~~~
 
 ## What the core owns
@@ -62,7 +62,7 @@ Keep game behavior separate from process management. The execution adapter start
 
 ### Integrations
 
-Integrations connect the core to proxies, monitoring, alerts, and notifications. They follow documented interfaces and cannot bypass lifecycle or privacy policy. Velocity is a proxy integration, not a hosting provider.
+Integrations connect the core to proxies, DNS providers, monitoring, alerts, and notifications. They follow documented interfaces and cannot bypass lifecycle or privacy policy. Velocity is a proxy integration, not a hosting provider. DNS is an integration too: it points names at servers but does not create or own them. Whether a server needs a given integration is set by its network profile, not by the category; a game without a proxy requires DNS, while this Minecraft deployment uses it only optionally for backend hostnames.
 
 ## Optional hosted control plane
 

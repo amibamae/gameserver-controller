@@ -1,0 +1,1128 @@
+{
+  "fixture_id": "integration.dns.record.upsert.purpose-readiness-and-confirmation",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.dns.record.upsert",
+  "purpose": "A direct-join DNS record changes only with a current readiness assertion bound to the exact instance; any record is usable only after a confirmed observation of exactly the requested values and TTL for the requested record.",
+  "input": {
+    "evaluations": [
+      {
+        "case_id": "direct-join-confirmed-after-readiness",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "confirmed",
+          "observation_state": "present",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:02Z"
+        }
+      },
+      {
+        "case_id": "direct-join-expired-readiness-is-refused",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T09:59:59Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "rejected",
+          "observation_state": "present",
+          "values": [
+            "198.51.100.10"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:01Z",
+          "reason_code": "readiness_assertion_expired"
+        }
+      },
+      {
+        "case_id": "direct-join-readiness-for-other-instance",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-002"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "rejected",
+          "observation_state": "present",
+          "values": [
+            "198.51.100.10"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:01Z",
+          "reason_code": "readiness_assertion_mismatch"
+        }
+      },
+      {
+        "case_id": "direct-join-future-readiness",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T10:00:30Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "rejected",
+          "observation_state": "present",
+          "values": [
+            "198.51.100.10"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:01Z",
+          "reason_code": "readiness_assertion_not_yet_valid"
+        }
+      },
+      {
+        "case_id": "direct-join-without-readiness-is-schema-invalid",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "rejected",
+          "observation_state": "present",
+          "values": [
+            "198.51.100.10"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:01Z",
+          "reason_code": "readiness_assertion_required"
+        }
+      },
+      {
+        "case_id": "backend-address-needs-no-readiness",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "paper-main.backends.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "backend_address",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "paper-main.backends.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "confirmed",
+          "observation_state": "present",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:02Z"
+        }
+      },
+      {
+        "case_id": "fallback-points-at-lobby",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "fallback",
+          "values": [
+            "198.51.100.10"
+          ],
+          "ttl_seconds": 60
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "confirmed",
+          "observation_state": "present",
+          "values": [
+            "198.51.100.10"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:02Z"
+        }
+      },
+      {
+        "case_id": "fallback-with-instance-is-schema-invalid",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "fallback",
+          "values": [
+            "198.51.100.10"
+          ],
+          "ttl_seconds": 60,
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "confirmed",
+          "observation_state": "present",
+          "values": [
+            "198.51.100.10"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:02Z"
+        }
+      },
+      {
+        "case_id": "accepted-is-not-confirmed",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "accepted",
+          "observation_state": "unknown",
+          "observed_at": "2026-11-07T10:00:02Z"
+        }
+      },
+      {
+        "case_id": "unknown-outcome-is-not-confirmed",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "outcome_unknown",
+          "observation_state": "unknown",
+          "observed_at": "2026-11-07T10:00:02Z",
+          "reason_code": "provider_timeout"
+        }
+      },
+      {
+        "case_id": "confirmed-with-other-values-is-unusable",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "confirmed",
+          "observation_state": "present",
+          "values": [
+            "203.0.113.21"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:02Z"
+        }
+      },
+      {
+        "case_id": "confirmed-with-other-ttl-is-unusable",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "confirmed",
+          "observation_state": "present",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 300,
+          "observed_at": "2026-11-07T10:00:02Z"
+        }
+      },
+      {
+        "case_id": "confirmed-for-other-record-is-unbound",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "other.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "confirmed",
+          "observation_state": "present",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:02Z"
+        }
+      },
+      {
+        "case_id": "zone-in-other-environment",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "production",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "production",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "confirmed",
+          "observation_state": "present",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:02Z"
+        }
+      },
+      {
+        "case_id": "a-record-with-ipv6-value-is-schema-invalid",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "2001:db8::1"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "confirmed",
+          "observation_state": "present",
+          "values": [
+            "2001:db8::1"
+          ],
+          "ttl_seconds": 60,
+          "observed_at": "2026-11-07T10:00:02Z"
+        }
+      },
+      {
+        "case_id": "confirmed-with-absent-state-is-schema-invalid",
+        "evaluation_time": "2026-11-07T10:00:00Z",
+        "request": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "environment_id": "test",
+          "purpose": "direct_join",
+          "values": [
+            "203.0.113.20"
+          ],
+          "ttl_seconds": 60,
+          "server_id": "fivem-test",
+          "instance_ref": {
+            "adapter_id": "hosting.vultr",
+            "environment_id": "test",
+            "resource_kind": "instance",
+            "external_id": "instance-test-001"
+          },
+          "readiness_assertion": {
+            "assertion_id": "readiness-001",
+            "server_id": "fivem-test",
+            "environment_id": "test",
+            "instance_ref": {
+              "adapter_id": "hosting.vultr",
+              "environment_id": "test",
+              "resource_kind": "instance",
+              "external_id": "instance-test-001"
+            },
+            "readiness_check_set_id": "fivem-ready-v1",
+            "observed_at": "2026-11-07T09:59:00Z",
+            "expires_at": "2026-11-07T10:01:00Z"
+          }
+        },
+        "response": {
+          "record": {
+            "zone_ref": {
+              "adapter_id": "integration.cloudflare-dns",
+              "environment_id": "test",
+              "resource_kind": "dns-zone",
+              "external_id": "zone-example-com"
+            },
+            "name": "play.example.com",
+            "record_type": "A"
+          },
+          "request_outcome": "confirmed",
+          "observation_state": "absent",
+          "observed_at": "2026-11-07T10:00:02Z"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "direct-join-confirmed-after-readiness",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": true,
+        "change_permitted": true,
+        "values_confirmed": true,
+        "record_usable": true
+      },
+      {
+        "case_id": "direct-join-expired-readiness-is-refused",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": false,
+        "change_permitted": false,
+        "values_confirmed": false,
+        "record_usable": false
+      },
+      {
+        "case_id": "direct-join-readiness-for-other-instance",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": false,
+        "change_permitted": false,
+        "values_confirmed": false,
+        "record_usable": false
+      },
+      {
+        "case_id": "direct-join-future-readiness",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": false,
+        "change_permitted": false,
+        "values_confirmed": false,
+        "record_usable": false
+      },
+      {
+        "case_id": "direct-join-without-readiness-is-schema-invalid",
+        "request_schema_valid": false,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": false,
+        "change_permitted": false,
+        "values_confirmed": false,
+        "record_usable": false
+      },
+      {
+        "case_id": "backend-address-needs-no-readiness",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": false,
+        "readiness_satisfied": true,
+        "change_permitted": true,
+        "values_confirmed": true,
+        "record_usable": true
+      },
+      {
+        "case_id": "fallback-points-at-lobby",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": false,
+        "readiness_satisfied": true,
+        "change_permitted": true,
+        "values_confirmed": true,
+        "record_usable": true
+      },
+      {
+        "case_id": "fallback-with-instance-is-schema-invalid",
+        "request_schema_valid": false,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": false,
+        "readiness_satisfied": true,
+        "change_permitted": false,
+        "values_confirmed": true,
+        "record_usable": false
+      },
+      {
+        "case_id": "accepted-is-not-confirmed",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": true,
+        "change_permitted": true,
+        "values_confirmed": false,
+        "record_usable": false
+      },
+      {
+        "case_id": "unknown-outcome-is-not-confirmed",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": true,
+        "change_permitted": true,
+        "values_confirmed": false,
+        "record_usable": false
+      },
+      {
+        "case_id": "confirmed-with-other-values-is-unusable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": true,
+        "change_permitted": true,
+        "values_confirmed": false,
+        "record_usable": false
+      },
+      {
+        "case_id": "confirmed-with-other-ttl-is-unusable",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": true,
+        "change_permitted": true,
+        "values_confirmed": false,
+        "record_usable": false
+      },
+      {
+        "case_id": "confirmed-for-other-record-is-unbound",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": false,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": true,
+        "change_permitted": true,
+        "values_confirmed": true,
+        "record_usable": false
+      },
+      {
+        "case_id": "zone-in-other-environment",
+        "request_schema_valid": true,
+        "response_schema_valid": true,
+        "record_bound": true,
+        "environment_consistent": false,
+        "readiness_required": true,
+        "readiness_satisfied": true,
+        "change_permitted": false,
+        "values_confirmed": true,
+        "record_usable": false
+      },
+      {
+        "case_id": "a-record-with-ipv6-value-is-schema-invalid",
+        "request_schema_valid": false,
+        "response_schema_valid": false,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": true,
+        "change_permitted": false,
+        "values_confirmed": false,
+        "record_usable": false
+      },
+      {
+        "case_id": "confirmed-with-absent-state-is-schema-invalid",
+        "request_schema_valid": true,
+        "response_schema_valid": false,
+        "record_bound": true,
+        "environment_consistent": true,
+        "readiness_required": true,
+        "readiness_satisfied": true,
+        "change_permitted": true,
+        "values_confirmed": false,
+        "record_usable": false
+      }
+    ]
+  },
+  "side_effect_expectation": "none"
+}

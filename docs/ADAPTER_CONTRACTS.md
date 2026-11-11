@@ -57,9 +57,25 @@ The game adapter explains how to save data consistently. The core coordinates tr
 
 ## Integrations
 
-Integrations connect the core to Velocity, monitoring, alerts, and notifications. Each declares events and actions, permissions, side effects, retry and idempotency behavior, timeouts, transmitted fields, and privacy implications.
+Integrations connect the core to proxies such as Velocity, DNS providers such as Cloudflare, monitoring, alerts, and notifications. Each declares events and actions, permissions, side effects, retry and idempotency behavior, timeouts, transmitted fields, and privacy implications.
 
-A proxy adapter may inspect, register, drain, and unregister a backend and report player counts. It routes players only after the core confirms readiness. It must not route to a backend that is provisioning, starting, validating, degraded, or failed. A broad transfer must identify and validate every affected player and destination.
+A proxy adapter may inspect, register, drain, and unregister a backend and report player counts. It routes players only after the core confirms readiness. It must not route to a backend that is provisioning, starting, validating, degraded, or failed. A broad transfer must identify and validate every affected player and destination. The proxy may send new joins to a backend on its own only while the core has it registered and routable, and may send players to an operator-configured fallback (such as a lobby) while they wait.
+
+A DNS adapter inspects, sets, and deletes individual managed A/AAAA records. A record that players join through directly is changed only with a current readiness assertion for the exact instance.
+
+### Per-server network profile requirements
+
+"Integration" describes what an adapter is responsible for, not whether it is optional. Each server's network profile declares what that server needs:
+
+| Join mode | Example | Requires |
+|---|---|---|
+| `proxy` | Minecraft behind Velocity | Proxy backend and transfer capabilities |
+| `direct_dns` | A game without a proxy, such as FiveM: players join a lobby, are told the estimated boot time, and rejoin once DNS points at the ready server | DNS record capabilities for the join hostname |
+| `none` | Operator hands out the address | Nothing |
+
+A profile may also give each backend a managed backend hostname that points at its instance, so the proxy reaches it by name and an IP change only updates DNS. That also requires the DNS capabilities.
+
+The controller refuses to plan operations for a server whose profile requires a capability no registered adapter provides. It never skips a required routing or DNS step. The normative rules are in [the integration contract](../protocol/adapters/integrations.md#6-network-profile-requirements). The local configuration does not yet have a network profile block; that is planned work.
 
 ## Request and result shape
 
@@ -94,6 +110,6 @@ Use fake adapters for core tests. Test production adapters only against isolated
 | Storage | Wasabi through its S3-compatible API | Other object stores |
 | Execution | systemd on Debian VM | Containers, Kubernetes |
 | Game | Minecraft Java with Paper | Terraria, Valheim, ARK |
-| Integration | Velocity | Other proxies, monitoring, notifications |
+| Integration | Velocity proxy; Cloudflare DNS (planned) | Other proxies and DNS providers, monitoring, notifications |
 
 These are the first design targets, not a promise that providers or games expose identical capabilities.
