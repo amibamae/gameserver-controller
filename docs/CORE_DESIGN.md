@@ -87,6 +87,17 @@ Provisioning does not grant permission to overwrite or migrate an existing world
 
 Any save, upload, verification, authorization, or target-check failure stops this workflow. Never use destroy as best-effort cleanup. If the destroy response is ambiguous, inspect the exact provider instance before doing anything else.
 
+### Billing-aware scaling
+
+Hosting providers such as Vultr bill each instance in whole increments (one hour) from creation until it is destroyed. The core uses each instance for the time already charged:
+
+- `idle_shutdown` is the minimum idle time, not the shutdown time. An idle server is backed up and destroyed only in the decision window near the end of its current paid increment (by default minutes 58 to 59 of each hour since creation). Until then it stays up, so returning players reuse it instead of starting a new, separately billed instance.
+- With a server running, adding capacity also waits for that server's decision window. Starting a server when none is running is never delayed.
+- A server whose configured hourly cost is below the owner's threshold skips the window and scales as soon as it is idle.
+- The window only decides *when* the core may start a scaling action. Back up and destroy still runs every check above, and a failed check stops it.
+
+The policy lives in `internal/scalingpolicy` and is configured per server under `lifecycle.scaling` (see [configuration](CONFIGURATION.md#scaling-and-billing)). Hosting adapters may declare their billing increment with the `billing_increment_seconds` descriptor constraint. The runtime scheduler that applies it is future work.
+
 ### Restore and stage
 
 Restore one identified backup. Check its integrity and version compatibility; require approval when replacing data or crossing a major-version boundary. Reject archive traversal and unsafe symlinks.

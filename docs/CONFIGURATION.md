@@ -67,7 +67,26 @@ Every backend hostname, from a template or set by hand, must be unique across al
 
 The older `adapters.integration` field is still accepted. If it is set together with `network.proxy`, they must name the same adapter. The validator checks these settings; the controller runtime does not use them yet.
 
-Environments are `production`, `staging`, or `testing`. Production declares `production_backup_access: read_write`; staging and testing may declare `none` or `read_only`, never `read_write`. The validator checks these policy declarations but does not enforce access at the storage service. A server must list verified backup and operator approval as destroy prerequisites. The validator checks an optional idle-shutdown duration but does not schedule it.
+Environments are `production`, `staging`, or `testing`. Production declares `production_backup_access: read_write`; staging and testing may declare `none` or `read_only`, never `read_write`. The validator checks these policy declarations but does not enforce access at the storage service. A server must list verified backup and operator approval as destroy prerequisites. The validator checks an optional idle-shutdown duration but does not schedule it. `idle_shutdown` is the minimum time a server must be idle; with the default scaling policy below it is then kept until its next billing decision window.
+
+### Scaling and billing
+
+Providers such as Vultr bill each server in whole hours from creation until it is destroyed, so shutting a server down early in an hour saves nothing. Each server may define `lifecycle.scaling`:
+
+```yaml
+lifecycle:
+  idle_shutdown: 15m                   # minimum idle time before shutdown
+  scaling:
+    billing_increment: 1h              # default
+    decision_window_start: 58m         # default
+    decision_window_end: 59m           # default
+    hourly_cost: "0.036"               # optional, provider account currency
+    ignore_billing_below_hourly_cost: "0.005"   # optional
+```
+
+While a server is running, the controller adds or removes servers only inside the decision window, measured from the start of each hour the server has run (by default minutes 58 to 59). An idle server is shut down only when it has been idle for at least `idle_shutdown` and the window is open; otherwise it stays up for the rest of the paid hour, and returning players cancel the shutdown. Starting a server when none is running is never delayed, because players are waiting. If `hourly_cost` is below `ignore_billing_below_hourly_cost`, the window is ignored and the server scales as soon as it is idle.
+
+Shutting down includes stopping the game, backing up, verifying, and destroying the instance. If that takes longer than the time left in the hour after the window, the next hour is charged; move the window earlier once real shutdown times are known. The validator checks these settings; the controller runtime does not schedule them yet.
 
 Each server may define `lifecycle.backups.schedule` and `lifecycle.backups.retention`. The defaults are every 9 hours and keep the newest five verified backups. Schedule units are `minutes`, `hours`, `days`, `weeks`, `months`, or `years`; month and year intervals use calendar units, anchored to the original schedule date. If a month lacks that day, the occurrence uses that month's last day and later occurrences return to the original day. Set `keep_last: 0` to retain backups indefinitely. The configuration validator checks this policy, but scheduled execution and retention cleanup are not wired into a controller runtime yet. Cleanup must run only after a new backup is verified and must use the normal exact-object authorization and retention checks.
 

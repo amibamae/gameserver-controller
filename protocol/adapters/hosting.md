@@ -72,6 +72,10 @@ An instance reference contains adapter ID, environment ID, resource kind, and op
 
 Use least-privilege provider credentials; never include them in diagnostics. Network and firewall changes are privileged operations and need separate capabilities and authorization.
 
+### 5.1 Billing increments
+
+A hosting adapter for a provider that bills instances in fixed increments SHOULD declare the increment as the descriptor constraint `billing_increment_seconds` (3600 for hourly billing). The core uses it to time scale-up and scale-down so a running instance is used for the time already charged; see the scaling policy in [the core design](../../docs/CORE_DESIGN.md#billing-aware-scaling). The constraint is advisory: it never authorizes destroying an instance, and every destroy still requires the verified backup and approval rules in [the operation catalog](../operation-catalog.md).
+
 ## 6. Bootstrap
 
 The initial preferred path uses a provider-supported standard OS image and a reviewed, versioned bootstrap. The adapter may deliver a protected script reference or start a separate bootstrap runner. A repeated delivery with the same instance, revision, digest, and operation step MUST be idempotent or return the exact existing execution reference; it MUST NOT launch an untracked duplicate run. The controller reconciles an accepted or uncertain execution by inspecting that exact reference rather than resubmitting blindly.

@@ -426,3 +426,18 @@ func TestBackendHostnamesAreUniqueAcrossServers(t *testing.T) {
 		t.Fatalf("duplicate hostname: %v", err)
 	}
 }
+
+func TestScalingPolicy(t *testing.T) {
+	input := strings.Replace(validConfig, "      idle_shutdown: 30m\n", "      idle_shutdown: 30m\n      scaling:\n        decision_window_start: 58m\n        decision_window_end: 59m\n        hourly_cost: \"0.036\"\n        ignore_billing_below_hourly_cost: \"0.005\"\n", 1)
+	config, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if config.Servers[1].Lifecycle.Scaling.HourlyCost != "0.036" {
+		t.Fatal("scaling settings were not parsed")
+	}
+	bad := strings.Replace(validConfig, "      idle_shutdown: 30m\n", "      idle_shutdown: 30m\n      scaling:\n        decision_window_end: 61m\n", 1)
+	if _, err := Parse(strings.NewReader(bad)); err == nil || !strings.Contains(err.Error(), "lifecycle.scaling") {
+		t.Fatalf("invalid scaling accepted: %v", err)
+	}
+}
