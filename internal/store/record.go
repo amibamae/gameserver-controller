@@ -128,7 +128,30 @@ func prepareNewRecord(record OperationRecord, now time.Time) (OperationRecord, e
 	return record, nil
 }
 
+// validateRecord checks an operation record before it is stored or after it
+// is loaded. The checks run in a fixed order and the first failure is
+// returned, so callers and tests see the same field name for the same record.
 func validateRecord(record OperationRecord) error {
+	for _, validate := range []func(OperationRecord) error{
+		validateBackupInitialState,
+		validateRecordIdentity,
+		validateRecordStatus,
+		validateRecordDocuments,
+		validateRecordExecutionTimes,
+		validateRecordSteps,
+		validateRecordStepPlan,
+	} {
+		if err := validate(record); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateBackupInitialState requires a succeeded server.backup to record the
+// lifecycle state it started from, and allows that field only on server.backup
+// with a ready, degraded, or stopped state.
+func validateBackupInitialState(record OperationRecord) error {
 	if record.OperationType == "server.backup" && record.Status == protocolstate.OperationSucceeded && record.BackupInitialLifecycleState == "" {
 		return invalidField("backup_initial_lifecycle_state")
 	}
@@ -137,6 +160,10 @@ func validateRecord(record OperationRecord) error {
 			return invalidField("backup_initial_lifecycle_state")
 		}
 	}
+	return nil
+}
+
+func validateRecordIdentity(record OperationRecord) error {
 	if !validIdentifier(record.OperationID, 200) {
 		return invalidField("operation_id")
 	}
@@ -164,12 +191,22 @@ func validateRecord(record OperationRecord) error {
 	if record.RequestFingerprint != "" && !validFingerprint(record.RequestFingerprint) {
 		return invalidField("request_fingerprint")
 	}
+	return nil
+}
+
+func validateRecordStatus(record OperationRecord) error {
 	if record.CreatedAt.IsZero() || record.UpdatedAt.IsZero() || record.UpdatedAt.Before(record.CreatedAt) {
 		return invalidField("timestamps")
 	}
 	if !knownOperationStatus(record.Status) {
 		return invalidField("status")
 	}
+	return nil
+}
+
+// validateRecordDocuments checks the request snapshot and that every stored
+// JSON document on the record is an object.
+func validateRecordDocuments(record OperationRecord) error {
 	if record.RequestSnapshot.OperationType != record.OperationType || !isJSONObject(record.RequestSnapshot.Parameters) {
 		return invalidField("request_snapshot")
 	}
@@ -178,89 +215,135 @@ func validateRecord(record OperationRecord) error {
 			return invalidField("request_snapshot.secret_refs")
 		}
 	}
-	if len(record.Target.InstanceRef) > 0 && !isJSONObject(record.Target.InstanceRef) {
-		return invalidField("target.instance_ref")
+	for _, document := range []struct {
+		field string
+		value []byte
+	}{
+		{"target.instance_ref", record.Target.InstanceRef},
+		{"progress", record.Progress},
+		{"result", record.Result},
+		{"error", record.Error},
+	} {
+		if len(document.value) > 0 && !isJSONObject(document.value) {
+			return invalidField(document.field)
+		}
 	}
-	if len(record.Progress) > 0 && !isJSONObject(record.Progress) {
-		return invalidField("progress")
-	}
-	if len(record.Result) > 0 && !isJSONObject(record.Result) {
-		return invalidField("result")
-	}
-	if len(record.Error) > 0 && !isJSONObject(record.Error) {
-		return invalidField("error")
-	}
-	if record.StartedAt != nil && record.StartedAt.Before(record.CreatedAt) {
-		return invalidField("started_at")
-	}
-	if record.StartedAt != nil && record.StartedAt.After(record.UpdatedAt) {
+	return nil
+}
+
+func validateRecordExecutionTimes(record OperationRecord) error {
+	if record.StartedAt != nil && (record.StartedAt.Before(record.CreatedAt) || record.StartedAt.After(record.UpdatedAt)) {
 		return invalidField("started_at")
 	}
 	if record.CompletedAt != nil && (record.CompletedAt.Before(record.CreatedAt) || !record.CompletedAt.Equal(record.UpdatedAt)) {
 		return invalidField("completed_at")
 	}
+	return nil
+}
+
+// validateRecordSteps checks every step in order and rejects repeated step
+// IDs. A current step, if set, must name one of the steps.
+func validateRecordSteps(record OperationRecord) error {
 	seenSteps := make(map[string]struct{}, len(record.Steps))
 	for i, step := range record.Steps {
-		if record.OperationType == "server.backup" && record.BackupInitialLifecycleState == "" && (step.Attempt != 0 || step.Status == protocolstate.StepRunning || step.Status == protocolstate.StepSucceeded || step.Status == protocolstate.StepWaiting || step.Status == protocolstate.StepOutcomeUnknown) {
-			return invalidField("backup_initial_lifecycle_state must precede dispatch")
-		}
-		if !validIdentifier(step.StepID, 200) || !validCapabilityName(step.StepType, 160) || !knownStepStatus(step.Status) || step.Attempt < 0 {
-			return invalidField(fmt.Sprintf("steps[%d]", i))
-		}
-		if (step.Status == protocolstate.StepPending && step.Attempt != 0) ||
-			(step.Status != protocolstate.StepPending && step.Status != protocolstate.StepSkipped && step.Status != protocolstate.StepCancelled && step.Attempt == 0) {
-			return invalidField(fmt.Sprintf("steps[%d].attempt", i))
+		if err := validateStepIdentity(record, i, step); err != nil {
+			return err
 		}
 		if _, exists := seenSteps[step.StepID]; exists {
 			return invalidField("duplicate step_id")
 		}
 		seenSteps[step.StepID] = struct{}{}
-		if step.CapabilityName != "" && (!validCapabilityName(step.CapabilityName, 160) || step.AdapterID == "" || step.CapabilityVersion == "") {
-			return invalidField(fmt.Sprintf("steps[%d].capability", i))
-		}
-		if step.CapabilityVersion != "" && (step.AdapterID == "" || step.CapabilityName == "") {
-			return invalidField(fmt.Sprintf("steps[%d].capability", i))
-		}
-		if step.CapabilityName != "" && !isJSONObject(step.Input) {
-			return invalidField(fmt.Sprintf("steps[%d].input", i))
-		}
-		if len(step.Input) > 0 && !isJSONObject(step.Input) {
-			return invalidField(fmt.Sprintf("steps[%d].input", i))
-		}
-		if len(step.InputBindings) > 0 && (step.CapabilityName == "" || !isJSONObject(step.Input)) {
-			return invalidField(fmt.Sprintf("steps[%d].input_bindings", i))
-		}
-		if len(step.ResolvedInput) > 0 && !isJSONObject(step.ResolvedInput) {
-			return invalidField(fmt.Sprintf("steps[%d].resolved_input", i))
-		}
-		if len(step.InputBindings) == 0 && len(step.ResolvedInput) > 0 {
-			return invalidField(fmt.Sprintf("steps[%d].resolved_input has no bindings", i))
-		}
-		if len(step.InputBindings) > 0 && step.Attempt > 0 && len(step.ResolvedInput) == 0 {
-			return invalidField(fmt.Sprintf("steps[%d].resolved_input must be persisted before dispatch", i))
-		}
-		if len(step.Output) > 0 && (!isJSONObject(step.Output) || step.Status != protocolstate.StepSucceeded) {
-			return invalidField(fmt.Sprintf("steps[%d].output", i))
-		}
-		if step.Status == protocolstate.StepSucceeded && step.CapabilityName != "" && len(step.Output) == 0 {
-			return invalidField(fmt.Sprintf("steps[%d].output", i))
-		}
-		if len(step.ExternalOperationRef) > 0 && !isJSONObject(step.ExternalOperationRef) {
-			return invalidField(fmt.Sprintf("steps[%d].external_operation_ref", i))
-		}
-		if len(step.Error) > 0 && !isJSONObject(step.Error) {
-			return invalidField(fmt.Sprintf("steps[%d].error", i))
-		}
-		if step.StartedAt != nil && step.StartedAt.Before(record.CreatedAt) {
-			return invalidField(fmt.Sprintf("steps[%d].started_at", i))
-		}
-		if step.StartedAt != nil && step.StartedAt.After(record.UpdatedAt) {
-			return invalidField(fmt.Sprintf("steps[%d].started_at", i))
-		}
-		if step.CompletedAt != nil && (step.CompletedAt.Before(record.CreatedAt) || (step.StartedAt != nil && step.CompletedAt.Before(*step.StartedAt)) || step.CompletedAt.After(record.UpdatedAt)) {
-			return invalidField(fmt.Sprintf("steps[%d].completed_at", i))
+		for _, validate := range []func(OperationRecord, int, OperationStep) error{
+			validateStepInput,
+			validateStepOutcome,
+			validateStepTimes,
+		} {
+			if err := validate(record, i, step); err != nil {
+				return err
+			}
 		}
 	}
+	return nil
+}
+
+// validateStepIdentity checks a step's ID, type, status, and attempt count. A
+// server.backup must record its initial lifecycle state before any step runs.
+func validateStepIdentity(record OperationRecord, i int, step OperationStep) error {
+	if record.OperationType == "server.backup" && record.BackupInitialLifecycleState == "" && (step.Attempt != 0 || step.Status == protocolstate.StepRunning || step.Status == protocolstate.StepSucceeded || step.Status == protocolstate.StepWaiting || step.Status == protocolstate.StepOutcomeUnknown) {
+		return invalidField("backup_initial_lifecycle_state must precede dispatch")
+	}
+	if !validIdentifier(step.StepID, 200) || !validCapabilityName(step.StepType, 160) || !knownStepStatus(step.Status) || step.Attempt < 0 {
+		return invalidField(fmt.Sprintf("steps[%d]", i))
+	}
+	if (step.Status == protocolstate.StepPending && step.Attempt != 0) ||
+		(step.Status != protocolstate.StepPending && step.Status != protocolstate.StepSkipped && step.Status != protocolstate.StepCancelled && step.Attempt == 0) {
+		return invalidField(fmt.Sprintf("steps[%d].attempt", i))
+	}
+	return nil
+}
+
+// validateStepInput checks the step's capability identity, its input object,
+// and its input bindings. Resolved input exists only for bound steps and must
+// be persisted before a bound step is dispatched.
+func validateStepInput(_ OperationRecord, i int, step OperationStep) error {
+	if step.CapabilityName != "" && (!validCapabilityName(step.CapabilityName, 160) || step.AdapterID == "" || step.CapabilityVersion == "") {
+		return invalidField(fmt.Sprintf("steps[%d].capability", i))
+	}
+	if step.CapabilityVersion != "" && (step.AdapterID == "" || step.CapabilityName == "") {
+		return invalidField(fmt.Sprintf("steps[%d].capability", i))
+	}
+	if (step.CapabilityName != "" || len(step.Input) > 0) && !isJSONObject(step.Input) {
+		return invalidField(fmt.Sprintf("steps[%d].input", i))
+	}
+	if len(step.InputBindings) > 0 && (step.CapabilityName == "" || !isJSONObject(step.Input)) {
+		return invalidField(fmt.Sprintf("steps[%d].input_bindings", i))
+	}
+	if len(step.ResolvedInput) > 0 && !isJSONObject(step.ResolvedInput) {
+		return invalidField(fmt.Sprintf("steps[%d].resolved_input", i))
+	}
+	if len(step.InputBindings) == 0 && len(step.ResolvedInput) > 0 {
+		return invalidField(fmt.Sprintf("steps[%d].resolved_input has no bindings", i))
+	}
+	if len(step.InputBindings) > 0 && step.Attempt > 0 && len(step.ResolvedInput) == 0 {
+		return invalidField(fmt.Sprintf("steps[%d].resolved_input must be persisted before dispatch", i))
+	}
+	return nil
+}
+
+// validateStepOutcome checks the step's output, external operation reference,
+// and error documents. Only a succeeded step has output, and a succeeded
+// adapter step must have it.
+func validateStepOutcome(_ OperationRecord, i int, step OperationStep) error {
+	if len(step.Output) > 0 && (!isJSONObject(step.Output) || step.Status != protocolstate.StepSucceeded) {
+		return invalidField(fmt.Sprintf("steps[%d].output", i))
+	}
+	if step.Status == protocolstate.StepSucceeded && step.CapabilityName != "" && len(step.Output) == 0 {
+		return invalidField(fmt.Sprintf("steps[%d].output", i))
+	}
+	if len(step.ExternalOperationRef) > 0 && !isJSONObject(step.ExternalOperationRef) {
+		return invalidField(fmt.Sprintf("steps[%d].external_operation_ref", i))
+	}
+	if len(step.Error) > 0 && !isJSONObject(step.Error) {
+		return invalidField(fmt.Sprintf("steps[%d].error", i))
+	}
+	return nil
+}
+
+// validateStepTimes requires step timestamps to fall within the record's
+// lifetime, with completion no earlier than the step's start.
+func validateStepTimes(record OperationRecord, i int, step OperationStep) error {
+	if step.StartedAt != nil && (step.StartedAt.Before(record.CreatedAt) || step.StartedAt.After(record.UpdatedAt)) {
+		return invalidField(fmt.Sprintf("steps[%d].started_at", i))
+	}
+	if step.CompletedAt != nil && (step.CompletedAt.Before(record.CreatedAt) || (step.StartedAt != nil && step.CompletedAt.Before(*step.StartedAt)) || step.CompletedAt.After(record.UpdatedAt)) {
+		return invalidField(fmt.Sprintf("steps[%d].completed_at", i))
+	}
+	return nil
+}
+
+// validateRecordStepPlan checks the input bindings across steps and that the
+// current step, if set, is one of the record's steps.
+func validateRecordStepPlan(record OperationRecord) error {
 	bindingSteps := make([]inputbinding.Step, len(record.Steps))
 	for i, step := range record.Steps {
 		bindingSteps[i] = inputbinding.Step{StepID: step.StepID, Status: string(step.Status), Input: step.Input, Output: step.Output, Binding: step.InputBindings}
@@ -272,11 +355,20 @@ func validateRecord(record OperationRecord) error {
 		if *record.CurrentStepID == "" {
 			return invalidField("current_step_id")
 		}
-		if _, exists := seenSteps[*record.CurrentStepID]; !exists {
+		if !containsStepID(record.Steps, *record.CurrentStepID) {
 			return invalidField("current_step_id")
 		}
 	}
 	return nil
+}
+
+func containsStepID(steps []OperationStep, stepID string) bool {
+	for _, step := range steps {
+		if step.StepID == stepID {
+			return true
+		}
+	}
+	return false
 }
 
 func validSecretReference(ref SecretReference) bool {

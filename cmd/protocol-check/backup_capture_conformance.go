@@ -10,130 +10,161 @@ import (
 
 const backupCaptureFiveMinuteLifetime = 5 * time.Minute
 
+// backupCaptureCase is one evaluation after its overrides and removals are
+// applied to the fixture's base objects.
+type backupCaptureCase struct {
+	request, requestContext, output, preparation, scope map[string]any
+	streamTransfers                                     []any
+	transfer                                            map[string]any
+}
+
 func evaluateBackupCapture(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
 	input := asObject(fixture["input"])
-	baseRequest := asObject(input["base_request"])
-	baseOutput := asObject(input["base_output"])
-	basePreparation := asObject(input["base_preparation_result"])
-	baseScope := asObject(input["base_transfer_scope"])
-	baseRequestContext := asObject(input["request_context"])
 	results := make(map[string]any)
 	for _, rawEvaluation := range arrayValue(input, "evaluations") {
 		evaluation := asObject(rawEvaluation)
+		result := evaluateBackupCaptureCase(pkg, fixture, input, evaluation)
 		caseID := stringValue(evaluation, "case_id")
-		request := mergeJSONObjects(baseRequest, asObject(evaluation["request_overrides"]))
-		requestContext := mergeJSONObjects(baseRequestContext, asObject(evaluation["request_context_overrides"]))
-		for _, key := range arrayValue(evaluation, "request_context_remove") {
-			if stringKey, ok := key.(string); ok {
-				delete(requestContext, stringKey)
-			}
-		}
-		output := mergeJSONObjects(baseOutput, asObject(evaluation["output_overrides"]))
-		preparation := mergeJSONObjects(basePreparation, asObject(evaluation["preparation_result_overrides"]))
-		for _, key := range arrayValue(evaluation, "output_remove") {
-			if stringKey, ok := key.(string); ok {
-				delete(output, stringKey)
-			}
-		}
-		scope := mergeJSONObjects(baseScope, asObject(evaluation["transfer_scope_overrides"]))
-
-		inputSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-capture-input", request) == nil
-		outputSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-capture-output", output) == nil
-		preparationSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-prepare-output", preparation) == nil
-		requestContextSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:common:request-context", requestContext) == nil
-		streamTransfers := arrayValue(requestContext, "stream_transfers")
-		transferSchemaValid := len(streamTransfers) == 1 && pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:storage:storage-transfer-reference", asObject(streamTransfers[0])) == nil
-		schemasValid := inputSchemaValid && outputSchemaValid && requestContextSchemaValid && transferSchemaValid
-		target := asObject(request["target"])
-		requestTargetBound := stringValue(target, "server_id") == stringValue(requestContext, "server_id") &&
-			stringValue(target, "environment_id") == stringValue(requestContext, "environment_id")
-		preparationBound := preparationSchemaValid &&
-			stringValue(preparation, "outcome") == "prepared" &&
-			reflect.DeepEqual(request["target"], preparation["target"]) &&
-			stringValue(request, "release_id") == stringValue(preparation, "release_id") &&
-			stringValue(request, "backup_id") == stringValue(preparation, "backup_id") &&
-			stringValue(request, "data_generation_id") == stringValue(preparation, "data_generation_id") &&
-			stringValue(request, "preparation_id") == stringValue(preparation, "preparation_id") &&
-			stringValue(request, "consistency_mode") == stringValue(preparation, "consistency_mode") &&
-			containsString(arrayValue(preparation, "data_set_ids"), stringValue(request, "data_set_id"))
-		transfer := map[string]any{}
-		if len(streamTransfers) == 1 {
-			transfer = asObject(streamTransfers[0])
-		}
-		transferAuthorized := transferSchemaValid && backupCaptureTransferAuthorized(fixture, input, requestContext, request, scope, transfer)
-		bindingExact := backupCaptureBindingExact(request, output)
-		transferID := stringValue(transfer, "transfer_id")
-		transferHandleInDurableInput := transferID != "" && backupCaptureContainsValue(request, transferID)
-		transferHandleInInvocationContext := transferID != "" && backupCaptureContainsValue(requestContext, transferID)
-		transferHandleInResult := transferID != "" && backupCaptureContainsValue(output, transferID)
-
-		streamBytes := []byte(stringValue(evaluation, "stream_bytes"))
-		maximumBytes, maximumErr := integerValue(transfer["maximum_bytes"])
-		reportedBytes, sizeErr := integerValue(output["size_bytes"])
-		streamWithinBounds := maximumErr == nil && sizeErr == nil && maximumBytes >= 0 &&
-			reportedBytes == int64(len(streamBytes)) && int64(len(streamBytes)) <= maximumBytes
-		streamCompleted, hasStreamCompleted := output["stream_completed"].(bool)
-		transportCompleted := true
-		if configured, ok := evaluation["stream_transport_complete"].(bool); ok {
-			transportCompleted = configured
-		}
-		streamCompleted = hasStreamCompleted && streamCompleted && transportCompleted
-		checksum := asObject(output["checksum"])
-		streamDigest := sha256.Sum256(streamBytes)
-		checksumValid := stringValue(checksum, "algorithm") == "sha256" &&
-			stringValue(checksum, "digest") == hex.EncodeToString(streamDigest[:])
-		outcome := stringValue(output, "outcome")
-		dispatchPermitted := inputSchemaValid && requestContextSchemaValid && transferSchemaValid &&
-			requestTargetBound && preparationBound && transferAuthorized
-		captureAccepted := schemasValid && requestTargetBound && preparationBound && transferAuthorized && bindingExact &&
-			outcome == "captured" && streamCompleted && streamWithinBounds && checksumValid
-		requiresReconciliation := !outputSchemaValid || outcome == "outcome_unknown" ||
-			outcome == "captured" && !captureAccepted ||
-			outcome == "rejected" && (!bindingExact || !dispatchPermitted || len(streamBytes) != 0)
-
-		watermark := asObject(output["write_watermark"])
-		watermarkBound := len(watermark) > 0 && stringValue(watermark, "data_generation_id") == stringValue(request, "data_generation_id")
-		runtimeResumed, _ := evaluation["runtime_resumed"].(bool)
-		currentGeneration := stringValue(evaluation, "current_generation_id")
-		if currentGeneration == "" {
-			currentGeneration = stringValue(request, "data_generation_id")
-		}
-		destructionCurrentGenerationProven := false
-		if captureAccepted && !runtimeResumed && currentGeneration == stringValue(request, "data_generation_id") {
-			switch stringValue(request, "consistency_mode") {
-			case "offline":
-				destructionCurrentGenerationProven = true
-			case "game_native":
-				// This draft has no interoperable watermark-verifier contract.
-				destructionCurrentGenerationProven = false
-			}
-		}
-
 		if caseID == "" {
 			return nil, fmt.Errorf("backup capture evaluation has no case_id")
 		}
-		results[caseID] = map[string]any{
-			"schemas_valid":                         schemasValid,
-			"preparation_result_schema_valid":       preparationSchemaValid,
-			"preparation_bound":                     preparationBound,
-			"dispatch_permitted":                    dispatchPermitted,
-			"request_target_bound":                  requestTargetBound,
-			"binding_exact":                         bindingExact,
-			"transfer_authorized":                   transferAuthorized,
-			"transfer_handle_in_durable_input":      transferHandleInDurableInput,
-			"transfer_handle_in_invocation_context": transferHandleInInvocationContext,
-			"transfer_handle_in_result":             transferHandleInResult,
-			"stream_completed":                      streamCompleted,
-			"stream_within_bounds":                  streamWithinBounds,
-			"checksum_valid":                        checksumValid,
-			"write_watermark_bound":                 watermarkBound,
-			"capture_accepted":                      captureAccepted,
-			"requires_reconciliation":               requiresReconciliation,
-			"retry_permitted":                       false,
-			"destruction_current_generation_proven": destructionCurrentGenerationProven,
-		}
+		results[caseID] = result
 	}
 	return map[string]any{"cases": results}, nil
+}
+
+func evaluateBackupCaptureCase(pkg *protocolPackage, fixture, input, evaluation map[string]any) map[string]any {
+	bc := newBackupCaptureCase(input, evaluation)
+	request := bc.request
+	inputSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-capture-input", request) == nil
+	outputSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-capture-output", bc.output) == nil
+	preparationSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-prepare-output", bc.preparation) == nil
+	requestContextSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:common:request-context", bc.requestContext) == nil
+	transferSchemaValid := len(bc.streamTransfers) == 1 && pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:storage:storage-transfer-reference", asObject(bc.streamTransfers[0])) == nil
+	schemasValid := inputSchemaValid && outputSchemaValid && requestContextSchemaValid && transferSchemaValid
+	target := asObject(request["target"])
+	requestTargetBound := stringValue(target, "server_id") == stringValue(bc.requestContext, "server_id") &&
+		stringValue(target, "environment_id") == stringValue(bc.requestContext, "environment_id")
+	preparationBound := preparationSchemaValid && backupCapturePreparationBound(request, bc.preparation)
+	transferAuthorized := transferSchemaValid && backupCaptureTransferAuthorized(fixture, input, bc.requestContext, request, bc.scope, bc.transfer)
+	bindingExact := backupCaptureBindingExact(request, bc.output)
+	transferID := stringValue(bc.transfer, "transfer_id")
+
+	streamBytes := []byte(stringValue(evaluation, "stream_bytes"))
+	stream := checkBackupCaptureStream(bc, evaluation, streamBytes)
+	outcome := stringValue(bc.output, "outcome")
+	dispatchPermitted := inputSchemaValid && requestContextSchemaValid && transferSchemaValid &&
+		requestTargetBound && preparationBound && transferAuthorized
+	captureAccepted := schemasValid && requestTargetBound && preparationBound && transferAuthorized && bindingExact &&
+		outcome == "captured" && stream.completed && stream.withinBounds && stream.checksumValid
+	requiresReconciliation := !outputSchemaValid || outcome == "outcome_unknown" ||
+		outcome == "captured" && !captureAccepted ||
+		outcome == "rejected" && (!bindingExact || !dispatchPermitted || len(streamBytes) != 0)
+	watermark := asObject(bc.output["write_watermark"])
+	watermarkBound := len(watermark) > 0 && stringValue(watermark, "data_generation_id") == stringValue(request, "data_generation_id")
+
+	return map[string]any{
+		"schemas_valid":                         schemasValid,
+		"preparation_result_schema_valid":       preparationSchemaValid,
+		"preparation_bound":                     preparationBound,
+		"dispatch_permitted":                    dispatchPermitted,
+		"request_target_bound":                  requestTargetBound,
+		"binding_exact":                         bindingExact,
+		"transfer_authorized":                   transferAuthorized,
+		"transfer_handle_in_durable_input":      transferID != "" && backupCaptureContainsValue(request, transferID),
+		"transfer_handle_in_invocation_context": transferID != "" && backupCaptureContainsValue(bc.requestContext, transferID),
+		"transfer_handle_in_result":             transferID != "" && backupCaptureContainsValue(bc.output, transferID),
+		"stream_completed":                      stream.completed,
+		"stream_within_bounds":                  stream.withinBounds,
+		"checksum_valid":                        stream.checksumValid,
+		"write_watermark_bound":                 watermarkBound,
+		"capture_accepted":                      captureAccepted,
+		"requires_reconciliation":               requiresReconciliation,
+		"retry_permitted":                       false,
+		"destruction_current_generation_proven": backupCaptureCurrentGenerationProven(captureAccepted, evaluation, request),
+	}
+}
+
+// newBackupCaptureCase merges an evaluation's overrides into the fixture's base
+// objects and applies its key removals.
+func newBackupCaptureCase(input, evaluation map[string]any) backupCaptureCase {
+	bc := backupCaptureCase{
+		request:        mergeJSONObjects(asObject(input["base_request"]), asObject(evaluation["request_overrides"])),
+		requestContext: mergeJSONObjects(asObject(input["request_context"]), asObject(evaluation["request_context_overrides"])),
+		output:         mergeJSONObjects(asObject(input["base_output"]), asObject(evaluation["output_overrides"])),
+		preparation:    mergeJSONObjects(asObject(input["base_preparation_result"]), asObject(evaluation["preparation_result_overrides"])),
+		scope:          mergeJSONObjects(asObject(input["base_transfer_scope"]), asObject(evaluation["transfer_scope_overrides"])),
+	}
+	deleteStringKeys(bc.requestContext, arrayValue(evaluation, "request_context_remove"))
+	deleteStringKeys(bc.output, arrayValue(evaluation, "output_remove"))
+	bc.streamTransfers = arrayValue(bc.requestContext, "stream_transfers")
+	bc.transfer = map[string]any{}
+	if len(bc.streamTransfers) == 1 {
+		bc.transfer = asObject(bc.streamTransfers[0])
+	}
+	return bc
+}
+
+func deleteStringKeys(object map[string]any, keys []any) {
+	for _, key := range keys {
+		if stringKey, ok := key.(string); ok {
+			delete(object, stringKey)
+		}
+	}
+}
+
+// backupCapturePreparationBound reports whether a prepared backup matches the
+// capture request's target, release, backup, generation, preparation, mode,
+// and data set.
+func backupCapturePreparationBound(request, preparation map[string]any) bool {
+	if stringValue(preparation, "outcome") != "prepared" || !reflect.DeepEqual(request["target"], preparation["target"]) {
+		return false
+	}
+	for _, field := range []string{"release_id", "backup_id", "data_generation_id", "preparation_id", "consistency_mode"} {
+		if stringValue(request, field) != stringValue(preparation, field) {
+			return false
+		}
+	}
+	return containsString(arrayValue(preparation, "data_set_ids"), stringValue(request, "data_set_id"))
+}
+
+// backupCaptureStream reports how the captured stream compares with what the
+// adapter reported and what the transfer allowed.
+type backupCaptureStream struct {
+	completed, withinBounds, checksumValid bool
+}
+
+func checkBackupCaptureStream(bc backupCaptureCase, evaluation map[string]any, streamBytes []byte) backupCaptureStream {
+	maximumBytes, maximumErr := integerValue(bc.transfer["maximum_bytes"])
+	reportedBytes, sizeErr := integerValue(bc.output["size_bytes"])
+	streamCompleted, hasStreamCompleted := bc.output["stream_completed"].(bool)
+	transportCompleted := true
+	if configured, ok := evaluation["stream_transport_complete"].(bool); ok {
+		transportCompleted = configured
+	}
+	checksum := asObject(bc.output["checksum"])
+	streamDigest := sha256.Sum256(streamBytes)
+	return backupCaptureStream{
+		completed: hasStreamCompleted && streamCompleted && transportCompleted,
+		withinBounds: maximumErr == nil && sizeErr == nil && maximumBytes >= 0 &&
+			reportedBytes == int64(len(streamBytes)) && int64(len(streamBytes)) <= maximumBytes,
+		checksumValid: stringValue(checksum, "algorithm") == "sha256" &&
+			stringValue(checksum, "digest") == hex.EncodeToString(streamDigest[:]),
+	}
+}
+
+// backupCaptureCurrentGenerationProven reports whether an accepted capture
+// proves the current data generation for destruction. Only an offline capture
+// with no runtime resume can; this draft has no interoperable verifier for
+// game-native write watermarks.
+func backupCaptureCurrentGenerationProven(captureAccepted bool, evaluation, request map[string]any) bool {
+	runtimeResumed, _ := evaluation["runtime_resumed"].(bool)
+	currentGeneration := stringValue(evaluation, "current_generation_id")
+	if currentGeneration == "" {
+		currentGeneration = stringValue(request, "data_generation_id")
+	}
+	return captureAccepted && !runtimeResumed && currentGeneration == stringValue(request, "data_generation_id") &&
+		stringValue(request, "consistency_mode") == "offline"
 }
 
 func backupCaptureTransferAuthorized(fixture, fixtureInput, requestContext, request, scope, transfer map[string]any) bool {

@@ -108,12 +108,14 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
+	// Start background work before serving: handlers read the runner to
+	// queue accepted operations, so it must exist before the first request.
+	runtime.StartMonitoring(ctx, controllerLog(stdout))
+	runtime.StartRunner(ctx, controllerLog(stdout))
 	serveResult := make(chan error, 1)
 	go func() {
 		serveResult <- server.Serve(tls.NewListener(listener, tlsConfig))
 	}()
-	runtime.StartMonitoring(ctx, controllerLog(stdout))
-	runtime.StartRunner(ctx, controllerLog(stdout))
 	if stdout != nil {
 		if adapters := runtime.AdapterIDs(); len(adapters) > 0 {
 			_, _ = fmt.Fprintf(stdout, "Registered adapters: %s\n", strings.Join(adapters, ", "))
