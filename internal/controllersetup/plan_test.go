@@ -21,8 +21,8 @@ func TestBuildPlanReportsSupportedExistingMachineWithoutSecrets(t *testing.T) {
 	if !plan.TargetSupported || plan.Target != "existing-machine" {
 		t.Fatalf("unexpected target status: %+v", plan)
 	}
-	if plan.CredentialRefCount != 2 {
-		t.Fatalf("credential references = %d, want 2", plan.CredentialRefCount)
+	if plan.CredentialRefCount != 3 { // two adapter secrets and one idempotency key
+		t.Fatalf("credential references = %d, want 3", plan.CredentialRefCount)
 	}
 	serialized := strings.Join(plan.Actions, " ") + plan.Layout.ConfigFile
 	if strings.Contains(serialized, "private-vultr-reference") {

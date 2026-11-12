@@ -11,6 +11,7 @@ The controller core makes every authorization decision. HTTP handlers, CLI comma
 Permissions name an action, resource, and environment. Initial names are in [security.md](../security.md):
 
 - `server.inspect`
+- `server.define`
 - `server.provision`
 - `server.start`
 - `server.stop`
@@ -25,6 +26,28 @@ Permissions name an action, resource, and environment. Initial names are in [sec
 - `proxy.backend.manage`
 
 Each implementation must document how principals, roles/groups, scopes, resources, and environments relate. Permission wildcards must be explicit; a wildcard must not silently include future destructive actions.
+
+### 2.1 Submit decisions
+
+The management API decides each define or submit request in this order, and stops at the first rule that applies. The rules are checked by [management-operations-submit-decision.json](../conformance/test-vectors/management-operations-submit-decision.json).
+
+**`POST /servers` (define):**
+
+1. No `Idempotency-Key`, or an operation type other than `server.define`: 400, `core.validation.invalid_request`.
+2. The actor lacks `server.define` for that exact environment and server ID: 403, `core.authorization.denied`.
+3. The key was already used by this actor: the same request replays the original operation (202); a different request is 409, `core.operation.idempotency_conflict`.
+4. A server with that ID exists in any environment: 409, `core.operation.conflict`. Server IDs are unique across environments, because later routes name only the server.
+5. Otherwise the operation is accepted (202).
+
+**`POST /servers/{server_id}/operations` (submit):**
+
+1. No `Idempotency-Key`: 400, `core.validation.invalid_request`.
+2. The server does not exist, or the actor lacks `server.inspect` for it: 404. An inaccessible server is indistinguishable from a missing one.
+3. The actor lacks the operation type's permission (for example `server.start`) for that server and environment: 403, `core.authorization.denied`.
+4. The controller has no runnable workflow for the operation type: 422, `core.operation.unsupported_type`. Nothing is accepted that could never run.
+5. The server's network profile needs a missing integration capability: 422, `core.network.capability_missing`.
+6. Key reuse behaves as for define: replay (202) or 409, `core.operation.idempotency_conflict`.
+7. Otherwise the operation is accepted (202).
 
 ## 3. Evaluate before accepting and dispatching
 

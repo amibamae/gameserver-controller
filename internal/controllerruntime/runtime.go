@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/amibamae/gameserver-controller/internal/acceptance"
 	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/adapterprocess"
 	"github.com/amibamae/gameserver-controller/internal/config"
@@ -58,6 +59,13 @@ type Runtime struct {
 	destinations   []integrationmonitor.Destination
 	monitorPolicy  integrationmonitor.Policy
 	stopMonitoring func()
+	// keyring binds management API idempotency keys; nil without
+	// controller.idempotency_keys.
+	keyring *acceptance.Keyring
+	// recovered are the unfinished operations found at startup, which the
+	// runner resumes.
+	recovered []string
+	runner    *runner
 }
 
 // AdapterIDs returns the IDs of the adapters that were started and registered.
@@ -150,8 +158,15 @@ func Build(ctx context.Context, value config.Config, configPath string, options 
 	if runtime.Engine, err = workflow.NewEngine(runtime.Store, runtime.Registry, runtime.Schemas, definitions, denyResume{}, timeout, attempts); err != nil {
 		return nil, err
 	}
-	if _, err = runtime.Engine.Recover(ctx); err != nil {
+	recovered, err := runtime.Engine.Recover(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("recover durable operations: %w", err)
+	}
+	for _, operation := range recovered {
+		runtime.recovered = append(runtime.recovered, operation.Record.OperationID)
+	}
+	if runtime.keyring, err = buildKeyring(value.Controller.IdempotencyKeys, options.CredentialDirectory); err != nil {
+		return nil, err
 	}
 	return runtime, nil
 }
@@ -248,6 +263,10 @@ func (r *Runtime) Close() error {
 	if r.stopMonitoring != nil {
 		r.stopMonitoring()
 		r.stopMonitoring = nil
+	}
+	if r.runner != nil {
+		r.runner.stop()
+		r.runner = nil
 	}
 	var failures []error
 	for i := len(r.processes) - 1; i >= 0; i-- {

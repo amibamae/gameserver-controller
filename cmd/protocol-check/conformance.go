@@ -363,6 +363,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"storage_get_advertised":               hasGet,
 			"storage_stream_capabilities_accepted": storageStreamCapabilitiesAccepted,
 		}, nil
+	case "management.operations.submit-decision":
+		return evaluateManagementSubmitDecision(pkg, fixture)
 	case "management.pagination.cursor-scope":
 		cursor := asObject(input["cursor"])
 		cursorActor := stringValue(cursor, "actor_id")

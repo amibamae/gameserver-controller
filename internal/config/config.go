@@ -48,6 +48,43 @@ type Controller struct {
 	Audit         Audit         `yaml:"audit"`
 	ManagementAPI ManagementAPI `yaml:"management_api"`
 	Monitoring    Monitoring    `yaml:"monitoring"`
+	// IdempotencyKeys are the installation secrets that bind management API
+	// idempotency keys to actors and requests. Required when the management
+	// API is enabled.
+	IdempotencyKeys IdempotencyKeys `yaml:"idempotency_keys"`
+}
+
+// IdempotencyKeys names the active key version and every version still
+// needed to verify retained idempotency records. Each value is a systemd
+// credential reference to at least 32 bytes of random key material.
+type IdempotencyKeys struct {
+	Active   string            `yaml:"active"`
+	Versions map[string]string `yaml:"versions"`
+}
+
+var (
+	idempotencyVersionPattern    = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+	idempotencyCredentialPattern = regexp.MustCompile(`^systemd-credential://[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+)
+
+func validateIdempotencyKeys(problems *[]string, keys IdempotencyKeys, required bool) {
+	if keys.Active == "" && len(keys.Versions) == 0 {
+		if required {
+			*problems = append(*problems, "controller.idempotency_keys is required when the management API is enabled")
+		}
+		return
+	}
+	if !idempotencyVersionPattern.MatchString(keys.Active) {
+		*problems = append(*problems, "controller.idempotency_keys.active must be a version name")
+	}
+	if _, ok := keys.Versions[keys.Active]; !ok {
+		*problems = append(*problems, "controller.idempotency_keys.versions must include the active version")
+	}
+	for version, reference := range keys.Versions {
+		if !idempotencyVersionPattern.MatchString(version) || !idempotencyCredentialPattern.MatchString(reference) {
+			*problems = append(*problems, "controller.idempotency_keys.versions must map version names to systemd-credential:// references")
+		}
+	}
 }
 
 // Monitoring configures background integration monitoring. Every field is
@@ -295,6 +332,7 @@ func Validate(value Config) error {
 	add(value.Controller.Audit.Enabled, "controller.audit.enabled must be true")
 	add(value.Controller.Audit.Destination == "local", "controller.audit.destination must be local")
 	validateManagementAPI(&problems, value.Controller.ManagementAPI)
+	validateIdempotencyKeys(&problems, value.Controller.IdempotencyKeys, value.Controller.ManagementAPI.Enabled)
 	if _, err := value.Controller.Monitoring.ProxyPolicy(); err != nil {
 		add(false, "controller.monitoring.proxy."+err.Error())
 	}

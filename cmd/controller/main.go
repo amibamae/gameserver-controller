@@ -90,7 +90,8 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 	if err != nil {
 		return err
 	}
-	handler, err := managementapi.NewHandler(runtime.Store, keyManager, management.Audience, nil)
+	handler, err := managementapi.NewAPIHandler(managementapi.Config{Store: runtime.Store, Controller: runtime, Authenticator: keyManager,
+		Audience: management.Audience, ProtocolVersion: runtime.Schemas.ProtocolVersion()})
 	if err != nil {
 		return err
 	}
@@ -112,6 +113,7 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 		serveResult <- server.Serve(tls.NewListener(listener, tlsConfig))
 	}()
 	runtime.StartMonitoring(ctx, controllerLog(stdout))
+	runtime.StartRunner(ctx, controllerLog(stdout))
 	if stdout != nil {
 		if adapters := runtime.AdapterIDs(); len(adapters) > 0 {
 			_, _ = fmt.Fprintf(stdout, "Registered adapters: %s\n", strings.Join(adapters, ", "))

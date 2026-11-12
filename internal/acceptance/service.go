@@ -19,6 +19,9 @@ var (
 	ErrFingerprintMismatch = errors.New("supplied request fingerprint does not match validated parameters")
 	ErrCallerSuppliedPlan  = errors.New("adapter execution plans are controller-owned")
 	ErrInvalidPlan         = errors.New("controller produced an invalid operation plan")
+	// ErrInvalidRequest wraps every rejection of the request itself, so
+	// callers can report it as a client error.
+	ErrInvalidRequest = errors.New("invalid operation request")
 )
 
 type OperationStore interface {
@@ -102,17 +105,17 @@ func (s *Service) Accept(ctx context.Context, authenticatedActorID, idempotencyK
 	record.IdempotencyKey = idempotencyKey
 	record.Target, err = canonicalTarget(record.Target)
 	if err != nil {
-		return store.StoredOperation{}, false, err
+		return store.StoredOperation{}, false, fmt.Errorf("%w: %w", ErrInvalidRequest, err)
 	}
 	if err := s.validator.ValidateOperationRequest(ctx, record); err != nil {
-		return store.StoredOperation{}, false, fmt.Errorf("validate operation request: %w", err)
+		return store.StoredOperation{}, false, fmt.Errorf("%w: validate operation request: %w", ErrInvalidRequest, err)
 	}
 	fingerprint, err := RequestFingerprint(record.RequestSnapshot.Parameters)
 	if err != nil {
-		return store.StoredOperation{}, false, err
+		return store.StoredOperation{}, false, fmt.Errorf("%w: %w", ErrInvalidRequest, err)
 	}
 	if record.RequestFingerprint != "" && record.RequestFingerprint != fingerprint {
-		return store.StoredOperation{}, false, ErrFingerprintMismatch
+		return store.StoredOperation{}, false, fmt.Errorf("%w: %w", ErrInvalidRequest, ErrFingerprintMismatch)
 	}
 	record.RequestFingerprint = fingerprint
 	if err := s.authorizer.AuthorizeTarget(ctx, authenticatedActorID, record); err != nil {

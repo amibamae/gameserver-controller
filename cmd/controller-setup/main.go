@@ -6,8 +6,10 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/subtle"
 	"debug/buildinfo"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -320,6 +322,9 @@ func requireExistingDatabase(path string) error {
 type passwordPrompt func(context.Context, string) ([]byte, error)
 
 func runCredentialCommand(args []string, stdout, stderr io.Writer, isRoot bool, prompt passwordPrompt, encryptor controllersetup.Encryptor, credentialDirectory string) error {
+	if len(args) > 0 && args[0] == "generate" {
+		return runGenerateCredential(args[1:], stdout, stderr, isRoot, encryptor, credentialDirectory)
+	}
 	if len(args) == 0 || args[0] != "set" {
 		fmt.Fprintln(stderr, "usage: controller-setup credentials set (--config <config.yaml> | --pilot) --name <credential> [--replace --confirm-replace <name>]")
 		return errors.New("invalid command")
@@ -557,4 +562,45 @@ func writeNewPublicFile(path, content string) error {
 		return errors.New("write --public-key-out failed")
 	}
 	return file.Close()
+}
+
+// runGenerateCredential creates a random management API idempotency key and
+// stores it as an encrypted credential. The value is never displayed.
+func runGenerateCredential(args []string, stdout, stderr io.Writer, isRoot bool, encryptor controllersetup.Encryptor, credentialDirectory string) error {
+	flags := flag.NewFlagSet("controller-setup credentials generate", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	configPath := flags.String("config", "", "validated controller configuration")
+	name := flags.String("name", "", "configured idempotency key credential name")
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if flags.NArg() != 0 || *configPath == "" || *name == "" {
+		return errors.New("usage: controller-setup credentials generate --config <config.yaml> --name <idempotency-key-credential>")
+	}
+	if !isRoot {
+		return errors.New("credential installation must run with local administrator privileges")
+	}
+	value, err := config.Load(*configPath)
+	if err != nil {
+		return err
+	}
+	if !controllersetup.IsIdempotencyKeyCredential(value, *name) {
+		return errors.New("credentials generate only creates the configured controller.idempotency_keys credentials")
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return errors.New("generate key failed")
+	}
+	secret := []byte(hex.EncodeToString(raw))
+	zeroSecret(raw)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err := controllersetup.SetEncryptedCredential(ctx, value, *name, credentialDirectory, secret, false, encryptor); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "Generated and stored encrypted credential %q (64 random hex characters). The value was not displayed.\n", *name)
+	return nil
 }

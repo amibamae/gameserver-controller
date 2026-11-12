@@ -783,3 +783,19 @@ func testOperation(id string) OperationRecord {
 		}},
 	}
 }
+
+func TestDefineRefusesAServerIDUsedInAnotherEnvironment(t *testing.T) {
+	store := openTestStore(t)
+	testLogicalServerFixture(t, store) // server-1 in staging
+	operation := testOperation("define-in-production")
+	operation.OperationType, operation.RequestSnapshot.OperationType = "server.define", "server.define"
+	operation.Steps = nil
+	operation.Target = OperationTarget{ServerID: "server-1", EnvironmentID: "production"}
+	operation.RequestSnapshot.Parameters = json.RawMessage(`{"server_id":"server-1","environment_id":"production","display_name":"Prod","hosting_profile":"vultr-small","storage_profile":"wasabi-worlds","game":{"adapter_id":"game.paper","release_channel":"stable"},"execution":{"adapter_id":"execution.systemd","profile":"paper-default"}}`)
+	operation.RequestFingerprint = "sha256:" + strings.Repeat("d", 64)
+	proof := IdempotencyProof{ActiveKeyVersion: "v1", Candidates: []IdempotencyVerifier{{
+		KeyVersion: "v1", Digest: bytes.Repeat([]byte{5}, 32), BindingDigest: bytes.Repeat([]byte{6}, 32)}}}
+	if _, _, err := store.AcceptOperation(operation, proof, []string{LogicalServerLockScope("production", "server-1")}); !errors.Is(err, ErrLogicalServerAlreadyExists) {
+		t.Fatalf("duplicate server ID in another environment: %v", err)
+	}
+}
