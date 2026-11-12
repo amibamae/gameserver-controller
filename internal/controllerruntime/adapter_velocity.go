@@ -4,34 +4,89 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
-	"sort"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/amibamae/gameserver-controller/internal/cloudflaredns"
 	"github.com/amibamae/gameserver-controller/internal/config"
 	"github.com/amibamae/gameserver-controller/internal/velocityproxy"
 	"github.com/amibamae/gameserver-controller/internal/vultrapi"
 )
 
+// Velocity proxy integration adapter (`implementation: velocity`).
+
+const velocityBridgeTokenSecret = "bridge_token"
+
 // hostingTokenSecret is the secret_refs name a hosting profile uses for its
 // Vultr API token. Instance-IP backends need it to look up the instance's IP.
 const hostingTokenSecret = "api_token"
 
-// credentialResolver is the subset of credential.Resolver the integration
-// adapters use.
-type credentialResolver interface {
-	WithCredential(reference string, use func([]byte) error) error
+// VelocitySettings is the `velocity:` block. The bridge token comes from
+// secret_refs.
+type VelocitySettings struct {
+	EnvironmentID   string `yaml:"environment_id"`
+	BridgeURL       string `yaml:"bridge_url"`
+	ProxyInstanceID string `yaml:"proxy_instance_id"`
+	Timeout         string `yaml:"timeout"`
 }
 
-// unavailableCredentials lets Validate construct adapters without reading any
-// credential: every lookup fails.
-type unavailableCredentials struct{}
+func (v *VelocitySettings) BoundEnvironment() string { return v.EnvironmentID }
 
-func (unavailableCredentials) WithCredential(string, func([]byte) error) error {
-	return errors.New("credentials are not read during validation")
+func (v *VelocitySettings) Validate(check config.SettingsCheck) {
+	check.Require(check.KnownEnvironment(v.EnvironmentID), "environment_id must name a configured environment")
+	check.Require(validBridgeURL(v.BridgeURL), "bridge_url must be an https URL, or http to a loopback address, with no path, query, or user information")
+	check.Require(strings.TrimSpace(v.ProxyInstanceID) != "" && len(v.ProxyInstanceID) <= 1024, "proxy_instance_id is required")
+	if v.Timeout != "" {
+		timeout, err := time.ParseDuration(v.Timeout)
+		check.Require(err == nil && timeout > 0 && timeout <= 2*time.Minute, "timeout must be greater than zero and no more than 2m")
+	}
+}
+
+// validBridgeURL mirrors velocityproxy.NewHTTPBridge: https anywhere, plain
+// http only to loopback, and no user information, path, query, or fragment.
+func validBridgeURL(value string) bool {
+	u, err := url.Parse(value)
+	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Hostname() == "" || (u.Path != "" && u.Path != "/") {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return true
+	case "http":
+		ip := net.ParseIP(u.Hostname())
+		return (ip != nil && ip.IsLoopback()) || strings.EqualFold(u.Hostname(), "localhost")
+	}
+	return false
+}
+
+func init() {
+	registerAdapter(config.Implementation{
+		Name: "velocity", Category: "integration", Secrets: []string{velocityBridgeTokenSecret},
+		NewSettings: func() config.ImplementationSettings { return &VelocitySettings{} },
+	}, adapterBuilder{
+		check: func(b adapterBuild) error {
+			_, err := buildVelocity(b.value, b.profile, b.protocolVersion, unavailableCredentials{})
+			return err
+		},
+		build: func(b adapterBuild) (builtAdapter, error) {
+			credentials, err := b.credentials()
+			if err != nil {
+				return builtAdapter{}, err
+			}
+			parts, err := buildVelocity(b.value, b.profile, b.protocolVersion, credentials)
+			if err != nil {
+				return builtAdapter{}, err
+			}
+			reachable, err := parts.bridge.startupCheck(b.ctx)
+			if err != nil {
+				return builtAdapter{}, err
+			}
+			return builtAdapter{implementation: parts.adapter, unreachableProxy: !reachable}, nil
+		},
+	})
 }
 
 // velocityParts are the pieces of one Velocity adapter, built without
@@ -42,10 +97,13 @@ type velocityParts struct {
 }
 
 func buildVelocity(value config.Config, profile config.AdapterProfile, protocolVersion string, credentials credentialResolver) (velocityParts, error) {
-	v := profile.Velocity
+	v, ok := config.SettingsOf[*VelocitySettings](profile)
+	if !ok {
+		return velocityParts{}, errors.New("velocity settings are missing")
+	}
 	timeout, _ := time.ParseDuration(v.Timeout)
 	http, err := velocityproxy.NewHTTPBridge(velocityproxy.HTTPBridgeConfig{
-		BaseURL: v.BridgeURL, TokenRef: profile.SecretRefs[config.VelocityBridgeTokenSecret].SecretRef,
+		BaseURL: v.BridgeURL, TokenRef: profile.SecretRefs[velocityBridgeTokenSecret].SecretRef,
 		ProxyInstanceID: v.ProxyInstanceID, Timeout: timeout,
 	}, credentials, nil)
 	if err != nil {
@@ -93,7 +151,7 @@ func velocityAddresses(value config.Config, profile config.AdapterProfile, crede
 		}
 	}
 	if usesInstanceIP {
-		addresses.LookupIP = vultrIPLookup(profile.Velocity.EnvironmentID, hostingTokens, credentials)
+		addresses.LookupIP = vultrIPLookup(config.BoundEnvironment(profile), hostingTokens, credentials)
 	}
 	return addresses
 }
@@ -218,47 +276,4 @@ func (b *checkedBridge) WaitingCohort(ctx context.Context, cohortID string) ([]s
 		return nil, time.Time{}, err
 	}
 	return b.inner.WaitingCohort(ctx, cohortID)
-}
-
-// cloudflareRecords derives the managed record names for one DNS adapter from
-// the network profiles of the servers that use it: each hostname backend gets
-// backend_address, and each direct_dns join hostname gets direct_join plus
-// fallback with the configured lobby values.
-func cloudflareRecords(value config.Config, profileID string) map[string]cloudflaredns.ManagedRecord {
-	records := map[string]cloudflaredns.ManagedRecord{}
-	for _, server := range value.Servers {
-		network := server.Network
-		if network == nil || network.DNS != profileID {
-			continue
-		}
-		for _, backend := range network.Backends {
-			if name, ok := network.BackendHostname(server.ID, server.EnvironmentID, backend); ok && name != "" {
-				records[strings.ToLower(name)] = cloudflaredns.ManagedRecord{Purposes: []cloudflaredns.Purpose{cloudflaredns.PurposeBackendAddress}}
-			}
-		}
-		if network.JoinMode == "direct_dns" {
-			fallback := map[string][]string{}
-			for recordType, values := range network.FallbackRecords {
-				fallback[recordType] = append([]string(nil), values...)
-				sort.Strings(fallback[recordType])
-			}
-			records[strings.ToLower(network.JoinHostname)] = cloudflaredns.ManagedRecord{
-				Purposes: []cloudflaredns.Purpose{cloudflaredns.PurposeDirectJoin, cloudflaredns.PurposeFallback},
-				Fallback: fallback,
-			}
-		}
-	}
-	return records
-}
-
-func buildCloudflare(value config.Config, profile config.AdapterProfile, protocolVersion string, credentials credentialResolver) (*cloudflaredns.Adapter, error) {
-	c := profile.Cloudflare
-	records := cloudflareRecords(value, profile.ID)
-	if len(records) == 0 {
-		return nil, errors.New("no server network profile uses this DNS adapter, so it manages no records; remove it or reference it from a network profile")
-	}
-	return cloudflaredns.New(cloudflaredns.Config{
-		AdapterID: profile.ID, EnvironmentID: c.EnvironmentID, ZoneID: c.ZoneID, ZoneName: c.ZoneName,
-		APITokenRef: profile.SecretRefs[config.CloudflareAPITokenSecret].SecretRef, Records: records,
-	}, protocolVersion, credentials, nil)
 }

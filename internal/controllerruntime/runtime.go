@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -18,7 +17,6 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/credential"
 	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 	"github.com/amibamae/gameserver-controller/internal/store"
-	"github.com/amibamae/gameserver-controller/internal/wasabistorage"
 	"github.com/amibamae/gameserver-controller/internal/workflow"
 )
 
@@ -66,28 +64,23 @@ func (r *Runtime) UnreachableProxies() []string {
 }
 
 // Validate checks implemented adapter profiles without starting anything,
-// opening the store, or reading credentials.
+// opening the store, or reading credentials. Each implementation's own file
+// supplies the check (see adapter_registry.go).
 func Validate(value config.Config) error {
 	var problems []string
 	for _, profile := range value.Adapters {
-		switch profile.Implementation {
-		case config.ImplementationWasabi:
-			if err := wasabistorage.ValidateConfig(wasabiConfig(profile)); err != nil {
-				problems = append(problems, fmt.Sprintf("adapter %s: %v", profile.ID, err))
-			}
-		case config.ImplementationProcess:
-			info, err := os.Stat(profile.Process.Path)
-			if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0 {
-				problems = append(problems, fmt.Sprintf("adapter %s: process.path is not an executable file", profile.ID))
-			}
-		case config.ImplementationVelocity:
-			if _, err := buildVelocity(value, profile, "validation", unavailableCredentials{}); err != nil {
-				problems = append(problems, fmt.Sprintf("adapter %s: %v", profile.ID, err))
-			}
-		case config.ImplementationCloudflare:
-			if _, err := buildCloudflare(value, profile, "validation", unavailableCredentials{}); err != nil {
-				problems = append(problems, fmt.Sprintf("adapter %s: %v", profile.ID, err))
-			}
+		if profile.Implementation == "" {
+			continue
+		}
+		builder, ok := adapterBuilders[profile.Implementation]
+		if !ok {
+			problems = append(problems, fmt.Sprintf("adapter %s: implementation %s has no runtime builder", profile.ID, profile.Implementation))
+			continue
+		}
+		build := adapterBuild{value: value, profile: profile, protocolVersion: "validation",
+			credentials: func() (credentialResolver, error) { return unavailableCredentials{}, nil }}
+		if err := builder.check(build); err != nil {
+			problems = append(problems, fmt.Sprintf("adapter %s: %v", profile.ID, err))
 		}
 	}
 	if len(problems) > 0 {
@@ -156,105 +149,45 @@ func Build(ctx context.Context, value config.Config, configPath string, options 
 
 func (r *Runtime) registerAdapters(ctx context.Context, value config.Config, options Options) error {
 	var resolver *credential.Resolver
-	credentials := func(profileID string) (*credential.Resolver, error) {
-		if resolver == nil {
-			var err error
-			if resolver, err = credential.NewResolver(options.CredentialDirectory); err != nil {
-				return nil, fmt.Errorf("adapter %s needs systemd credentials: %w", profileID, err)
-			}
-		}
-		return resolver, nil
-	}
 	for _, profile := range value.Adapters {
-		var implementation adapter.Implementation
-		switch profile.Implementation {
-		case "":
+		if profile.Implementation == "" {
 			continue
-		case config.ImplementationWasabi:
-			resolver, err := credentials(profile.ID)
-			if err != nil {
-				return err
-			}
-			wasabi, err := wasabistorage.New(wasabiConfig(profile), r.Schemas.ProtocolVersion(), resolver)
-			if err != nil {
-				return fmt.Errorf("adapter %s: %w", profile.ID, err)
-			}
-			implementation = wasabi
-		case config.ImplementationProcess:
-			process, err := adapterprocess.Start(ctx, r.Schemas, processConfig(profile, options))
-			if err != nil {
-				return fmt.Errorf("adapter %s: %w", profile.ID, err)
-			}
-			r.processes = append(r.processes, process)
-			// A configured executable is not automatically trusted.
-			descriptor := process.Descriptor()
-			if descriptor.AdapterID != profile.ID || string(descriptor.Category) != profile.Category {
-				return fmt.Errorf("adapter %s: process reported identity %q (%s), not the configured one", profile.ID, descriptor.AdapterID, descriptor.Category)
-			}
-			implementation = process
-		case config.ImplementationVelocity:
-			resolver, err := credentials(profile.ID)
-			if err != nil {
-				return err
-			}
-			parts, err := buildVelocity(value, profile, r.Schemas.ProtocolVersion(), resolver)
-			if err != nil {
-				return fmt.Errorf("adapter %s: %w", profile.ID, err)
-			}
-			reachable, err := parts.bridge.startupCheck(ctx)
-			if err != nil {
-				return fmt.Errorf("adapter %s: %w", profile.ID, err)
-			}
-			if !reachable {
-				r.unreachableProxies = append(r.unreachableProxies, profile.ID)
-			}
-			implementation = parts.adapter
-			r.adapterEnvironments[profile.ID] = profile.Velocity.EnvironmentID
-		case config.ImplementationCloudflare:
-			resolver, err := credentials(profile.ID)
-			if err != nil {
-				return err
-			}
-			cloudflare, err := buildCloudflare(value, profile, r.Schemas.ProtocolVersion(), resolver)
-			if err != nil {
-				return fmt.Errorf("adapter %s: %w", profile.ID, err)
-			}
-			implementation = cloudflare
-			r.adapterEnvironments[profile.ID] = profile.Cloudflare.EnvironmentID
-		default:
-			return fmt.Errorf("adapter %s: unsupported implementation", profile.ID)
 		}
-		if err := r.Registry.Register(implementation); err != nil {
+		builder, ok := adapterBuilders[profile.Implementation]
+		if !ok {
+			return fmt.Errorf("adapter %s: unsupported implementation %s", profile.ID, profile.Implementation)
+		}
+		profileID := profile.ID
+		built, err := builder.build(adapterBuild{
+			ctx: ctx, value: value, profile: profile, protocolVersion: r.Schemas.ProtocolVersion(), options: options, schemas: r.Schemas,
+			credentials: func() (credentialResolver, error) {
+				if resolver == nil {
+					var err error
+					if resolver, err = credential.NewResolver(options.CredentialDirectory); err != nil {
+						return nil, fmt.Errorf("adapter %s needs systemd credentials: %w", profileID, err)
+					}
+				}
+				return resolver, nil
+			},
+		})
+		if built.process != nil {
+			r.processes = append(r.processes, built.process)
+		}
+		if err != nil {
+			return fmt.Errorf("adapter %s: %w", profile.ID, err)
+		}
+		if built.unreachableProxy {
+			r.unreachableProxies = append(r.unreachableProxies, profile.ID)
+		}
+		if environment := config.BoundEnvironment(profile); environment != "" {
+			r.adapterEnvironments[profile.ID] = environment
+		}
+		if err := r.Registry.Register(built.implementation); err != nil {
 			return fmt.Errorf("adapter %s: %w", profile.ID, err)
 		}
 		r.adapters = append(r.adapters, profile.ID)
 	}
 	return nil
-}
-
-func wasabiConfig(profile config.AdapterProfile) wasabistorage.Config {
-	w := profile.Wasabi
-	if w == nil {
-		w = &config.WasabiProfile{}
-	}
-	return wasabistorage.Config{
-		AdapterID: profile.ID, StorageProfileID: w.StorageProfileID, EnvironmentID: w.EnvironmentID,
-		Container: w.Container, KeyPrefix: w.KeyPrefix, Region: w.Region, EndpointURL: w.EndpointURL,
-		AccessKeyIDRef:     profile.SecretRefs[config.WasabiAccessKeyIDSecret].SecretRef,
-		SecretAccessKeyRef: profile.SecretRefs[config.WasabiSecretAccessKeySecret].SecretRef,
-		MaxObjectBytes:     w.MaxObjectBytes, RequireVersionIDs: w.RequireVersionIDs,
-	}
-}
-
-func processConfig(profile config.AdapterProfile, options Options) adapterprocess.Config {
-	p := profile.Process
-	start, _ := time.ParseDuration(p.StartTimeout)
-	stop, _ := time.ParseDuration(p.StopTimeout)
-	return adapterprocess.Config{
-		Path: p.Path, Args: p.Args, Env: p.Env, Dir: p.WorkingDirectory,
-		ControllerID: "gameserver-controller", ControllerVersion: options.ControllerVersion,
-		StartTimeout: start, StopTimeout: stop,
-	}
 }
 
 // Close stops process adapters, then closes the store. It is safe to call on
