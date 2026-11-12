@@ -41,7 +41,7 @@ Do these in order. "Model / reasoning" is the recommended setting for that task.
 | R3 | done (branch `claude/integration-wiring`) | Velocity and Cloudflare registered in the runtime. | — |
 | R4 | done (same branch) | `Runtime.CheckNetwork` enforces §6; the step R6 planner must call it before accepting an operation. | R3 |
 | N1 | done (branch `claude/adapter-files`) | One file per adapter: `internal/controllerruntime/adapter_<name>.go` registers each implementation; `adapters.d/` holds one profile per file. | — |
-| R5 | Opus 5.5, medium | Rust behavior tests in `conformance-rs/` (see below). | R2 |
+| R5 | part 1 done (branch `claude/conformance-rs`); part 2 Opus 5.5, medium | Rust consumer `conformance-rs/`: part 1 has the crate, strict parser, digests, schema and example validation, report, CI, crate notices, and 6 fixtures. Part 2 adds the other 11 profile fixtures (game configure, release, install; execution start, stop, inspect, logs, health; proxy register, player count; Velocity reconciliation and privacy) plus RFC 8785 canonical JSON for the configure digests. | R2 |
 | R6 | Opus 5.5, high | Management API routes, with a new `server.define` permission (see below). | — |
 | R7 | Opus 5.5, high | Finish controller setup (`internal/controllersetup`): provider credential checks, local audit, rollback of all host changes. | R6 |
 | R8 | Opus 5.5, high | Attach adopted VMs to a logical server (builds on `internal/pilotcapacity`). | R6 |

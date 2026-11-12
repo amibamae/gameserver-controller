@@ -138,3 +138,98 @@ These run in GitHub Actions workflows and are not distributed with the project o
 - **`gradle/actions/setup-gradle@v4`**: MIT, Copyright (c) 2023 Gradle Inc. ([LICENSE](https://github.com/gradle/actions/blob/v4/LICENSE)). Later major versions bundle a proprietary "Enhanced Caching" component (`gradle-actions-caching`) under Gradle's own terms and enable it by default. The `v4` tag has no such component or license file, and this project does not use a later version. Check this before upgrading.
 - **Gradle 8.14.3**, pinned in `.github/workflows/velocity-plugin.yml`: Apache-2.0, by Gradle Inc. ([LICENSE](https://github.com/gradle/gradle/blob/v8.14.3/LICENSE)).
 - **Eclipse Temurin JDK 21**, installed by `actions/setup-java` with `distribution: temurin`: GNU GPL v2 with the Classpath Exception, from the Eclipse Adoptium project ([license](https://github.com/adoptium/jdk21u/blob/HEAD/LICENSE)). The JDK is only the build and test toolchain.
+
+## Rust conformance consumer (`conformance-rs`)
+
+[`conformance-rs`](conformance-rs) is an optional, independent test tool that runs in CI. It is not shipped with the controller and no binary is distributed, so these crates are not redistributed by this project. Versions match [conformance-rs/Cargo.lock](conformance-rs/Cargo.lock). Licenses are as declared in each crate's published metadata and checked against the license files in the published crate. `cargo test` in `conformance-rs` fails if a crate in the lockfile is missing from this table. Where a crate offers a choice of licenses, the project may use any of them.
+
+The build uses the Rust toolchain (rustc and cargo, MIT OR Apache-2.0, by the Rust Project) installed on the CI runner.
+
+| Crate | Version | License | Authors | Source | Notes |
+|---|---|---|---|---|---|
+| `ahash` | 0.8.12 | MIT OR Apache-2.0 | Tom Kaitchuck | [source](https://github.com/tkaitchuck/ahash) |  |
+| `aho-corasick` | 1.1.5 | Unlicense OR MIT | Andrew Gallant | [source](https://github.com/BurntSushi/aho-corasick) |  |
+| `allocator-api2` | 0.2.21 | MIT OR Apache-2.0 | Zakarum | [source](https://github.com/zakarumych/allocator-api2) |  |
+| `autocfg` | 1.5.1 | Apache-2.0 OR MIT | Josh Stone | [source](https://github.com/cuviper/autocfg) |  |
+| `bit-set` | 0.8.0 | Apache-2.0 OR MIT | Alexis Beingessner | [source](https://github.com/contain-rs/bit-set) |  |
+| `bit-vec` | 0.8.0 | Apache-2.0 OR MIT | Alexis Beingessner | [source](https://github.com/contain-rs/bit-vec) |  |
+| `bitflags` | 2.13.2 | MIT OR Apache-2.0 | The Rust Project Developers | [source](https://github.com/bitflags/bitflags) |  |
+| `block-buffer` | 0.10.4 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/utils) |  |
+| `borrow-or-share` | 0.2.4 | MIT-0 | Scallop Ye | [source](https://github.com/yescallop/borrow-or-share) |  |
+| `bumpalo` | 3.20.3 | MIT OR Apache-2.0 | Nick Fitzgerald | [source](https://github.com/fitzgen/bumpalo) | non-Linux targets only; not built in CI |
+| `bytecount` | 0.6.9 | Apache-2.0/MIT | Andre Bogus, Joshua Landau | [source](https://github.com/llogiq/bytecount) |  |
+| `cfg-if` | 1.0.5 | MIT OR Apache-2.0 | Alex Crichton | [source](https://github.com/rust-lang/cfg-if) |  |
+| `cpufeatures` | 0.2.17 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/utils) |  |
+| `crypto-common` | 0.1.7 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/traits) |  |
+| `data-encoding` | 2.11.1 | MIT | see repository | [source](https://github.com/ia0/data-encoding) |  |
+| `digest` | 0.10.7 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/traits) |  |
+| `email_address` | 0.2.9 | MIT | Simon Johnston | [source](https://github.com/johnstonskj/rust-email_address) |  |
+| `equivalent` | 1.0.3 | Apache-2.0 OR MIT | see repository | [source](https://github.com/indexmap-rs/equivalent) |  |
+| `fancy-regex` | 0.20.2 | MIT | Raph Levien, Robin Stocker, Keith Hall | [source](https://github.com/fancy-regex/fancy-regex) |  |
+| `fluent-uri` | 0.4.1 | MIT | Scallop Ye | [source](https://github.com/yescallop/fluent-uri-rs) |  |
+| `foldhash` | 0.2.0 | Zlib | Orson Peters | [source](https://github.com/orlp/foldhash) |  |
+| `fraction` | 0.17.0 | MIT OR Apache-2.0 | dnsl48 | [source](https://github.com/dnsl48/fraction) |  |
+| `generic-array` | 0.14.7 | MIT | Bartłomiej Kamiński, Aaron Trent | [source](https://github.com/fizyk20/generic-array) |  |
+| `getrandom` | 0.3.4 | MIT OR Apache-2.0 | The Rand Project Developers | [source](https://github.com/rust-random/getrandom) |  |
+| `hashbrown` | 0.17.1 | MIT OR Apache-2.0 | see repository | [source](https://github.com/rust-lang/hashbrown) |  |
+| `heck` | 0.5.0 | MIT OR Apache-2.0 | see repository | [source](https://github.com/withoutboats/heck) |  |
+| `itoa` | 1.0.19 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/itoa) |  |
+| `js-sys` | 0.3.107 | MIT OR Apache-2.0 | The wasm-bindgen Developers | [source](https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys) | non-Linux targets only; not built in CI |
+| `jsonschema` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) |  |
+| `jsonschema-regex` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) | no license file in the published crate; license from crate metadata |
+| `jsonschema-value` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) | no license file in the published crate; license from crate metadata |
+| `libc` | 0.2.191 | MIT OR Apache-2.0 | see repository | [source](https://github.com/rust-lang/libc) |  |
+| `lock_api` | 0.4.14 | MIT OR Apache-2.0 | Amanieu d'Antras | [source](https://github.com/Amanieu/parking_lot) |  |
+| `memchr` | 2.8.3 | Unlicense OR MIT | Andrew Gallant, bluss | [source](https://github.com/BurntSushi/memchr) |  |
+| `micromap` | 0.3.0 | MIT | see repository | [source](https://github.com/yegor256/micromap) |  |
+| `num` | 0.4.3 | MIT OR Apache-2.0 | The Rust Project Developers | [source](https://github.com/rust-num/num) |  |
+| `num-bigint` | 0.4.8 | MIT OR Apache-2.0 | The Rust Project Developers | [source](https://github.com/rust-num/num-bigint) |  |
+| `num-cmp` | 0.1.0 | MIT/Apache-2.0 | Kang Seonghoon | [source](https://github.com/lifthrasiir/num-cmp) |  |
+| `num-complex` | 0.4.6 | MIT OR Apache-2.0 | The Rust Project Developers | [source](https://github.com/rust-num/num-complex) |  |
+| `num-integer` | 0.1.47 | MIT OR Apache-2.0 | The Rust Project Developers | [source](https://github.com/rust-num/num-integer) |  |
+| `num-iter` | 0.1.46 | MIT OR Apache-2.0 | The Rust Project Developers | [source](https://github.com/rust-num/num-iter) |  |
+| `num-rational` | 0.4.2 | MIT OR Apache-2.0 | The Rust Project Developers | [source](https://github.com/rust-num/num-rational) |  |
+| `num-traits` | 0.2.19 | MIT OR Apache-2.0 | The Rust Project Developers | [source](https://github.com/rust-num/num-traits) |  |
+| `once_cell` | 1.21.4 | MIT OR Apache-2.0 | Aleksey Kladov | [source](https://github.com/matklad/once_cell) |  |
+| `outref` | 0.5.2 | MIT | see repository | [source](https://github.com/Nugine/outref) |  |
+| `parking_lot` | 0.12.5 | MIT OR Apache-2.0 | Amanieu d'Antras | [source](https://github.com/Amanieu/parking_lot) |  |
+| `parking_lot_core` | 0.9.12 | MIT OR Apache-2.0 | Amanieu d'Antras | [source](https://github.com/Amanieu/parking_lot) |  |
+| `percent-encoding` | 2.3.2 | MIT OR Apache-2.0 | The rust-url developers | [source](https://github.com/servo/rust-url) |  |
+| `proc-macro2` | 1.0.107 | MIT OR Apache-2.0 | David Tolnay, Alex Crichton | [source](https://github.com/dtolnay/proc-macro2) |  |
+| `quote` | 1.0.47 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/quote) |  |
+| `r-efi` | 5.3.0 | MIT OR Apache-2.0 OR LGPL-2.1-or-later | see repository | [source](https://github.com/r-efi/r-efi) | no license file in the published crate; license from crate metadata; non-Linux targets only; not built in CI |
+| `redox_syscall` | 0.5.18 | MIT | Jeremy Soller | [source](https://gitlab.redox-os.org/redox-os/syscall) | non-Linux targets only; not built in CI |
+| `ref-cast` | 1.0.27 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/ref-cast) |  |
+| `ref-cast-impl` | 1.0.27 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/ref-cast) |  |
+| `referencing` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) |  |
+| `regex` | 1.13.1 | MIT OR Apache-2.0 | The Rust Project Developers, Andrew Gallant | [source](https://github.com/rust-lang/regex) |  |
+| `regex-automata` | 0.4.18 | MIT OR Apache-2.0 | The Rust Project Developers, Andrew Gallant | [source](https://github.com/rust-lang/regex) |  |
+| `regex-syntax` | 0.8.11 | MIT OR Apache-2.0 | The Rust Project Developers, Andrew Gallant | [source](https://github.com/rust-lang/regex) |  |
+| `rustversion` | 1.0.23 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/rustversion) |  |
+| `scopeguard` | 1.2.0 | MIT OR Apache-2.0 | bluss | [source](https://github.com/bluss/scopeguard) |  |
+| `serde` | 1.0.229 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay | [source](https://github.com/serde-rs/serde) |  |
+| `serde_core` | 1.0.229 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay | [source](https://github.com/serde-rs/serde) |  |
+| `serde_derive` | 1.0.229 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay | [source](https://github.com/serde-rs/serde) |  |
+| `serde_json` | 1.0.154 | MIT OR Apache-2.0 | see repository | [source](https://github.com/serde-rs/json) |  |
+| `sha2` | 0.10.9 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/hashes) |  |
+| `smallvec` | 1.16.5 | MIT OR Apache-2.0 | The Servo Project Developers | [source](https://github.com/servo/rust-smallvec) |  |
+| `strum` | 0.28.0 | MIT | Peter Glotfelty | [source](https://github.com/Peternator7/strum) |  |
+| `strum_macros` | 0.28.0 | MIT | Peter Glotfelty | [source](https://github.com/Peternator7/strum) |  |
+| `syn` | 2.0.119 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/syn) |  |
+| `syn` | 3.0.10 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/syn) |  |
+| `typenum` | 1.20.1 | MIT OR Apache-2.0 | see repository | [source](https://github.com/paholg/typenum) |  |
+| `unicode-general-category` | 1.1.0 | Apache-2.0 | YesLogic Pty. Ltd. | [source](https://github.com/yeslogic/unicode-general-category) |  |
+| `unicode-ident` | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 | David Tolnay | [source](https://github.com/dtolnay/unicode-ident) |  |
+| `uuid-simd` | 0.8.0 | MIT | see repository | [source](https://github.com/Nugine/simd) | no license file in the published crate; license from crate metadata |
+| `version_check` | 0.9.5 | MIT/Apache-2.0 | Sergio Benitez | [source](https://github.com/SergioBenitez/version_check) |  |
+| `vsimd` | 0.8.0 | MIT | see repository | [source](https://github.com/Nugine/simd) | no license file in the published crate; license from crate metadata |
+| `wasip2` | 1.0.4+wasi-0.2.12 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | see repository | [source](https://github.com/bytecodealliance/wasi-rs) | non-Linux targets only; not built in CI |
+| `wasm-bindgen` | 0.2.130 | MIT OR Apache-2.0 | The wasm-bindgen Developers | [source](https://github.com/wasm-bindgen/wasm-bindgen) | non-Linux targets only; not built in CI |
+| `wasm-bindgen-macro` | 0.2.130 | MIT OR Apache-2.0 | The wasm-bindgen Developers | [source](https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/macro) | non-Linux targets only; not built in CI |
+| `wasm-bindgen-macro-support` | 0.2.130 | MIT OR Apache-2.0 | The wasm-bindgen Developers | [source](https://github.com/wasm-bindgen/wasm-bindgen/tree/main/crates/macro-support) | non-Linux targets only; not built in CI |
+| `wasm-bindgen-shared` | 0.2.130 | MIT OR Apache-2.0 | The wasm-bindgen Developers | [source](https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/shared) | non-Linux targets only; not built in CI |
+| `windows-link` | 0.2.1 | MIT OR Apache-2.0 | see repository | [source](https://github.com/microsoft/windows-rs) | no license file in the published crate; license from crate metadata; non-Linux targets only; not built in CI |
+| `wit-bindgen` | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | Alex Crichton | [source](https://github.com/bytecodealliance/wit-bindgen) | non-Linux targets only; not built in CI |
+| `zerocopy` | 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT | see repository | [source](https://github.com/google/zerocopy) |  |
+| `zerocopy-derive` | 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT | see repository | [source](https://github.com/google/zerocopy) |  |
+| `zmij` | 1.0.23 | MIT | David Tolnay | [source](https://github.com/dtolnay/zmij) |  |
