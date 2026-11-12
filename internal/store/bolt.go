@@ -246,6 +246,17 @@ func (s *BoltStore) AcceptOperation(record OperationRecord, proof IdempotencyPro
 			if tx.Bucket(logicalServersBucket).Get(key) != nil {
 				return ErrLogicalServerAlreadyExists
 			}
+			// Server IDs are unique across environments, because management
+			// routes after definition name only the server.
+			if err := tx.Bucket(logicalServersBucket).ForEach(func(_, value []byte) error {
+				var existing StoredLogicalServer
+				if json.Unmarshal(value, &existing) == nil && existing.Record.ServerID == server.ServerID {
+					return ErrLogicalServerAlreadyExists
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
 			server.CreatedAt = prepared.CreatedAt
 			server.UpdatedAt = prepared.CreatedAt
 			server.LastOperationID = prepared.OperationID

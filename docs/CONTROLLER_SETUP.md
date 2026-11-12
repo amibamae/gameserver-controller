@@ -74,8 +74,21 @@ the local test environment.
 go run ./cmd/controller serve --config /etc/gameserver-controller/controller.yaml
 ```
 
-This runtime currently supports `GET /v1/operations/{operation_id}` only. It is
-not ready to operate game-server lifecycles or replace the supervised pilot.
+The management API defines servers (`POST /v1/servers`), lists and reads them,
+accepts server operations, reads operations, and lists adapter capabilities.
+Only `server.define` runs to completion today; other operation types are refused
+with `core.operation.unsupported_type` until their workflows are registered. It
+is not ready to operate game-server lifecycles or replace the supervised pilot.
+
+The management API needs an idempotency key (`controller.idempotency_keys`).
+Generate it on the controller host instead of typing a value:
+
+```sh
+sudo /tmp/controller-setup credentials generate --config /etc/gameserver-controller/controller.yaml --name controller-idempotency-key-v1
+```
+
+It writes 64 random hex characters through `systemd-creds encrypt` and never
+displays them.
 
 To store one of the credential names already referenced by your validated
 configuration, use:

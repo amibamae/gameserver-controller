@@ -11,6 +11,12 @@ controller:
     audience: controller-instance-1
     tls_certificate_file: /etc/gameserver-controller/tls.crt
     tls_private_key_file: /etc/gameserver-controller/tls.key
+  # Required when the management API is enabled. Create the key with
+  # controller-setup credentials generate; never type it in by hand.
+  idempotency_keys:
+    active: v1
+    versions:
+      v1: systemd-credential://controller-idempotency-key-v1
   defaults:
     operation_timeout: 15m
     retry_limit: 2

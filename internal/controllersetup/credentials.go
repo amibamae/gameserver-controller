@@ -66,6 +66,11 @@ func ConfiguredCredentialNames(value config.Config) []string {
 			}
 		}
 	}
+	for _, reference := range value.Controller.IdempotencyKeys.Versions {
+		if name, ok := credentialName(reference); ok {
+			seen[name] = struct{}{}
+		}
+	}
 	names := make([]string, 0, len(seen))
 	for name := range seen {
 		names = append(names, name)
@@ -90,6 +95,17 @@ func SetEncryptedCredential(ctx context.Context, value config.Config, name, dire
 		return errors.New("credential input is empty or invalid")
 	}
 	return storeEncryptedCredential(ctx, name, directory, plaintext, replace, encryptor)
+}
+
+// IsIdempotencyKeyCredential reports whether name is one of the configured
+// management API idempotency key credentials.
+func IsIdempotencyKeyCredential(value config.Config, name string) bool {
+	for _, reference := range value.Controller.IdempotencyKeys.Versions {
+		if configured, ok := credentialName(reference); ok && configured == name {
+			return true
+		}
+	}
+	return false
 }
 
 // PilotCredentialNames are the credentials gsc-pilot reads that the

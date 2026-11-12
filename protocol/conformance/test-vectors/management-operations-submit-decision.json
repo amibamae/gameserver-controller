@@ -1,0 +1,442 @@
+{
+  "fixture_id": "management.operations.submit-decision",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "management_api.operations",
+  "purpose": "Define and submit requests are decided in a fixed order: request shape, then exact-scope authorization (an inaccessible server is not found), then registered workflow and network capabilities, then idempotency, then server ID uniqueness. Nothing is accepted that the actor may not run or the controller could never run.",
+  "side_effect_expected": "none",
+  "input": {
+    "servers": [
+      {
+        "environment_id": "staging",
+        "server_id": "paper-staging"
+      },
+      {
+        "environment_id": "production",
+        "server_id": "paper-main"
+      }
+    ],
+    "registered_operation_types": [
+      "server.define",
+      "server.start"
+    ],
+    "network_profile_satisfied": {
+      "paper-staging": true,
+      "paper-main": false
+    },
+    "evaluations": [
+      {
+        "case_id": "define-accepted",
+        "route": "define",
+        "operation_type": "server.define",
+        "environment_id": "staging",
+        "server_id": "paper-new",
+        "idempotency_key": "key-0001",
+        "actor_scopes": [
+          {
+            "permission": "server.define",
+            "environment_id": "staging",
+            "resource_id": "paper-new"
+          }
+        ]
+      },
+      {
+        "case_id": "define-without-idempotency-key",
+        "route": "define",
+        "operation_type": "server.define",
+        "environment_id": "staging",
+        "server_id": "paper-new",
+        "idempotency_key": "",
+        "actor_scopes": [
+          {
+            "permission": "server.define",
+            "environment_id": "staging",
+            "resource_id": "paper-new"
+          }
+        ]
+      },
+      {
+        "case_id": "define-with-another-operation-type",
+        "route": "define",
+        "operation_type": "server.start",
+        "environment_id": "staging",
+        "server_id": "paper-new",
+        "idempotency_key": "key-0001",
+        "actor_scopes": [
+          {
+            "permission": "server.define",
+            "environment_id": "staging",
+            "resource_id": "paper-new"
+          }
+        ]
+      },
+      {
+        "case_id": "define-scope-for-another-environment",
+        "route": "define",
+        "operation_type": "server.define",
+        "environment_id": "staging",
+        "server_id": "paper-new",
+        "idempotency_key": "key-0001",
+        "actor_scopes": [
+          {
+            "permission": "server.define",
+            "environment_id": "production",
+            "resource_id": "paper-new"
+          }
+        ]
+      },
+      {
+        "case_id": "define-scope-for-another-server",
+        "route": "define",
+        "operation_type": "server.define",
+        "environment_id": "staging",
+        "server_id": "paper-new",
+        "idempotency_key": "key-0001",
+        "actor_scopes": [
+          {
+            "permission": "server.define",
+            "environment_id": "staging",
+            "resource_id": "paper-other"
+          }
+        ]
+      },
+      {
+        "case_id": "define-duplicate-id-in-another-environment",
+        "route": "define",
+        "operation_type": "server.define",
+        "environment_id": "staging",
+        "server_id": "paper-main",
+        "idempotency_key": "key-0001",
+        "actor_scopes": [
+          {
+            "permission": "server.define",
+            "environment_id": "staging",
+            "resource_id": "paper-main"
+          }
+        ]
+      },
+      {
+        "case_id": "define-replay-same-request",
+        "route": "define",
+        "operation_type": "server.define",
+        "environment_id": "staging",
+        "server_id": "paper-new",
+        "idempotency_key": "key-0001",
+        "prior_use": "same_request",
+        "actor_scopes": [
+          {
+            "permission": "server.define",
+            "environment_id": "staging",
+            "resource_id": "paper-new"
+          }
+        ]
+      },
+      {
+        "case_id": "define-reused-key-different-request",
+        "route": "define",
+        "operation_type": "server.define",
+        "environment_id": "staging",
+        "server_id": "paper-new",
+        "idempotency_key": "key-0001",
+        "prior_use": "different_request",
+        "actor_scopes": [
+          {
+            "permission": "server.define",
+            "environment_id": "staging",
+            "resource_id": "paper-new"
+          }
+        ]
+      },
+      {
+        "case_id": "submit-accepted",
+        "route": "submit",
+        "operation_type": "server.start",
+        "server_id": "paper-staging",
+        "idempotency_key": "key-0001",
+        "actor_scopes": [
+          {
+            "permission": "server.inspect",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          },
+          {
+            "permission": "server.start",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          }
+        ]
+      },
+      {
+        "case_id": "submit-without-idempotency-key",
+        "route": "submit",
+        "operation_type": "server.start",
+        "server_id": "paper-staging",
+        "idempotency_key": "",
+        "actor_scopes": [
+          {
+            "permission": "server.inspect",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          },
+          {
+            "permission": "server.start",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          }
+        ]
+      },
+      {
+        "case_id": "submit-unknown-server-is-not-found",
+        "route": "submit",
+        "operation_type": "server.start",
+        "server_id": "paper-missing",
+        "idempotency_key": "key-0001",
+        "actor_scopes": [
+          {
+            "permission": "server.inspect",
+            "environment_id": "staging",
+            "resource_id": "paper-missing"
+          },
+          {
+            "permission": "server.start",
+            "environment_id": "staging",
+            "resource_id": "paper-missing"
+          }
+        ]
+      },
+      {
+        "case_id": "submit-without-inspect-is-not-found",
+        "route": "submit",
+        "operation_type": "server.start",
+        "server_id": "paper-staging",
+        "idempotency_key": "key-0001",
+        "actor_scopes": [
+          {
+            "permission": "server.start",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          }
+        ]
+      },
+      {
+        "case_id": "submit-without-operation-permission",
+        "route": "submit",
+        "operation_type": "server.start",
+        "server_id": "paper-staging",
+        "idempotency_key": "key-0001",
+        "actor_scopes": [
+          {
+            "permission": "server.inspect",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          },
+          {
+            "permission": "server.stop",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          }
+        ]
+      },
+      {
+        "case_id": "submit-unregistered-operation-type",
+        "route": "submit",
+        "operation_type": "server.backup",
+        "server_id": "paper-staging",
+        "idempotency_key": "key-0001",
+        "actor_scopes": [
+          {
+            "permission": "server.inspect",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          },
+          {
+            "permission": "server.backup",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          }
+        ]
+      },
+      {
+        "case_id": "submit-missing-network-capability",
+        "route": "submit",
+        "operation_type": "server.start",
+        "server_id": "paper-main",
+        "idempotency_key": "key-0001",
+        "actor_scopes": [
+          {
+            "permission": "server.inspect",
+            "environment_id": "production",
+            "resource_id": "paper-main"
+          },
+          {
+            "permission": "server.start",
+            "environment_id": "production",
+            "resource_id": "paper-main"
+          }
+        ]
+      },
+      {
+        "case_id": "submit-replay-same-request",
+        "route": "submit",
+        "operation_type": "server.start",
+        "server_id": "paper-staging",
+        "idempotency_key": "key-0001",
+        "prior_use": "same_request",
+        "actor_scopes": [
+          {
+            "permission": "server.inspect",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          },
+          {
+            "permission": "server.start",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          }
+        ]
+      },
+      {
+        "case_id": "submit-reused-key-different-request",
+        "route": "submit",
+        "operation_type": "server.start",
+        "server_id": "paper-staging",
+        "idempotency_key": "key-0001",
+        "prior_use": "different_request",
+        "actor_scopes": [
+          {
+            "permission": "server.inspect",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          },
+          {
+            "permission": "server.start",
+            "environment_id": "staging",
+            "resource_id": "paper-staging"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "define-accepted",
+        "status": 202,
+        "error_code": null,
+        "accepted": true,
+        "replayed": false
+      },
+      {
+        "case_id": "define-without-idempotency-key",
+        "status": 400,
+        "error_code": "core.validation.invalid_request",
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "define-with-another-operation-type",
+        "status": 400,
+        "error_code": "core.validation.invalid_request",
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "define-scope-for-another-environment",
+        "status": 403,
+        "error_code": "core.authorization.denied",
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "define-scope-for-another-server",
+        "status": 403,
+        "error_code": "core.authorization.denied",
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "define-duplicate-id-in-another-environment",
+        "status": 409,
+        "error_code": "core.operation.conflict",
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "define-replay-same-request",
+        "status": 202,
+        "error_code": null,
+        "accepted": true,
+        "replayed": true
+      },
+      {
+        "case_id": "define-reused-key-different-request",
+        "status": 409,
+        "error_code": "core.operation.idempotency_conflict",
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "submit-accepted",
+        "status": 202,
+        "error_code": null,
+        "accepted": true,
+        "replayed": false
+      },
+      {
+        "case_id": "submit-without-idempotency-key",
+        "status": 400,
+        "error_code": "core.validation.invalid_request",
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "submit-unknown-server-is-not-found",
+        "status": 404,
+        "error_code": null,
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "submit-without-inspect-is-not-found",
+        "status": 404,
+        "error_code": null,
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "submit-without-operation-permission",
+        "status": 403,
+        "error_code": "core.authorization.denied",
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "submit-unregistered-operation-type",
+        "status": 422,
+        "error_code": "core.operation.unsupported_type",
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "submit-missing-network-capability",
+        "status": 422,
+        "error_code": "core.network.capability_missing",
+        "accepted": false,
+        "replayed": false
+      },
+      {
+        "case_id": "submit-replay-same-request",
+        "status": 202,
+        "error_code": null,
+        "accepted": true,
+        "replayed": true
+      },
+      {
+        "case_id": "submit-reused-key-different-request",
+        "status": 409,
+        "error_code": "core.operation.idempotency_conflict",
+        "accepted": false,
+        "replayed": false
+      }
+    ]
+  }
+}

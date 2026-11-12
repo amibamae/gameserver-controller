@@ -95,7 +95,7 @@ func TestManagementAPIIsDisabledByDefaultAndRequiresExplicitTLSConfiguration(t *
 	if value.Controller.ManagementAPI.Enabled {
 		t.Fatal("remote management API must default to disabled")
 	}
-	configured := strings.Replace(validConfig, "  audit:\n", "  management_api:\n    enabled: true\n    listen_address: 127.0.0.1:8443\n    audience: controller-instance-1\n    tls_certificate_file: /etc/gameserver-controller/tls.crt\n    tls_private_key_file: /etc/gameserver-controller/tls.key\n  audit:\n", 1)
+	configured := strings.Replace(validConfig, "  audit:\n", "  management_api:\n    enabled: true\n    listen_address: 127.0.0.1:8443\n    audience: controller-instance-1\n    tls_certificate_file: /etc/gameserver-controller/tls.crt\n    tls_private_key_file: /etc/gameserver-controller/tls.key\n  idempotency_keys:\n    active: v1\n    versions:\n      v1: systemd-credential://controller-idempotency-key-v1\n  audit:\n", 1)
 	value, err = Parse(strings.NewReader(configured))
 	if err != nil {
 		t.Fatalf("valid HTTPS listener configuration rejected: %v", err)
@@ -106,7 +106,7 @@ func TestManagementAPIIsDisabledByDefaultAndRequiresExplicitTLSConfiguration(t *
 }
 
 func TestManagementAPIRejectsInvalidListenerConfiguration(t *testing.T) {
-	base := "  management_api:\n    enabled: true\n    listen_address: 127.0.0.1:8443\n    audience: controller-instance-1\n    tls_certificate_file: /etc/gameserver-controller/tls.crt\n    tls_private_key_file: /etc/gameserver-controller/tls.key\n"
+	base := "  management_api:\n    enabled: true\n    listen_address: 127.0.0.1:8443\n    audience: controller-instance-1\n    tls_certificate_file: /etc/gameserver-controller/tls.crt\n    tls_private_key_file: /etc/gameserver-controller/tls.key\n  idempotency_keys:\n    active: v1\n    versions:\n      v1: systemd-credential://controller-idempotency-key-v1\n"
 	cases := []struct{ name, before, after, want string }{
 		{"wildcard bind requires an explicit IP", "127.0.0.1:8443", ":8443", "listen_address"},
 		{"hostname bind rejected", "127.0.0.1:8443", "controller.local:8443", "listen_address"},

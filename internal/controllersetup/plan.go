@@ -120,7 +120,7 @@ func resolveStateDatabase(stateDir, configuredPath string) (string, error) {
 }
 
 func countCredentialRefs(value config.Config) int {
-	count := 0
+	count := len(value.Controller.IdempotencyKeys.Versions)
 	for _, adapter := range value.Adapters {
 		count += len(adapter.SecretRefs)
 	}

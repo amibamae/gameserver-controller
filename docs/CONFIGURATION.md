@@ -242,6 +242,29 @@ See [notifications](NOTIFICATIONS.md) for what each destination receives and how
 
 Relative state-store paths are resolved against the configuration file by `ResolveStateStorePath`; absolute local paths remain absolute. The validator does not create parent directories, canonicalize symlinks, or stop a separate runtime from opening a path.
 
+### Management API idempotency keys
+
+`controller.idempotency_keys` is required when `management_api.enabled` is
+true. The controller uses these installation keys to bind each
+`Idempotency-Key` to the actor and request without storing the key itself.
+
+```yaml
+controller:
+  idempotency_keys:
+    active: v1
+    versions:
+      v1: systemd-credential://controller-idempotency-key-v1
+```
+
+`active` names the version used for new operations. Older versions stay listed
+so that retries of earlier requests still verify; remove a version only after
+its operations are no longer retained. Version names match
+`[A-Za-z0-9._-]{1,64}`, and each value is a `systemd-credential://` reference to
+a credential of at least 32 bytes. Create one with
+`controller-setup credentials generate --config <file> --name <credential>`,
+which stores 64 random hex characters and never displays them. The controller
+does not start if a configured key is missing or too short.
+
 ## Secret references
 
 Version 1 accepts references only in the explicit

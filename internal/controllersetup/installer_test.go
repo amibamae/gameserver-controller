@@ -67,7 +67,7 @@ func TestBuildInstallBundleRendersPrivateConfigAndCredentialUnit(t *testing.T) {
 		t.Fatalf("rendered state path=%q, want %q", rendered.Controller.StateStore.Path, layout.StateDatabaseFile)
 	}
 	unit := string(files[layout.ServiceFile].Content)
-	for _, credential := range []string{"example-vultr-api-token", "example-wasabi-staging-writer"} {
+	for _, credential := range []string{"example-vultr-api-token", "example-wasabi-staging-writer", "controller-idempotency-key-v1"} {
 		if !strings.Contains(unit, "LoadCredentialEncrypted="+credential+":") {
 			t.Fatalf("systemd unit omitted configured encrypted credential %q", credential)
 		}

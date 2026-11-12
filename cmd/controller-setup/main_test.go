@@ -33,7 +33,7 @@ func TestPlanCommandPrintsRedactedPreview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"\"target\": \"existing-machine\"", "\"target_supported\": true", "\"credential_reference_count\": 2", "/etc/credstore.encrypted", "/var/lib/gameserver-controller/var/controller.db"} {
+	for _, expected := range []string{"\"target\": \"existing-machine\"", "\"target_supported\": true", "\"credential_reference_count\": 3", "/etc/credstore.encrypted", "/var/lib/gameserver-controller/var/controller.db"} {
 		if !strings.Contains(stdout.String(), expected) {
 			t.Errorf("plan output missing %q: %s", expected, stdout.String())
 		}
@@ -195,6 +195,40 @@ func TestCredentialSetPromptsTwiceAndNeverPrintsSecret(t *testing.T) {
 				t.Fatal("credential prompt buffer was not cleared")
 			}
 		}
+	}
+}
+
+func TestCredentialGenerateStoresARandomIdempotencyKey(t *testing.T) {
+	configPath := filepath.Join("..", "..", "configs", "controller.example.yaml")
+	noPrompt := func(context.Context, string) ([]byte, error) {
+		t.Fatal("generate must not prompt for a value")
+		return nil, nil
+	}
+	first, second := &testEncryptor{}, &testEncryptor{}
+	var stdout, stderr bytes.Buffer
+	for _, encryptor := range []*testEncryptor{first, second} {
+		if err := runCredentialCommand([]string{"generate", "--config", configPath, "--name", "controller-idempotency-key-v1"}, &stdout, &stderr, true, noPrompt, encryptor, t.TempDir()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if first.calls != 1 || len(first.plaintext) != 64 || bytes.Equal(first.plaintext, second.plaintext) {
+		t.Fatalf("generated keys are not 64 random hex characters: %d bytes", len(first.plaintext))
+	}
+	if strings.Contains(stdout.String()+stderr.String(), string(first.plaintext)) {
+		t.Fatal("generate printed the key")
+	}
+	for name, args := range map[string][]string{
+		"not an idempotency key": {"generate", "--config", configPath, "--name", "example-vultr-api-token"},
+		"unknown name":           {"generate", "--config", configPath, "--name", "controller-idempotency-key-v9"},
+	} {
+		encryptor := &testEncryptor{}
+		if err := runCredentialCommand(args, &stdout, &stderr, true, noPrompt, encryptor, t.TempDir()); err == nil || encryptor.calls != 0 {
+			t.Errorf("%s: generate continued", name)
+		}
+	}
+	encryptor := &testEncryptor{}
+	if err := runCredentialCommand([]string{"generate", "--config", configPath, "--name", "controller-idempotency-key-v1"}, &stdout, &stderr, false, noPrompt, encryptor, t.TempDir()); err == nil || encryptor.calls != 0 {
+		t.Fatal("non-administrator generate continued")
 	}
 }
 

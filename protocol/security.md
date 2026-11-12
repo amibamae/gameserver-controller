@@ -32,6 +32,7 @@ The core checks authorization before accepting a mutating operation and again be
 Permission scopes name an action, resource category, and environment. Examples:
 
 - `server.inspect`
+- `server.define`
 - `server.provision`
 - `server.start`
 - `server.stop`

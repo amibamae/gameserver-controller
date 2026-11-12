@@ -66,6 +66,9 @@ Initial codes include:
 - `core.operation.idempotency_conflict`
 - `core.operation.idempotency_key_expired` (category `conflict`)
 - `core.operation.outcome_unknown`
+- `core.operation.unsupported_type` (category `unsupported_capability`): the controller has no runnable workflow for the requested operation type.
+- `core.network.capability_missing` (category `unsupported_capability`): the server's network profile needs an integration capability no adapter in its environment advertises (integrations section 6).
+- `core.api.not_implemented` (category `unsupported_capability`): the controller does not implement this management API endpoint yet.
 - `core.compatibility.unsupported_version` (category `compatibility_failure`)
 - `core.compatibility.unknown_state` (category `compatibility_failure`)
 - `core.safety.backup_not_verified`

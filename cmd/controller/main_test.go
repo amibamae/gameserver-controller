@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"io"
 	"math/big"
@@ -14,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +40,12 @@ func TestServeRunsOnlyConfiguredAuthenticatedHTTPSListener(t *testing.T) {
 		TLSCertificate: filepath.Join(t.TempDir(), "tls.crt"),
 		TLSPrivateKey:  filepath.Join(t.TempDir(), "tls.key"),
 	}
+	credentials := t.TempDir()
+	if err := os.WriteFile(filepath.Join(credentials, "controller-idempotency-key-v1"), bytes.Repeat([]byte{9}, 32), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CREDENTIALS_DIRECTORY", credentials)
+	value.Controller.IdempotencyKeys = config.IdempotencyKeys{Active: "v1", Versions: map[string]string{"v1": "systemd-credential://controller-idempotency-key-v1"}}
 	writeServerCertificate(t, value.Controller.ManagementAPI.TLSCertificate, value.Controller.ManagementAPI.TLSPrivateKey)
 	if err := config.Validate(value); err != nil {
 		t.Fatalf("validate test configuration: %v", err)
@@ -72,6 +81,46 @@ func TestServeRunsOnlyConfiguredAuthenticatedHTTPSListener(t *testing.T) {
 	response.Body.Close()
 	if response.StatusCode != http.StatusNotFound {
 		t.Fatalf("valid scoped key should reach operation lookup and get 404, got %d", response.StatusCode)
+	}
+
+	// Define a server over HTTPS; the runner takes the operation to succeeded.
+	base := "https://" + value.Controller.ManagementAPI.ListenAddress
+	definition := `{"operation_type":"server.define","parameters":{"server_id":"server-1","environment_id":"staging","display_name":"Server 1","hosting_profile":"vultr-small","storage_profile":"wasabi-worlds","game":{"adapter_id":"game.paper","release_channel":"stable"},"execution":{"adapter_id":"execution.systemd","profile":"paper-default"}}}`
+	request, err := http.NewRequest(http.MethodPost, base+"/v1/servers", strings.NewReader(definition))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "Bearer "+issued.Secret)
+	request.Header.Set("Idempotency-Key", "define-server-1")
+	response, err = client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	location := response.Header.Get("Location")
+	response.Body.Close()
+	if response.StatusCode != http.StatusAccepted || !strings.HasPrefix(location, "/v1/operations/") {
+		t.Fatalf("define = %d, Location %q", response.StatusCode, location)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		request, _ := http.NewRequest(http.MethodGet, base+location, nil)
+		request.Header.Set("Authorization", "Bearer "+issued.Secret)
+		response, err := client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var operation struct {
+			Status string `json:"status"`
+		}
+		decodeErr := json.NewDecoder(response.Body).Decode(&operation)
+		response.Body.Close()
+		if decodeErr == nil && operation.Status == "succeeded" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("defined server operation is %q (HTTP %d)", operation.Status, response.StatusCode)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 
@@ -133,7 +182,8 @@ func issueTestKey(t *testing.T, databasePath string) authkey.IssuedKey {
 	now := time.Now().UTC()
 	issued, err := manager.Issue(authkey.IssueRequest{
 		ActorID: "automation", Audience: "controller-test",
-		Scopes:    []authkey.Scope{{Permission: "server.inspect", Environment: "staging", Resource: "server-1"}},
+		Scopes: []authkey.Scope{{Permission: "server.inspect", Environment: "staging", Resource: "server-1"},
+			{Permission: "server.define", Environment: "staging", Resource: "server-1"}},
 		CreatedBy: "test", CreatedAt: now, ExpiresAt: now.Add(time.Hour),
 	})
 	if closeErr := database.Close(); closeErr != nil {

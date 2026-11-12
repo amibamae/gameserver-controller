@@ -36,6 +36,8 @@ HTTP 202 means the controller accepted and durably recorded the request. It does
 
 Every endpoint enforces authorization and environment scope. A list endpoint must not reveal inaccessible resources.
 
+A controller that does not yet support cancellation or the event stream returns 501 with `core.api.not_implemented`. A server operation type the controller cannot run to completion is refused with 422 and `core.operation.unsupported_type` before anything is recorded. The decision order for define and submit is in [authorization section 2.1](authorization.md#21-submit-decisions).
+
 ## 4. Operation requests and idempotency
 
 Each request names an operation type and its type-specific parameters. Every mutating acceptance request must include the `Idempotency-Key` header. The value is case-sensitive and contains 1–128 visible ASCII characters (U+0021 through U+007E). It is scoped to the authenticated actor and is not a credential.
