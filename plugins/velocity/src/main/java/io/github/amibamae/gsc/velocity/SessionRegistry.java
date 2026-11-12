@@ -23,11 +23,15 @@ final class SessionRegistry {
   /** What the API may reveal about one session. */
   record SessionView(String sessionId, boolean connected, String backendId, String cohortId, Instant observedAt) {}
 
+  /** A connected member of a waiting cohort, for the automatic mover only. */
+  record Waiting(String sessionId, UUID player, String backendId, String cohortId, Instant waitingSince) {}
+
   private static final class Entry {
     final String sessionId;
     final UUID player;
     String backendId;
     String cohortId;
+    Instant waitingSince;
     Instant disconnectedAt;
 
     Entry(String sessionId, UUID player) {
@@ -71,12 +75,16 @@ final class SessionRegistry {
     if (!backendId.equals(fallbackId)) {
       // A player who reached a real backend is no longer waiting.
       entry.cohortId = null;
+      entry.waitingSince = null;
     }
   }
 
   synchronized void setCohort(UUID player, String cohortId) {
     Entry entry = byPlayer.get(player);
     if (entry != null) {
+      if (cohortId == null || !cohortId.equals(entry.cohortId)) {
+        entry.waitingSince = cohortId == null ? null : clock.instant();
+      }
       entry.cohortId = cohortId;
     }
   }
@@ -87,6 +95,7 @@ final class SessionRegistry {
       entry.disconnectedAt = clock.instant();
       entry.backendId = null;
       entry.cohortId = null;
+      entry.waitingSince = null;
     }
     purge();
   }
@@ -115,6 +124,17 @@ final class SessionRegistry {
       }
     }
     members.sort(null);
+    return members;
+  }
+
+  /** Connected members of every waiting cohort. */
+  synchronized List<Waiting> waiting() {
+    List<Waiting> members = new ArrayList<>();
+    for (Entry entry : byPlayer.values()) {
+      if (entry.disconnectedAt == null && entry.cohortId != null) {
+        members.add(new Waiting(entry.sessionId, entry.player, entry.backendId, entry.cohortId, entry.waitingSince));
+      }
+    }
     return members;
   }
 

@@ -24,6 +24,7 @@ class BridgeConfigAndStoreTest {
       assertEquals("lobby", config.fallback());
       assertEquals(Duration.ofSeconds(5), config.healthCheckInterval());
       assertTrue(config.joinBackends().isEmpty());
+      assertEquals(AutoMover.Settings.DEFAULT, config.autoMove(), "default: move 5 waiting players every 5 seconds");
     }
   }
 
@@ -44,6 +45,21 @@ class BridgeConfigAndStoreTest {
   }
 
   @Test
+  void parsesAutoMoveSettings() {
+    BridgeConfig config = BridgeConfig.parse(new Toml().read("""
+        [bridge]
+        token-file = "/etc/gsc/token"
+        proxy-instance-id = "velocity-edge-001"
+        [routing]
+        fallback = "lobby"
+        auto-move = false
+        auto-move-batch = 3
+        auto-move-interval-seconds = 10
+        """));
+    assertEquals(new AutoMover.Settings(false, 3, Duration.ofSeconds(10), Duration.ofSeconds(30)), config.autoMove());
+  }
+
+  @Test
   void rejectsUnsafeConfig() {
     String valid = "token-file = \"/t\"\nproxy-instance-id = \"p\"\n";
     for (String toml : new String[] {
@@ -51,6 +67,8 @@ class BridgeConfigAndStoreTest {
         "[bridge]\nproxy-instance-id = \"p\"\n[routing]\n",
         "[bridge]\n" + valid + "[routing]\njoin-backends = [\"Bad Name\"]\n",
         "[bridge]\n" + valid + "[routing]\nhealth-check-seconds = 0\n",
+        "[bridge]\n" + valid + "[routing]\nauto-move-batch = 0\n",
+        "[bridge]\n" + valid + "[routing]\nauto-move-interval-seconds = 301\n",
         "[bridge]\n" + valid,
     }) {
       assertThrows(IllegalArgumentException.class, () -> BridgeConfig.parse(new Toml().read(toml)), toml);

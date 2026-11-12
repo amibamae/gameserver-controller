@@ -82,6 +82,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return evaluateDNSRecordUpsert(pkg, fixture)
 	case "hosting.bootstrap.host-key-handoff":
 		return evaluateHostKeyHandoff(pkg, fixture)
+	case "integration.proxy.cohort.automatic-move":
+		return evaluateProxyAutomaticMove(pkg, fixture)
 	case "integration.network-profile.requirements":
 		return evaluateNetworkProfileRequirements(pkg, fixture)
 	case "integration.notification.proxy-outage-transitions":

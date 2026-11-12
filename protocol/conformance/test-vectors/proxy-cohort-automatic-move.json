@@ -1,0 +1,404 @@
+{
+  "fixture_id": "integration.proxy.cohort.automatic-move",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.proxy.cohort",
+  "purpose": "A proxy moves a backend's waiting cohort to it only while the core has it registered and routable, only players still waiting on the fallback, oldest first, at most one batch per interval, and not a player whose move failed recently. Players who chose the fallback themselves or wait for another backend stay put.",
+  "side_effect_expected": "simulated",
+  "input": {
+    "policy": {
+      "batch_size": 5,
+      "interval_seconds": 5,
+      "retry_after_seconds": 30
+    },
+    "evaluations": [
+      {
+        "case_id": "routable-moves-the-oldest-five",
+        "backend_id": "paper-main",
+        "fallback_id": "lobby",
+        "backend": {
+          "registration": "registered",
+          "routable": true
+        },
+        "now": "2026-11-12T18:01:40Z",
+        "sessions": [
+          {
+            "session_id": "s01",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:01:29Z"
+          },
+          {
+            "session_id": "s02",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:01:28Z"
+          },
+          {
+            "session_id": "s03",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:01:27Z"
+          },
+          {
+            "session_id": "s04",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:01:26Z"
+          },
+          {
+            "session_id": "s05",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:01:25Z"
+          },
+          {
+            "session_id": "s06",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:01:24Z"
+          },
+          {
+            "session_id": "s07",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:01:23Z"
+          }
+        ]
+      },
+      {
+        "case_id": "fewer-than-a-batch",
+        "backend_id": "paper-main",
+        "fallback_id": "lobby",
+        "backend": {
+          "registration": "registered",
+          "routable": true
+        },
+        "now": "2026-11-12T18:01:40Z",
+        "sessions": [
+          {
+            "session_id": "s01",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:10Z"
+          },
+          {
+            "session_id": "s02",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:20Z"
+          }
+        ]
+      },
+      {
+        "case_id": "draining-moves-nobody",
+        "backend_id": "paper-main",
+        "fallback_id": "lobby",
+        "backend": {
+          "registration": "draining",
+          "routable": false
+        },
+        "now": "2026-11-12T18:01:40Z",
+        "sessions": [
+          {
+            "session_id": "s01",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:10Z"
+          }
+        ]
+      },
+      {
+        "case_id": "unregistered-moves-nobody",
+        "backend_id": "paper-main",
+        "fallback_id": "lobby",
+        "backend": {
+          "registration": "unregistered",
+          "routable": false
+        },
+        "now": "2026-11-12T18:01:40Z",
+        "sessions": [
+          {
+            "session_id": "s01",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:10Z"
+          }
+        ]
+      },
+      {
+        "case_id": "failing-health-check-moves-nobody",
+        "backend_id": "paper-main",
+        "fallback_id": "lobby",
+        "backend": {
+          "registration": "registered",
+          "routable": false
+        },
+        "now": "2026-11-12T18:01:40Z",
+        "sessions": [
+          {
+            "session_id": "s01",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:10Z"
+          }
+        ]
+      },
+      {
+        "case_id": "player-who-chose-the-lobby-stays",
+        "backend_id": "paper-main",
+        "fallback_id": "lobby",
+        "backend": {
+          "registration": "registered",
+          "routable": true
+        },
+        "now": "2026-11-12T18:01:40Z",
+        "sessions": [
+          {
+            "session_id": "s01",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": null,
+            "waiting_since": "2026-11-12T18:00:10Z"
+          },
+          {
+            "session_id": "s02",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:20Z"
+          }
+        ]
+      },
+      {
+        "case_id": "player-waiting-for-another-backend-stays",
+        "backend_id": "paper-main",
+        "fallback_id": "lobby",
+        "backend": {
+          "registration": "registered",
+          "routable": true
+        },
+        "now": "2026-11-12T18:01:40Z",
+        "sessions": [
+          {
+            "session_id": "s01",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-other",
+            "waiting_since": "2026-11-12T18:00:10Z"
+          },
+          {
+            "session_id": "s02",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:20Z"
+          }
+        ]
+      },
+      {
+        "case_id": "player-already-on-a-backend-is-skipped",
+        "backend_id": "paper-main",
+        "fallback_id": "lobby",
+        "backend": {
+          "registration": "registered",
+          "routable": true
+        },
+        "now": "2026-11-12T18:01:40Z",
+        "sessions": [
+          {
+            "session_id": "s01",
+            "connected": true,
+            "current_backend_id": "paper-other",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:10Z"
+          },
+          {
+            "session_id": "s02",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:20Z"
+          }
+        ]
+      },
+      {
+        "case_id": "disconnected-player-is-skipped",
+        "backend_id": "paper-main",
+        "fallback_id": "lobby",
+        "backend": {
+          "registration": "registered",
+          "routable": true
+        },
+        "now": "2026-11-12T18:01:40Z",
+        "sessions": [
+          {
+            "session_id": "s01",
+            "connected": false,
+            "current_backend_id": null,
+            "cohort_id": null,
+            "waiting_since": "2026-11-12T18:00:10Z"
+          },
+          {
+            "session_id": "s02",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:20Z"
+          }
+        ]
+      },
+      {
+        "case_id": "recent-failure-waits-before-retry",
+        "backend_id": "paper-main",
+        "fallback_id": "lobby",
+        "backend": {
+          "registration": "registered",
+          "routable": true
+        },
+        "now": "2026-11-12T18:01:40Z",
+        "sessions": [
+          {
+            "session_id": "s01",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:10Z",
+            "last_failed_at": "2026-11-12T18:01:20Z"
+          },
+          {
+            "session_id": "s02",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:20Z",
+            "last_failed_at": "2026-11-12T18:01:00Z"
+          },
+          {
+            "session_id": "s03",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:30Z"
+          }
+        ]
+      },
+      {
+        "case_id": "equal-wait-is-ordered-by-session-id",
+        "backend_id": "paper-main",
+        "fallback_id": "lobby",
+        "backend": {
+          "registration": "registered",
+          "routable": true
+        },
+        "now": "2026-11-12T18:01:40Z",
+        "sessions": [
+          {
+            "session_id": "s03",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:10Z"
+          },
+          {
+            "session_id": "s01",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:10Z"
+          },
+          {
+            "session_id": "s02",
+            "connected": true,
+            "current_backend_id": "lobby",
+            "cohort_id": "waiting-paper-main",
+            "waiting_since": "2026-11-12T18:00:10Z"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "routable-moves-the-oldest-five",
+        "moves": [
+          "s07",
+          "s06",
+          "s05",
+          "s04",
+          "s03"
+        ]
+      },
+      {
+        "case_id": "fewer-than-a-batch",
+        "moves": [
+          "s01",
+          "s02"
+        ]
+      },
+      {
+        "case_id": "draining-moves-nobody",
+        "moves": []
+      },
+      {
+        "case_id": "unregistered-moves-nobody",
+        "moves": []
+      },
+      {
+        "case_id": "failing-health-check-moves-nobody",
+        "moves": []
+      },
+      {
+        "case_id": "player-who-chose-the-lobby-stays",
+        "moves": [
+          "s02"
+        ]
+      },
+      {
+        "case_id": "player-waiting-for-another-backend-stays",
+        "moves": [
+          "s02"
+        ]
+      },
+      {
+        "case_id": "player-already-on-a-backend-is-skipped",
+        "moves": [
+          "s02"
+        ]
+      },
+      {
+        "case_id": "disconnected-player-is-skipped",
+        "moves": [
+          "s02"
+        ]
+      },
+      {
+        "case_id": "recent-failure-waits-before-retry",
+        "moves": [
+          "s02",
+          "s03"
+        ]
+      },
+      {
+        "case_id": "equal-wait-is-ordered-by-session-id",
+        "moves": [
+          "s01",
+          "s02",
+          "s03"
+        ]
+      }
+    ]
+  }
+}
