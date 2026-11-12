@@ -166,7 +166,7 @@ func validateRecord(record OperationRecord) error {
 }
 
 func validateRecordIdentity(record OperationRecord) error {
-i	f !validIdentifier(record.OperationID, 200) {
+	if !validIdentifier(record.OperationID, 200) {
 		return invalidField("operation_id")
 	}
 	if !validQualifiedName(record.OperationType, 160) {
@@ -200,7 +200,7 @@ i	f !validIdentifier(record.OperationID, 200) {
 }
 
 func validateRecordPayload(record OperationRecord) error {
-i	f !knownOperationStatus(record.Status) {
+	if !knownOperationStatus(record.Status) {
 		return invalidField("status")
 	}
 	if record.RequestSnapshot.OperationType != record.OperationType || !isJSONObject(record.RequestSnapshot.Parameters) {
@@ -289,7 +289,7 @@ func validateRecordStepTimes(record OperationRecord, step OperationStep, i int) 
 }
 
 func validateRecordSteps(record OperationRecord) (map[string]struct{}, error) {
-s	eenSteps := make(map[string]struct{}, len(record.Steps))
+	seenSteps := make(map[string]struct{}, len(record.Steps))
 	for i, step := range record.Steps {
 		if record.OperationType == "server.backup" && record.BackupInitialLifecycleState == "" && (step.Attempt != 0 || step.Status == protocolstate.StepRunning || step.Status == protocolstate.StepSucceeded || step.Status == protocolstate.StepWaiting || step.Status == protocolstate.StepOutcomeUnknown) {
 			return nil, invalidField("backup_initial_lifecycle_state must precede dispatch")
