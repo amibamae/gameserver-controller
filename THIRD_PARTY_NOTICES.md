@@ -240,12 +240,33 @@ The [Velocity bridge plugin](plugins/velocity) compiles against the Velocity API
 
 - **Gson 2.10.1** (`com.google.code.gson:gson`): Apache-2.0, by Google. [LICENSE](https://github.com/google/gson/blob/gson-parent-2.10.1/LICENSE).
 - **Guice 6.0.0** (`com.google.inject:guice`, `@Inject` only): Apache-2.0, by Google, per its [parent POM](https://repo1.maven.org/maven2/com/google/inject/guice-parent/6.0.0/guice-parent-6.0.0.pom) and [COPYING](https://github.com/google/guice/blob/6.0.0/COPYING).
-- **JUnit 5.11.4** (`org.junit:junit-bom`, `org.junit.jupiter:junit-jupiter`, `org.junit.platform:junit-platform-launcher`): Eclipse Public License 2.0, by the JUnit team ([POM](https://repo1.maven.org/maven2/org/junit/jupiter/junit-jupiter/5.11.4/junit-jupiter-5.11.4.pom)). Used for tests only and not included in the jar.
+- **JUnit 5.11.4** (`org.junit:junit-bom`, `org.junit.jupiter:junit-jupiter`, `org.junit.platform:junit-platform-launcher`, and through them `junit-jupiter-api`, `junit-jupiter-engine`, `junit-jupiter-params`, `junit-platform-commons` 1.11.4 and `junit-platform-engine` 1.11.4): Eclipse Public License 2.0, by the JUnit team ([POM](https://repo1.maven.org/maven2/org/junit/jupiter/junit-jupiter/5.11.4/junit-jupiter-5.11.4.pom)). Used for tests only and not included in the jar.
+- **opentest4j 1.3.0** (`org.opentest4j:opentest4j`, through JUnit): Apache-2.0, by the OTA4J team ([POM](https://repo1.maven.org/maven2/org/opentest4j/opentest4j/1.3.0/opentest4j-1.3.0.pom), [ota4j-team/opentest4j](https://github.com/ota4j-team/opentest4j)). Tests only.
 - **SLF4J 2.0.17** (`org.slf4j:slf4j-api`): MIT, Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland). [LICENSE.txt](https://github.com/qos-ch/slf4j/blob/v_2.0.17/LICENSE.txt).
 - **toml4j 0.7.2** (`com.moandjiezana.toml:toml4j`): MIT, by Moandji Ezana (license named in its [published POM](https://repo1.maven.org/maven2/com/moandjiezana/toml/toml4j/0.7.2/toml4j-0.7.2.pom)).
 - **Velocity API**: `com.velocitypowered:velocity-api:3.4.0`, from the PaperMC Maven repository.
   - License: MIT. Copyright 2018 Velocity Contributors. Full text: [licenses/velocity-api-LICENSE](licenses/velocity-api-LICENSE), copied from [`api/LICENSE` in PaperMC/Velocity](https://github.com/PaperMC/Velocity/blob/HEAD/api/LICENSE).
   - The published 3.4.0 POM and jar carry no license text, and the upstream `api/LICENSE` was not reachable at the 3.4.0 tag, so the MIT grant above comes from the repository's current `api/LICENSE`. Re-check it at the tag when it is accessible.
   - The Velocity proxy itself is GPLv3 ([PaperMC/Velocity](https://github.com/PaperMC/Velocity)). The plugin links only the API module and does not include proxy code.
+
+### Libraries the Velocity API brings onto the compile classpath
+
+`velocity-api` 3.4.0 depends on these libraries. The plugin compiles against them, and the Velocity proxy supplies them at runtime; the plugin jar bundles none of them. The versions are the ones Gradle resolves for the plugin's build. Each license was read from the artifact's published POM (or its parent POM) in November 2026, except where noted.
+
+- **Adventure 4.26.1** (`net.kyori:adventure-api`, `adventure-bom`, `adventure-key`, `adventure-text-logger-slf4j`, `adventure-text-minimessage`, and the `adventure-text-serializer-` modules `ansi`, `commons`, `gson`, `json`, `legacy` and `plain`): MIT, by the Adventure contributors ([PaperMC/adventure](https://github.com/PaperMC/adventure)).
+- **aopalliance 1.0** (`aopalliance:aopalliance`, through Guice): Public Domain, per its POM ([aopalliance.sourceforge.net](http://aopalliance.sourceforge.net)).
+- **ansi 1.1.1**, **examination 1.3.0** (`examination-api`, `examination-string`) and **option 1.1.0** (`net.kyori`): MIT, by KyoriPowered ([KyoriPowered/ansi](https://github.com/KyoriPowered/ansi), [KyoriPowered/examination](https://github.com/KyoriPowered/examination), [option.kyori.net](https://option.kyori.net)).
+- **Brigadier, Velocity fork** (`com.velocitypowered:velocity-brigadier:1.0.0-SNAPSHOT`): MIT, Copyright (c) Microsoft Corporation, per the `LICENSE` at the head of [PaperMC/Brigadier](https://github.com/PaperMC/Brigadier/blob/master/LICENSE), a fork of [Mojang/brigadier](https://github.com/Mojang/brigadier). The published snapshot's POM and jar carry no license and name no commit, so this could not be confirmed for the exact artifact.
+- **Caffeine 3.1.8** (`com.github.ben-manes.caffeine:caffeine`): Apache-2.0, by Ben Manes ([ben-manes/caffeine](https://github.com/ben-manes/caffeine)).
+- **Checker Framework qualifiers 3.42.0** (`org.checkerframework:checker-qual`): MIT, by the Checker Framework developers ([checkerframework.org](https://checkerframework.org/)).
+- **Configurate 4.1.2** (`org.spongepowered:configurate-core`, `configurate-gson`, `configurate-hocon`, `configurate-yaml`): Apache-2.0, by SpongePowered ([SpongePowered/Configurate](https://github.com/SpongePowered/Configurate)).
+- **Error Prone annotations 2.21.1** (`com.google.errorprone:error_prone_annotations`): Apache-2.0, by Google LLC ([errorprone.info](https://errorprone.info)).
+- **GeAnTyRef 1.3.11** (`io.leangen.geantyref:geantyref`): Apache-2.0, by Bojan Tomic ([leangen/geantyref](https://github.com/leangen/geantyref)).
+- **Guava 31.0.1-jre** (`com.google.guava:guava`, with `failureaccess` 1.0.1 and the empty `listenablefuture` 9999.0 marker): Apache-2.0, by Google ([google/guava](https://github.com/google/guava)).
+- **J2ObjC annotations 1.3** (`com.google.j2objc:j2objc-annotations`): Apache-2.0, by Google ([google/j2objc](https://github.com/google/j2objc/)).
+- **Jakarta Dependency Injection 2.0.1** (`jakarta.inject:jakarta.inject-api`) and **javax.inject 1** (`javax.inject:javax.inject`, through Guice): Apache-2.0 ([eclipse-ee4j/injection-api](https://github.com/eclipse-ee4j/injection-api); [atinject](http://code.google.com/p/atinject/)).
+- **JSR 305 annotations 3.0.2** (`com.google.code.findbugs:jsr305`): Apache-2.0, per its parent POM ([findbugs.sourceforge.net](http://findbugs.sourceforge.net/)).
+- **SnakeYAML 1.33** (`org.yaml:snakeyaml`, through Configurate): Apache-2.0, by Andrey Somov and contributors ([snakeyaml](https://bitbucket.org/snakeyaml/snakeyaml)).
+- **Typesafe Config 1.4.1** (`com.typesafe:config`, through Configurate): Apache-2.0, by Lightbend ([lightbend/config](https://github.com/lightbend/config)).
 
 Distributors of a Velocity proxy bundle follow Velocity's own license terms.
