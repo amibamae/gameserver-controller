@@ -24,144 +24,6 @@ const (
 	operationEventSchemaID = "urn:gameserver-controller:0.21.0-draft:operations:operation-event"
 )
 
-var exampleSchemaIDs = map[string]string{
-	"execution-unit-restart-input.json":             "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-input",
-	"execution-unit-restart-output.json":            "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-output",
-	"execution-unit-create-input.json":              "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-create-input",
-	"execution-unit-create-output.json":             "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-create-output",
-	"adapter-descriptor.cloudflare-dns.json":        "urn:gameserver-controller:0.21.0-draft:common:capability-descriptor",
-	"adapter-descriptor.hosting.json":               "urn:gameserver-controller:0.21.0-draft:common:capability-descriptor",
-	"adapter-descriptor.paper.json":                 "urn:gameserver-controller:0.21.0-draft:common:capability-descriptor",
-	"adapter-descriptor.storage.json":               "urn:gameserver-controller:0.21.0-draft:common:capability-descriptor",
-	"adapter-descriptor.systemd.json":               "urn:gameserver-controller:0.21.0-draft:common:capability-descriptor",
-	"adapter-descriptor.velocity.json":              "urn:gameserver-controller:0.21.0-draft:common:capability-descriptor",
-	"dns-record-delete-input.json":                  "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-delete-input",
-	"dns-record-delete-output.json":                 "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-delete-output",
-	"dns-record-inspect-input.json":                 "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-inspect-input",
-	"dns-record-inspect-output.json":                "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-inspect-output",
-	"dns-record-upsert-input.json":                  "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-upsert-input",
-	"dns-record-upsert-output.json":                 "urn:gameserver-controller:0.21.0-draft:integrations:dns-record-upsert-output",
-	"adapter-initialize-stream-request.json":        "urn:gameserver-controller:0.21.0-draft:rpc:adapter-initialize-request",
-	"adapter-initialize-stream-result.json":         "urn:gameserver-controller:0.21.0-draft:rpc:adapter-initialize-result",
-	"adapter-invoke-request.json":                   "urn:gameserver-controller:0.21.0-draft:rpc:adapter-invoke-request",
-	"backup-manifest.json":                          "urn:gameserver-controller:0.21.0-draft:storage:backup-manifest",
-	"game-backup-prepare-input.json":                "urn:gameserver-controller:0.21.0-draft:game:backup-prepare-input",
-	"game-backup-prepare-output.json":               "urn:gameserver-controller:0.21.0-draft:game:backup-prepare-output",
-	"game-backup-capture-input.json":                "urn:gameserver-controller:0.21.0-draft:game:backup-capture-input",
-	"game-backup-capture-invocation.json":           "urn:gameserver-controller:0.21.0-draft:rpc:adapter-invoke-request",
-	"game-backup-capture-output.json":               "urn:gameserver-controller:0.21.0-draft:game:backup-capture-output",
-	"game-backup-write-watermark.json":              "urn:gameserver-controller:0.21.0-draft:game:backup-write-watermark",
-	"game-backup-validate-input.json":               "urn:gameserver-controller:0.21.0-draft:game:backup-validate-input",
-	"game-backup-validate-output.json":              "urn:gameserver-controller:0.21.0-draft:game:backup-validate-output",
-	"game-compatibility-check-input.json":           "urn:gameserver-controller:0.21.0-draft:game:compatibility-check-input",
-	"game-compatibility-check-output.json":          "urn:gameserver-controller:0.21.0-draft:game:compatibility-check-output",
-	"game-configure-input.json":                     "urn:gameserver-controller:0.21.0-draft:game:configure-input",
-	"game-configure-output.json":                    "urn:gameserver-controller:0.21.0-draft:game:configure-output",
-	"game-data-describe-input.json":                 "urn:gameserver-controller:0.21.0-draft:game:data-describe-input",
-	"game-data-describe-output.json":                "urn:gameserver-controller:0.21.0-draft:game:data-describe-output",
-	"game-health-check-input.json":                  "urn:gameserver-controller:0.21.0-draft:game:health-check-input",
-	"game-health-check-output.json":                 "urn:gameserver-controller:0.21.0-draft:game:health-check-output",
-	"game-migrate-input.json":                       "urn:gameserver-controller:0.21.0-draft:game:migrate-input",
-	"game-migrate-output.json":                      "urn:gameserver-controller:0.21.0-draft:game:migrate-output",
-	"game-install-input.json":                       "urn:gameserver-controller:0.21.0-draft:game:install-input",
-	"game-install-output.json":                      "urn:gameserver-controller:0.21.0-draft:game:install-output",
-	"game-readiness-check-input.json":               "urn:gameserver-controller:0.21.0-draft:game:readiness-check-input",
-	"game-readiness-check-output.json":              "urn:gameserver-controller:0.21.0-draft:game:readiness-check-output",
-	"game-release-describe-input.json":              "urn:gameserver-controller:0.21.0-draft:game:release-describe-input",
-	"game-release-describe-output.json":             "urn:gameserver-controller:0.21.0-draft:game:release-describe-output",
-	"game-save-request-input.json":                  "urn:gameserver-controller:0.21.0-draft:game:save-request-input",
-	"game-save-request-output.json":                 "urn:gameserver-controller:0.21.0-draft:game:save-request-output",
-	"game-validate-installation-input.json":         "urn:gameserver-controller:0.21.0-draft:game:validate-installation-input",
-	"game-validate-installation-output.json":        "urn:gameserver-controller:0.21.0-draft:game:validate-installation-output",
-	"operation-accepted.json":                       "urn:gameserver-controller:0.21.0-draft:operations:operation",
-	"hosting-instance-inspect-input.json":           "urn:gameserver-controller:0.21.0-draft:hosting:instance-inspect-input",
-	"hosting-instance-inspect-output.json":          "urn:gameserver-controller:0.21.0-draft:hosting:instance-inspect-output",
-	"hosting-bootstrap-deliver-input.json":          "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-deliver-input",
-	"hosting-bootstrap-inspect-input.json":          "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-inspect-input",
-	"hosting-bootstrap-execution-output.json":       "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-execution-output",
-	"hosting-instance-start-input.json":             "urn:gameserver-controller:0.21.0-draft:hosting:instance-start-input",
-	"hosting-instance-start-output.json":            "urn:gameserver-controller:0.21.0-draft:hosting:instance-start-output",
-	"hosting-instance-stop-input.json":              "urn:gameserver-controller:0.21.0-draft:hosting:instance-stop-input",
-	"hosting-instance-stop-output.json":             "urn:gameserver-controller:0.21.0-draft:hosting:instance-stop-output",
-	"hosting-instance-wait-input.json":              "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-input",
-	"hosting-instance-wait-no-ref-input.json":       "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-input",
-	"hosting-instance-wait-output.json":             "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-output",
-	"hosting-instance-reboot-input.json":            "urn:gameserver-controller:0.21.0-draft:hosting:instance-reboot-input",
-	"hosting-instance-reboot-output.json":           "urn:gameserver-controller:0.21.0-draft:hosting:instance-reboot-output",
-	"hosting-instance-destroy-input.json":           "urn:gameserver-controller:0.21.0-draft:hosting:instance-destroy-input",
-	"hosting-instance-destroy-output.json":          "urn:gameserver-controller:0.21.0-draft:hosting:instance-destroy-output",
-	"hosting-os-offerings-list-input.json":          "urn:gameserver-controller:0.21.0-draft:hosting:os-offerings-list-input",
-	"hosting-os-offerings-list-output.json":         "urn:gameserver-controller:0.21.0-draft:hosting:os-offerings-list-output",
-	"hosting-plans-list-input.json":                 "urn:gameserver-controller:0.21.0-draft:hosting:plans-list-input",
-	"hosting-plans-list-output.json":                "urn:gameserver-controller:0.21.0-draft:hosting:plans-list-output",
-	"hosting-regions-list-input.json":               "urn:gameserver-controller:0.21.0-draft:hosting:regions-list-input",
-	"hosting-regions-list-output.json":              "urn:gameserver-controller:0.21.0-draft:hosting:regions-list-output",
-	"operation-event.json":                          "urn:gameserver-controller:0.21.0-draft:operations:operation-event",
-	"operation-result.backup.succeeded.json":        "urn:gameserver-controller:0.21.0-draft:operations:server-backup-result",
-	"operation-result.destroy.succeeded.json":       "urn:gameserver-controller:0.21.0-draft:operations:server-destroy-result",
-	"operation-result.restore.succeeded.json":       "urn:gameserver-controller:0.21.0-draft:operations:server-restore-result",
-	"operation-result.succeeded.json":               "urn:gameserver-controller:0.21.0-draft:operations:server-provision-result",
-	"operation-succeeded.json":                      "urn:gameserver-controller:0.21.0-draft:operations:operation",
-	"provision-request.json":                        "urn:gameserver-controller:0.21.0-draft:hosting:provision-request",
-	"proxy-backend-drain-input.json":                "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-drain-input",
-	"proxy-backend-drain-output.json":               "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-drain-output",
-	"proxy-backend-inspect-input.json":              "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-inspect-input",
-	"proxy-backend-inspect-output.json":             "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-inspect-output",
-	"proxy-backend-players-inspect-input.json":      "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-players-inspect-input",
-	"network-profile.proxy.json":                    "urn:gameserver-controller:0.21.0-draft:integrations:network-profile",
-	"notification-send-input.json":                  "urn:gameserver-controller:0.21.0-draft:integrations:notification-send-input",
-	"notification-send-output.json":                 "urn:gameserver-controller:0.21.0-draft:integrations:notification-send-output",
-	"proxy-backend-players-inspect-output.json":     "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-players-inspect-output",
-	"proxy-backend-register-input.json":             "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input",
-	"proxy-backend-register-output.json":            "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-output",
-	"proxy-backend-unregister-input.json":           "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-input",
-	"proxy-backend-unregister-output.json":          "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-output",
-	"proxy-cohort-inspect-input.json":               "urn:gameserver-controller:0.21.0-draft:integrations:proxy-cohort-inspect-input",
-	"proxy-cohort-inspect-output.json":              "urn:gameserver-controller:0.21.0-draft:integrations:proxy-cohort-inspect-output",
-	"proxy-session-inspect-input.json":              "urn:gameserver-controller:0.21.0-draft:integrations:proxy-session-inspect-input",
-	"proxy-session-inspect-output.json":             "urn:gameserver-controller:0.21.0-draft:integrations:proxy-session-inspect-output",
-	"server-define-result.succeeded.json":           "urn:gameserver-controller:0.21.0-draft:operations:server-define-result",
-	"server-start-result.succeeded.json":            "urn:gameserver-controller:0.21.0-draft:operations:server-start-result",
-	"server-stop-result.succeeded.json":             "urn:gameserver-controller:0.21.0-draft:operations:server-stop-result",
-	"storage-checksum.json":                         "urn:gameserver-controller:0.21.0-draft:storage:storage-checksum",
-	"storage-container-reference.json":              "urn:gameserver-controller:0.21.0-draft:storage:storage-container-reference",
-	"storage-object-copy-input.json":                "urn:gameserver-controller:0.21.0-draft:storage:object-copy-input",
-	"storage-object-copy-output.json":               "urn:gameserver-controller:0.21.0-draft:storage:object-copy-output",
-	"storage-object-delete-input.json":              "urn:gameserver-controller:0.21.0-draft:storage:object-delete-input",
-	"storage-object-delete-output.json":             "urn:gameserver-controller:0.21.0-draft:storage:object-delete-output",
-	"storage-object-get-input.json":                 "urn:gameserver-controller:0.21.0-draft:storage:object-get-input",
-	"storage-object-get-output.json":                "urn:gameserver-controller:0.21.0-draft:storage:object-get-output",
-	"storage-object-head-input.json":                "urn:gameserver-controller:0.21.0-draft:storage:object-head-input",
-	"storage-object-head-output.json":               "urn:gameserver-controller:0.21.0-draft:storage:object-head-output",
-	"storage-object-list-input.json":                "urn:gameserver-controller:0.21.0-draft:storage:object-list-input",
-	"storage-object-list-output.json":               "urn:gameserver-controller:0.21.0-draft:storage:object-list-output",
-	"storage-object-put-input.json":                 "urn:gameserver-controller:0.21.0-draft:storage:object-put-input",
-	"storage-object-put-output.json":                "urn:gameserver-controller:0.21.0-draft:storage:object-put-output",
-	"storage-object-reference.json":                 "urn:gameserver-controller:0.21.0-draft:storage:storage-object-reference",
-	"storage-object-retention-inspect-input.json":   "urn:gameserver-controller:0.21.0-draft:storage:object-retention-inspect-input",
-	"storage-object-retention-inspect-output.json":  "urn:gameserver-controller:0.21.0-draft:storage:object-retention-inspect-output",
-	"storage-object-target.json":                    "urn:gameserver-controller:0.21.0-draft:storage:storage-object-target",
-	"storage-object-verify-checksum-input.json":     "urn:gameserver-controller:0.21.0-draft:storage:object-verify-checksum-input",
-	"storage-object-verify-checksum-output.json":    "urn:gameserver-controller:0.21.0-draft:storage:object-verify-checksum-output",
-	"storage-object-versioning-inspect-input.json":  "urn:gameserver-controller:0.21.0-draft:storage:object-versioning-inspect-input",
-	"storage-object-versioning-inspect-output.json": "urn:gameserver-controller:0.21.0-draft:storage:object-versioning-inspect-output",
-	"storage-transfer-reference.json":               "urn:gameserver-controller:0.21.0-draft:storage:storage-transfer-reference",
-	"systemd-unit-delete-input.json":                "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-delete-input",
-	"systemd-unit-delete-output.json":               "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-delete-output",
-	"systemd-unit-health-inspect-input.json":        "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-health-inspect-input",
-	"systemd-unit-health-inspect-output.json":       "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-health-inspect-output",
-	"systemd-unit-force-stop-input.json":            "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-force-stop-input",
-	"systemd-unit-force-stop-output.json":           "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-force-stop-output",
-	"systemd-unit-graceful-stop-input.json":         "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-graceful-stop-input",
-	"systemd-unit-graceful-stop-output.json":        "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-graceful-stop-output",
-	"systemd-unit-start-input.json":                 "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-start-input",
-	"systemd-unit-start-output.json":                "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-start-output",
-	"systemd-unit-logs-read-input.json":             "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-logs-read-input",
-	"systemd-unit-logs-read-output.json":            "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-logs-read-output",
-	"velocity-player-transfer-request.json":         "urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-request",
-	"velocity-player-transfer-result.json":          "urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-result",
-}
-
 type schemaEntry struct {
 	Path string
 	ID   string
@@ -193,6 +55,8 @@ type protocolPackage struct {
 	schemaDocs map[string]any
 	rawSchemas map[string][]byte
 	validators map[string]*jsonschema.Schema
+	// exampleCount is the number of examples validateExamples checked.
+	exampleCount int
 }
 
 func main() {
@@ -230,7 +94,7 @@ func runWithManifest(root string, printManifest bool) error {
 		return encoder.Encode(manifest)
 	}
 	fmt.Printf("Protocol validation passed: %d schemas, %d examples, %d conformance fixtures, protocol %s.\n",
-		len(pkg.entries), len(exampleSchemaIDs), pkg.fixtureCount(), pkg.version)
+		len(pkg.entries), pkg.exampleCount, pkg.fixtureCount(), pkg.version)
 	fmt.Printf("Conformance passed: %d fixtures.\n", pkg.fixtureCount())
 	return nil
 }
@@ -427,33 +291,31 @@ func (pkg *protocolPackage) validatePackage() error {
 	return pkg.validateOpenAPI()
 }
 
-// exampleIndexFile is the language-neutral example-to-schema map that other
-// implementations read. It must list exactly the mapping below.
+// exampleIndexFile is the language-neutral example-to-schema map. It is the
+// only mapping: this validator and other implementations both read it.
 const exampleIndexFile = "index.json"
 
-func (pkg *protocolPackage) validateExampleIndex(path string) error {
+// readExampleIndex returns the example-to-schema map from path. Each entry
+// needs a path and a schema_id, and each path may appear once.
+func readExampleIndex(path string) (map[string]string, error) {
 	doc, err := parseJSONFile(path)
 	if err != nil {
-		return fmt.Errorf("examples/%s: %w", exampleIndexFile, err)
+		return nil, fmt.Errorf("examples/%s: %w", exampleIndexFile, err)
+	}
+	entries := arrayValue(asObject(doc), "examples")
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("examples/%s must contain a non-empty examples array", exampleIndexFile)
 	}
 	listed := map[string]string{}
-	for _, raw := range arrayValue(asObject(doc), "examples") {
+	for _, raw := range entries {
 		entry := asObject(raw)
 		name, id := stringValue(entry, "path"), stringValue(entry, "schema_id")
 		if _, duplicate := listed[name]; duplicate || name == "" || id == "" {
-			return fmt.Errorf("examples/%s: entry %q is empty or duplicated", exampleIndexFile, name)
+			return nil, fmt.Errorf("examples/%s: entry %q is empty or duplicated", exampleIndexFile, name)
 		}
 		listed[name] = id
 	}
-	if len(listed) != len(exampleSchemaIDs) {
-		return fmt.Errorf("examples/%s lists %d examples, want %d", exampleIndexFile, len(listed), len(exampleSchemaIDs))
-	}
-	for name, id := range exampleSchemaIDs {
-		if listed[name] != id {
-			return fmt.Errorf("examples/%s maps %s to %q, want %q", exampleIndexFile, name, listed[name], id)
-		}
-	}
-	return nil
+	return listed, nil
 }
 
 func (pkg *protocolPackage) validateExamples() error {
@@ -469,16 +331,13 @@ func (pkg *protocolPackage) validateExamples() error {
 		}
 		actual[filepath.Base(path)] = true
 	}
-	if err := pkg.validateExampleIndex(filepath.Join(examplesDir, exampleIndexFile)); err != nil {
+	exampleSchemaIDs, err := readExampleIndex(filepath.Join(examplesDir, exampleIndexFile))
+	if err != nil {
 		return err
 	}
-	expected := make(map[string]bool)
-	for name := range exampleSchemaIDs {
-		expected[name] = true
-	}
 	for name := range actual {
-		if !expected[name] {
-			return fmt.Errorf("example is not mapped to a schema in validator: %s", name)
+		if _, listed := exampleSchemaIDs[name]; !listed {
+			return fmt.Errorf("example is not listed in examples/%s: %s", exampleIndexFile, name)
 		}
 	}
 	for name, id := range exampleSchemaIDs {
@@ -513,6 +372,7 @@ func (pkg *protocolPackage) validateExamples() error {
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
+	pkg.exampleCount = len(exampleSchemaIDs)
 	return nil
 }
 
