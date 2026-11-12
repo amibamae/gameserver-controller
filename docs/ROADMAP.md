@@ -92,6 +92,7 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - Add production adoption through the same policy; the live production server may remain unmanaged.
 - Validate bootstrap execution and game readiness on fresh, isolated instances; include startup-script ID and digest in instance records.
 - [ ] Complete Wasabi's S3-compatible storage adapter integration. The Go `internal/wasabistorage` package implements bounded put/get/head, prefix-fenced list with bound continuation tokens, readback-verified copy, exact-version delete, and versioning and retention inspection, with profile and environment checks, systemd credential references, SHA-256 verification, and optional exact-version enforcement. Runtime/config registration, workflow authorization tests, and isolated Wasabi validation remain open; see [the adapter status](WASABI_STORAGE_ADAPTER.md).
+- [x] Keep each adapter implementation in its own file (`internal/controllerruntime/adapter_<name>.go`, registered from `init()`), and allow one adapter profile per file in `adapters.d/`, so adapters are added or removed by adding or removing files.
 - Implement the Minecraft Paper adapter.
 - Add dry runs, exact-target confirmation, approvals, durable operation tracking, and audit.
 - Validate provision, readiness, backup, restore, and destroy on isolated resources.

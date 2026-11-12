@@ -229,3 +229,66 @@ func buildTestPlan(t *testing.T, value config.Config) Plan {
 	}
 	return plan
 }
+
+func TestBuildInstallBundleKeepsAdapterFilesSeparate(t *testing.T) {
+	value := loadExampleConfig(t)
+	var moved string
+	for i := range value.Adapters {
+		if value.Adapters[i].ID == "game.paper" {
+			value.Adapters[i].Source = "30-paper.yaml"
+			moved = value.Adapters[i].ID
+		}
+	}
+	if moved == "" {
+		t.Fatal("example config has no game.paper adapter")
+	}
+	layout := buildTestPlan(t, value).Layout
+	bundle, err := BuildInstallBundle(value, layout, []byte("test-controller-binary"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapterPath := filepath.Join(filepath.Dir(layout.ConfigFile), config.AdapterDirectoryName, "30-paper.yaml")
+	files := map[string]InstallFile{}
+	for _, file := range bundle.Files {
+		files[file.Path] = file
+	}
+	adapterFile, ok := files[adapterPath]
+	if !ok || adapterFile.Mode.Perm() != 0o640 {
+		t.Fatalf("adapters.d profile was not installed as its own file: %v", ok)
+	}
+	var mainConfig config.Config
+	if err := yaml.Unmarshal(files[layout.ConfigFile].Content, &mainConfig); err != nil {
+		t.Fatal(err)
+	}
+	for _, profile := range mainConfig.Adapters {
+		if profile.ID == moved {
+			t.Fatal("the adapters.d profile was also written into the main config")
+		}
+	}
+	foundDir := false
+	for _, directory := range bundle.Directories {
+		foundDir = foundDir || directory.Path == filepath.Dir(adapterPath)
+	}
+	if !foundDir {
+		t.Fatal("adapters.d directory is not created")
+	}
+
+	// The installed files load back to the same adapters.
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, config.AdapterDirectoryName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "controller.yaml"), files[layout.ConfigFile].Content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, config.AdapterDirectoryName, "30-paper.yaml"), adapterFile.Content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := config.Load(filepath.Join(dir, "controller.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reloaded.Adapters) != len(value.Adapters) || reloaded.Adapters[len(reloaded.Adapters)-1].ID != moved {
+		t.Fatalf("reloaded adapters = %+v", reloaded.Adapters)
+	}
+}

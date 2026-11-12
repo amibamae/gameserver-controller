@@ -211,8 +211,8 @@ func TestValidateRejectsNonExecutableProcessPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := range value.Adapters {
-		if value.Adapters[i].Process != nil {
-			value.Adapters[i].Process.Path = notExecutable
+		if settings, ok := config.SettingsOf[*ProcessSettings](value.Adapters[i]); ok {
+			settings.Path = notExecutable
 		}
 	}
 	if err := Validate(value); err == nil || !strings.Contains(err.Error(), "not an executable file") {

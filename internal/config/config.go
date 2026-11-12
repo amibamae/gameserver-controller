@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"net/netip"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -76,76 +75,22 @@ type Audit struct {
 
 // AdapterProfile declares one adapter. Implementation is optional: when it is
 // empty the adapter is declared for cross-reference checks but the controller
-// runtime does not start it.
+// runtime does not start it. When set, the profile carries that
+// implementation's settings block under the key of the same name; see
+// RegisterImplementation.
 type AdapterProfile struct {
 	ID             string                     `yaml:"id"`
 	Category       string                     `yaml:"category"`
 	SecretRefs     map[string]SecretReference `yaml:"secret_refs"`
-	Implementation string                     `yaml:"implementation"`
-	Wasabi         *WasabiProfile             `yaml:"wasabi"`
-	Process        *ProcessProfile            `yaml:"process"`
-	Velocity       *VelocityProfile           `yaml:"velocity"`
-	Cloudflare     *CloudflareProfile         `yaml:"cloudflare"`
-}
-
-const (
-	ImplementationWasabi     = "wasabi"
-	ImplementationProcess    = "process"
-	ImplementationVelocity   = "velocity"
-	ImplementationCloudflare = "cloudflare"
-
-	// WasabiAccessKeyIDSecret and WasabiSecretAccessKeySecret are the
-	// secret_refs names a Wasabi adapter profile must define.
-	WasabiAccessKeyIDSecret     = "access_key_id"
-	WasabiSecretAccessKeySecret = "secret_access_key"
-	// VelocityBridgeTokenSecret is the secret_refs name holding the proxy
-	// bridge bearer token.
-	VelocityBridgeTokenSecret = "bridge_token"
-	// CloudflareAPITokenSecret is the secret_refs name holding a Cloudflare API
-	// token scoped to DNS edit for one zone.
-	CloudflareAPITokenSecret = "api_token"
-)
-
-// VelocityProfile configures the built-in Velocity proxy integration adapter.
-// The bridge token comes from the profile's secret_refs.
-type VelocityProfile struct {
-	EnvironmentID   string `yaml:"environment_id"`
-	BridgeURL       string `yaml:"bridge_url"`
-	ProxyInstanceID string `yaml:"proxy_instance_id"`
-	Timeout         string `yaml:"timeout"`
-}
-
-// CloudflareProfile configures the built-in Cloudflare DNS integration
-// adapter for one zone. Managed record names are derived from the network
-// profiles of the servers that use this adapter.
-type CloudflareProfile struct {
-	EnvironmentID string `yaml:"environment_id"`
-	ZoneID        string `yaml:"zone_id"`
-	ZoneName      string `yaml:"zone_name"`
-}
-
-// WasabiProfile holds the non-secret settings for the built-in Wasabi storage
-// adapter. Keys come from the profile's secret_refs.
-type WasabiProfile struct {
-	StorageProfileID  string `yaml:"storage_profile_id"`
-	EnvironmentID     string `yaml:"environment_id"`
-	Container         string `yaml:"container"`
-	KeyPrefix         string `yaml:"key_prefix"`
-	Region            string `yaml:"region"`
-	EndpointURL       string `yaml:"endpoint_url"`
-	MaxObjectBytes    int64  `yaml:"max_object_bytes"`
-	RequireVersionIDs bool   `yaml:"require_version_ids"`
-}
-
-// ProcessProfile starts an adapter executable over jsonrpc-stdio-v1. Env is
-// the complete environment; nothing is inherited from the controller.
-type ProcessProfile struct {
-	Path             string   `yaml:"path"`
-	Args             []string `yaml:"args"`
-	Env              []string `yaml:"env"`
-	WorkingDirectory string   `yaml:"working_directory"`
-	StartTimeout     string   `yaml:"start_timeout"`
-	StopTimeout      string   `yaml:"stop_timeout"`
+	Implementation string                     `yaml:"implementation,omitempty"`
+	// Blocks holds the raw settings blocks keyed by implementation name. Any
+	// key other than the selected implementation is rejected by Validate.
+	Blocks map[string]yaml.Node `yaml:",inline"`
+	// Settings is the decoded block of the selected implementation.
+	Settings ImplementationSettings `yaml:"-"`
+	// Source is the adapters.d file name the profile came from, or "" for the
+	// main configuration file.
+	Source string `yaml:"-"`
 }
 
 type SecretReference struct {
@@ -224,22 +169,44 @@ type ServerLifecycle struct {
 	Scaling scalingpolicy.Settings `yaml:"scaling"`
 }
 
-// Load reads a single YAML document with unknown-field rejection, then checks
-// cross-reference and safety rules. It never resolves secret references.
+// Load reads the configuration file with unknown-field rejection, adds one
+// adapter profile from each file in the adapters.d directory next to it (see
+// loadAdapterDirectory), then checks cross-reference and safety rules. It
+// never resolves secret references.
 func Load(path string) (Config, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("open configuration: %w", err)
 	}
 	defer file.Close()
-	value, err := Parse(file)
+	value, err := decodeConfig(file)
 	if err != nil {
+		return Config{}, fmt.Errorf("validate configuration: %w", err)
+	}
+	extra, err := loadAdapterDirectory(filepath.Join(filepath.Dir(path), AdapterDirectoryName))
+	if err != nil {
+		return Config{}, fmt.Errorf("validate configuration: %w", err)
+	}
+	value.Adapters = append(value.Adapters, extra...)
+	if err := finish(&value); err != nil {
 		return Config{}, fmt.Errorf("validate configuration: %w", err)
 	}
 	return value, nil
 }
 
+// Parse reads one configuration document. It does not read adapters.d.
 func Parse(reader io.Reader) (Config, error) {
+	value, err := decodeConfig(reader)
+	if err != nil {
+		return Config{}, err
+	}
+	if err := finish(&value); err != nil {
+		return Config{}, err
+	}
+	return value, nil
+}
+
+func decodeConfig(reader io.Reader) (Config, error) {
 	decoder := yaml.NewDecoder(reader)
 	decoder.KnownFields(true)
 	var value Config
@@ -255,10 +222,15 @@ func Parse(reader io.Reader) (Config, error) {
 		}
 		return Config{}, fmt.Errorf("decode trailing YAML document failed")
 	}
-	if err := Validate(value); err != nil {
-		return Config{}, err
-	}
 	return value, nil
+}
+
+// finish decodes each profile's settings block, then validates.
+func finish(value *Config) error {
+	for i := range value.Adapters {
+		_ = resolveSettings(&value.Adapters[i]) // Validate reports failures.
+	}
+	return Validate(*value)
 }
 
 func Validate(value Config) error {
@@ -285,7 +257,11 @@ func Validate(value Config) error {
 
 	adapterByID := make(map[string]AdapterProfile, len(value.Adapters))
 	for i, profile := range value.Adapters {
-		label := fmt.Sprintf("adapters[%d]", i)
+		label := profileLabel(profile.Source, i)
+		// Decode settings on this copy so environment and zone checks work
+		// for a Config that was not produced by Parse. Errors are reported by
+		// validateImplementation below.
+		_ = resolveSettings(&profile)
 		add(adapterIDPattern.MatchString(profile.ID), label+".id must be a lower-case dotted adapter ID")
 		add(validCategory(profile.Category), label+".category is unsupported")
 		if expectedPrefix, ok := categoryPrefix(profile.Category); ok {
@@ -322,7 +298,7 @@ func Validate(value Config) error {
 	}
 	add(hasProduction, "at least one production environment is required")
 	for i, profile := range value.Adapters {
-		validateImplementation(&problems, fmt.Sprintf("adapters[%d]", i), profile, environmentByID)
+		validateImplementation(&problems, profileLabel(profile.Source, i), profile, environmentByID)
 	}
 
 	serverIDs := make(map[string]struct{}, len(value.Servers))
@@ -339,8 +315,11 @@ func Validate(value Config) error {
 		}
 		checkServerAdapter(&problems, label+".adapters.hosting", server.Adapters.Hosting, "hosting", adapterByID, true)
 		checkServerAdapter(&problems, label+".adapters.storage", server.Adapters.Storage, "storage", adapterByID, true)
-		if storage, ok := adapterByID[server.Adapters.Storage]; ok && storage.Wasabi != nil && storage.Wasabi.EnvironmentID != server.EnvironmentID {
-			problems = append(problems, label+".adapters.storage must use a Wasabi profile in the same environment as the server")
+		for field, id := range map[string]string{"hosting": server.Adapters.Hosting, "storage": server.Adapters.Storage, "execution": server.Adapters.Execution,
+			"game": server.Adapters.Game, "integration": server.Adapters.Integration} {
+			if environment := BoundEnvironment(adapterByID[id]); id != "" && environment != "" && environment != server.EnvironmentID {
+				problems = append(problems, label+".adapters."+field+" must use an adapter bound to the same environment as the server")
+			}
 		}
 		checkServerAdapter(&problems, label+".adapters.execution", server.Adapters.Execution, "execution", adapterByID, true)
 		checkServerAdapter(&problems, label+".adapters.game", server.Adapters.Game, "game", adapterByID, true)
@@ -393,144 +372,6 @@ func validateManagementAPI(problems *[]string, value ManagementAPI) {
 	if value.TLSCertificate != "" && value.TLSCertificate == value.TLSPrivateKey {
 		*problems = append(*problems, "controller.management_api TLS certificate and private-key paths must differ")
 	}
-}
-
-var envNamePattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,127}$`)
-
-func validateImplementation(problems *[]string, label string, profile AdapterProfile, environments map[string]Environment) {
-	add := func(ok bool, message string) {
-		if !ok {
-			*problems = append(*problems, label+message)
-		}
-	}
-	// Each implementation takes exactly its own settings block.
-	blocks := map[string]bool{ImplementationWasabi: profile.Wasabi != nil, ImplementationProcess: profile.Process != nil,
-		ImplementationVelocity: profile.Velocity != nil, ImplementationCloudflare: profile.Cloudflare != nil}
-	for name, set := range blocks {
-		if set && name != profile.Implementation {
-			if profile.Implementation == "" {
-				add(false, " has "+name+" settings but no implementation")
-			} else {
-				add(false, " must not have "+name+" settings with implementation "+profile.Implementation)
-			}
-		}
-	}
-	exactSecrets := func(names ...string) bool {
-		if len(profile.SecretRefs) != len(names) {
-			return false
-		}
-		for _, name := range names {
-			if _, ok := profile.SecretRefs[name]; !ok {
-				return false
-			}
-		}
-		return true
-	}
-	switch profile.Implementation {
-	case "":
-	case ImplementationWasabi:
-		add(profile.Category == "storage", ".implementation wasabi requires category storage")
-		if profile.Wasabi == nil {
-			*problems = append(*problems, label+".wasabi is required with implementation wasabi")
-			return
-		}
-		w := profile.Wasabi
-		add(exactSecrets(WasabiAccessKeyIDSecret, WasabiSecretAccessKeySecret), ".secret_refs must define exactly access_key_id and secret_access_key for implementation wasabi")
-		add(strings.TrimSpace(w.StorageProfileID) != "" && len(w.StorageProfileID) <= 200, ".wasabi.storage_profile_id is required")
-		_, knownEnvironment := environments[w.EnvironmentID]
-		add(knownEnvironment, ".wasabi.environment_id must name a configured environment")
-		add(w.Container != "" && len(w.Container) <= 500, ".wasabi.container is required")
-		add(strings.HasSuffix(w.KeyPrefix, "/") && len(w.KeyPrefix) <= 2048, ".wasabi.key_prefix must end with /")
-		add(w.Region != "", ".wasabi.region is required")
-		add(strings.HasPrefix(w.EndpointURL, "https://"), ".wasabi.endpoint_url must be an HTTPS URL")
-		add(w.MaxObjectBytes > 0, ".wasabi.max_object_bytes must be positive")
-	case ImplementationProcess:
-		if profile.Process == nil {
-			*problems = append(*problems, label+".process is required with implementation process")
-			return
-		}
-		p := profile.Process
-		add(filepath.IsAbs(p.Path) && !strings.ContainsRune(p.Path, '\x00'), ".process.path must be an absolute executable path")
-		add(p.WorkingDirectory == "" || filepath.IsAbs(p.WorkingDirectory), ".process.working_directory must be absolute when set")
-		for _, arg := range p.Args {
-			add(!strings.ContainsRune(arg, '\x00'), ".process.args must not contain NUL")
-		}
-		seen := map[string]bool{}
-		for _, entry := range p.Env {
-			name, _, found := strings.Cut(entry, "=")
-			add(found && envNamePattern.MatchString(name), ".process.env entries must be NAME=value with an upper-case name")
-			add(!seen[name], ".process.env must not repeat "+name)
-			seen[name] = true
-		}
-		for field, text := range map[string]string{"start_timeout": p.StartTimeout, "stop_timeout": p.StopTimeout} {
-			if text == "" {
-				continue
-			}
-			duration, err := time.ParseDuration(text)
-			add(err == nil && duration > 0 && duration <= 10*time.Minute, ".process."+field+" must be greater than zero and no more than 10m")
-		}
-	case ImplementationVelocity:
-		add(profile.Category == "integration", ".implementation velocity requires category integration")
-		if profile.Velocity == nil {
-			*problems = append(*problems, label+".velocity is required with implementation velocity")
-			return
-		}
-		v := profile.Velocity
-		add(exactSecrets(VelocityBridgeTokenSecret), ".secret_refs must define exactly bridge_token for implementation velocity")
-		_, knownEnvironment := environments[v.EnvironmentID]
-		add(knownEnvironment, ".velocity.environment_id must name a configured environment")
-		add(validBridgeURL(v.BridgeURL), ".velocity.bridge_url must be an https URL, or http to a loopback address, with no path, query, or user information")
-		add(strings.TrimSpace(v.ProxyInstanceID) != "" && len(v.ProxyInstanceID) <= 1024, ".velocity.proxy_instance_id is required")
-		if v.Timeout != "" {
-			timeout, err := time.ParseDuration(v.Timeout)
-			add(err == nil && timeout > 0 && timeout <= 2*time.Minute, ".velocity.timeout must be greater than zero and no more than 2m")
-		}
-	case ImplementationCloudflare:
-		add(profile.Category == "integration", ".implementation cloudflare requires category integration")
-		if profile.Cloudflare == nil {
-			*problems = append(*problems, label+".cloudflare is required with implementation cloudflare")
-			return
-		}
-		c := profile.Cloudflare
-		add(exactSecrets(CloudflareAPITokenSecret), ".secret_refs must define exactly api_token for implementation cloudflare")
-		_, knownEnvironment := environments[c.EnvironmentID]
-		add(knownEnvironment, ".cloudflare.environment_id must name a configured environment")
-		add(zoneIDPattern.MatchString(c.ZoneID), ".cloudflare.zone_id must be a 32-character lower-case hex Cloudflare zone ID")
-		add(validDNSHostname(c.ZoneName), ".cloudflare.zone_name must be a lower-case DNS name")
-	default:
-		*problems = append(*problems, label+".implementation must be wasabi, process, velocity, or cloudflare when set")
-	}
-}
-
-var zoneIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
-
-// validBridgeURL mirrors velocityproxy.NewHTTPBridge: https anywhere, plain
-// http only to loopback, and no user information, path, query, or fragment.
-func validBridgeURL(value string) bool {
-	u, err := url.Parse(value)
-	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Hostname() == "" || (u.Path != "" && u.Path != "/") {
-		return false
-	}
-	switch u.Scheme {
-	case "https":
-		return true
-	case "http":
-		ip := net.ParseIP(u.Hostname())
-		return (ip != nil && ip.IsLoopback()) || strings.EqualFold(u.Hostname(), "localhost")
-	}
-	return false
-}
-
-// adapterEnvironment returns the environment a built-in integration adapter
-// profile is bound to, or "" for a declared-only profile.
-func adapterEnvironment(profile AdapterProfile) string {
-	switch {
-	case profile.Velocity != nil:
-		return profile.Velocity.EnvironmentID
-	case profile.Cloudflare != nil:
-		return profile.Cloudflare.EnvironmentID
-	}
-	return ""
 }
 
 // inZone reports whether name is the zone apex or a name below it.
@@ -691,11 +532,12 @@ func validateServerNetwork(problems *[]string, label string, server ServerProfil
 	// Built-in integration adapters are bound to one environment; a server
 	// must not route through another environment's proxy or DNS zone.
 	for field, id := range map[string]string{".proxy": network.Proxy, ".dns": network.DNS} {
-		if environment := adapterEnvironment(adapters[id]); id != "" && environment != "" {
+		if environment := BoundEnvironment(adapters[id]); id != "" && environment != "" {
 			add(environment == server.EnvironmentID, field+" adapter "+id+" belongs to environment "+environment+", not "+server.EnvironmentID)
 		}
 	}
-	if zone := adapters[network.DNS].Cloudflare; zone != nil {
+	if owner, ok := adapters[network.DNS].Settings.(DNSZoneOwner); ok {
+		zone := owner.DNSZone()
 		names := []string{}
 		if network.JoinMode == "direct_dns" {
 			names = append(names, network.JoinHostname)
@@ -706,7 +548,7 @@ func validateServerNetwork(problems *[]string, label string, server ServerProfil
 			}
 		}
 		for _, name := range names {
-			add(inZone(name, zone.ZoneName), " hostname "+name+" is outside the DNS zone "+zone.ZoneName)
+			add(inZone(name, zone), " hostname "+name+" is outside the DNS zone "+zone)
 		}
 	}
 	seen := make(map[string]bool, len(network.Backends))

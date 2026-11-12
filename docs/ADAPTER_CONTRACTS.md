@@ -6,6 +6,15 @@ The detailed drafts live under [protocol/adapters](../protocol/adapters/README.m
 
 ## What exists in Go
 
+### Adding or removing an adapter
+
+Each built-in adapter implementation is one file, `internal/controllerruntime/adapter_<name>.go`:
+- the settings type for its config block, and its validation;
+- the code that builds (and, if needed, starts) the adapter;
+- an `init()` that registers both with `registerAdapter`.
+
+To add an implementation, add such a file next to the existing ones: [`adapter_wasabi.go`](../internal/controllerruntime/adapter_wasabi.go), `adapter_process.go`, `adapter_velocity.go`, and `adapter_cloudflare.go`. To remove one, delete its file. Configurations that select it then fail validation with a clear message. Nothing else lists the implementations: `config.RegisterImplementation` and the runtime builder registry are filled from these files. The adapter packages themselves (`internal/wasabistorage`, `internal/velocityproxy`, and so on) stay independent of configuration. An adapter that runs as its own executable needs no new Go file; configure it with `implementation: process`.
+
 The Go registry validates adapter descriptors and capability inputs and outputs against the bundled protocol schemas. Scripted in-process fakes cover all five categories for local tests. The registry is a boundary and test harness; it does not implement lifecycle policy, authorization, or provider behavior. The separate [workflow engine](WORKFLOW_ENGINE.md) persists adapter calls and reconciles uncertain outcomes, but the standard lifecycle workflows are not wired yet.
 
 `internal/adapterprocess` implements the optional [`jsonrpc-stdio-v1`](../protocol/rpc/transport.md) process transport. `adapterprocess.Start` runs an adapter executable directly (absolute path, explicit arguments, an explicit environment with nothing inherited, never a shell), negotiates the protocol version, and checks the descriptor; the resulting `Process` registers with the same registry as an in-process adapter. `adapterprocess.Serve` runs any Go adapter behind stdio. Calls are serialized. A crash, a missed deadline, a malformed frame, or any other output on stdout marks the process failed, and the registry reports an in-flight mutating call as possibly having side effects so the workflow reconciles it. Limits for now: the `local-unix-stream-v1` byte-stream profile is not negotiated, so a process adapter that advertises `storage.object.put` or `storage.object.get` is rejected at start; `adapter.reconcile` and concurrent calls are not supported; and the controller runtime does not start process adapters from configuration yet.
