@@ -101,6 +101,38 @@ lifecycle:
 
 While a server is running, the controller adds or removes servers only inside the decision window, measured from the start of each hour the server has run (by default minutes 58 to 59). An idle server is shut down only when it has been idle for at least `idle_shutdown` and the window is open; otherwise it stays up for the rest of the paid hour, and returning players cancel the shutdown. Starting a server when none is running is never delayed, because players are waiting. If `hourly_cost` is below `ignore_billing_below_hourly_cost`, the window is ignored and the server scales as soon as it is idle.
 
+#### Planned: vertical auto-scaling and migration target servers
+
+**These options are planned and not yet accepted by the validator.** Adding them to a configuration today makes it fail validation, because unknown fields are rejected. They are documented here so operators can plan for them.
+
+```yaml
+controller:
+  capacity:
+    migration_targets:
+      enabled: true        # default true
+      max_servers: 1       # default 1; 0 means no limit
+
+servers:
+  - id: example
+    lifecycle:
+      migration_targets:        # optional per-server override of the controller setting
+        enabled: true
+        max_servers: 1
+      scaling:
+        vertical:
+          enabled: true         # default false; turns vertical auto-scaling on for this server
+          plans:                # plan ladder, cheapest first
+            - vc2-1c-2gb
+            - vc2-2c-4gb
+            - vc2-4c-8gb
+```
+
+A **migration target server** is the new server a migration moves to. It runs alongside the live server until the migration handover finishes: players are handed over from the live server to the migration target, the live server's final backup is verified, and only then is the old server destroyed.
+
+- `migration_targets.enabled` decides whether a migration may start a migration target server alongside the live one. Set it to `false` if you never want a migration target running next to a live server.
+- `migration_targets.max_servers` is the most migration target servers that may run at the same time. It is a limit, not an on/off switch: to stop migration target servers entirely, set `enabled: false` rather than changing this number. `0` removes the limit.
+- `scaling.vertical.enabled` is a separate option that turns vertical auto-scaling on or off for one server. When on, the controller moves the server one rung up or down its plan ladder at a time, through a migration to a migration target server (see [core design](CORE_DESIGN.md#vertical-auto-scaling-planned)). Vertical scaling needs migration target servers, so it stays inactive while `migration_targets.enabled` is `false` for that server. A migration is the only case where more than two managed servers may run. The thresholds that trigger a move are not designed yet.
+
 Shutting down includes stopping the game, backing up, verifying, and destroying the instance. If that takes longer than the time left in the hour after the window, the next hour is charged; move the window earlier once real shutdown times are known. The validator checks these settings; the controller runtime does not schedule them yet.
 
 Each server may define `lifecycle.backups.schedule` and `lifecycle.backups.retention`. The defaults are every 9 hours and keep the newest five verified backups. Schedule units are `minutes`, `hours`, `days`, `weeks`, `months`, or `years`; month and year intervals use calendar units, anchored to the original schedule date. If a month lacks that day, the occurrence uses that month's last day and later occurrences return to the original day. Set `keep_last: 0` to retain backups indefinitely. The configuration validator checks this policy, but scheduled execution and retention cleanup are not wired into a controller runtime yet. Cleanup must run only after a new backup is verified and must use the normal exact-object authorization and retention checks.

@@ -98,6 +98,19 @@ Hosting providers such as Vultr bill each instance in whole increments (one hour
 
 The policy lives in `internal/scalingpolicy` and is configured per server under `lifecycle.scaling` (see [configuration](CONFIGURATION.md#scaling-and-billing)). Hosting adapters may declare their billing increment with the `billing_increment_seconds` descriptor constraint. The runtime scheduler that applies it is future work.
 
+### Vertical auto-scaling (planned)
+
+**Status: planned, not implemented.** The controller will be able to move a server to a larger or smaller hosting plan automatically, one step at a time:
+
+- Vertical auto-scaling has its own per-server switch (`scaling.vertical.enabled`), separate from the migration target server options.
+- The operator lists the allowed plans for a server in order, from cheapest to most expensive. That ordered list is the server's plan ladder.
+- Scaling is linear: the controller moves at most one rung up or down per decision. It moves up after sustained high load and down after sustained low load. It never skips a rung, and never leaves the ladder.
+- Each move is a migration (`server.migrate`) to a **migration target server** on the new plan. The controller provisions the migration target, restores the newest verified backup, and waits for readiness. Then the **migration handover** runs: players are handed over through the proxy from the live server to the migration target, a final backup of the old live server is taken and verified, and only then is the exact old server destroyed. If anything fails before the handover moves players, the migration target is destroyed and the live server keeps serving.
+- A migration target server is the only case where more than two controller-managed servers may run. `migration_targets.enabled` decides whether a migration may start one alongside the live server, and `migration_targets.max_servers` caps how many may run at once. Vertical scaling depends on migration target servers, so it stays inactive while they are disabled.
+- Moves start only inside the billing decision window above, so a server is not replaced partway through an hour that is already paid for.
+
+The load signals and thresholds are not designed yet. Until this is built, change a server's plan by hand.
+
 ### Restore and stage
 
 Restore one identified backup. Check its integrity and version compatibility; require approval when replacing data or crossing a major-version boundary. Reject archive traversal and unsafe symlinks.
