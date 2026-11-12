@@ -20,3 +20,7 @@ func evaluateRestoreFinalStatePolicy(pkg *protocolPackage, fixture map[string]an
 	}
 	return map[string]any{"evaluations": results}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateRestoreFinalStatePolicy, "operations.restore.final-state-policy")
+}

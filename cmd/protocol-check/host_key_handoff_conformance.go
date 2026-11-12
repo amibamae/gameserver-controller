@@ -119,3 +119,7 @@ func evaluateHostKeyHandoff(_ *protocolPackage, fixture map[string]any) (map[str
 	}
 	return map[string]any{"evaluations": evaluations}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateHostKeyHandoff, "hosting.bootstrap.host-key-handoff")
+}

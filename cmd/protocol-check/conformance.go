@@ -48,184 +48,195 @@ func (pkg *protocolPackage) runConformance() error {
 
 func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
 	fixtureID := stringValue(fixture, "fixture_id")
-	switch fixtureID {
-	case "protocol.json.raw-wire-interoperability":
-		return evaluateRawJSONInteroperability(fixture)
-	case "execution.unit.restart.clean-stop-distinct-runtime":
-		return evaluateUnitRestart(pkg, fixture)
-	case "execution.unit.create.exact-definition-no-autostart":
-		return evaluateUnitCreate(pkg, fixture)
-	case "hosting.instance.find-by-resource-key.create-recovery":
-		return evaluateInstanceCreateRecovery(pkg, fixture)
-	case "game.release.describe.integrity-and-identity":
-		return evaluateGameReleaseDescription(pkg, fixture)
-	case "game.install.release-binding-and-reconciliation":
-		return evaluateGameInstallContract(pkg, fixture)
-	case "game.backup.capture.binding-and-stream-integrity":
-		return evaluateBackupCapture(pkg, fixture)
-	case "operations.type-binding":
-		return evaluateOperationTypeBinding(pkg, fixture)
-	case "operations.unknown-result-reference-projection":
-		return evaluateUnknownResultReferenceProjection(pkg, fixture)
-	case "operations.request-fingerprint-jcs":
-		return evaluateRequestFingerprintJCS(fixture)
-	case "integration.proxy.backend.drain-unregister-state-confirmation":
-		return evaluateProxyBackendDrainUnregisterState(pkg, fixture)
-	case "integration.proxy.inspect.target-state-and-routability":
-		return evaluateProxyBackendInspect(pkg, fixture)
-	case "integration.proxy.players.inspect.fresh-count-and-target-binding":
-		return evaluateProxyBackendPlayersInspect(pkg, fixture)
-	case "integration.proxy.cohort.inspect.binding-and-freshness":
-		return evaluateProxyCohortInspect(pkg, fixture)
-	case "integration.dns.record.upsert.purpose-readiness-and-confirmation":
-		return evaluateDNSRecordUpsert(pkg, fixture)
-	case "hosting.bootstrap.host-key-handoff":
-		return evaluateHostKeyHandoff(pkg, fixture)
-	case "integration.proxy.cohort.automatic-move":
-		return evaluateProxyAutomaticMove(pkg, fixture)
-	case "integration.network-profile.requirements":
-		return evaluateNetworkProfileRequirements(pkg, fixture)
-	case "integration.notification.proxy-outage-transitions":
-		return evaluateProxyOutageTransitions(pkg, fixture)
-	case "integration.notification.send.outcome-and-privacy":
-		return evaluateNotificationSend(pkg, fixture)
-	case "game.configure.pinned-schema-and-result-binding":
-		return evaluateConfiguration(pkg, fixture)
-	case "lifecycle.reject.unlisted-transition":
-		return evaluateLifecycleRejectUnlistedTransition(fixture)
-	case "lifecycle.replacement.identity":
-		return evaluateLifecycleReplacementIdentity(pkg, fixture)
-	case "lifecycle.required-readiness-set":
-		return evaluateLifecycleRequiredReadinessSet(pkg, fixture)
-	case "compatibility.protocol-version-negotiation":
-		return evaluateCompatibilityProtocolVersionNegotiation(fixture)
-	case "compatibility.response-evolution":
-		return evaluateCompatibilityResponseEvolution(pkg, fixture)
-	case "compatibility.operation-upgrade-recovery":
-		return evaluateCompatibilityOperationUpgradeRecovery(pkg, fixture)
-	case "transport.storage.profile-negotiated", "transport.storage.profile-not-selected", "transport.storage.selection-not-offered":
-		return evaluateTransportStorageProfile(pkg, fixture)
-	case "management.operations.submit-decision":
-		return evaluateManagementSubmitDecision(pkg, fixture)
-	case "management.pagination.cursor-scope":
-		return evaluateManagementPaginationCursorScope(fixture)
-	case "management.authentication.credential-profiles":
-		return evaluateManagementAuthenticationCredentialProfiles(fixture)
-	case "management.authentication.actor-spoofing":
-		return evaluateManagementAuthenticationActorSpoofing(fixture)
-	case "operations.authentication.client-session-expiry":
-		return evaluateOperationsAuthenticationClientSessionExpiry(pkg, fixture)
-	case "operations.cancellation.before-dispatch", "operations.cancellation.unknown-after-dispatch":
-		return evaluateOperationsCancellation(fixture)
-	case "operations.reconcile.unknown-create-outcome":
-		return evaluateOperationsReconcileUnknownCreateOutcome(fixture)
-	case "safety.destroy.blocked-stale-data-generation", "safety.destroy.blocked-unverified-backup":
-		return evaluateSafetyDestroyBlocked(fixture)
-	case "security.staging.cannot-write-production-backup", "security.staging.production-write-scope-denied", "security.production.backup-write-authorized":
-		return evaluateBackupWriteScope(fixture)
-	case "hosting.instance.wait.pending-remains-pending", "hosting.instance.wait.succeeded-postcondition-confirmed", "hosting.instance.wait.succeeded-state-mismatch", "hosting.instance.wait.unknown-requires-inspection", "hosting.instance.wait.operation-reference-mismatch", "hosting.instance.wait.failed-terminal-requires-inspection", "hosting.instance.wait.without-operation-reference":
-		return evaluateHostingInstanceWait(pkg, fixture)
-	case "hosting.instance.destroy.approval-exact-scope", "hosting.instance.destroy.approval-wrong-action", "hosting.instance.destroy.approval-target-mismatch", "hosting.instance.destroy.approval-environment-mismatch", "hosting.instance.destroy.approval-plan-mismatch", "hosting.instance.destroy.approval-expired", "hosting.instance.destroy.approval-missing-approver":
-		return evaluateHostingInstanceDestroyApproval(pkg, fixture)
-	case "hosting.instance.destroy.authorization-required", "hosting.instance.destroy.verified-backup-required", "hosting.instance.destroy.current-generation-backup-required", "hosting.instance.destroy.stopped-required", "hosting.instance.destroy.completed-destroyed", "hosting.instance.destroy.accepted-not-destroyed", "hosting.instance.destroy.unknown-requires-inspection", "hosting.instance.destroy.target-mismatch":
-		return evaluateHostingInstanceDestroy(pkg, fixture)
-	case "hosting.instance.reboot.core-missing-save-blocked", "hosting.instance.reboot.core-save-bound", "hosting.instance.reboot.core-clean-stop-bound", "hosting.instance.reboot.core-save-mismatch-blocked", "hosting.instance.reboot.core-unknown-data-blocked", "hosting.instance.reboot.core-emergency-approved", "hosting.instance.reboot.core-emergency-target-mismatch", "hosting.instance.reboot.core-emergency-wrong-action", "hosting.instance.reboot.core-no-data-no-gate":
-		return evaluateHostingInstanceRebootCoreGate(pkg, fixture)
-	case "hosting.instance.reboot.completed-active", "hosting.instance.reboot.accepted-not-complete", "hosting.instance.reboot.unknown-requires-inspection", "hosting.instance.reboot.target-mismatch":
-		return evaluateHostingInstanceReboot(pkg, fixture)
-	case "hosting.instance.start.completed-active", "hosting.instance.start.accepted-not-active", "hosting.instance.start.unknown-requires-inspection", "hosting.instance.start.target-mismatch", "hosting.instance.stop.completed-stopped", "hosting.instance.stop.accepted-not-stopped", "hosting.instance.stop.unknown-requires-inspection", "hosting.instance.stop.target-mismatch":
-		return evaluateHostingInstanceStartStop(pkg, fixture)
-	case "hosting.regions.list.filtered", "hosting.plans.list.resource-filter", "hosting.plans.list.minimum-filter-mismatch", "hosting.os_offerings.list.unknown-not-available":
-		return evaluateHostingCatalogList(pkg, fixture)
-	case "hosting.instance.inspect.exact-active", "hosting.instance.inspect.unknown-not-active", "hosting.instance.inspect.target-mismatch":
-		return evaluateHostingInstanceInspect(pkg, fixture)
-	case "execution.unit.inspect.exact-target-state":
-		return evaluateSystemdUnitInspection(pkg, fixture)
-	case "execution.unit.start.accepted-not-ready", "execution.unit.start.unknown-requires-inspection", "execution.unit.start.target-mismatch", "execution.unit.graceful-stop.completed-stopped", "execution.unit.graceful-stop.unknown-requires-inspection":
-		return evaluateExecutionUnitStartStop(pkg, fixture)
-	case "execution.unit.force-stop.approval-required", "execution.unit.force-stop.approval-scope-denied", "execution.unit.force-stop.completed-stopped", "execution.unit.force-stop.accepted-not-stopped", "execution.unit.force-stop.target-mismatch", "execution.unit.force-stop.unknown-requires-inspection":
-		return evaluateExecutionUnitForceStop(pkg, fixture)
-	case "game.migrate.approved-copy-success", "game.migrate.approval-required", "game.migrate.verified-backup-required", "game.migrate.distinct-target-required", "game.migrate.target-binding", "game.migrate.complete-checks-required", "game.migrate.compatibility-required", "game.migrate.backup-result-binding", "game.migrate.target-stopped", "game.migrate.unknown-requires-reconciliation":
-		return evaluateGameMigrate(pkg, fixture)
-	case "game.compatibility.check.compatible", "game.compatibility.check.migration-required", "game.compatibility.check.incompatible", "game.compatibility.check.unknown", "game.compatibility.check.incomplete", "game.compatibility.check.unknown-reported-compatible", "game.compatibility.check.target-mismatch":
-		return evaluateGameCompatibilityCheck(pkg, fixture)
-	case "game.health.check.unknown-not-healthy":
-		return evaluateGameHealthCheckUnknownNotHealthy(pkg, fixture)
-	case "game.backup.validate.exact-objects", "game.backup.validate.unknown-not-valid":
-		return evaluateGameBackupValidate(pkg, fixture)
-	case "game.data.save.backup-prepare.binding", "game.data.save.backup-prepare.reject-unsafe-datasets":
-		return evaluateGameDataSaveBackupPrepare(pkg, fixture)
-	case "game.save.unknown-requires-reconciliation":
-		return evaluateGameSaveUnknownRequiresReconciliation(pkg, fixture)
-	case "operations.backup.no-resume-final-state":
-		return evaluateBackupNoResumePolicy(pkg, fixture)
-	case "operations.backup.initial-state-resume-policy":
-		return evaluateBackupInitialStatePolicy(pkg, fixture)
-	case "operations.restore.final-state-policy":
-		return evaluateRestoreFinalStatePolicy(pkg, fixture)
-	case "operations.typed-provision-backup-restore-destroy-results", "operations.typed-provision-backup-restore-destroy-target-mismatch", "operations.typed-provision-backup-restore-readiness-binding", "operations.typed-provision-backup-restore-readiness-freshness", "operations.typed-restore-data-generation-not-rotated":
-		return evaluateTypedProvisionBackupRestoreDestroyResults(pkg, fixture)
-	case "operations.typed-define-start-stop-results", "operations.typed-define-start-stop-target-mismatch", "operations.typed-define-start-stop-future-readiness", "operations.typed-define-start-stop-no-drain", "operations.typed-define-start-stop-no-proxy-drain":
-		return evaluateTypedDefineStartStopResults(pkg, fixture)
-	case "execution.logs.health.delete.safety":
-		return evaluateExecutionLogsHealthDeleteSafety(pkg, fixture)
-	case "execution.unit.health.diagnostic-redaction-and-binding":
-		return evaluateExecutionHealthDiagnostics(pkg, fixture)
-	case "execution.unit.logs.byte-bound-and-redaction":
-		return evaluateExecutionLogRead(pkg, fixture)
-	case "integration.proxy.register.expired-readiness-rejected":
-		return evaluateIntegrationProxyRegisterExpiredReadinessRejected(pkg, fixture)
-	case "integration.proxy.register.accepted-is-not-routable":
-		return evaluateIntegrationProxyRegisterAcceptedIsNotRoutable(pkg, fixture)
-	case "integration.proxy.unknown-drain-and-unregister-require-inspection":
-		return evaluateIntegrationProxyUnknownDrainAndUnregisterRequireInspection(pkg, fixture)
-	case "game.release.install.configure.fail-closed":
-		return evaluateGameReleaseInstallConfigureFailClosed(pkg, fixture)
-	case "game.install.repeat-same-release-is-idempotent", "game.install.completed-verifies-exact-artifacts", "game.install.incomplete-artifact-set-requires-reconciliation":
-		return evaluateGameInstallArtifacts(pkg, fixture)
-	case "game.validate-installation.unknown-blocks-start", "game.validate-installation.valid-exact-artifacts", "game.validate-installation.valid-incomplete-artifacts-blocks-start", "game.validate-installation.valid-claim-with-unverified-artifact", "game.validate-installation.valid-claim-with-checksum-mismatch":
-		return evaluateGameValidateInstallation(pkg, fixture)
-	case "game.readiness.unknown-required-check-blocks-ready":
-		return evaluateGameReadinessUnknownRequiredCheckBlocksReady(pkg, fixture)
-	case "readiness-required-before-transfer", "readiness-target-mismatch-before-transfer", "readiness-server-mismatch-before-transfer":
-		return evaluateReadinessBeforeTransfer(pkg, fixture)
-	case "velocity-transfer-outcome-unknown-reconciliation":
-		return evaluateVelocityTransferUnknownReconciliation(pkg, fixture)
-	case "velocity-transfer-privacy-canaries":
-		return evaluateVelocityTransferPrivacy(pkg, fixture)
-	case "velocity-transfer-partial-results", "velocity-transfer-count-mismatch", "velocity-transfer-context-mismatch", "velocity-transfer-duplicate-session-result", "velocity-transfer-target-mismatch":
-		return evaluateVelocityTransferResults(pkg, fixture)
-	case "storage.backup.partial-upload-not-verified":
-		return evaluateStorageBackupPartialUploadNotVerified(fixture)
-	case "storage.object.checksum-mismatch-blocks-restore":
-		return evaluateStorageObjectChecksumMismatchBlocksRestore(fixture)
-	case "storage.object.etag-not-checksum":
-		return evaluateStorageObjectEtagNotChecksum(fixture)
-	case "storage.staging.cannot-delete-production-object", "storage.staging.production-delete-scope-denied", "storage.production.backup-delete-authorized":
-		return evaluateBackupDeleteScope(fixture)
-	case "operations.idempotency.same-key-same-request":
-		return evaluateOperationsIdempotencySameKeySameRequest(fixture)
-	case "operations.idempotency.same-key-different-request":
-		return evaluateOperationsIdempotencySameKeyDifferentRequest(fixture)
-	case "operations.idempotency.expired-key-reuse":
-		return evaluateOperationsIdempotencyExpiredKeyReuse(fixture)
-	case "operations.recovery.restart-preserves-lock":
-		return evaluateOperationsRecoveryRestartPreservesLock(fixture)
-	case "operations.events.duplicate-delivery":
-		return evaluateOperationsEventsDuplicateDelivery(pkg, fixture)
-	case "operations.events.gap-recovery":
-		return evaluateOperationsEventsGapRecovery(pkg, fixture)
-	case "operations.events.monotonic-sequence":
-		return evaluateOperationsEventsMonotonicSequence(pkg, fixture)
-	case "hosting.provision.valid.standard-os":
-		return evaluateHostingProvisionValidStandardOs(pkg, fixture)
-	case "hosting.bootstrap.execution-binding-and-readiness-gate":
-		return evaluateHostingBootstrapExecutionBindingAndReadinessGate(pkg, fixture)
-	case "hosting.bootstrap.rejects-false-success":
-		return evaluateHostingBootstrapRejectsFalseSuccess(pkg, fixture)
-	default:
+	evaluator, ok := evaluators[fixtureID]
+	if !ok {
 		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
 	}
+	return evaluator(pkg, fixture)
+}
+
+// The evaluators defined in this file. Evaluators in other files register
+// themselves beside their definitions.
+func init() {
+	registerEvaluator(withoutPackage(evaluateLifecycleRejectUnlistedTransition), "lifecycle.reject.unlisted-transition")
+	registerEvaluator(evaluateLifecycleReplacementIdentity, "lifecycle.replacement.identity")
+	registerEvaluator(evaluateLifecycleRequiredReadinessSet, "lifecycle.required-readiness-set")
+	registerEvaluator(withoutPackage(evaluateCompatibilityProtocolVersionNegotiation), "compatibility.protocol-version-negotiation")
+	registerEvaluator(evaluateCompatibilityResponseEvolution, "compatibility.response-evolution")
+	registerEvaluator(evaluateCompatibilityOperationUpgradeRecovery, "compatibility.operation-upgrade-recovery")
+	registerEvaluator(evaluateTransportStorageProfile,
+		"transport.storage.profile-negotiated",
+		"transport.storage.profile-not-selected",
+		"transport.storage.selection-not-offered")
+	registerEvaluator(withoutPackage(evaluateManagementPaginationCursorScope), "management.pagination.cursor-scope")
+	registerEvaluator(withoutPackage(evaluateManagementAuthenticationCredentialProfiles), "management.authentication.credential-profiles")
+	registerEvaluator(withoutPackage(evaluateManagementAuthenticationActorSpoofing), "management.authentication.actor-spoofing")
+	registerEvaluator(evaluateOperationsAuthenticationClientSessionExpiry, "operations.authentication.client-session-expiry")
+	registerEvaluator(withoutPackage(evaluateOperationsCancellation),
+		"operations.cancellation.before-dispatch",
+		"operations.cancellation.unknown-after-dispatch")
+	registerEvaluator(withoutPackage(evaluateOperationsReconcileUnknownCreateOutcome), "operations.reconcile.unknown-create-outcome")
+	registerEvaluator(withoutPackage(evaluateSafetyDestroyBlocked),
+		"safety.destroy.blocked-stale-data-generation",
+		"safety.destroy.blocked-unverified-backup")
+	registerEvaluator(withoutPackage(evaluateBackupWriteScope),
+		"security.staging.cannot-write-production-backup",
+		"security.staging.production-write-scope-denied",
+		"security.production.backup-write-authorized")
+	registerEvaluator(evaluateHostingInstanceWait,
+		"hosting.instance.wait.pending-remains-pending",
+		"hosting.instance.wait.succeeded-postcondition-confirmed",
+		"hosting.instance.wait.succeeded-state-mismatch",
+		"hosting.instance.wait.unknown-requires-inspection",
+		"hosting.instance.wait.operation-reference-mismatch",
+		"hosting.instance.wait.failed-terminal-requires-inspection",
+		"hosting.instance.wait.without-operation-reference")
+	registerEvaluator(evaluateHostingInstanceDestroyApproval,
+		"hosting.instance.destroy.approval-exact-scope",
+		"hosting.instance.destroy.approval-wrong-action",
+		"hosting.instance.destroy.approval-target-mismatch",
+		"hosting.instance.destroy.approval-environment-mismatch",
+		"hosting.instance.destroy.approval-plan-mismatch",
+		"hosting.instance.destroy.approval-expired",
+		"hosting.instance.destroy.approval-missing-approver")
+	registerEvaluator(evaluateHostingInstanceDestroy,
+		"hosting.instance.destroy.authorization-required",
+		"hosting.instance.destroy.verified-backup-required",
+		"hosting.instance.destroy.current-generation-backup-required",
+		"hosting.instance.destroy.stopped-required",
+		"hosting.instance.destroy.completed-destroyed",
+		"hosting.instance.destroy.accepted-not-destroyed",
+		"hosting.instance.destroy.unknown-requires-inspection",
+		"hosting.instance.destroy.target-mismatch")
+	registerEvaluator(evaluateHostingInstanceRebootCoreGate,
+		"hosting.instance.reboot.core-missing-save-blocked",
+		"hosting.instance.reboot.core-save-bound",
+		"hosting.instance.reboot.core-clean-stop-bound",
+		"hosting.instance.reboot.core-save-mismatch-blocked",
+		"hosting.instance.reboot.core-unknown-data-blocked",
+		"hosting.instance.reboot.core-emergency-approved",
+		"hosting.instance.reboot.core-emergency-target-mismatch",
+		"hosting.instance.reboot.core-emergency-wrong-action",
+		"hosting.instance.reboot.core-no-data-no-gate")
+	registerEvaluator(evaluateHostingInstanceReboot,
+		"hosting.instance.reboot.completed-active",
+		"hosting.instance.reboot.accepted-not-complete",
+		"hosting.instance.reboot.unknown-requires-inspection",
+		"hosting.instance.reboot.target-mismatch")
+	registerEvaluator(evaluateHostingInstanceStartStop,
+		"hosting.instance.start.completed-active",
+		"hosting.instance.start.accepted-not-active",
+		"hosting.instance.start.unknown-requires-inspection",
+		"hosting.instance.start.target-mismatch",
+		"hosting.instance.stop.completed-stopped",
+		"hosting.instance.stop.accepted-not-stopped",
+		"hosting.instance.stop.unknown-requires-inspection",
+		"hosting.instance.stop.target-mismatch")
+	registerEvaluator(evaluateHostingCatalogList,
+		"hosting.regions.list.filtered",
+		"hosting.plans.list.resource-filter",
+		"hosting.plans.list.minimum-filter-mismatch",
+		"hosting.os_offerings.list.unknown-not-available")
+	registerEvaluator(evaluateHostingInstanceInspect,
+		"hosting.instance.inspect.exact-active",
+		"hosting.instance.inspect.unknown-not-active",
+		"hosting.instance.inspect.target-mismatch")
+	registerEvaluator(evaluateExecutionUnitStartStop,
+		"execution.unit.start.accepted-not-ready",
+		"execution.unit.start.unknown-requires-inspection",
+		"execution.unit.start.target-mismatch",
+		"execution.unit.graceful-stop.completed-stopped",
+		"execution.unit.graceful-stop.unknown-requires-inspection")
+	registerEvaluator(evaluateExecutionUnitForceStop,
+		"execution.unit.force-stop.approval-required",
+		"execution.unit.force-stop.approval-scope-denied",
+		"execution.unit.force-stop.completed-stopped",
+		"execution.unit.force-stop.accepted-not-stopped",
+		"execution.unit.force-stop.target-mismatch",
+		"execution.unit.force-stop.unknown-requires-inspection")
+	registerEvaluator(evaluateGameMigrate,
+		"game.migrate.approved-copy-success",
+		"game.migrate.approval-required",
+		"game.migrate.verified-backup-required",
+		"game.migrate.distinct-target-required",
+		"game.migrate.target-binding",
+		"game.migrate.complete-checks-required",
+		"game.migrate.compatibility-required",
+		"game.migrate.backup-result-binding",
+		"game.migrate.target-stopped",
+		"game.migrate.unknown-requires-reconciliation")
+	registerEvaluator(evaluateGameCompatibilityCheck,
+		"game.compatibility.check.compatible",
+		"game.compatibility.check.migration-required",
+		"game.compatibility.check.incompatible",
+		"game.compatibility.check.unknown",
+		"game.compatibility.check.incomplete",
+		"game.compatibility.check.unknown-reported-compatible",
+		"game.compatibility.check.target-mismatch")
+	registerEvaluator(evaluateGameHealthCheckUnknownNotHealthy, "game.health.check.unknown-not-healthy")
+	registerEvaluator(evaluateGameBackupValidate,
+		"game.backup.validate.exact-objects",
+		"game.backup.validate.unknown-not-valid")
+	registerEvaluator(evaluateGameDataSaveBackupPrepare,
+		"game.data.save.backup-prepare.binding",
+		"game.data.save.backup-prepare.reject-unsafe-datasets")
+	registerEvaluator(evaluateGameSaveUnknownRequiresReconciliation, "game.save.unknown-requires-reconciliation")
+	registerEvaluator(evaluateTypedProvisionBackupRestoreDestroyResults,
+		"operations.typed-provision-backup-restore-destroy-results",
+		"operations.typed-provision-backup-restore-destroy-target-mismatch",
+		"operations.typed-provision-backup-restore-readiness-binding",
+		"operations.typed-provision-backup-restore-readiness-freshness",
+		"operations.typed-restore-data-generation-not-rotated")
+	registerEvaluator(evaluateTypedDefineStartStopResults,
+		"operations.typed-define-start-stop-results",
+		"operations.typed-define-start-stop-target-mismatch",
+		"operations.typed-define-start-stop-future-readiness",
+		"operations.typed-define-start-stop-no-drain",
+		"operations.typed-define-start-stop-no-proxy-drain")
+	registerEvaluator(evaluateExecutionLogsHealthDeleteSafety, "execution.logs.health.delete.safety")
+	registerEvaluator(evaluateIntegrationProxyRegisterExpiredReadinessRejected, "integration.proxy.register.expired-readiness-rejected")
+	registerEvaluator(evaluateIntegrationProxyRegisterAcceptedIsNotRoutable, "integration.proxy.register.accepted-is-not-routable")
+	registerEvaluator(evaluateIntegrationProxyUnknownDrainAndUnregisterRequireInspection, "integration.proxy.unknown-drain-and-unregister-require-inspection")
+	registerEvaluator(evaluateGameReleaseInstallConfigureFailClosed, "game.release.install.configure.fail-closed")
+	registerEvaluator(evaluateGameInstallArtifacts,
+		"game.install.repeat-same-release-is-idempotent",
+		"game.install.completed-verifies-exact-artifacts",
+		"game.install.incomplete-artifact-set-requires-reconciliation")
+	registerEvaluator(evaluateGameValidateInstallation,
+		"game.validate-installation.unknown-blocks-start",
+		"game.validate-installation.valid-exact-artifacts",
+		"game.validate-installation.valid-incomplete-artifacts-blocks-start",
+		"game.validate-installation.valid-claim-with-unverified-artifact",
+		"game.validate-installation.valid-claim-with-checksum-mismatch")
+	registerEvaluator(evaluateGameReadinessUnknownRequiredCheckBlocksReady, "game.readiness.unknown-required-check-blocks-ready")
+	registerEvaluator(evaluateReadinessBeforeTransfer,
+		"readiness-required-before-transfer",
+		"readiness-target-mismatch-before-transfer",
+		"readiness-server-mismatch-before-transfer")
+	registerEvaluator(evaluateVelocityTransferUnknownReconciliation, "velocity-transfer-outcome-unknown-reconciliation")
+	registerEvaluator(evaluateVelocityTransferResults,
+		"velocity-transfer-partial-results",
+		"velocity-transfer-count-mismatch",
+		"velocity-transfer-context-mismatch",
+		"velocity-transfer-duplicate-session-result",
+		"velocity-transfer-target-mismatch")
+	registerEvaluator(withoutPackage(evaluateStorageBackupPartialUploadNotVerified), "storage.backup.partial-upload-not-verified")
+	registerEvaluator(withoutPackage(evaluateStorageObjectChecksumMismatchBlocksRestore), "storage.object.checksum-mismatch-blocks-restore")
+	registerEvaluator(withoutPackage(evaluateStorageObjectEtagNotChecksum), "storage.object.etag-not-checksum")
+	registerEvaluator(withoutPackage(evaluateBackupDeleteScope),
+		"storage.staging.cannot-delete-production-object",
+		"storage.staging.production-delete-scope-denied",
+		"storage.production.backup-delete-authorized")
+	registerEvaluator(withoutPackage(evaluateOperationsIdempotencySameKeySameRequest), "operations.idempotency.same-key-same-request")
+	registerEvaluator(withoutPackage(evaluateOperationsIdempotencySameKeyDifferentRequest), "operations.idempotency.same-key-different-request")
+	registerEvaluator(withoutPackage(evaluateOperationsIdempotencyExpiredKeyReuse), "operations.idempotency.expired-key-reuse")
+	registerEvaluator(withoutPackage(evaluateOperationsRecoveryRestartPreservesLock), "operations.recovery.restart-preserves-lock")
+	registerEvaluator(evaluateOperationsEventsDuplicateDelivery, "operations.events.duplicate-delivery")
+	registerEvaluator(evaluateOperationsEventsGapRecovery, "operations.events.gap-recovery")
+	registerEvaluator(evaluateOperationsEventsMonotonicSequence, "operations.events.monotonic-sequence")
+	registerEvaluator(evaluateHostingProvisionValidStandardOs, "hosting.provision.valid.standard-os")
+	registerEvaluator(evaluateHostingBootstrapExecutionBindingAndReadinessGate, "hosting.bootstrap.execution-binding-and-readiness-gate")
+	registerEvaluator(evaluateHostingBootstrapRejectsFalseSuccess, "hosting.bootstrap.rejects-false-success")
 }
 
 // evaluateLifecycleRejectUnlistedTransition evaluates the lifecycle.reject.unlisted-transition conformance fixture.

@@ -71,3 +71,7 @@ func dnsReadinessCurrent(evaluation, request map[string]any) bool {
 	}
 	return !observed.After(now) && now.Before(expires) && expires.After(observed)
 }
+
+func init() {
+	registerEvaluator(evaluateDNSRecordUpsert, "integration.dns.record.upsert.purpose-readiness-and-confirmation")
+}

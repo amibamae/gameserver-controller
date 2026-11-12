@@ -57,3 +57,7 @@ func evaluateProxyCohortInspect(pkg *protocolPackage, fixture map[string]any) (m
 	}
 	return map[string]any{"evaluations": evaluations}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateProxyCohortInspect, "integration.proxy.cohort.inspect.binding-and-freshness")
+}

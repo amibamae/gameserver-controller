@@ -70,3 +70,7 @@ func evaluateProxyAutomaticMove(_ *protocolPackage, fixture map[string]any) (map
 	}
 	return map[string]any{"evaluations": evaluations}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateProxyAutomaticMove, "integration.proxy.cohort.automatic-move")
+}

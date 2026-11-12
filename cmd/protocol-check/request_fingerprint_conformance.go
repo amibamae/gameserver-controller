@@ -42,3 +42,7 @@ func evaluateRequestFingerprintJCS(fixture map[string]any) (map[string]any, erro
 	}
 	return map[string]any{"cases": results}, nil
 }
+
+func init() {
+	registerEvaluator(withoutPackage(evaluateRequestFingerprintJCS), "operations.request-fingerprint-jcs")
+}

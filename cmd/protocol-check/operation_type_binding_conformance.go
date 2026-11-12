@@ -82,3 +82,7 @@ func evaluateOperationTypeBinding(pkg *protocolPackage, fixture map[string]any) 
 	result["evaluations"] = evaluations
 	return result, nil
 }
+
+func init() {
+	registerEvaluator(evaluateOperationTypeBinding, "operations.type-binding")
+}

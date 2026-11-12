@@ -54,3 +54,7 @@ func evaluateExecutionLogRead(pkg *protocolPackage, fixture map[string]any) (map
 	}
 	return map[string]any{"evaluations": evaluations}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateExecutionLogRead, "execution.unit.logs.byte-bound-and-redaction")
+}

@@ -44,3 +44,7 @@ func evaluateInstanceCreateRecovery(pkg *protocolPackage, fixture map[string]any
 		"retry_requires_authoritative_safe_to_retry_evidence": true,
 	}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateInstanceCreateRecovery, "hosting.instance.find-by-resource-key.create-recovery")
+}

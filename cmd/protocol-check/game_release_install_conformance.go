@@ -146,3 +146,8 @@ func validSHA256Checksum(checksum map[string]any) bool {
 	_, err := hex.DecodeString(digest)
 	return err == nil
 }
+
+func init() {
+	registerEvaluator(evaluateGameReleaseDescription, "game.release.describe.integrity-and-identity")
+	registerEvaluator(evaluateGameInstallContract, "game.install.release-binding-and-reconciliation")
+}

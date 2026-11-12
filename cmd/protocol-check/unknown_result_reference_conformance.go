@@ -90,3 +90,7 @@ func evaluateUnknownResultReferenceProjection(pkg *protocolPackage, fixture map[
 	}
 	return map[string]any{"cases": results}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateUnknownResultReferenceProjection, "operations.unknown-result-reference-projection")
+}

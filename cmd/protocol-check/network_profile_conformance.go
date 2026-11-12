@@ -105,3 +105,7 @@ func requirementsJSON(requirements []map[string]string) []any {
 	}
 	return result
 }
+
+func init() {
+	registerEvaluator(evaluateNetworkProfileRequirements, "integration.network-profile.requirements")
+}

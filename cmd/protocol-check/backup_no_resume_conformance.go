@@ -17,3 +17,7 @@ func evaluateBackupNoResumePolicy(pkg *protocolPackage, fixture map[string]any) 
 	}
 	return map[string]any{"evaluations": results}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateBackupNoResumePolicy, "operations.backup.no-resume-final-state")
+}

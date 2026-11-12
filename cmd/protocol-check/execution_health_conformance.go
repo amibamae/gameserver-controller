@@ -42,3 +42,7 @@ func evaluateExecutionHealthDiagnostics(pkg *protocolPackage, fixture map[string
 	}
 	return map[string]any{"evaluations": evaluations}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateExecutionHealthDiagnostics, "execution.unit.health.diagnostic-redaction-and-binding")
+}
