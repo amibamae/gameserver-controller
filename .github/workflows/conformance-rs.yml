@@ -1,0 +1,44 @@
+name: Rust conformance consumer
+
+# Optional, independent consumer of the protocol package. Not a release gate.
+on:
+  push:
+    paths:
+      - "conformance-rs/**"
+      - "protocol/**"
+      - "THIRD_PARTY_NOTICES.md"
+      - ".github/workflows/conformance-rs.yml"
+  pull_request:
+    paths:
+      - "conformance-rs/**"
+      - "protocol/**"
+      - "THIRD_PARTY_NOTICES.md"
+      - ".github/workflows/conformance-rs.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  conformance-rs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: conformance-rs
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install the pinned Rust toolchain
+        # rustup is preinstalled on GitHub-hosted runners; rust-toolchain.toml
+        # pins the version and components.
+        run: rustup show active-toolchain || rustup toolchain install
+      - name: Format
+        run: cargo fmt --check
+      - name: Lint
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --locked
+      - name: Run against this repository's protocol package
+        run: cargo run --locked --release -- --package .. --report ../conformance-rs-report.json
+      - name: Print report
+        if: always()
+        run: cat ../conformance-rs-report.json || true

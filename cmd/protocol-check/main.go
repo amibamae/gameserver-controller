@@ -425,6 +425,35 @@ func (pkg *protocolPackage) validatePackage() error {
 	return pkg.validateOpenAPI()
 }
 
+// exampleIndexFile is the language-neutral example-to-schema map that other
+// implementations read. It must list exactly the mapping below.
+const exampleIndexFile = "index.json"
+
+func (pkg *protocolPackage) validateExampleIndex(path string) error {
+	doc, err := parseJSONFile(path)
+	if err != nil {
+		return fmt.Errorf("examples/%s: %w", exampleIndexFile, err)
+	}
+	listed := map[string]string{}
+	for _, raw := range arrayValue(asObject(doc), "examples") {
+		entry := asObject(raw)
+		name, id := stringValue(entry, "path"), stringValue(entry, "schema_id")
+		if _, duplicate := listed[name]; duplicate || name == "" || id == "" {
+			return fmt.Errorf("examples/%s: entry %q is empty or duplicated", exampleIndexFile, name)
+		}
+		listed[name] = id
+	}
+	if len(listed) != len(exampleSchemaIDs) {
+		return fmt.Errorf("examples/%s lists %d examples, want %d", exampleIndexFile, len(listed), len(exampleSchemaIDs))
+	}
+	for name, id := range exampleSchemaIDs {
+		if listed[name] != id {
+			return fmt.Errorf("examples/%s maps %s to %q, want %q", exampleIndexFile, name, listed[name], id)
+		}
+	}
+	return nil
+}
+
 func (pkg *protocolPackage) validateExamples() error {
 	examplesDir := filepath.Join(pkg.root, "protocol", "examples")
 	paths, err := filepath.Glob(filepath.Join(examplesDir, "*.json"))
@@ -433,7 +462,13 @@ func (pkg *protocolPackage) validateExamples() error {
 	}
 	actual := make(map[string]bool)
 	for _, path := range paths {
+		if filepath.Base(path) == exampleIndexFile {
+			continue
+		}
 		actual[filepath.Base(path)] = true
+	}
+	if err := pkg.validateExampleIndex(filepath.Join(examplesDir, exampleIndexFile)); err != nil {
+		return err
 	}
 	expected := make(map[string]bool)
 	for name := range exampleSchemaIDs {

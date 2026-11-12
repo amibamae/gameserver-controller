@@ -61,7 +61,7 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - [x] Add a bounded accessor for systemd credentials; runtime and provider-adapter integration remain future work.
 - [x] Persist immutable adapter-step inputs and schema-validated completed outputs with the exact capability identities.
 - [x] Implement generic durable adapter dispatch, outcome persistence, reconciliation hooks, bounded safe retry, and restart recovery.
-- [ ] Expand language-neutral behavior tests as contracts mature.
+- [ ] Expand language-neutral behavior tests as contracts mature. In progress: the independent Rust consumer [`conformance-rs`](../conformance-rs/README.md) evaluates 6 fixtures (raw JSON wire, operation type binding, restore and backup final-state policies, network-profile requirements), recomputes the package digests, and validates every schema and example; the rest of the initial interoperability profile follows.
 - [x] Implement the metadata-only `server.define` and fake-adapter `server.start` and graceful `server.stop` workflows over the durable engine.
 - [x] Implement the generic durable `server.destroy` workflow with fake-adapter tests.
 - [x] Implement the Go `server.backup` workflow with bounded capture/storage streams, readback verification, game validation, and lifecycle recovery.
