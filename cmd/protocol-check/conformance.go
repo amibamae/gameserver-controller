@@ -80,6 +80,8 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return evaluateProxyCohortInspect(pkg, fixture)
 	case "integration.dns.record.upsert.purpose-readiness-and-confirmation":
 		return evaluateDNSRecordUpsert(pkg, fixture)
+	case "integration.network-profile.requirements":
+		return evaluateNetworkProfileRequirements(pkg, fixture)
 	case "game.configure.pinned-schema-and-result-binding":
 		return evaluateConfiguration(pkg, fixture)
 	case "lifecycle.reject.unlisted-transition":

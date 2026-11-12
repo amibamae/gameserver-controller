@@ -63,9 +63,24 @@ network:
       port: 25566
 ```
 
-Every backend hostname, from a template or set by hand, must be unique across all servers in the file. The DNS adapter profile must manage each generated name.
+Every backend hostname, from a template or set by hand, must be unique across all servers in the file, and must lie inside the DNS adapter's zone. Backend IDs must also be unique among servers that share one proxy, because the proxy knows backends only by ID.
 
-The older `adapters.integration` field is still accepted. If it is set together with `network.proxy`, they must name the same adapter. The validator checks these settings; the controller runtime does not use them yet.
+With `join_mode: direct_dns`, `fallback_records` is required: the A and/or AAAA values (normally the lobby's address) the join name points at while the server is not ready.
+
+```yaml
+network:
+  join_mode: direct_dns
+  dns: integration.cloudflare-dns
+  join_hostname: play.example.com
+  fallback_records:
+    A: [203.0.113.10]
+```
+
+The proxy and DNS adapters a server uses must belong to the server's environment.
+
+The older `adapters.integration` field is still accepted. If it is set together with `network.proxy`, they must name the same adapter.
+
+At startup the controller checks every server's network profile against the adapters it registered (see [integrations section 6](../protocol/adapters/integrations.md#6-network-profile-requirements)). A server whose profile needs a capability that no adapter in its environment advertises is reported and cannot be planned; the controller does not skip or emulate the missing step. Only adapters with `implementation: velocity` or `cloudflare` are bound to an environment, so a declared-only or process adapter cannot satisfy a network requirement yet. The workflows that register backends, move players, and update DNS are not wired yet.
 
 Environments are `production`, `staging`, or `testing`. Production declares `production_backup_access: read_write`; staging and testing may declare `none` or `read_only`, never `read_write`. The validator checks these policy declarations but does not enforce access at the storage service. A server must list verified backup and operator approval as destroy prerequisites. The validator checks an optional idle-shutdown duration but does not schedule it. `idle_shutdown` is the minimum time a server must be idle; with the default scaling policy below it is then kept until its next billing decision window.
 
@@ -95,6 +110,8 @@ Each server may define `lifecycle.backups.schedule` and `lifecycle.backups.reten
 An adapter profile may set `implementation` to tell the controller runtime to start it. Without `implementation`, the profile is declared for cross-reference checks only and the runtime does not start it.
 
 - `implementation: wasabi` builds the built-in Wasabi storage adapter (category `storage` only). The `wasabi:` block holds non-secret settings, and `secret_refs` must define exactly `access_key_id` and `secret_access_key`. A server that uses this adapter must be in the same environment as `wasabi.environment_id`. See [the Wasabi adapter](WASABI_STORAGE_ADAPTER.md) for the meaning of each field.
+- `implementation: velocity` builds the built-in Velocity proxy adapter (category `integration`). The `velocity:` block names the `environment_id`, the `bridge_url` of the [proxy bridge](PROXY_BRIDGE_API.md) (`https`, or plain `http` only to a loopback address), the `proxy_instance_id` the bridge must report, and an optional request `timeout` (at most 2m). `secret_refs` must define exactly `bridge_token`. At startup the controller checks the bridge's identity: a different instance or API version stops startup; an unreachable bridge does not, but every proxy call is refused until the check passes. Backends come from the network profiles of the servers routed through this proxy. An `instance_ip` backend looks its IP up from Vultr using the `api_token` secret ref of the server's hosting profile; without one, the lookup fails and that backend cannot be registered.
+- `implementation: cloudflare` builds the built-in Cloudflare DNS adapter (category `integration`) for one zone. The `cloudflare:` block names the `environment_id`, the 32-character `zone_id`, and the `zone_name`. `secret_refs` must define exactly `api_token` (a token scoped to DNS edit for that zone). The records it may change are derived from network profiles: each hostname backend's name (`backend_address`), and each `direct_dns` join name (`direct_join` and `fallback`, with `fallback_records`). A Cloudflare profile that no network profile uses is rejected.
 - `implementation: process` starts an adapter executable over [`jsonrpc-stdio-v1`](../protocol/rpc/transport.md). The executable must report the configured adapter ID and category, or startup fails. `env` is the complete environment for the child; nothing is inherited from the controller, so put only non-secret settings there. Process adapters cannot use the storage byte-stream profile yet.
 
 ```yaml
@@ -129,7 +146,7 @@ adapters:
       stop_timeout: 10s    # optional, default 10s, at most 10m
 ```
 
-`config-check validate` also checks the Wasabi settings with the adapter's own rules and confirms that each process path is an executable file. It never contacts Wasabi or reads credentials.
+`config-check validate` also checks the Wasabi, Velocity, and Cloudflare settings with each adapter's own rules and confirms that each process path is an executable file. It never contacts a provider or reads credentials.
 
 Relative state-store paths are resolved against the configuration file by `ResolveStateStorePath`; absolute local paths remain absolute. The validator does not create parent directories, canonicalize symlinks, or stop a separate runtime from opening a path.
 

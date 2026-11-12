@@ -1,0 +1,611 @@
+{
+  "fixture_id": "integration.network-profile.requirements",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.network-profile",
+  "purpose": "The controller derives a server's required integration capabilities from its network profile and refuses planning when any is not advertised by an adapter registered for the server's environment. It never emulates or skips a missing capability, and a profile that needs nothing requires nothing.",
+  "input": {
+    "evaluations": [
+      {
+        "case_id": "proxy-instance-ip-all-capabilities-present",
+        "environment_id": "test",
+        "network_profile": {
+          "join_mode": "proxy",
+          "proxy_adapter_id": "integration.velocity",
+          "backends": [
+            {
+              "backend_id": "paper-main",
+              "address_mode": "instance_ip"
+            }
+          ]
+        },
+        "registered_adapters": [
+          {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "capabilities": [
+              "integration.proxy.backend.inspect",
+              "integration.proxy.backend.register",
+              "integration.proxy.backend.drain",
+              "integration.proxy.backend.unregister",
+              "integration.proxy.cohort.inspect",
+              "integration.proxy.session.inspect",
+              "integration.velocity.players.transfer",
+              "integration.proxy.backend.players.inspect"
+            ]
+          }
+        ]
+      },
+      {
+        "case_id": "proxy-hostname-backends-also-require-dns",
+        "environment_id": "test",
+        "network_profile": {
+          "join_mode": "proxy",
+          "proxy_adapter_id": "integration.velocity",
+          "dns_adapter_id": "integration.cloudflare-dns",
+          "backends": [
+            {
+              "backend_id": "paper-main",
+              "address_mode": "hostname"
+            }
+          ]
+        },
+        "registered_adapters": [
+          {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "capabilities": [
+              "integration.proxy.backend.inspect",
+              "integration.proxy.backend.register",
+              "integration.proxy.backend.drain",
+              "integration.proxy.backend.unregister",
+              "integration.proxy.cohort.inspect",
+              "integration.proxy.session.inspect",
+              "integration.velocity.players.transfer",
+              "integration.proxy.backend.players.inspect"
+            ]
+          },
+          {
+            "adapter_id": "integration.cloudflare-dns",
+            "environment_id": "test",
+            "capabilities": [
+              "integration.dns.record.inspect",
+              "integration.dns.record.upsert",
+              "integration.dns.record.delete"
+            ]
+          }
+        ]
+      },
+      {
+        "case_id": "proxy-missing-cohort-and-transfer-is-refused",
+        "environment_id": "test",
+        "network_profile": {
+          "join_mode": "proxy",
+          "proxy_adapter_id": "integration.velocity",
+          "backends": [
+            {
+              "backend_id": "paper-main",
+              "address_mode": "instance_ip"
+            }
+          ]
+        },
+        "registered_adapters": [
+          {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "capabilities": [
+              "integration.proxy.backend.inspect",
+              "integration.proxy.backend.register",
+              "integration.proxy.backend.drain",
+              "integration.proxy.backend.unregister",
+              "integration.proxy.session.inspect"
+            ]
+          }
+        ]
+      },
+      {
+        "case_id": "direct-dns-all-capabilities-present",
+        "environment_id": "test",
+        "network_profile": {
+          "join_mode": "direct_dns",
+          "dns_adapter_id": "integration.cloudflare-dns",
+          "join_hostname": "play.example.com"
+        },
+        "registered_adapters": [
+          {
+            "adapter_id": "integration.cloudflare-dns",
+            "environment_id": "test",
+            "capabilities": [
+              "integration.dns.record.inspect",
+              "integration.dns.record.upsert",
+              "integration.dns.record.delete"
+            ]
+          }
+        ]
+      },
+      {
+        "case_id": "direct-dns-adapter-in-other-environment-is-refused",
+        "environment_id": "test",
+        "network_profile": {
+          "join_mode": "direct_dns",
+          "dns_adapter_id": "integration.cloudflare-dns",
+          "join_hostname": "play.example.com"
+        },
+        "registered_adapters": [
+          {
+            "adapter_id": "integration.cloudflare-dns",
+            "environment_id": "production",
+            "capabilities": [
+              "integration.dns.record.inspect",
+              "integration.dns.record.upsert",
+              "integration.dns.record.delete"
+            ]
+          }
+        ]
+      },
+      {
+        "case_id": "join-mode-none-requires-nothing",
+        "environment_id": "test",
+        "network_profile": {
+          "join_mode": "none"
+        },
+        "registered_adapters": [
+          {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "capabilities": [
+              "integration.proxy.backend.inspect",
+              "integration.proxy.backend.register",
+              "integration.proxy.backend.drain",
+              "integration.proxy.backend.unregister",
+              "integration.proxy.cohort.inspect",
+              "integration.proxy.session.inspect",
+              "integration.velocity.players.transfer",
+              "integration.proxy.backend.players.inspect"
+            ]
+          }
+        ]
+      },
+      {
+        "case_id": "proxy-adapter-not-registered-is-refused",
+        "environment_id": "test",
+        "network_profile": {
+          "join_mode": "proxy",
+          "proxy_adapter_id": "integration.velocity",
+          "backends": [
+            {
+              "backend_id": "paper-main",
+              "address_mode": "instance_ip"
+            }
+          ]
+        },
+        "registered_adapters": [
+          {
+            "adapter_id": "integration.cloudflare-dns",
+            "environment_id": "test",
+            "capabilities": [
+              "integration.dns.record.inspect",
+              "integration.dns.record.upsert",
+              "integration.dns.record.delete"
+            ]
+          }
+        ]
+      },
+      {
+        "case_id": "hostname-backend-dns-without-delete-is-refused",
+        "environment_id": "test",
+        "network_profile": {
+          "join_mode": "proxy",
+          "proxy_adapter_id": "integration.velocity",
+          "dns_adapter_id": "integration.cloudflare-dns",
+          "backends": [
+            {
+              "backend_id": "paper-main",
+              "address_mode": "hostname"
+            }
+          ]
+        },
+        "registered_adapters": [
+          {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "capabilities": [
+              "integration.proxy.backend.inspect",
+              "integration.proxy.backend.register",
+              "integration.proxy.backend.drain",
+              "integration.proxy.backend.unregister",
+              "integration.proxy.cohort.inspect",
+              "integration.proxy.session.inspect",
+              "integration.velocity.players.transfer",
+              "integration.proxy.backend.players.inspect"
+            ]
+          },
+          {
+            "adapter_id": "integration.cloudflare-dns",
+            "environment_id": "test",
+            "capabilities": [
+              "integration.dns.record.inspect",
+              "integration.dns.record.upsert"
+            ]
+          }
+        ]
+      },
+      {
+        "case_id": "other-transfer-capability-name-satisfies-transfer",
+        "environment_id": "test",
+        "network_profile": {
+          "join_mode": "proxy",
+          "proxy_adapter_id": "integration.velocity",
+          "backends": [
+            {
+              "backend_id": "paper-main",
+              "address_mode": "instance_ip"
+            }
+          ]
+        },
+        "registered_adapters": [
+          {
+            "adapter_id": "integration.velocity",
+            "environment_id": "test",
+            "capabilities": [
+              "integration.proxy.backend.inspect",
+              "integration.proxy.backend.register",
+              "integration.proxy.backend.drain",
+              "integration.proxy.backend.unregister",
+              "integration.proxy.cohort.inspect",
+              "integration.proxy.session.inspect",
+              "integration.bungee.players.transfer"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "proxy-instance-ip-all-capabilities-present",
+        "profile_schema_valid": true,
+        "required_capabilities": [
+          {
+            "role": "proxy",
+            "capability": "integration.*.players.transfer"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.drain"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.register"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.unregister"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.cohort.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.session.inspect"
+          }
+        ],
+        "missing_capabilities": [],
+        "planning_permitted": true
+      },
+      {
+        "case_id": "proxy-hostname-backends-also-require-dns",
+        "profile_schema_valid": true,
+        "required_capabilities": [
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.delete"
+          },
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.inspect"
+          },
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.upsert"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.*.players.transfer"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.drain"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.register"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.unregister"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.cohort.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.session.inspect"
+          }
+        ],
+        "missing_capabilities": [],
+        "planning_permitted": true
+      },
+      {
+        "case_id": "proxy-missing-cohort-and-transfer-is-refused",
+        "profile_schema_valid": true,
+        "required_capabilities": [
+          {
+            "role": "proxy",
+            "capability": "integration.*.players.transfer"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.drain"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.register"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.unregister"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.cohort.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.session.inspect"
+          }
+        ],
+        "missing_capabilities": [
+          {
+            "role": "proxy",
+            "capability": "integration.*.players.transfer"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.cohort.inspect"
+          }
+        ],
+        "planning_permitted": false
+      },
+      {
+        "case_id": "direct-dns-all-capabilities-present",
+        "profile_schema_valid": true,
+        "required_capabilities": [
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.delete"
+          },
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.inspect"
+          },
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.upsert"
+          }
+        ],
+        "missing_capabilities": [],
+        "planning_permitted": true
+      },
+      {
+        "case_id": "direct-dns-adapter-in-other-environment-is-refused",
+        "profile_schema_valid": true,
+        "required_capabilities": [
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.delete"
+          },
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.inspect"
+          },
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.upsert"
+          }
+        ],
+        "missing_capabilities": [
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.delete"
+          },
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.inspect"
+          },
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.upsert"
+          }
+        ],
+        "planning_permitted": false
+      },
+      {
+        "case_id": "join-mode-none-requires-nothing",
+        "profile_schema_valid": true,
+        "required_capabilities": [],
+        "missing_capabilities": [],
+        "planning_permitted": true
+      },
+      {
+        "case_id": "proxy-adapter-not-registered-is-refused",
+        "profile_schema_valid": true,
+        "required_capabilities": [
+          {
+            "role": "proxy",
+            "capability": "integration.*.players.transfer"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.drain"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.register"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.unregister"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.cohort.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.session.inspect"
+          }
+        ],
+        "missing_capabilities": [
+          {
+            "role": "proxy",
+            "capability": "integration.*.players.transfer"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.drain"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.register"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.unregister"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.cohort.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.session.inspect"
+          }
+        ],
+        "planning_permitted": false
+      },
+      {
+        "case_id": "hostname-backend-dns-without-delete-is-refused",
+        "profile_schema_valid": true,
+        "required_capabilities": [
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.delete"
+          },
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.inspect"
+          },
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.upsert"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.*.players.transfer"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.drain"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.register"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.unregister"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.cohort.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.session.inspect"
+          }
+        ],
+        "missing_capabilities": [
+          {
+            "role": "dns",
+            "capability": "integration.dns.record.delete"
+          }
+        ],
+        "planning_permitted": false
+      },
+      {
+        "case_id": "other-transfer-capability-name-satisfies-transfer",
+        "profile_schema_valid": true,
+        "required_capabilities": [
+          {
+            "role": "proxy",
+            "capability": "integration.*.players.transfer"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.drain"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.register"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.backend.unregister"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.cohort.inspect"
+          },
+          {
+            "role": "proxy",
+            "capability": "integration.proxy.session.inspect"
+          }
+        ],
+        "missing_capabilities": [],
+        "planning_permitted": true
+      }
+    ]
+  },
+  "side_effect_expectation": "none"
+}

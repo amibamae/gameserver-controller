@@ -1,6 +1,6 @@
 # Agent handoff
 
-Written 2026-11-11 for another AI agent (or a human) taking over if the previous session can't continue. It reflects the state at the time of writing; check `git log` and open PRs before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`). Read [CLAUDE.md](../CLAUDE.md) first: its rules are standing requirements from the project owner.
+Written 2026-11-11, updated 2026-11-12, for another AI agent (or a human) taking over if the previous session can't continue. It reflects the state at the time of writing; check `git log` and open PRs before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`). Read [CLAUDE.md](../CLAUDE.md) first: its rules are standing requirements from the project owner.
 
 ## Standing rules from the owner
 
@@ -17,7 +17,8 @@ Written 2026-11-11 for another AI agent (or a human) taking over if the previous
   - All 12 draft PRs rebased and merged (#106, #108, #110, #112–#119, #121).
   - #158–#160 (another session): Velocity adapter and bridge plugin (`internal/velocityproxy`, `plugins/velocity`), Cloudflare DNS adapter (`internal/cloudflaredns`), per-server `network` config, and billing-aware scaling policy (`internal/scalingpolicy`).
   - #161: README refresh, Wasabi list/copy/delete/versioning/retention operations (`internal/wasabistorage`), the `jsonrpc-stdio-v1` process transport (`internal/adapterprocess`), and the controller runtime (`internal/controllerruntime`), with adapter `implementation: wasabi | process` config.
-- **Open PR:** #162 (`claude/credits-and-rust-decision`), docs only: adds `CLAUDE.md`, and records that an optional Rust consumer may live in `conformance-rs/`. If its CI is green, merge it. This handoff file is added to the same branch.
+- Also merged: #162 (`CLAUDE.md`, the in-repo Rust decision, this handoff) and #163 (third-party notices for CI actions, Gradle, Temurin, and the Velocity plugin libraries, checked at source).
+- **In progress:** the branch `claude/integration-wiring` registers the Velocity and Cloudflare adapters in the runtime and enforces integrations §6 (R3 and R4 below). If it has no open PR yet, finish its checks and open one.
 - **Leftover remote branches nobody has judged:** `codex/pilot-invocation-binding-rebased-20261106` and `codex/resolve-open-protocol-decisions-20261107`. They look abandoned (no PR, last touched Nov 6) but are not proven merged. Ask the owner before deleting.
 - Nothing else is open. The other Claude session that built #157–#160 has stopped and handed all its work over.
 
@@ -25,7 +26,7 @@ Written 2026-11-11 for another AI agent (or a human) taking over if the previous
 
 - `controller serve` builds the runtime from config: schema registry, bbolt store, adapter registry (Wasabi and process adapters from config), credential resolver (systemd credentials), workflow engine, and startup recovery. **Only `server.define` is registered.** The other lifecycle workflows exist and are fake-tested in `internal/workflow` but need hosting, execution and game adapters that are not built.
 - The management API serves only `GET /v1/operations/{id}`. Resume of a stuck operation is always refused (`denyResume` in `internal/controllerruntime/runtime.go`).
-- Velocity, Cloudflare and scaling code exists and is tested against fakes but is **not wired into the runtime**.
+- Velocity and Cloudflare are registered from config once `claude/integration-wiring` merges (`implementation: velocity` / `cloudflare`); the runtime also reports servers whose network profile needs a missing capability. No workflow calls them yet, and the scaling policy is not scheduled.
 - Nothing has run against live Wasabi, Cloudflare, Vultr or a real Velocity proxy.
 - `docs/ROADMAP.md` is the source of truth for status; `docs/ARCHITECTURE.md` and `docs/CONFIGURATION.md` describe the runtime and config.
 
@@ -35,10 +36,10 @@ Do these in order. "Model / reasoning" is the recommended setting for that task.
 
 | # | Model / reasoning | Task | Depends on |
 |---|---|---|---|
-| R1 | Sonnet 5.5, low | Merge #162 when CI is green. | — |
-| R2 | Sonnet 5.5, medium | Fill the `THIRD_PARTY_NOTICES.md` gaps (see below) and verify each license at its source. | R1 |
-| R3 | Opus 5.5, medium | Register Velocity and Cloudflare in `Runtime.registerAdapters` (`implementation: velocity` / `cloudflare`, own config blocks). | — |
-| R4 | Opus 5.5, medium | Reject planning when a server's network profile needs a capability no registered adapter advertises (`protocol/adapters/integrations.md` §6). | R3 |
+| R1 | done | #162 merged. | — |
+| R2 | done | #163 merged. | — |
+| R3 | done (branch `claude/integration-wiring`) | Velocity and Cloudflare registered in the runtime. | — |
+| R4 | done (same branch) | `Runtime.CheckNetwork` enforces §6; the step R6 planner must call it before accepting an operation. | R3 |
 | R5 | Opus 5.5, medium | Rust behavior tests in `conformance-rs/` (see below). | R2 |
 | R6 | Opus 5.5, high | Management API routes, with a new `server.define` permission (see below). | — |
 | R7 | Opus 5.5, high | Finish controller setup (`internal/controllersetup`): provider credential checks, local audit, rollback of all host changes. | R6 |
@@ -78,6 +79,7 @@ Keep new schemas in `0.21.0-draft` until R14.
 - **Force-pushing a rebased branch:** use `git push --force-with-lease=<branch>:<old-sha>`.
 - **Waiting for CI:** use a background poll of `gh api repos/amibamae/gameserver-controller/actions/runs?head_sha=<sha>` until every run is completed, never a foreground `sleep`. Check conclusions, not just completion.
 - **Merging:** mark the draft ready (`update_pull_request` with `draft: false`) then `merge_pull_request` with `expectedHeadSha` and the merge-commit method.
+- **Docs-only PRs trigger no CI** here (the workflows are path-filtered), so a docs-only PR has no checks to wait for. Confirm it is mergeable and merge.
 - **Branch deletion** is blocked in some sandboxes ("Write access to this GitHub API path is not permitted"). GitHub's "Automatically delete head branches" setting appears to be on, because merged branches disappear. Check `git fetch --prune` before assuming a branch needs deleting.
 - Go is 1.24 in the sandbox. Process-transport tests re-run the test binary as a child (`TestHelper*` functions gated on an env var). The strict JSON decoder in `internal/schemaregistry` now exposes `ParseStrictJSON` and `DecodeStrictJSON` and keeps `[]` as an empty array.
 - Adapter capability prefixes are `hosting.`, `storage.`, `execution.`, `game.`, `integration.` (singular).
