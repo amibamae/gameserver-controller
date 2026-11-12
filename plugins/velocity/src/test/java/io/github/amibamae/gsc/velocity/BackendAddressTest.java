@@ -26,4 +26,14 @@ class BackendAddressTest {
       assertThrows(BridgeException.class, () -> BackendAddress.parse(value), value);
     }
   }
+
+  @Test
+  void normalisesAndBoundsAddresses() {
+    assertEquals(new BackendAddress("play.example.com", 25565), BackendAddress.parse("Play.Example.COM.:25565"));
+    assertEquals(new BackendAddress("2001:db8::1", 25565), BackendAddress.parse("[2001:DB8::1]:25565"));
+    for (String value : new String[] {null, "a".repeat(301), "[2001:db8::1]25565", "[1.2.3.4]:25565", ":25565",
+        "203.0.113.20:025565", "203.0.113.20:", "a".repeat(64) + ".example.com:25565"}) {
+      assertThrows(BridgeException.class, () -> BackendAddress.parse(value), String.valueOf(value));
+    }
+  }
 }
