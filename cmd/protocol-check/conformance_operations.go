@@ -144,118 +144,151 @@ func evaluateTypedProvisionBackupRestoreDestroyResults(pkg *protocolPackage, fix
 			return nil, fmt.Errorf("%s operation does not match schema: %w", operation.name, err)
 		}
 	}
-	provisionTarget := asObject(provisionOperation["target"])
-	provisionData := asObject(asObject(provisionOperation["result"])["operation_data"])
-	provisionAssertion := asObject(provisionData["readiness_assertion"])
-	provisionInstance := asObject(provisionData["instance_ref"])
-	assertedInstance := asObject(provisionAssertion["instance_ref"])
-	provisionCompletedAt, err := parseTime(stringValue(provisionOperation, "completed_at"))
+	provisionResultBound, err := typedProvisionResultBound(provisionOperation)
 	if err != nil {
 		return nil, err
 	}
-	readinessObservedAt, err := parseTime(stringValue(provisionAssertion, "observed_at"))
+	backupResultBound, err := typedBackupResultBound(backupOperation)
 	if err != nil {
 		return nil, err
 	}
-	readinessExpiresAt, err := parseTime(stringValue(provisionAssertion, "expires_at"))
+	restore, err := typedRestoreResult(restoreOperation, backupOperation, backupResultBound)
 	if err != nil {
 		return nil, err
 	}
-	provisionResultBound := stringValue(provisionData, "server_id") == stringValue(provisionTarget, "server_id") &&
-		stringValue(provisionData, "environment_id") == stringValue(provisionTarget, "environment_id") &&
-		stringValue(provisionAssertion, "server_id") == stringValue(provisionData, "server_id") &&
-		stringValue(provisionAssertion, "environment_id") == stringValue(provisionData, "environment_id") &&
-		stringValue(provisionInstance, "environment_id") == stringValue(provisionData, "environment_id") &&
-		stringValue(assertedInstance, "environment_id") == stringValue(provisionAssertion, "environment_id") &&
-		reflect.DeepEqual(provisionData["instance_ref"], provisionAssertion["instance_ref"]) &&
-		stringValue(provisionData, "lifecycle_state") == "ready" &&
-		!provisionCompletedAt.Before(readinessObservedAt) && provisionCompletedAt.Before(readinessExpiresAt)
-
-	backupTarget := asObject(backupOperation["target"])
-	backupParameters := asObject(asObject(backupOperation["request_snapshot"])["parameters"])
-	backupData := asObject(asObject(backupOperation["result"])["operation_data"])
-	backupManifest := asObject(backupData["manifest"])
-	backupInstance := asObject(backupTarget["instance_ref"])
-	manifestInstance := asObject(backupManifest["source_instance_ref"])
-	backupExpectedInstance := asObject(backupParameters["expected_instance_ref"])
-	backupReadinessBound, err := readinessAssertionBindsAtCompletion(
-		asObject(backupData["readiness_assertion"]),
-		stringValue(backupOperation, "completed_at"),
-		stringValue(backupTarget, "server_id"),
-		stringValue(backupTarget, "environment_id"),
-		backupTarget["instance_ref"],
-	)
-	if err != nil {
-		return nil, fmt.Errorf("backup readiness assertion: %w", err)
-	}
-	backupResultBound := stringValue(backupTarget, "server_id") == stringValue(backupManifest, "server_id") &&
-		stringValue(backupTarget, "environment_id") == stringValue(backupData, "environment_id") &&
-		stringValue(backupData, "environment_id") == stringValue(backupManifest, "environment_id") &&
-		stringValue(backupData, "backup_id") == stringValue(backupManifest, "backup_id") &&
-		stringValue(backupData, "data_generation_id") == stringValue(backupManifest, "data_generation_id") &&
-		stringValue(backupInstance, "environment_id") == stringValue(backupTarget, "environment_id") &&
-		reflect.DeepEqual(backupTarget["instance_ref"], backupManifest["source_instance_ref"]) &&
-		(backupParameters["expected_instance_ref"] == nil || reflect.DeepEqual(backupExpectedInstance, manifestInstance)) &&
-		backupReadinessBound
-
-	restoreTarget := asObject(restoreOperation["target"])
-	restoreParameters := asObject(asObject(restoreOperation["request_snapshot"])["parameters"])
-	restoreData := asObject(asObject(restoreOperation["result"])["operation_data"])
-	restoreBackupManifest := asObject(backupData["manifest"])
-	restoreInstance := asObject(restoreTarget["instance_ref"])
-	restoreResultInstance := asObject(restoreData["target_instance_ref"])
-	restoreRequestedInstance := asObject(restoreParameters["target_instance_ref"])
-	restoreReadinessBound, err := readinessAssertionBindsAtCompletion(
-		asObject(restoreData["readiness_assertion"]),
-		stringValue(restoreOperation, "completed_at"),
-		stringValue(restoreTarget, "server_id"),
-		stringValue(restoreTarget, "environment_id"),
-		restoreTarget["instance_ref"],
-	)
-	if err != nil {
-		return nil, fmt.Errorf("restore readiness assertion: %w", err)
-	}
-	restoreBackupOwnerBound := backupResultBound &&
-		stringValue(restoreParameters, "backup_id") == stringValue(restoreBackupManifest, "backup_id") &&
-		stringValue(restoreTarget, "server_id") == stringValue(restoreBackupManifest, "server_id") &&
-		stringValue(restoreTarget, "environment_id") == stringValue(restoreBackupManifest, "environment_id") &&
-		stringValue(backupOperation, "status") == "succeeded" &&
-		stringValue(backupData, "verified_at") != ""
-	restoreDataGenerationRotated := stringValue(restoreData, "data_generation_id") != "" &&
-		stringValue(restoreData, "data_generation_id") != stringValue(restoreBackupManifest, "data_generation_id")
-	restoreResultBound := restoreBackupOwnerBound && restoreDataGenerationRotated &&
-		stringValue(restoreTarget, "environment_id") == stringValue(restoreInstance, "environment_id") &&
-		stringValue(restoreParameters, "backup_id") == stringValue(restoreData, "backup_id") &&
-		reflect.DeepEqual(restoreTarget["instance_ref"], restoreData["target_instance_ref"]) &&
-		(restoreParameters["target_instance_ref"] == nil || reflect.DeepEqual(restoreRequestedInstance, restoreResultInstance)) &&
-		restoreReadinessBound
-
-	destroyTarget := asObject(destroyOperation["target"])
-	destroyParameters := asObject(asObject(destroyOperation["request_snapshot"])["parameters"])
-	destroyData := asObject(asObject(destroyOperation["result"])["operation_data"])
-	destroyInstance := asObject(destroyTarget["instance_ref"])
-	destroyResultInstance := asObject(destroyData["instance_ref"])
-	destroyRequestedInstance := asObject(destroyParameters["expected_instance_ref"])
-	destroyBackupBound := destroyParameters["verified_backup_id"] == nil ||
-		stringValue(destroyParameters, "verified_backup_id") == stringValue(destroyData, "verified_backup_id")
-	destroyResultBound := stringValue(destroyTarget, "environment_id") == stringValue(destroyInstance, "environment_id") &&
-		reflect.DeepEqual(destroyInstance, destroyResultInstance) &&
-		reflect.DeepEqual(destroyTarget["instance_ref"], destroyParameters["expected_instance_ref"]) &&
-		stringValue(destroyData, "final_lifecycle_state") == "destroyed" &&
-		boolValue(destroyData, "provider_absence_confirmed") && destroyBackupBound &&
-		(destroyParameters["expected_instance_ref"] == nil || reflect.DeepEqual(destroyRequestedInstance, destroyInstance))
-
-	allResultsBound := provisionResultBound && backupResultBound && restoreResultBound && destroyResultBound
+	destroyResultBound := typedDestroyResultBound(destroyOperation)
+	allResultsBound := provisionResultBound && backupResultBound && restore.resultBound && destroyResultBound
 	return map[string]any{
 		"schemas_valid":                   true,
 		"provision_result_bound":          provisionResultBound,
 		"backup_result_bound":             backupResultBound,
-		"restore_backup_owner_bound":      restoreBackupOwnerBound,
-		"restore_data_generation_rotated": restoreDataGenerationRotated,
-		"restore_result_bound":            restoreResultBound,
+		"restore_backup_owner_bound":      restore.backupOwnerBound,
+		"restore_data_generation_rotated": restore.dataGenerationRotated,
+		"restore_result_bound":            restore.resultBound,
 		"destroy_result_bound":            destroyResultBound,
 		"all_results_bound":               allResultsBound,
 	}, nil
+}
+
+// operationData returns an operation's result.operation_data.
+func operationData(operation map[string]any) map[string]any {
+	return asObject(asObject(operation["result"])["operation_data"])
+}
+
+// operationParameters returns an operation's request_snapshot.parameters.
+func operationParameters(operation map[string]any) map[string]any {
+	return asObject(asObject(operation["request_snapshot"])["parameters"])
+}
+
+// typedProvisionResultBound: a provision result names its target, reports
+// it ready, and carries a readiness assertion for the same instance that
+// was current when the operation completed.
+func typedProvisionResultBound(operation map[string]any) (bool, error) {
+	target := asObject(operation["target"])
+	data := operationData(operation)
+	assertion := asObject(data["readiness_assertion"])
+	completedAt, err := parseTime(stringValue(operation, "completed_at"))
+	if err != nil {
+		return false, err
+	}
+	observedAt, err := parseTime(stringValue(assertion, "observed_at"))
+	if err != nil {
+		return false, err
+	}
+	expiresAt, err := parseTime(stringValue(assertion, "expires_at"))
+	if err != nil {
+		return false, err
+	}
+	return stringValue(data, "server_id") == stringValue(target, "server_id") &&
+		stringValue(data, "environment_id") == stringValue(target, "environment_id") &&
+		stringValue(assertion, "server_id") == stringValue(data, "server_id") &&
+		stringValue(assertion, "environment_id") == stringValue(data, "environment_id") &&
+		stringValue(asObject(data["instance_ref"]), "environment_id") == stringValue(data, "environment_id") &&
+		stringValue(asObject(assertion["instance_ref"]), "environment_id") == stringValue(assertion, "environment_id") &&
+		reflect.DeepEqual(data["instance_ref"], assertion["instance_ref"]) &&
+		stringValue(data, "lifecycle_state") == "ready" &&
+		!completedAt.Before(observedAt) && completedAt.Before(expiresAt), nil
+}
+
+// typedBackupResultBound: a backup result and its manifest name the target
+// server, environment and source instance (the expected one, if requested),
+// and readiness held when it completed.
+func typedBackupResultBound(operation map[string]any) (bool, error) {
+	target := asObject(operation["target"])
+	parameters := operationParameters(operation)
+	data := operationData(operation)
+	manifest := asObject(data["manifest"])
+	readinessBound, err := readinessAssertionBindsAtCompletion(asObject(data["readiness_assertion"]),
+		stringValue(operation, "completed_at"), stringValue(target, "server_id"), stringValue(target, "environment_id"), target["instance_ref"])
+	if err != nil {
+		return false, fmt.Errorf("backup readiness assertion: %w", err)
+	}
+	return stringValue(target, "server_id") == stringValue(manifest, "server_id") &&
+		stringValue(target, "environment_id") == stringValue(data, "environment_id") &&
+		stringValue(data, "environment_id") == stringValue(manifest, "environment_id") &&
+		stringValue(data, "backup_id") == stringValue(manifest, "backup_id") &&
+		stringValue(data, "data_generation_id") == stringValue(manifest, "data_generation_id") &&
+		stringValue(asObject(target["instance_ref"]), "environment_id") == stringValue(target, "environment_id") &&
+		reflect.DeepEqual(target["instance_ref"], manifest["source_instance_ref"]) &&
+		(parameters["expected_instance_ref"] == nil ||
+			reflect.DeepEqual(asObject(parameters["expected_instance_ref"]), asObject(manifest["source_instance_ref"]))) &&
+		readinessBound, nil
+}
+
+// typedRestore is what a restore result proves.
+type typedRestore struct {
+	backupOwnerBound, dataGenerationRotated, resultBound bool
+}
+
+// typedRestoreResult: a restore uses a verified, succeeded backup of the
+// same server, writes a new data generation, and names its target instance
+// (the requested one, if any), with readiness current at completion.
+func typedRestoreResult(operation, backupOperation map[string]any, backupResultBound bool) (typedRestore, error) {
+	target := asObject(operation["target"])
+	parameters := operationParameters(operation)
+	data := operationData(operation)
+	backupData := operationData(backupOperation)
+	manifest := asObject(backupData["manifest"])
+	readinessBound, err := readinessAssertionBindsAtCompletion(asObject(data["readiness_assertion"]),
+		stringValue(operation, "completed_at"), stringValue(target, "server_id"), stringValue(target, "environment_id"), target["instance_ref"])
+	if err != nil {
+		return typedRestore{}, fmt.Errorf("restore readiness assertion: %w", err)
+	}
+	var result typedRestore
+	result.backupOwnerBound = backupResultBound &&
+		stringValue(parameters, "backup_id") == stringValue(manifest, "backup_id") &&
+		stringValue(target, "server_id") == stringValue(manifest, "server_id") &&
+		stringValue(target, "environment_id") == stringValue(manifest, "environment_id") &&
+		stringValue(backupOperation, "status") == "succeeded" &&
+		stringValue(backupData, "verified_at") != ""
+	result.dataGenerationRotated = stringValue(data, "data_generation_id") != "" &&
+		stringValue(data, "data_generation_id") != stringValue(manifest, "data_generation_id")
+	result.resultBound = result.backupOwnerBound && result.dataGenerationRotated &&
+		stringValue(target, "environment_id") == stringValue(asObject(target["instance_ref"]), "environment_id") &&
+		stringValue(parameters, "backup_id") == stringValue(data, "backup_id") &&
+		reflect.DeepEqual(target["instance_ref"], data["target_instance_ref"]) &&
+		(parameters["target_instance_ref"] == nil ||
+			reflect.DeepEqual(asObject(parameters["target_instance_ref"]), asObject(data["target_instance_ref"]))) &&
+		readinessBound
+	return result, nil
+}
+
+// typedDestroyResultBound: a destroy result names the expected instance,
+// confirms the provider no longer has it, and names the verified backup
+// if one was required.
+func typedDestroyResultBound(operation map[string]any) bool {
+	target := asObject(operation["target"])
+	parameters := operationParameters(operation)
+	data := operationData(operation)
+	instance := asObject(target["instance_ref"])
+	backupBound := parameters["verified_backup_id"] == nil ||
+		stringValue(parameters, "verified_backup_id") == stringValue(data, "verified_backup_id")
+	return stringValue(target, "environment_id") == stringValue(instance, "environment_id") &&
+		reflect.DeepEqual(instance, asObject(data["instance_ref"])) &&
+		reflect.DeepEqual(target["instance_ref"], parameters["expected_instance_ref"]) &&
+		stringValue(data, "final_lifecycle_state") == "destroyed" &&
+		boolValue(data, "provider_absence_confirmed") && backupBound &&
+		(parameters["expected_instance_ref"] == nil || reflect.DeepEqual(asObject(parameters["expected_instance_ref"]), instance))
 }
 
 // evaluateTypedDefineStartStopResults evaluates the conformance fixtures
