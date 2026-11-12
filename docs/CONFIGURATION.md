@@ -109,8 +109,8 @@ While a server is running, the controller adds or removes servers only inside th
 controller:
   capacity:
     side_by_side_migration:
-      enabled: true        # default true; false never allows a third server
-      max_servers: 1       # default 1 extra server; 0 means unlimited
+      enabled: true        # default true
+      max_servers: 1       # default 1; 0 means no limit
 
 servers:
   - id: example
@@ -119,13 +119,19 @@ servers:
         enabled: true
         max_servers: 1
       scaling:
-        plans:                  # plan ladder, cheapest first; scale one rung at a time
-          - vc2-1c-2gb
-          - vc2-2c-4gb
-          - vc2-4c-8gb
+        vertical:
+          enabled: true         # default false; turns vertical auto-scaling on for this server
+          plans:                # plan ladder, cheapest first
+            - vc2-1c-2gb
+            - vc2-2c-4gb
+            - vc2-4c-8gb
 ```
 
-The controller will move a server one rung up or down the plan ladder at a time, through a side-by-side migration (see [core design](CORE_DESIGN.md#vertical-auto-scaling-planned)). The old live server is destroyed only after its final backup is verified. A migration is the only case where more than two managed servers may run, within `max_servers`. The thresholds that trigger a move are not designed yet.
+- `side_by_side_migration.enabled` decides whether a migration may run a new server alongside the live one. Set it to `false` if you never want side-by-side servers.
+- `side_by_side_migration.max_servers` is the most extra servers that may run alongside live servers at the same time during migrations. It is a limit, not an on/off switch: to stop side-by-side servers entirely, set `enabled: false` rather than changing this number. `0` removes the limit.
+- `scaling.vertical.enabled` is a separate option that turns vertical auto-scaling on or off for one server. When on, the controller moves the server one rung up or down its plan ladder at a time, through a side-by-side migration (see [core design](CORE_DESIGN.md#vertical-auto-scaling-planned)). Vertical scaling needs side-by-side migration, so it stays inactive while `side_by_side_migration.enabled` is `false` for that server.
+
+The old live server is destroyed only after its final backup is verified. A migration is the only case where more than two managed servers may run. The thresholds that trigger a move are not designed yet.
 
 Shutting down includes stopping the game, backing up, verifying, and destroying the instance. If that takes longer than the time left in the hour after the window, the next hour is charged; move the window earlier once real shutdown times are known. The validator checks these settings; the controller runtime does not schedule them yet.
 
