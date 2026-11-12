@@ -73,8 +73,19 @@ type CreateRequest struct {
 	ControllerSSHPublicKey string
 }
 
+// capacityStore is the part of the state store Provision uses. It is an
+// interface so that tests can wrap the real store and inject the failures and
+// concurrent state changes that crash recovery must handle.
+type capacityStore interface {
+	GetCapacityReservation(operationID string) (store.CapacityReservation, error)
+	ReleaseUnsentCapacityReservation(operationID, resourceKey string) error
+	ClaimCapacityCreateWithHandoff(operationID string, handoff hosthandoff.Handoff) (store.CapacityReservation, error)
+	ObserveCapacity(operationID string, observation store.CapacityProviderObservation) (store.CapacityReservation, error)
+}
+
 type Provisioner struct {
-	store       *store.BoltStore
+	store       capacityStore
+	reserve     func(store.CapacityReservation) (store.CapacityReservation, bool, error)
 	policy      pilotcapacity.Policy
 	provider    Provider
 	credentials CredentialResolver
@@ -88,6 +99,9 @@ func NewProvisioner(repository *store.BoltStore, policy pilotcapacity.Policy, pr
 	}
 	return &Provisioner{
 		store: repository, policy: policy, provider: provider,
+		reserve: func(reservation store.CapacityReservation) (store.CapacityReservation, bool, error) {
+			return policy.ReserveCapacity(repository, reservation)
+		},
 		credentials: credentials, credential: credentialRef,
 		now: func() time.Time { return time.Now().UTC() },
 	}, nil
@@ -105,184 +119,221 @@ func (p *Provisioner) Provision(ctx context.Context, request CreateRequest) (sto
 	if err != nil {
 		return store.CapacityReservation{}, err
 	}
-	existing, getErr := p.store.GetCapacityReservation(request.OperationID)
+	plan, result, done, err := p.resolveExisting(provisionPlan{request: request, create: create, reservation: reservation})
+	if done {
+		return result, err
+	}
+	err = p.credentials.WithCredential(p.credential, func(token []byte) error {
+		var runErr error
+		result, runErr = p.provisionWithToken(ctx, token, plan)
+		return runErr
+	})
+	return result, err
+}
+
+// provisionPlan is the create Provision will dispatch or reconcile once it
+// has looked at any reservation already stored for the operation.
+type provisionPlan struct {
+	request     CreateRequest
+	create      vultrapi.CreateInstanceRequest
+	reservation store.CapacityReservation
+	// previous is the stored reservation, or nil if there was none.
+	previous     *store.CapacityReservation
+	dispatchable bool
+}
+
+// resolveExisting reads any stored reservation for the operation. done is
+// true when Provision must return result and err without contacting the
+// provider: the operation is already active or released, or its stored
+// identity conflicts with the request.
+func (p *Provisioner) resolveExisting(plan provisionPlan) (provisionPlan, store.CapacityReservation, bool, error) {
+	existing, getErr := p.store.GetCapacityReservation(plan.request.OperationID)
+	if getErr != nil && !errors.Is(getErr, store.ErrCapacityNotFound) {
+		return plan, store.CapacityReservation{}, true, getErr
+	}
 	if getErr == nil {
-		if !sameReservationIdentity(existing, reservation) {
-			legacyRequest, legacyCreate, legacyReservation, found := p.legacyMatch(request, existing)
-			if !found {
-				return existing, store.ErrCapacityConflict
-			}
-			switch existing.State {
-			case store.CapacityActive, store.CapacityCreateOutcomeUnknown:
-				// Keep legacy identity for safe replay or reconciliation. Never
-				// redispatch an old create with a newly selected bootstrap.
-				request, reservation = legacyRequest, legacyReservation
-				create = legacyCreate
-			case store.CapacityReserved:
-				if !hasBootstrapReference(request) || !hasAccessReference(request) {
-					return existing, ErrInvalidRequest
-				}
-				if releaseErr := p.store.ReleaseUnsentCapacityReservation(existing.OperationID, existing.ResourceKey); releaseErr != nil {
-					current, currentErr := p.store.GetCapacityReservation(existing.OperationID)
-					if currentErr == nil && sameReservationIdentity(current, legacyReservation) && current.State == store.CapacityCreateOutcomeUnknown {
-						request, reservation = legacyRequest, legacyReservation
-						create = legacyCreate
-						existing = current
-					} else if currentErr == nil && sameReservationIdentity(current, legacyReservation) && current.State == store.CapacityActive {
-						return current, nil
-					} else {
-						return current, releaseErr
-					}
-				}
-			default:
-				return existing, store.ErrCapacityConflict
+		if !sameReservationIdentity(existing, plan.reservation) {
+			if result, done, err := p.adoptLegacyIdentity(&plan, &existing); done {
+				return plan, result, true, err
 			}
 		}
 		switch existing.State {
 		case store.CapacityActive:
-			return existing, nil
+			return plan, existing, true, nil
 		case store.CapacityAbsent, store.CapacityDestroyed:
-			return existing, ErrOperationClosed
+			return plan, existing, true, ErrOperationClosed
 		}
-	} else if !errors.Is(getErr, store.ErrCapacityNotFound) {
-		return store.CapacityReservation{}, getErr
+		plan.previous = &existing
 	}
-	dispatchable := hasBootstrapReference(request) && hasAccessReference(request)
-	if !dispatchable && (getErr != nil || existing.State != store.CapacityCreateOutcomeUnknown) {
-		return store.CapacityReservation{}, ErrInvalidRequest
+	plan.dispatchable = hasBootstrapReference(plan.request) && hasAccessReference(plan.request)
+	if !plan.dispatchable && (plan.previous == nil || plan.previous.State != store.CapacityCreateOutcomeUnknown) {
+		return plan, store.CapacityReservation{}, true, ErrInvalidRequest
 	}
-	var previous *store.CapacityReservation
-	if getErr == nil {
-		previous = &existing
+	return plan, store.CapacityReservation{}, false, nil
+}
+
+// adoptLegacyIdentity handles a stored reservation that an earlier build made
+// with an older request shape. An active or unknown one keeps its legacy
+// identity, so it is replayed or reconciled and never redispatched with a
+// newly selected bootstrap. An unsent one is released so the current request
+// can be dispatched; if another process moved it on first, the new state
+// decides. done is true when Provision must return result and err.
+func (p *Provisioner) adoptLegacyIdentity(plan *provisionPlan, existing *store.CapacityReservation) (store.CapacityReservation, bool, error) {
+	legacyRequest, legacyCreate, legacyReservation, found := p.legacyMatch(plan.request, *existing)
+	if !found {
+		return *existing, true, store.ErrCapacityConflict
 	}
-
-	var result store.CapacityReservation
-	err = p.credentials.WithCredential(p.credential, func(token []byte) error {
-		if err := ctx.Err(); err != nil {
-			return err
+	useLegacy := func() {
+		plan.request, plan.create, plan.reservation = legacyRequest, legacyCreate, legacyReservation
+	}
+	switch existing.State {
+	case store.CapacityActive, store.CapacityCreateOutcomeUnknown:
+		useLegacy()
+	case store.CapacityReserved:
+		if !hasBootstrapReference(plan.request) || !hasAccessReference(plan.request) {
+			return *existing, true, ErrInvalidRequest
 		}
-		if dispatchable && (previous == nil || previous.State == store.CapacityReserved) {
-			if err := p.verifyBeforeDispatch(ctx, token, create, request); err != nil {
-				if previous != nil {
-					if releaseErr := p.store.ReleaseUnsentCapacityReservation(previous.OperationID, previous.ResourceKey); releaseErr != nil {
-						current, getErr := p.store.GetCapacityReservation(previous.OperationID)
-						if getErr != nil {
-							return ErrOutcomeUnknown
-						}
-						switch current.State {
-						case store.CapacityCreateOutcomeUnknown:
-							reconciled, reconcileErr := p.reconcile(ctx, token, current)
-							result = reconciled
-							return reconcileErr
-						case store.CapacityActive:
-							result = current
-							return nil
-						default:
-							return ErrOutcomeUnknown
-						}
-					}
-				}
-				return err
-			}
-		}
-		var reserveErr error
-		result, _, reserveErr = p.policy.ReserveCapacity(p.store, reservation)
-		if reserveErr != nil {
-			return reserveErr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		switch result.State {
-		case store.CapacityActive:
-			return nil
-		case store.CapacityAbsent, store.CapacityDestroyed:
-			return ErrOperationClosed
-		case store.CapacityCreateOutcomeUnknown:
-			result, reserveErr = p.reconcile(ctx, token, result)
-			return reserveErr
-		case store.CapacityReserved:
-			// A crash before this one-shot claim is known to precede provider
-			// dispatch. Concurrent callers can claim it only once.
-		default:
-			return store.ErrCapacityTransition
-		}
-
-		// The single-use host key (protocol hosting section 6.1) is generated
-		// for this dispatch only. Its public half is stored in the same
-		// transaction as the claim; the private half exists only in memory
-		// and in the create request's user data.
-		hostPublic, hostPrivate, keyErr := sshkey.Generate()
-		if keyErr != nil {
-			return keyErr
-		}
-		defer clear(hostPrivate)
-		userData, keyErr := oneTimeHostKeyUserData(hostPublic, hostPrivate)
-		if keyErr != nil {
-			return keyErr
-		}
-		create.UserData = userData
-		result, reserveErr = p.store.ClaimCapacityCreateWithHandoff(result.OperationID, hosthandoff.New(hostPublic, p.now(), hosthandoff.DefaultLifetime))
-		if errors.Is(reserveErr, store.ErrCapacityTransition) {
-			result, reserveErr = p.store.GetCapacityReservation(reservation.OperationID)
-			if reserveErr != nil {
-				return reserveErr
-			}
-			switch result.State {
-			case store.CapacityActive:
-				return nil
-			case store.CapacityCreateOutcomeUnknown:
-				result, reserveErr = p.reconcile(ctx, token, result)
-				return reserveErr
-			case store.CapacityAbsent, store.CapacityDestroyed:
-				return ErrOperationClosed
+		if releaseErr := p.store.ReleaseUnsentCapacityReservation(existing.OperationID, existing.ResourceKey); releaseErr != nil {
+			current, currentErr := p.store.GetCapacityReservation(existing.OperationID)
+			switch {
+			case currentErr == nil && sameReservationIdentity(current, legacyReservation) && current.State == store.CapacityCreateOutcomeUnknown:
+				useLegacy()
+				*existing = current
+			case currentErr == nil && sameReservationIdentity(current, legacyReservation) && current.State == store.CapacityActive:
+				return current, true, nil
 			default:
-				return store.ErrCapacityTransition
+				return current, true, releaseErr
 			}
 		}
-		if reserveErr != nil {
-			return reserveErr
-		}
+	default:
+		return *existing, true, store.ErrCapacityConflict
+	}
+	return store.CapacityReservation{}, false, nil
+}
 
-		created, createErr := p.provider.CreateInstance(ctx, token, create)
-		if errors.Is(createErr, vultrapi.ErrProviderReject) {
-			result, reserveErr = p.recordAbsence(result)
-			if reserveErr != nil {
-				return ErrOutcomeUnknown
-			}
-			return ErrProviderRejected
+// provisionWithToken runs the planned provisioning with the provider token.
+func (p *Provisioner) provisionWithToken(ctx context.Context, token []byte, plan provisionPlan) (store.CapacityReservation, error) {
+	if err := ctx.Err(); err != nil {
+		return store.CapacityReservation{}, err
+	}
+	if plan.dispatchable && (plan.previous == nil || plan.previous.State == store.CapacityReserved) {
+		if err := p.verifyBeforeDispatch(ctx, token, plan.create, plan.request); err != nil {
+			return p.recoverAfterFailedVerify(ctx, token, plan.previous, err)
 		}
-		if createErr != nil {
-			result, reserveErr = p.reconcile(ctx, token, result)
-			if reserveErr == nil {
-				return nil
-			}
-			return reserveErr
-		}
-		if created.ID == "" || created.Label != create.Label {
-			result, reserveErr = p.reconcile(ctx, token, result)
-			if reserveErr == nil {
-				return nil
-			}
-			return reserveErr
-		}
-
-		observed, inspectErr := p.provider.GetInstance(ctx, token, created.ID)
-		if inspectErr == nil && observed.ID == created.ID && observed.Label == create.Label {
-			result, reserveErr = p.recordPresent(result, observed)
-			return reserveErr
-		}
-		result, reserveErr = p.reconcile(ctx, token, result)
-		if reserveErr == nil {
-			return nil
-		}
-		return reserveErr
-	})
+	}
+	result, _, err := p.reserve(plan.reservation)
 	if err != nil {
 		return result, err
 	}
-	return result, nil
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	switch result.State {
+	case store.CapacityActive:
+		return result, nil
+	case store.CapacityAbsent, store.CapacityDestroyed:
+		return result, ErrOperationClosed
+	case store.CapacityCreateOutcomeUnknown:
+		return p.reconcile(ctx, token, result)
+	case store.CapacityReserved:
+		// A crash before this one-shot claim is known to precede provider
+		// dispatch. Concurrent callers can claim it only once.
+		return p.claimAndDispatch(ctx, token, plan, result)
+	default:
+		return result, store.ErrCapacityTransition
+	}
+}
+
+// recoverAfterFailedVerify releases a resumed, unsent reservation whose
+// pre-dispatch checks failed. If another process moved it on first, the new
+// state decides; anything Provision cannot finish is an unknown outcome.
+func (p *Provisioner) recoverAfterFailedVerify(ctx context.Context, token []byte, previous *store.CapacityReservation, verifyErr error) (store.CapacityReservation, error) {
+	if previous == nil {
+		return store.CapacityReservation{}, verifyErr
+	}
+	if releaseErr := p.store.ReleaseUnsentCapacityReservation(previous.OperationID, previous.ResourceKey); releaseErr == nil {
+		return store.CapacityReservation{}, verifyErr
+	}
+	current, err := p.store.GetCapacityReservation(previous.OperationID)
+	if err != nil {
+		return store.CapacityReservation{}, ErrOutcomeUnknown
+	}
+	switch current.State {
+	case store.CapacityCreateOutcomeUnknown:
+		return p.reconcile(ctx, token, current)
+	case store.CapacityActive:
+		return current, nil
+	default:
+		return store.CapacityReservation{}, ErrOutcomeUnknown
+	}
+}
+
+// claimAndDispatch makes the one-shot dispatch claim and sends the create.
+// The single-use host key (protocol hosting section 6.1) is generated for
+// this dispatch only. Its public half is stored in the same transaction as
+// the claim; the private half exists only in memory and in the create
+// request's user data, and is cleared when this returns.
+func (p *Provisioner) claimAndDispatch(ctx context.Context, token []byte, plan provisionPlan, reserved store.CapacityReservation) (store.CapacityReservation, error) {
+	hostPublic, hostPrivate, err := sshkey.Generate()
+	if err != nil {
+		return reserved, err
+	}
+	defer clear(hostPrivate)
+	userData, err := oneTimeHostKeyUserData(hostPublic, hostPrivate)
+	if err != nil {
+		return reserved, err
+	}
+	create := plan.create
+	create.UserData = userData
+	claimed, err := p.store.ClaimCapacityCreateWithHandoff(reserved.OperationID, hosthandoff.New(hostPublic, p.now(), hosthandoff.DefaultLifetime))
+	if errors.Is(err, store.ErrCapacityTransition) {
+		return p.resolveClaimConflict(ctx, token, plan.reservation.OperationID)
+	}
+	if err != nil {
+		return claimed, err
+	}
+	return p.dispatchAndObserve(ctx, token, create, claimed)
+}
+
+// resolveClaimConflict finishes from the state another process left when it
+// claimed the dispatch first. Nothing is sent again.
+func (p *Provisioner) resolveClaimConflict(ctx context.Context, token []byte, operationID string) (store.CapacityReservation, error) {
+	current, err := p.store.GetCapacityReservation(operationID)
+	if err != nil {
+		return current, err
+	}
+	switch current.State {
+	case store.CapacityActive:
+		return current, nil
+	case store.CapacityCreateOutcomeUnknown:
+		return p.reconcile(ctx, token, current)
+	case store.CapacityAbsent, store.CapacityDestroyed:
+		return current, ErrOperationClosed
+	default:
+		return current, store.ErrCapacityTransition
+	}
+}
+
+// dispatchAndObserve sends the claimed create once. A rejection releases the
+// slot; any other failure, or a reply or inspection that does not name the
+// requested instance, is reconciled by label.
+func (p *Provisioner) dispatchAndObserve(ctx context.Context, token []byte, create vultrapi.CreateInstanceRequest, claimed store.CapacityReservation) (store.CapacityReservation, error) {
+	created, createErr := p.provider.CreateInstance(ctx, token, create)
+	if errors.Is(createErr, vultrapi.ErrProviderReject) {
+		recorded, err := p.recordAbsence(claimed)
+		if err != nil {
+			return recorded, ErrOutcomeUnknown
+		}
+		return recorded, ErrProviderRejected
+	}
+	if createErr != nil || created.ID == "" || created.Label != create.Label {
+		return p.reconcile(ctx, token, claimed)
+	}
+	observed, inspectErr := p.provider.GetInstance(ctx, token, created.ID)
+	if inspectErr == nil && observed.ID == created.ID && observed.Label == create.Label {
+		return p.recordPresent(claimed, observed)
+	}
+	return p.reconcile(ctx, token, claimed)
 }
 
 func (p *Provisioner) prepare(request CreateRequest) (vultrapi.CreateInstanceRequest, store.CapacityReservation, error) {
