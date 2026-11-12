@@ -89,7 +89,7 @@ Player worlds and credentials are valuable data. The design requires verified ba
 
 Optional telemetry is disabled by default. If it identifies a player, the design requires separate informed consent from the server owner and each affected player. See the full [security and privacy policy](SECURITY.md).
 
-AI tools may assist development, but the controller must never depend on an AI service to build, run, or operate. You do not need to use AI to contribute. See the [AI-use disclosure](docs/AI_DISCLOSURE.md).
+AI coding agents (OpenAI Codex and Anthropic Claude Code) write most of this repository under the owner's direction: 165 of 166 merged pull requests so far came from AI agent branches. The controller itself must never depend on an AI service to build, run, or operate. You do not need to use AI to contribute. See the [AI-use disclosure](docs/AI_DISCLOSURE.md).
 
 ## License
 

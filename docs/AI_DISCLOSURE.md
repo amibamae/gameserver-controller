@@ -1,28 +1,57 @@
 # AI Use and Development Transparency
 
 **Status:** Public project disclosure  
-**Last reviewed:** 2026-11-05
+**Last reviewed:** 2026-11-12
 
 ## Why I disclose this
 
-I currently use AI-assisted tools while I design and prototype the project. If you evaluate, use, or contribute to open-source software, you should know where AI is involved and what role it will have in the finished product.
+AI coding agents write most of this project. I direct the work, make the design decisions, and decide what ships. If you evaluate, use, or contribute to open-source software, you should know where AI is involved and what role it will have in the finished product.
 
 I do not want AI use hidden, overstated, or mistaken for a dependency of the controller itself.
 
-## How I use AI during development
+## How much AI is used
 
-During architecture and proof-of-concept work, AI tools may help me:
+Nearly all of the repository was written by AI coding agents working from my instructions. That includes the Go controller and its tests, the protocol schemas, examples and conformance vectors, the Java Velocity plugin, the Rust conformance consumer (`conformance-rs/`), the CI workflows, and the docs.
 
-- Explore and document the architecture.
-- Draft or refine specifications, interfaces, and technical docs.
-- Compare implementation options and their trade-offs.
-- Prototype ideas and reason through workflows.
-- Review configuration concepts, troubleshooting steps, and failure cases.
-- Plan and organize development.
+Measured from the git history and GitHub on 2026-11-12, from the first commit (2026-11-07):
 
-AI-assisted output is a starting point for human review. It is not automatically correct. Maintainers remain responsible for decisions, code, security, licensing, and the direction of the project.
+| Measure | Count |
+|---|---|
+| Merged pull requests | 166 |
+| From `codex/…` branches (OpenAI Codex agent) | 154 |
+| From `claude/…` branches (Anthropic Claude Code agent) | 11 |
+| From other branches | 1 |
+| Non-merge commits on `main` | 201 |
+| Commits with a `Co-Authored-By: Claude …` trailer | 37 |
 
-This disclosure describes the current approach. It does not claim that AI generated every file, line of code, or contribution in this repository.
+Codex commits are recorded under my name without a trailer, so the commit authors alone understate AI use. Treat the branch prefix as the marker. Claude Code commits carry the trailer and a `Claude-Session` link.
+
+To refresh the counts:
+
+```bash
+git log origin/main --no-merges --oneline | wc -l
+git log origin/main --no-merges -i --grep='Co-Authored-By: Claude' --oneline | wc -l
+```
+
+The branch counts come from the repository's closed pull requests on GitHub.
+
+## What AI does and what I do
+
+The agents:
+
+- Write code, tests, protocol files, and docs, and run the repository's checks (`gofmt`, `go vet`, `go test`, `protocol-check`, and the Rust checks).
+- Plan and order work, open pull requests, and rebase branches.
+- Merge their own pull requests once CI is green, in sessions where I have authorized that.
+- Hand work to each other through [AGENT_HANDOFF.md](AGENT_HANDOFF.md) when a session ends.
+- Follow the standing instructions in [CLAUDE.md](../CLAUDE.md), including crediting every third-party dependency in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
+I:
+
+- Choose what to build, set the requirements, and make the design decisions the agents ask about.
+- Authorize merges, force-pushes, and anything that touches live systems.
+- Run live validation against real providers myself (a real Velocity proxy, a Cloudflare staging zone, Vultr billing).
+
+Automated checks and CI are the main gate on AI-written changes. Not every line has had a separate line-by-line human review. AI output is not automatically correct, and I remain responsible for the code, its security and licensing, and the direction of the project.
 
 ## AI will never be required
 
@@ -55,7 +84,7 @@ Plausible output is not verified output. Before maintainers accept AI-assisted c
 - Checking compatibility and documenting limits.
 - Keeping secrets, private data, and unapproved third-party material out of the repository.
 
-AI tools do not approve, merge, or release their own work.
+Some of these steps are not yet done for every AI-written change; see [What AI does and what I do](#what-ai-does-and-what-i-do). AI agents may merge their own pull requests after CI passes when I have authorized it. They do not approve their own pull requests through review, and they do not publish a release or protocol tag without my explicit go-ahead.
 
 ## Contributors and AI
 
@@ -71,4 +100,4 @@ The no-AI-requirement commitment is a standing project principle. I will keep th
 
 Before adding an optional AI experiment or integration, maintainers must identify and document it. Where relevant, it must be off by default and designed so that removing AI services cannot impair the controller’s core behavior.
 
-AI currently helps us explore and prototype. It will never be required to develop, build, install, configure, operate, maintain, or use the project. The software should remain open, understandable, and independently operable, and I welcome better human-designed and tested replacements for AI-assisted work.
+AI currently writes most of the project. It will never be required to develop, build, install, configure, operate, maintain, or use the project. The software should remain open, understandable, and independently operable, and I welcome better human-designed and tested replacements for AI-assisted work.
