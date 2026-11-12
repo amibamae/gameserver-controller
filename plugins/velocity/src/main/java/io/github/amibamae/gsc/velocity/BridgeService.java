@@ -41,6 +41,13 @@ final class BridgeService {
     this.onBackendsChanged = onBackendsChanged;
   }
 
+  /** Set when the plugin moves waiting cohorts by itself (section 3.3). */
+  private volatile boolean autoMove;
+
+  void advertiseAutoMove(boolean enabled) {
+    this.autoMove = enabled;
+  }
+
   JsonObject info() {
     JsonObject info = new JsonObject();
     info.addProperty("api_version", API_VERSION);
@@ -50,6 +57,9 @@ final class BridgeService {
     JsonArray features = new JsonArray();
     for (String feature : List.of("backends", "sessions", "transfer", "cohorts", "join_routing")) {
       features.add(feature);
+    }
+    if (autoMove) {
+      features.add("auto_move");
     }
     info.add("features", features);
     return info;

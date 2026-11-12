@@ -65,11 +65,11 @@ never makes a backend routable that the controller has not registered.
   "proxy_platform": "velocity",
   "proxy_version": "3.4.0",
   "proxy_instance_id": "velocity-edge-001",
-  "features": ["backends", "sessions", "transfer", "cohorts", "join_routing"]
+  "features": ["backends", "sessions", "transfer", "cohorts", "join_routing", "auto_move"]
 }
 ```
 
-Clients check `api_version` and `proxy_instance_id` before other calls.
+Clients check `api_version` and `proxy_instance_id` before other calls. `auto_move` is present when the plugin moves waiting cohorts by itself (see [Automatic moves](#automatic-moves)); a controller that sees it does not also transfer those cohorts.
 
 ### `GET /v1/backends/{backend_id}`
 
@@ -177,6 +177,16 @@ so each proxy owner decides it. The Velocity plugin supports:
 
 A player leaves a waiting cohort when they are transferred, move server, or
 disconnect.
+
+## Automatic moves
+
+When `auto_move` is enabled, the plugin moves each backend's waiting cohort to that backend by itself, following [integrations section 3.3](../protocol/adapters/integrations.md#33-automatic-moves-from-a-waiting-cohort):
+
+- Only while the controller has the backend registered and it passes the health check. Moves stop as soon as it is draining, unregistered, or unhealthy.
+- Only connected cohort members who are still on the fallback. Players who chose the fallback themselves are not in a cohort and are not moved.
+- `auto-move-batch` players (default 5) per backend every `auto-move-interval-seconds` (default 5), longest waiting first. A failed move is retried after 30 seconds.
+
+Each move changes the session's `backend_id` and removes it from its cohort, as `GET /v1/sessions/{id}` and `GET /v1/cohorts/{id}` show.
 
 ## Errors
 

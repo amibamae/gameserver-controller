@@ -98,6 +98,7 @@ Fixtures MUST contain synthetic identifiers and credentials only. They MUST NOT 
 - Proxy availability monitoring (integrations section 7) declares an outage only after the configured number of consecutive failed probes. It backs off while failing, emits a new event when the outage reason changes, and sends a recovery only after a declared outage; shorter streaks send nothing. Event IDs follow the documented hash so receivers can drop duplicates.
 - `integration.notification.send` sends only schema-valid events that carry no player data. A result counts only when it is schema-valid and names the sent event; anything else is `outcome_unknown`. `delivered` and `rejected` are final, and `outcome_unknown` is retried after 30 seconds, doubling, for at most 5 attempts.
 - Proxy player-count inspection binds the exact backend and instance. The core uses a count only when its observation timestamp is not in the future and is within the request's `maximum_age_seconds`; `unknown`, stale, future-dated, missing, and mismatched observations cannot prove zero sessions or complete a drain. Go vectors cover the inclusive freshness boundary, stale and future timestamps, unknown counts, incomplete observations, and target mismatch.
+- A proxy that moves waiting players by itself (integrations section 3.3) moves only connected members of the backend's waiting cohort who are still on the fallback, only while the core has the backend registered and routable, oldest first, at most one batch per interval, and not a player whose move failed within the retry delay. Players who chose the fallback themselves or wait for another backend stay put.
 - Systemd lifecycle results bind the exact unit. A completed start does not establish game readiness, and an unknown start or stop outcome requires inspection before retry. Force stop requires approval bound to the exact unit and reason; accepted is not complete, unknown requires inspection, and a completed result confirms stopped state only.
 
 ### Proxy routing and player transfer
@@ -239,6 +240,7 @@ A contributed implementation SHOULD preserve the published protocol meaning. Gen
 - [proxy-cohort-inspect-binding-and-freshness.json](test-vectors/proxy-cohort-inspect-binding-and-freshness.json)
 - [dns-record-upsert-purpose-readiness-and-confirmation.json](test-vectors/dns-record-upsert-purpose-readiness-and-confirmation.json)
 - [hosting-bootstrap-host-key-handoff.json](test-vectors/hosting-bootstrap-host-key-handoff.json)
+- [proxy-cohort-automatic-move.json](test-vectors/proxy-cohort-automatic-move.json)
 - [network-profile-requirements.json](test-vectors/network-profile-requirements.json)
 - [notification-proxy-outage-transitions.json](test-vectors/notification-proxy-outage-transitions.json)
 - [notification-send-outcome-and-privacy.json](test-vectors/notification-send-outcome-and-privacy.json)

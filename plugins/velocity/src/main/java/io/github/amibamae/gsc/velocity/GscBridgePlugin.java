@@ -52,6 +52,7 @@ public final class GscBridgePlugin {
   private BackendStore store;
   private BridgeHttpServer http;
   private ScheduledTask healthTask;
+  private ScheduledTask moveTask;
 
   @Inject
   public GscBridgePlugin(ProxyServer proxy, Logger logger, @DataDirectory Path dataDirectory) {
@@ -102,6 +103,8 @@ public final class GscBridgePlugin {
     }
 
     BridgeService service = new BridgeService(config.proxyInstanceId(), backends, sessions, operations, clock, this::saveBackends);
+    boolean autoMove = config.autoMove().enabled() && !config.fallback().isEmpty();
+    service.advertiseAutoMove(autoMove);
     http = new BridgeHttpServer(service, token, logger);
     InetSocketAddress bound = http.start(new InetSocketAddress(config.bind(), config.port()));
     logger.info("GSC bridge listening on {}:{}", bound.getAddress().getHostAddress(), bound.getPort());
@@ -110,12 +113,25 @@ public final class GscBridgePlugin {
         .buildTask(this, () -> checkHealth(operations))
         .repeat(config.healthCheckInterval())
         .schedule();
+
+    if (autoMove) {
+      AutoMover mover = new AutoMover(config.autoMove(), backends, sessions, operations, config.fallback(), clock);
+      moveTask = proxy.getScheduler()
+          .buildTask(this, mover::tick)
+          .repeat(config.autoMove().interval())
+          .schedule();
+      logger.info("Moving waiting players automatically: {} every {} seconds", config.autoMove().batchSize(), config.autoMove().interval().toSeconds());
+    }
   }
 
   private void stop() {
     if (healthTask != null) {
       healthTask.cancel();
       healthTask = null;
+    }
+    if (moveTask != null) {
+      moveTask.cancel();
+      moveTask = null;
     }
     if (http != null) {
       http.stop();

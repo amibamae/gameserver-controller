@@ -24,9 +24,16 @@ exercised by the Go client. It has not yet run on a live Velocity proxy.
 - **Fallback on failure.** If a managed backend goes down, its players are
   sent to the fallback and put in that backend's waiting cohort instead of
   being disconnected.
-- **Moving waiting players.** Once a backend is ready, the controller reads
-  the waiting cohort and transfers those players. The plugin does not move
-  them on its own.
+- **Moving waiting players.** Once the controller has registered a backend
+  and it passes the health check, the plugin moves that backend's waiting
+  players there by itself: 5 every 5 seconds by default, oldest first
+  (`auto-move-batch`, `auto-move-interval-seconds`; set `auto-move = false`
+  to turn it off). Players who went to the lobby themselves, for example with
+  `/server lobby`, are not moved, and anyone can use `/server` to go sooner.
+  A failed move is retried after 30 seconds. Moves stop as soon as the
+  backend drains, is unregistered, or fails a health check. The controller
+  can still transfer players itself, for example during a migration
+  handover.
 - **Privacy.** Session IDs are random per connection. The API never returns
   player names, UUIDs, or IP addresses, and the plugin does not log session
   IDs.

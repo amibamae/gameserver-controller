@@ -25,6 +25,14 @@ fallback = "lobby"
 fallback-on-kick = true
 # Seconds between backend health checks.
 health-check-seconds = 5
+# Move players who are waiting on the fallback to their server once the
+# controller has registered it and it passes the health check. Players who
+# went to the fallback themselves are not moved. Players can still use
+# /server to go sooner.
+auto-move = true
+# How many waiting players to move per server each interval.
+auto-move-batch = 5
+auto-move-interval-seconds = 5
 
 # Per-hostname join backends. Players who connect through one of these
 # hostnames use this list instead of join-backends.

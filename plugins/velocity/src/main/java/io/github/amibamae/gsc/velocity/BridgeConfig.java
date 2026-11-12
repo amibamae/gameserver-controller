@@ -21,7 +21,8 @@ record BridgeConfig(
     Map<String, List<String>> forcedHosts,
     String fallback,
     boolean fallbackOnKick,
-    Duration healthCheckInterval) {
+    Duration healthCheckInterval,
+    AutoMover.Settings autoMove) {
 
   static BridgeConfig parse(Toml toml) {
     Toml bridge = toml.getTable("bridge");
@@ -74,8 +75,18 @@ record BridgeConfig(
     if (health < 1 || health > 300) {
       throw new IllegalArgumentException("routing.health-check-seconds must be between 1 and 300");
     }
+    long batch = routing.getLong("auto-move-batch", 5L);
+    if (batch < 1 || batch > 100) {
+      throw new IllegalArgumentException("routing.auto-move-batch must be between 1 and 100");
+    }
+    long interval = routing.getLong("auto-move-interval-seconds", 5L);
+    if (interval < 1 || interval > 300) {
+      throw new IllegalArgumentException("routing.auto-move-interval-seconds must be between 1 and 300");
+    }
+    AutoMover.Settings autoMove = new AutoMover.Settings(routing.getBoolean("auto-move", true), (int) batch,
+        Duration.ofSeconds(interval), AutoMover.Settings.DEFAULT.retryAfter());
     return new BridgeConfig(bind, (int) port, Path.of(tokenFile), instance, join, forced, fallback,
-        routing.getBoolean("fallback-on-kick", true), Duration.ofSeconds(health));
+        routing.getBoolean("fallback-on-kick", true), Duration.ofSeconds(health), autoMove);
   }
 
   private static List<String> backendList(List<?> values, String name) {
