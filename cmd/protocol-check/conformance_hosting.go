@@ -137,23 +137,9 @@ func evaluateHostingInstanceDestroyApproval(pkg *protocolPackage, fixture map[st
 	request := asObject(fixture["request_binding"])
 	approval := asObject(preconditions["approval"])
 	target := asObject(destroyInput["instance_ref"])
-	requestBindingMatches := stringValue(request, "action") == "hosting.instance.destroy" &&
-		stringValue(request, "logical_server_id") != "" &&
-		stringValue(request, "environment_id") == stringValue(target, "environment_id") &&
-		stringValue(request, "adapter_id") == stringValue(target, "adapter_id") &&
-		stringValue(request, "plan_fingerprint") != "" &&
-		reflect.DeepEqual(asObject(request["instance_ref"]), target)
-	approvalScopeMatches := stringValue(approval, "action") == stringValue(request, "action") &&
-		stringValue(approval, "logical_server_id") == stringValue(request, "logical_server_id") &&
-		stringValue(approval, "environment_id") == stringValue(request, "environment_id") &&
-		stringValue(approval, "adapter_id") == stringValue(request, "adapter_id") &&
-		reflect.DeepEqual(asObject(approval["instance_ref"]), target) &&
-		reflect.DeepEqual(asObject(approval["instance_ref"]), asObject(request["instance_ref"])) &&
-		stringValue(approval, "plan_fingerprint") != "" &&
-		stringValue(approval, "plan_fingerprint") == stringValue(request, "plan_fingerprint")
-	evaluatedAt, evaluationErr := time.Parse(time.RFC3339, stringValue(fixture, "evaluation_time"))
-	expiresAt, expiryErr := time.Parse(time.RFC3339, stringValue(approval, "expires_at"))
-	approvalCurrent := boolValue(approval, "valid") && evaluationErr == nil && expiryErr == nil && expiresAt.After(evaluatedAt)
+	requestBindingMatches := destroyRequestBindingMatches(request, target)
+	approvalScopeMatches := destroyApprovalScopeMatches(approval, request, target)
+	approvalCurrent := approvalCurrentAt(approval, stringValue(fixture, "evaluation_time"))
 	approvalApproverPresent := stringValue(approval, "approval_id") != "" && stringValue(approval, "approver_id") != ""
 	approvalBound := requestBindingMatches && approvalScopeMatches && approvalCurrent && approvalApproverPresent
 	allowed := boolValue(preconditions, "authorization_valid") && approvalBound &&
@@ -185,6 +171,39 @@ func evaluateHostingInstanceDestroyApproval(pkg *protocolPackage, fixture map[st
 		"target_bound":              targetBound,
 		"destruction_confirmed":     confirmed,
 	}, nil
+}
+
+// destroyRequestBindingMatches: the request is a hosting.instance.destroy
+// of this instance by its adapter in its environment, with a logical
+// server and a plan fingerprint.
+func destroyRequestBindingMatches(request, target map[string]any) bool {
+	return stringValue(request, "action") == "hosting.instance.destroy" &&
+		stringValue(request, "logical_server_id") != "" &&
+		stringValue(request, "environment_id") == stringValue(target, "environment_id") &&
+		stringValue(request, "adapter_id") == stringValue(target, "adapter_id") &&
+		stringValue(request, "plan_fingerprint") != "" &&
+		reflect.DeepEqual(asObject(request["instance_ref"]), target)
+}
+
+// destroyApprovalScopeMatches: the approval covers exactly the request's
+// action, server, environment, adapter, instance and plan.
+func destroyApprovalScopeMatches(approval, request, target map[string]any) bool {
+	return stringValue(approval, "action") == stringValue(request, "action") &&
+		stringValue(approval, "logical_server_id") == stringValue(request, "logical_server_id") &&
+		stringValue(approval, "environment_id") == stringValue(request, "environment_id") &&
+		stringValue(approval, "adapter_id") == stringValue(request, "adapter_id") &&
+		reflect.DeepEqual(asObject(approval["instance_ref"]), target) &&
+		reflect.DeepEqual(asObject(approval["instance_ref"]), asObject(request["instance_ref"])) &&
+		stringValue(approval, "plan_fingerprint") != "" &&
+		stringValue(approval, "plan_fingerprint") == stringValue(request, "plan_fingerprint")
+}
+
+// approvalCurrentAt: the approval is marked valid and expires after the
+// evaluation time; both times must parse.
+func approvalCurrentAt(approval map[string]any, evaluationTime string) bool {
+	evaluatedAt, evaluationErr := time.Parse(time.RFC3339, evaluationTime)
+	expiresAt, expiryErr := time.Parse(time.RFC3339, stringValue(approval, "expires_at"))
+	return boolValue(approval, "valid") && evaluationErr == nil && expiryErr == nil && expiresAt.After(evaluatedAt)
 }
 
 // evaluateHostingInstanceDestroy evaluates the conformance fixtures
@@ -347,38 +366,16 @@ func evaluateHostingCatalogList(pkg *protocolPackage, fixture map[string]any) (m
 	kind := stringValue(input, "catalog_kind")
 	catalogInput := asObject(input["catalog_input"])
 	catalogOutput := asObject(input["catalog_output"])
-	inputSchemaID, outputSchemaID, itemsKey, itemIDKey := "", "", "", ""
-	switch kind {
-	case "regions":
-		inputSchemaID = "urn:gameserver-controller:0.21.0-draft:hosting:regions-list-input"
-		outputSchemaID = "urn:gameserver-controller:0.21.0-draft:hosting:regions-list-output"
-		itemsKey, itemIDKey = "regions", "region_id"
-	case "plans":
-		inputSchemaID = "urn:gameserver-controller:0.21.0-draft:hosting:plans-list-input"
-		outputSchemaID = "urn:gameserver-controller:0.21.0-draft:hosting:plans-list-output"
-		itemsKey, itemIDKey = "plans", "plan_id"
-	case "os_offerings":
-		inputSchemaID = "urn:gameserver-controller:0.21.0-draft:hosting:os-offerings-list-input"
-		outputSchemaID = "urn:gameserver-controller:0.21.0-draft:hosting:os-offerings-list-output"
-		itemsKey, itemIDKey = "os_offerings", "offering_id"
-	}
+	inputSchemaID, outputSchemaID, itemsKey, itemIDKey := catalogShape(kind)
 	if err := pkg.validateSchema(inputSchemaID, catalogInput); err != nil {
 		return nil, fmt.Errorf("hosting %s list input does not match schema: %w", kind, err)
 	}
 	if err := pkg.validateSchema(outputSchemaID, catalogOutput); err != nil {
 		return nil, fmt.Errorf("hosting %s list output does not match schema: %w", kind, err)
 	}
-	numberValue := func(object map[string]any, key string) (float64, bool) {
-		raw, ok := object[key].(json.Number)
-		if !ok {
-			return 0, false
-		}
-		value, err := raw.Float64()
-		return value, err == nil
-	}
 	items := arrayValue(catalogOutput, itemsKey)
 	paginationContinues := stringValue(catalogOutput, "next_page_token") != ""
-	filterMatches, uniqueItems, eligible, withinPageSize := true, true, len(items) > 0, true
+	filterMatches, uniqueItems, eligible := true, true, len(items) > 0
 	seen := make(map[string]bool)
 	for _, raw := range items {
 		item := asObject(raw)
@@ -390,43 +387,15 @@ func evaluateHostingCatalogList(pkg *protocolPackage, fixture map[string]any) (m
 			uniqueItems = false
 		}
 		seen[key] = true
-		if kind == "regions" {
-			regionIDs := arrayValue(catalogInput, "region_ids")
-			if len(regionIDs) > 0 && !contains(regionIDs, stringValue(item, "region_id")) {
-				filterMatches = false
-			}
-		} else {
-			regionID := stringValue(catalogInput, "region_id")
-			if regionID != "" && stringValue(item, "region_id") != regionID {
-				filterMatches = false
-			}
-		}
-		if kind == "plans" {
-			if minimum, ok := numberValue(catalogInput, "minimum_vcpu_count"); ok {
-				if actual, ok := numberValue(item, "vcpu_count"); !ok || actual < minimum {
-					filterMatches = false
-				}
-			}
-			if minimum, ok := numberValue(catalogInput, "minimum_memory_mib"); ok {
-				if actual, ok := numberValue(item, "memory_mib"); !ok || actual < minimum {
-					filterMatches = false
-				}
-			}
-		}
-		if kind == "os_offerings" {
-			for _, field := range []string{"os_family", "architecture"} {
-				if requested := stringValue(catalogInput, field); requested != "" && stringValue(item, field) != requested {
-					filterMatches = false
-				}
-			}
+		if !catalogItemMatchesFilter(kind, catalogInput, item) {
+			filterMatches = false
 		}
 		if stringValue(item, "availability") != "available" {
 			eligible = false
 		}
 	}
-	if pageSize, ok := numberValue(catalogInput, "page_size"); ok && float64(len(items)) > pageSize {
-		withinPageSize = false
-	}
+	pageSize, ok := catalogNumber(catalogInput, "page_size")
+	withinPageSize := !ok || float64(len(items)) <= pageSize
 	return map[string]any{
 		"schemas_valid":              true,
 		"request_filter_matches":     filterMatches,
@@ -436,6 +405,67 @@ func evaluateHostingCatalogList(pkg *protocolPackage, fixture map[string]any) (m
 		"all_items_report_available": eligible,
 		"pagination_continues":       paginationContinues,
 	}, nil
+}
+
+// catalogShape returns the schemas and item keys of a hosting catalog
+// listing. An unknown kind returns empty values, so schema validation
+// fails.
+func catalogShape(kind string) (inputSchemaID, outputSchemaID, itemsKey, itemIDKey string) {
+	switch kind {
+	case "regions":
+		return "urn:gameserver-controller:0.21.0-draft:hosting:regions-list-input",
+			"urn:gameserver-controller:0.21.0-draft:hosting:regions-list-output", "regions", "region_id"
+	case "plans":
+		return "urn:gameserver-controller:0.21.0-draft:hosting:plans-list-input",
+			"urn:gameserver-controller:0.21.0-draft:hosting:plans-list-output", "plans", "plan_id"
+	case "os_offerings":
+		return "urn:gameserver-controller:0.21.0-draft:hosting:os-offerings-list-input",
+			"urn:gameserver-controller:0.21.0-draft:hosting:os-offerings-list-output", "os_offerings", "offering_id"
+	}
+	return "", "", "", ""
+}
+
+// catalogNumber reads a JSON number field; ok is false when it is absent
+// or not a valid number.
+func catalogNumber(object map[string]any, key string) (float64, bool) {
+	raw, ok := object[key].(json.Number)
+	if !ok {
+		return 0, false
+	}
+	value, err := raw.Float64()
+	return value, err == nil
+}
+
+// catalogItemMatchesFilter: the item satisfies the request's region filter
+// and, for plans, the minimum CPU and memory, and for OS offerings, the
+// requested family and architecture.
+func catalogItemMatchesFilter(kind string, request, item map[string]any) bool {
+	matches := true
+	if kind == "regions" {
+		regionIDs := arrayValue(request, "region_ids")
+		if len(regionIDs) > 0 && !contains(regionIDs, stringValue(item, "region_id")) {
+			matches = false
+		}
+	} else if regionID := stringValue(request, "region_id"); regionID != "" && stringValue(item, "region_id") != regionID {
+		matches = false
+	}
+	switch kind {
+	case "plans":
+		for _, minimum := range [][2]string{{"minimum_vcpu_count", "vcpu_count"}, {"minimum_memory_mib", "memory_mib"}} {
+			if want, ok := catalogNumber(request, minimum[0]); ok {
+				if actual, ok := catalogNumber(item, minimum[1]); !ok || actual < want {
+					matches = false
+				}
+			}
+		}
+	case "os_offerings":
+		for _, field := range []string{"os_family", "architecture"} {
+			if requested := stringValue(request, field); requested != "" && stringValue(item, field) != requested {
+				matches = false
+			}
+		}
+	}
+	return matches
 }
 
 // evaluateHostingInstanceInspect evaluates the conformance fixtures
