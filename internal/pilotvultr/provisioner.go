@@ -73,8 +73,19 @@ type CreateRequest struct {
 	ControllerSSHPublicKey string
 }
 
+// capacityStore is the part of the state store Provision uses. It is an
+// interface so that tests can wrap the real store and inject the failures and
+// concurrent state changes that crash recovery must handle.
+type capacityStore interface {
+	GetCapacityReservation(operationID string) (store.CapacityReservation, error)
+	ReleaseUnsentCapacityReservation(operationID, resourceKey string) error
+	ClaimCapacityCreateWithHandoff(operationID string, handoff hosthandoff.Handoff) (store.CapacityReservation, error)
+	ObserveCapacity(operationID string, observation store.CapacityProviderObservation) (store.CapacityReservation, error)
+}
+
 type Provisioner struct {
-	store       *store.BoltStore
+	store       capacityStore
+	reserve     func(store.CapacityReservation) (store.CapacityReservation, bool, error)
 	policy      pilotcapacity.Policy
 	provider    Provider
 	credentials CredentialResolver
@@ -88,6 +99,9 @@ func NewProvisioner(repository *store.BoltStore, policy pilotcapacity.Policy, pr
 	}
 	return &Provisioner{
 		store: repository, policy: policy, provider: provider,
+		reserve: func(reservation store.CapacityReservation) (store.CapacityReservation, bool, error) {
+			return policy.ReserveCapacity(repository, reservation)
+		},
 		credentials: credentials, credential: credentialRef,
 		now: func() time.Time { return time.Now().UTC() },
 	}, nil
@@ -186,7 +200,7 @@ func (p *Provisioner) Provision(ctx context.Context, request CreateRequest) (sto
 			}
 		}
 		var reserveErr error
-		result, _, reserveErr = p.policy.ReserveCapacity(p.store, reservation)
+		result, _, reserveErr = p.reserve(reservation)
 		if reserveErr != nil {
 			return reserveErr
 		}
