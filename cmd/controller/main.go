@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -109,9 +111,13 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 	go func() {
 		serveResult <- server.Serve(tls.NewListener(listener, tlsConfig))
 	}()
+	runtime.StartMonitoring(ctx, controllerLog(stdout))
 	if stdout != nil {
 		if adapters := runtime.AdapterIDs(); len(adapters) > 0 {
 			_, _ = fmt.Fprintf(stdout, "Registered adapters: %s\n", strings.Join(adapters, ", "))
+		}
+		if monitored := runtime.MonitoredIntegrations(); len(monitored) > 0 {
+			_, _ = fmt.Fprintf(stdout, "Monitoring proxies: %s; notifiers: %s\n", strings.Join(monitored, ", "), strings.Join(runtime.Notifiers(), ", "))
 		}
 		_, _ = fmt.Fprintf(stdout, "Management HTTPS listener ready at %s\n", management.ListenAddress)
 	}
@@ -133,5 +139,28 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 			return fmt.Errorf("serve management API: %w", err)
 		}
 		return nil
+	}
+}
+
+// controllerLog writes monitor events as one JSON object per line, which
+// journald keeps with the controller's other output. Fields hold only event
+// data and delivery status, never credentials or player data.
+func controllerLog(out io.Writer) func(string, map[string]any) {
+	var mu sync.Mutex
+	return func(message string, fields map[string]any) {
+		if out == nil {
+			return
+		}
+		line := map[string]any{"time": time.Now().UTC().Format(time.RFC3339), "message": message}
+		for name, value := range fields {
+			line[name] = value
+		}
+		encoded, err := json.Marshal(line)
+		if err != nil {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		_, _ = out.Write(append(encoded, '\n'))
 	}
 }

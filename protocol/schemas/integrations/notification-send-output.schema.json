@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:notification-send-output",
+  "title": "Notification send output",
+  "description": "Result of one delivery attempt. delivered: the destination accepted it. rejected: it was not delivered and a retry would fail the same way (refused by the destination, bad credentials, or a destination that does not meet the transport rules). outcome_unknown: delivery is not confirmed; it may have arrived, and the controller may retry with the same event_id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "outcome",
+    "observed_at"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "pattern": "^evt-[0-9a-f]{32}$"
+    },
+    "outcome": {
+      "enum": [
+        "delivered",
+        "rejected",
+        "outcome_unknown"
+      ]
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

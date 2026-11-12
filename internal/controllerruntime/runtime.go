@@ -15,6 +15,7 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/adapterprocess"
 	"github.com/amibamae/gameserver-controller/internal/config"
 	"github.com/amibamae/gameserver-controller/internal/credential"
+	"github.com/amibamae/gameserver-controller/internal/integrationmonitor"
 	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 	"github.com/amibamae/gameserver-controller/internal/store"
 	"github.com/amibamae/gameserver-controller/internal/workflow"
@@ -52,6 +53,11 @@ type Runtime struct {
 	// adapter was built for. Adapters without one cannot satisfy a network
 	// requirement.
 	adapterEnvironments map[string]string
+	// monitorTargets and destinations feed the outage monitor.
+	monitorTargets []integrationmonitor.Target
+	destinations   []integrationmonitor.Destination
+	monitorPolicy  integrationmonitor.Policy
+	stopMonitoring func()
 }
 
 // AdapterIDs returns the IDs of the adapters that were started and registered.
@@ -119,6 +125,9 @@ func Build(ctx context.Context, value config.Config, configPath string, options 
 	if runtime.Registry, err = adapter.NewRegistry(runtime.Schemas); err != nil {
 		return nil, err
 	}
+	if runtime.monitorPolicy, err = value.Controller.Monitoring.ProxyPolicy(); err != nil {
+		return nil, fmt.Errorf("controller.monitoring.proxy: %w", err)
+	}
 	if err = runtime.registerAdapters(ctx, value, options); err != nil {
 		return nil, err
 	}
@@ -179,6 +188,12 @@ func (r *Runtime) registerAdapters(ctx context.Context, value config.Config, opt
 		if built.unreachableProxy {
 			r.unreachableProxies = append(r.unreachableProxies, profile.ID)
 		}
+		if built.monitor != nil {
+			r.monitorTargets = append(r.monitorTargets, *built.monitor)
+		}
+		if built.destination != nil {
+			r.destinations = append(r.destinations, *built.destination)
+		}
 		if environment := config.BoundEnvironment(profile); environment != "" {
 			r.adapterEnvironments[profile.ID] = environment
 		}
@@ -190,9 +205,50 @@ func (r *Runtime) registerAdapters(ctx context.Context, value config.Config, opt
 	return nil
 }
 
-// Close stops process adapters, then closes the store. It is safe to call on
-// a partially built runtime.
+// MonitoredIntegrations returns the adapter IDs the outage monitor probes.
+func (r *Runtime) MonitoredIntegrations() []string {
+	ids := make([]string, 0, len(r.monitorTargets))
+	for _, target := range r.monitorTargets {
+		ids = append(ids, target.Subject.AdapterID)
+	}
+	return ids
+}
+
+// Notifiers returns the notifier adapter IDs that receive monitor events.
+func (r *Runtime) Notifiers() []string {
+	ids := make([]string, 0, len(r.destinations))
+	for _, destination := range r.destinations {
+		ids = append(ids, destination.AdapterID)
+	}
+	return ids
+}
+
+// StartMonitoring starts the proxy outage monitor and the notification
+// dispatcher. Every event also goes to log, the controller log channel. It
+// does nothing when no proxy is monitored. Close stops it.
+func (r *Runtime) StartMonitoring(ctx context.Context, log integrationmonitor.Logger) {
+	if len(r.monitorTargets) == 0 || r.stopMonitoring != nil {
+		return
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	dispatcher := integrationmonitor.NewDispatcher(r.Registry, r.destinations, log)
+	monitor := integrationmonitor.New(r.monitorPolicy, r.monitorTargets, dispatcher.Publish)
+	dispatcher.Start(ctx)
+	monitor.Start(ctx)
+	r.stopMonitoring = func() {
+		cancel()
+		monitor.Wait()
+		dispatcher.Wait()
+	}
+}
+
+// Close stops monitoring and process adapters, then closes the store. It is
+// safe to call on a partially built runtime.
 func (r *Runtime) Close() error {
+	if r.stopMonitoring != nil {
+		r.stopMonitoring()
+		r.stopMonitoring = nil
+	}
 	var failures []error
 	for i := len(r.processes) - 1; i >= 0; i-- {
 		if err := r.processes[i].Close(); err != nil {

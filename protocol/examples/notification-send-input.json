@@ -1,0 +1,19 @@
+{
+  "event": {
+    "event_id": "evt-6f0c2d7a9b3e41c58d2a7f1e0b9c4d36",
+    "event_type": "integration.proxy.unreachable",
+    "severity": "critical",
+    "occurred_at": "2026-11-12T18:01:00Z",
+    "environment_id": "production",
+    "adapter_id": "integration.velocity",
+    "subject": {
+      "adapter_id": "integration.velocity",
+      "environment_id": "production",
+      "resource_kind": "proxy-instance",
+      "external_id": "velocity-edge-001"
+    },
+    "outage_started_at": "2026-11-12T18:00:30Z",
+    "consecutive_failures": 2,
+    "summary": "Proxy integration.velocity (velocity-edge-001, production) is unreachable since 2026-11-12T18:00:30Z."
+  }
+}

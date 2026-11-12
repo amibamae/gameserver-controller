@@ -286,6 +286,14 @@
       "schema_id": "urn:gameserver-controller:0.21.0-draft:integrations:network-profile"
     },
     {
+      "path": "notification-send-input.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:integrations:notification-send-input"
+    },
+    {
+      "path": "notification-send-output.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:integrations:notification-send-output"
+    },
+    {
       "path": "operation-accepted.json",
       "schema_id": "urn:gameserver-controller:0.21.0-draft:operations:operation"
     },

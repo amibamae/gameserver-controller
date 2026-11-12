@@ -97,6 +97,8 @@ For each security-relevant action, audit the actor, action, target, environment,
 
 Minimize player identifiers and telemetry. Identifiable optional telemetry starts disabled and requires separate informed consent from the server owner and each affected player. Routine health checks must not silently become gameplay profiling.
 
+Operator notifications (integrations section 7) leave the controller for third-party destinations such as Discord, Slack, an email provider, or an ntfy server. They carry only the notification-event fields: the event type and severity, environment, adapter and proxy instance IDs, times, failure count, and a fixed-template summary. They never carry player data, session IDs, addresses, raw errors, URLs, or credentials. Destination secrets (webhook URLs, SMTP passwords, ntfy tokens) are systemd credentials, are passed to the notifier only as authorized secret references, and never appear in logs or events.
+
 ## 9. Security conformance
 
 Test that:

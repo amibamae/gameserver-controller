@@ -1,0 +1,346 @@
+{
+  "fixture_id": "integration.notification.proxy-outage-transitions",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.notification",
+  "purpose": "An outage is declared only after the threshold of consecutive failed probes, probes back off while failing, a changed reason during an outage is a new event, the first success after a declared outage is a recovery, and shorter failure streaks send nothing. Event IDs are stable so receivers can drop duplicate deliveries.",
+  "side_effect_expected": "none",
+  "input": {
+    "subject": {
+      "adapter_id": "integration.velocity",
+      "environment_id": "production",
+      "resource_kind": "proxy-instance",
+      "external_id": "velocity-edge-001"
+    },
+    "default_policy": {
+      "check_interval_seconds": 60,
+      "failure_threshold": 2,
+      "initial_backoff_seconds": 30,
+      "max_backoff_seconds": 300
+    },
+    "evaluations": [
+      {
+        "case_id": "steady-up-sends-nothing",
+        "probes": [
+          {
+            "observed_at": "2026-11-12T18:00:00Z",
+            "result": "up"
+          },
+          {
+            "observed_at": "2026-11-12T18:01:00Z",
+            "result": "up"
+          }
+        ]
+      },
+      {
+        "case_id": "single-failure-is-a-suppressed-flap",
+        "probes": [
+          {
+            "observed_at": "2026-11-12T18:00:00Z",
+            "result": "up"
+          },
+          {
+            "observed_at": "2026-11-12T18:01:00Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:01:30Z",
+            "result": "up"
+          }
+        ]
+      },
+      {
+        "case_id": "outage-declared-at-threshold-then-recovered",
+        "probes": [
+          {
+            "observed_at": "2026-11-12T18:00:00Z",
+            "result": "up"
+          },
+          {
+            "observed_at": "2026-11-12T18:01:00Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:01:30Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:02:30Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:04:30Z",
+            "result": "up"
+          }
+        ]
+      },
+      {
+        "case_id": "startup-failure-counts-toward-threshold",
+        "probes": [
+          {
+            "observed_at": "2026-11-12T18:00:00Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:00:30Z",
+            "result": "unreachable"
+          }
+        ]
+      },
+      {
+        "case_id": "backoff-doubles-and-is-capped",
+        "probes": [
+          {
+            "observed_at": "2026-11-12T18:00:00Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:00:30Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:01:30Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:03:30Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:07:30Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:12:30Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:17:30Z",
+            "result": "unreachable"
+          }
+        ]
+      },
+      {
+        "case_id": "identity-mismatch-during-outage-is-a-new-event",
+        "probes": [
+          {
+            "observed_at": "2026-11-12T18:00:00Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:00:30Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:01:30Z",
+            "result": "identity_mismatch"
+          },
+          {
+            "observed_at": "2026-11-12T18:03:30Z",
+            "result": "identity_mismatch"
+          },
+          {
+            "observed_at": "2026-11-12T18:07:30Z",
+            "result": "up"
+          }
+        ]
+      },
+      {
+        "case_id": "threshold-one-declares-immediately",
+        "probes": [
+          {
+            "observed_at": "2026-11-12T18:00:00Z",
+            "result": "unreachable"
+          },
+          {
+            "observed_at": "2026-11-12T18:00:30Z",
+            "result": "up"
+          }
+        ],
+        "policy": {
+          "check_interval_seconds": 60,
+          "failure_threshold": 1,
+          "initial_backoff_seconds": 30,
+          "max_backoff_seconds": 300
+        }
+      },
+      {
+        "case_id": "mismatch-before-threshold-is-suppressed",
+        "probes": [
+          {
+            "observed_at": "2026-11-12T18:00:00Z",
+            "result": "identity_mismatch"
+          },
+          {
+            "observed_at": "2026-11-12T18:00:30Z",
+            "result": "up"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "steady-up-sends-nothing",
+        "events": [],
+        "next_probe_delays_seconds": [
+          60,
+          60
+        ],
+        "events_schema_valid": true
+      },
+      {
+        "case_id": "single-failure-is-a-suppressed-flap",
+        "events": [],
+        "next_probe_delays_seconds": [
+          60,
+          30,
+          60
+        ],
+        "events_schema_valid": true
+      },
+      {
+        "case_id": "outage-declared-at-threshold-then-recovered",
+        "events": [
+          {
+            "event_id": "evt-b927d80f2b2e1ecd8c0d459e54f1dd48",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:01:30Z",
+            "outage_started_at": "2026-11-12T18:01:00Z",
+            "consecutive_failures": 2
+          },
+          {
+            "event_id": "evt-7b2aaaacbeb6c8b0bb80ad701d1ab5b0",
+            "event_type": "integration.proxy.recovered",
+            "severity": "info",
+            "occurred_at": "2026-11-12T18:04:30Z",
+            "outage_started_at": "2026-11-12T18:01:00Z",
+            "consecutive_failures": 3
+          }
+        ],
+        "next_probe_delays_seconds": [
+          60,
+          30,
+          60,
+          120,
+          60
+        ],
+        "events_schema_valid": true
+      },
+      {
+        "case_id": "startup-failure-counts-toward-threshold",
+        "events": [
+          {
+            "event_id": "evt-f555992e894bb47e3bf5885d9efcef03",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:00:30Z",
+            "outage_started_at": "2026-11-12T18:00:00Z",
+            "consecutive_failures": 2
+          }
+        ],
+        "next_probe_delays_seconds": [
+          30,
+          60
+        ],
+        "events_schema_valid": true
+      },
+      {
+        "case_id": "backoff-doubles-and-is-capped",
+        "events": [
+          {
+            "event_id": "evt-f555992e894bb47e3bf5885d9efcef03",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:00:30Z",
+            "outage_started_at": "2026-11-12T18:00:00Z",
+            "consecutive_failures": 2
+          }
+        ],
+        "next_probe_delays_seconds": [
+          30,
+          60,
+          120,
+          240,
+          300,
+          300,
+          300
+        ],
+        "events_schema_valid": true
+      },
+      {
+        "case_id": "identity-mismatch-during-outage-is-a-new-event",
+        "events": [
+          {
+            "event_id": "evt-f555992e894bb47e3bf5885d9efcef03",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:00:30Z",
+            "outage_started_at": "2026-11-12T18:00:00Z",
+            "consecutive_failures": 2
+          },
+          {
+            "event_id": "evt-ae348a6f719a24465d0764c4d157ede6",
+            "event_type": "integration.proxy.identity_mismatch",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:01:30Z",
+            "outage_started_at": "2026-11-12T18:00:00Z",
+            "consecutive_failures": 3
+          },
+          {
+            "event_id": "evt-fdba48d5ced37f17ef084749958b8871",
+            "event_type": "integration.proxy.recovered",
+            "severity": "info",
+            "occurred_at": "2026-11-12T18:07:30Z",
+            "outage_started_at": "2026-11-12T18:00:00Z",
+            "consecutive_failures": 4
+          }
+        ],
+        "next_probe_delays_seconds": [
+          30,
+          60,
+          120,
+          240,
+          60
+        ],
+        "events_schema_valid": true
+      },
+      {
+        "case_id": "threshold-one-declares-immediately",
+        "events": [
+          {
+            "event_id": "evt-fcf8282f44918ce5e3989c2d7d122b98",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:00:00Z",
+            "outage_started_at": "2026-11-12T18:00:00Z",
+            "consecutive_failures": 1
+          },
+          {
+            "event_id": "evt-6aed12a62350bc6bf31909f93d2bc365",
+            "event_type": "integration.proxy.recovered",
+            "severity": "info",
+            "occurred_at": "2026-11-12T18:00:30Z",
+            "outage_started_at": "2026-11-12T18:00:00Z",
+            "consecutive_failures": 1
+          }
+        ],
+        "next_probe_delays_seconds": [
+          30,
+          60
+        ],
+        "events_schema_valid": true
+      },
+      {
+        "case_id": "mismatch-before-threshold-is-suppressed",
+        "events": [],
+        "next_probe_delays_seconds": [
+          30,
+          60
+        ],
+        "events_schema_valid": true
+      }
+    ]
+  }
+}

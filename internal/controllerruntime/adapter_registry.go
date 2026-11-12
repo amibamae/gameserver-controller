@@ -7,6 +7,7 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/adapterprocess"
 	"github.com/amibamae/gameserver-controller/internal/config"
+	"github.com/amibamae/gameserver-controller/internal/integrationmonitor"
 	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 )
 
@@ -36,6 +37,10 @@ type builtAdapter struct {
 	process *adapterprocess.Process
 	// unreachableProxy reports a proxy whose bridge did not answer at startup.
 	unreachableProxy bool
+	// monitor is an integration the outage monitor should probe.
+	monitor *integrationmonitor.Target
+	// destination is a notifier the outage monitor should send events to.
+	destination *integrationmonitor.Destination
 }
 
 // adapterBuilder is the runtime half of an implementation.

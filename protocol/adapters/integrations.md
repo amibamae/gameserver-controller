@@ -122,6 +122,30 @@ The controller MUST resolve a server's network profile before planning operation
 
 Monitoring/notification adapters receive only explicitly permitted event fields and destinations. They MUST declare data transmitted, retention where known, and privacy implications. Optional player telemetry remains disabled by default and requires the separate consent rules in the security specification.
 
+### 7.1 Proxy availability
+
+The controller probes each proxy integration it runs. A probe checks only availability and identity (for Velocity, the bridge's `GET /v1/info`); it MUST NOT change proxy state. A probe result is `up`, `unreachable`, or `identity_mismatch` (the proxy answers, but with a different proxy instance or an unsupported API version).
+
+- **Outage:** an outage is declared after `failure_threshold` consecutive failed probes; a failed check at startup counts as the first. Declaring it emits one event for its reason. If the reason changes during the outage, the controller emits one event for the new reason.
+- **Recovery:** the first `up` after a declared outage emits `integration.proxy.recovered`. A failure streak shorter than the threshold ends silently, so one dropped probe does not page anyone.
+- **Probe spacing:** while up, probes run every `check_interval`. After the n-th consecutive failure the next probe waits `initial_backoff · 2^(n-1)`, capped at `max_backoff`. Defaults are 1 minute, 2 failures, 30 seconds, and 5 minutes.
+- **Proxy calls:** any failed probe makes the controller verify the proxy identity again before its next proxy call. Calls made while the identity is unverified fail without acting.
+- **Event identity:** `event_id` is `evt-` followed by the first 16 bytes, in lowercase hex, of SHA-256 over the adapter ID, event type, `outage_started_at`, and `occurred_at`, joined by NUL bytes. Timestamps are UTC RFC 3339.
+
+Events use [notification-event.schema.json](../schemas/integrations/notification-event.schema.json). The controller also writes every event as one line to its own log.
+
+### 7.2 Notification delivery
+
+A notifier adapter advertises `integration.notification.send` with [notification-send-input](../schemas/integrations/notification-send-input.schema.json) and [notification-send-output](../schemas/integrations/notification-send-output.schema.json). Each notifier is bound to one environment and receives only events for that environment, optionally filtered by event type.
+
+A notification changes no managed resource. The capability is therefore declared with `mutating: false`, and it runs outside durable operations. Delivery is at least once:
+
+- `delivered` and `rejected` are final. `rejected` means a retry would fail the same way, for example a refused request, bad credentials, or a destination that breaks the transport rules.
+- `outcome_unknown` is retried with the same event after 30 seconds, doubling, for at most 5 attempts. A response that is schema-invalid or names another event counts as `outcome_unknown`. Receivers can drop duplicates by `event_id`.
+- Delivery state is kept in memory only. A controller restart drops undelivered events, and a restart during an outage reports that outage again once the threshold is reached after startup.
+
+**Data sent:** exactly the notification-event fields. These are the event type and severity, the environment, adapter, and proxy instance IDs, the outage start, the time the event occurred, the failure count, and a fixed-template summary. Events MUST NOT contain player names, account IDs, session IDs, IP addresses, chat, raw error text, URLs, or credentials, and the schema allows no other fields. Each destination keeps what it receives under its own retention policy, which the controller does not control. Webhook URLs, SMTP passwords, and ntfy tokens are secrets that come from systemd credentials.
+
 ## 8. Conformance cases
 
 Test registration before readiness, drain/unregister outcome uncertainty, player-count staleness, target mismatch, expired or wrong-instance readiness assertions, sessions outside the waiting cohort, disconnected sessions, partial batches, unknown transfer outcomes, reconciliation-before-retry, waiting-cohort freshness and binding, direct-join DNS changes before readiness, unconfirmed or mismatched DNS values, and privacy/redaction boundaries.

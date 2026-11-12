@@ -165,6 +165,7 @@ An adapter profile may set `implementation` to tell the controller runtime to st
 - `implementation: wasabi` builds the built-in Wasabi storage adapter (category `storage` only). The `wasabi:` block holds non-secret settings, and `secret_refs` must define exactly `access_key_id` and `secret_access_key`. A server that uses this adapter must be in the same environment as `wasabi.environment_id`. See [the Wasabi adapter](WASABI_STORAGE_ADAPTER.md) for the meaning of each field.
 - `implementation: velocity` builds the built-in Velocity proxy adapter (category `integration`). The `velocity:` block names the `environment_id`, the `bridge_url` of the [proxy bridge](PROXY_BRIDGE_API.md) (`https`, or plain `http` only to a loopback address), the `proxy_instance_id` the bridge must report, and an optional request `timeout` (at most 2m). `secret_refs` must define exactly `bridge_token`. At startup the controller checks the bridge's identity: a different instance or API version stops startup; an unreachable bridge does not, but every proxy call is refused until the check passes. Backends come from the network profiles of the servers routed through this proxy. An `instance_ip` backend looks its IP up from Vultr using the `api_token` secret ref of the server's hosting profile; without one, the lookup fails and that backend cannot be registered.
 - `implementation: cloudflare` builds the built-in Cloudflare DNS adapter (category `integration`) for one zone. The `cloudflare:` block names the `environment_id`, the 32-character `zone_id`, and the `zone_name`. `secret_refs` must define exactly `api_token` (a token scoped to DNS edit for that zone). The records it may change are derived from network profiles: each hostname backend's name (`backend_address`), and each `direct_dns` join name (`direct_join` and `fallback`, with `fallback_records`). A Cloudflare profile that no network profile uses is rejected.
+- `implementation: webhook`, `smtp`, and `ntfy` build operator notifiers (category `integration`). See "Proxy monitoring and notifications" below.
 - `implementation: process` starts an adapter executable over [`jsonrpc-stdio-v1`](../protocol/rpc/transport.md). The executable must report the configured adapter ID and category, or startup fails. `env` is the complete environment for the child; nothing is inherited from the controller, so put only non-secret settings there. Process adapters cannot use the storage byte-stream profile yet.
 
 ```yaml
@@ -200,6 +201,44 @@ adapters:
 ```
 
 `config-check validate` also checks the Wasabi, Velocity, and Cloudflare settings with each adapter's own rules and confirms that each process path is an executable file. It never contacts a provider or reads credentials.
+
+### Proxy monitoring and notifications
+
+The controller probes every Velocity bridge it runs and notifies operators when one goes down and when it comes back. The optional `controller.monitoring.proxy` block tunes it; every field has a default:
+
+```yaml
+controller:
+  monitoring:
+    proxy:
+      check_interval: 1m    # probe spacing while up (1s to 1h)
+      failure_threshold: 2  # consecutive failures that declare an outage (1 to 100)
+      initial_backoff: 30s  # delay after the first failure; doubles per failure
+      max_backoff: 5m       # backoff cap (at least initial_backoff, at most 24h)
+```
+
+Every event is written to the controller log. To also send events elsewhere, add notifier adapters, one file each in `adapters.d/`. Each notifier is bound to one `environment_id` and gets only that environment's events. `events` optionally limits them to `integration.proxy.unreachable`, `integration.proxy.identity_mismatch`, and `integration.proxy.recovered`, and `timeout` (at most 1m, default 20s) bounds one attempt.
+
+| Implementation | Block | Secret (`secret_refs`) | Settings |
+|---|---|---|---|
+| `webhook` | `webhook:` | `webhook_url`: the full https webhook URL | `format`: `discord`, `slack`, or `json` |
+| `smtp` | `smtp:` | `password` | `host`, `port`, `tls` (`starttls` or `implicit`), `username`, `from`, `to` (1 to 20 bare addresses) |
+| `ntfy` | `ntfy:` | `access_token` | `server_url` (https, or http to loopback), `topic` |
+
+```yaml
+# adapters.d/50-notify-discord.yaml
+id: integration.notify-discord
+category: integration
+implementation: webhook
+secret_refs:
+  webhook_url:
+    secret_ref: systemd-credential://discord-alerts-webhook-url
+    purpose: Discord incoming webhook for controller alerts
+webhook:
+  environment_id: production
+  format: discord
+```
+
+See [notifications](NOTIFICATIONS.md) for what each destination receives and how to set it up.
 
 Relative state-store paths are resolved against the configuration file by `ResolveStateStorePath`; absolute local paths remain absolute. The validator does not create parent directories, canonicalize symlinks, or stop a separate runtime from opening a path.
 

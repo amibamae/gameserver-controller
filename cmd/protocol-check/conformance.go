@@ -82,6 +82,10 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 		return evaluateDNSRecordUpsert(pkg, fixture)
 	case "integration.network-profile.requirements":
 		return evaluateNetworkProfileRequirements(pkg, fixture)
+	case "integration.notification.proxy-outage-transitions":
+		return evaluateProxyOutageTransitions(pkg, fixture)
+	case "integration.notification.send.outcome-and-privacy":
+		return evaluateNotificationSend(pkg, fixture)
 	case "game.configure.pinned-schema-and-result-binding":
 		return evaluateConfiguration(pkg, fixture)
 	case "lifecycle.reject.unlisted-transition":

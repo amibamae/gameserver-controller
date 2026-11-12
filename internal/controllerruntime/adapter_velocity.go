@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/config"
+	"github.com/amibamae/gameserver-controller/internal/integrationmonitor"
 	"github.com/amibamae/gameserver-controller/internal/velocityproxy"
 	"github.com/amibamae/gameserver-controller/internal/vultrapi"
 )
@@ -84,7 +85,15 @@ func init() {
 			if err != nil {
 				return builtAdapter{}, err
 			}
-			return builtAdapter{implementation: parts.adapter, unreachableProxy: !reachable}, nil
+			initial := integrationmonitor.Up
+			if !reachable {
+				initial = integrationmonitor.Unreachable
+			}
+			v, _ := config.SettingsOf[*VelocitySettings](b.profile)
+			return builtAdapter{implementation: parts.adapter, unreachableProxy: !reachable, monitor: &integrationmonitor.Target{
+				Subject: integrationmonitor.Subject{AdapterID: b.profile.ID, EnvironmentID: v.EnvironmentID, ResourceKind: "proxy-instance", ExternalID: v.ProxyInstanceID},
+				Probe:   parts.bridge.Probe, Initial: initial,
+			}}, nil
 		},
 	})
 }
@@ -212,6 +221,23 @@ func (b *checkedBridge) startupCheck(ctx context.Context) (reachable bool, err e
 		return false, nil
 	default:
 		return false, err
+	}
+}
+
+// Probe re-runs the identity check for the outage monitor. Any failure clears
+// the verified flag, so proxy calls check the identity again before acting.
+func (b *checkedBridge) Probe(ctx context.Context) integrationmonitor.Result {
+	err := b.inner.CheckInfo(ctx)
+	b.mu.Lock()
+	b.verified = err == nil
+	b.mu.Unlock()
+	switch {
+	case err == nil:
+		return integrationmonitor.Up
+	case errors.Is(err, velocityproxy.ErrBridgeIdentity):
+		return integrationmonitor.IdentityMismatch
+	default:
+		return integrationmonitor.Unreachable
 	}
 }
 

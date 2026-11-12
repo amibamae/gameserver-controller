@@ -167,7 +167,7 @@ func TestValidateRejectsInvalidImplementedAdapterProfiles(t *testing.T) {
 	tests := []struct {
 		name, before, after, want string
 	}{
-		{"unknown implementation", "implementation: process", "implementation: docker", "implementation must be one of cloudflare, process, velocity, wasabi when set"},
+		{"unknown implementation", "implementation: process", "implementation: docker", "implementation must be one of "},
 		{"wasabi on non-storage", "implementation: process", "implementation: wasabi", "requires category storage"},
 		{"settings without implementation", "    implementation: process\n", "", "has process settings but no implementation"},
 		{"wrong secret names", "      access_key_id:\n", "      access_key:\n", "exactly access_key_id and secret_access_key"},

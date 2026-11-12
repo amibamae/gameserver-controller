@@ -1,0 +1,367 @@
+{
+  "fixture_id": "integration.notification.send.outcome-and-privacy",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "integration.notification.send",
+  "purpose": "Only schema-valid events without player data are sent. A delivery result counts only when it is schema-valid and names the sent event; anything else is outcome_unknown. Delivered and rejected are final, and outcome_unknown is retried with the same event after 30 seconds, doubling, for at most 5 attempts.",
+  "side_effect_expected": "simulated",
+  "input": {
+    "privacy_probes": [
+      "synthetic-player-name-canary",
+      "synthetic-account-uuid-canary",
+      "synthetic-ip-address-canary",
+      "synthetic-session-id-canary"
+    ],
+    "max_attempts": 5,
+    "evaluations": [
+      {
+        "case_id": "delivered-on-first-attempt",
+        "input": {
+          "event": {
+            "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:01:00Z",
+            "environment_id": "production",
+            "adapter_id": "integration.velocity",
+            "subject": {
+              "adapter_id": "integration.velocity",
+              "environment_id": "production",
+              "resource_kind": "proxy-instance",
+              "external_id": "velocity-edge-001"
+            },
+            "outage_started_at": "2026-11-12T18:00:30Z",
+            "consecutive_failures": 2,
+            "summary": "Proxy integration.velocity (velocity-edge-001, production) is unreachable since 2026-11-12T18:00:30Z."
+          }
+        },
+        "attempt": 1,
+        "output": {
+          "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+          "outcome": "delivered",
+          "observed_at": "2026-11-12T18:01:01Z"
+        }
+      },
+      {
+        "case_id": "rejected-is-final",
+        "input": {
+          "event": {
+            "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:01:00Z",
+            "environment_id": "production",
+            "adapter_id": "integration.velocity",
+            "subject": {
+              "adapter_id": "integration.velocity",
+              "environment_id": "production",
+              "resource_kind": "proxy-instance",
+              "external_id": "velocity-edge-001"
+            },
+            "outage_started_at": "2026-11-12T18:00:30Z",
+            "consecutive_failures": 2,
+            "summary": "Proxy integration.velocity (velocity-edge-001, production) is unreachable since 2026-11-12T18:00:30Z."
+          }
+        },
+        "attempt": 1,
+        "output": {
+          "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+          "outcome": "rejected",
+          "observed_at": "2026-11-12T18:01:01Z"
+        }
+      },
+      {
+        "case_id": "unknown-is-retried-after-30s",
+        "input": {
+          "event": {
+            "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:01:00Z",
+            "environment_id": "production",
+            "adapter_id": "integration.velocity",
+            "subject": {
+              "adapter_id": "integration.velocity",
+              "environment_id": "production",
+              "resource_kind": "proxy-instance",
+              "external_id": "velocity-edge-001"
+            },
+            "outage_started_at": "2026-11-12T18:00:30Z",
+            "consecutive_failures": 2,
+            "summary": "Proxy integration.velocity (velocity-edge-001, production) is unreachable since 2026-11-12T18:00:30Z."
+          }
+        },
+        "attempt": 1,
+        "output": {
+          "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+          "outcome": "outcome_unknown",
+          "observed_at": "2026-11-12T18:01:01Z"
+        }
+      },
+      {
+        "case_id": "unknown-third-attempt-waits-2m",
+        "input": {
+          "event": {
+            "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:01:00Z",
+            "environment_id": "production",
+            "adapter_id": "integration.velocity",
+            "subject": {
+              "adapter_id": "integration.velocity",
+              "environment_id": "production",
+              "resource_kind": "proxy-instance",
+              "external_id": "velocity-edge-001"
+            },
+            "outage_started_at": "2026-11-12T18:00:30Z",
+            "consecutive_failures": 2,
+            "summary": "Proxy integration.velocity (velocity-edge-001, production) is unreachable since 2026-11-12T18:00:30Z."
+          }
+        },
+        "attempt": 3,
+        "output": {
+          "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+          "outcome": "outcome_unknown",
+          "observed_at": "2026-11-12T18:01:01Z"
+        }
+      },
+      {
+        "case_id": "unknown-on-last-attempt-is-not-retried",
+        "input": {
+          "event": {
+            "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:01:00Z",
+            "environment_id": "production",
+            "adapter_id": "integration.velocity",
+            "subject": {
+              "adapter_id": "integration.velocity",
+              "environment_id": "production",
+              "resource_kind": "proxy-instance",
+              "external_id": "velocity-edge-001"
+            },
+            "outage_started_at": "2026-11-12T18:00:30Z",
+            "consecutive_failures": 2,
+            "summary": "Proxy integration.velocity (velocity-edge-001, production) is unreachable since 2026-11-12T18:00:30Z."
+          }
+        },
+        "attempt": 5,
+        "output": {
+          "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+          "outcome": "outcome_unknown",
+          "observed_at": "2026-11-12T18:01:01Z"
+        }
+      },
+      {
+        "case_id": "output-for-another-event-counts-as-unknown",
+        "input": {
+          "event": {
+            "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:01:00Z",
+            "environment_id": "production",
+            "adapter_id": "integration.velocity",
+            "subject": {
+              "adapter_id": "integration.velocity",
+              "environment_id": "production",
+              "resource_kind": "proxy-instance",
+              "external_id": "velocity-edge-001"
+            },
+            "outage_started_at": "2026-11-12T18:00:30Z",
+            "consecutive_failures": 2,
+            "summary": "Proxy integration.velocity (velocity-edge-001, production) is unreachable since 2026-11-12T18:00:30Z."
+          }
+        },
+        "attempt": 1,
+        "output": {
+          "event_id": "evt-00000000000000000000000000000000",
+          "outcome": "delivered",
+          "observed_at": "2026-11-12T18:01:01Z"
+        }
+      },
+      {
+        "case_id": "schema-invalid-output-counts-as-unknown",
+        "input": {
+          "event": {
+            "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:01:00Z",
+            "environment_id": "production",
+            "adapter_id": "integration.velocity",
+            "subject": {
+              "adapter_id": "integration.velocity",
+              "environment_id": "production",
+              "resource_kind": "proxy-instance",
+              "external_id": "velocity-edge-001"
+            },
+            "outage_started_at": "2026-11-12T18:00:30Z",
+            "consecutive_failures": 2,
+            "summary": "Proxy integration.velocity (velocity-edge-001, production) is unreachable since 2026-11-12T18:00:30Z."
+          }
+        },
+        "attempt": 2,
+        "output": {
+          "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+          "outcome": "sent",
+          "observed_at": "2026-11-12T18:01:01Z"
+        }
+      },
+      {
+        "case_id": "player-field-is-rejected-by-the-schema",
+        "input": {
+          "event": {
+            "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:01:00Z",
+            "environment_id": "production",
+            "adapter_id": "integration.velocity",
+            "subject": {
+              "adapter_id": "integration.velocity",
+              "environment_id": "production",
+              "resource_kind": "proxy-instance",
+              "external_id": "velocity-edge-001"
+            },
+            "outage_started_at": "2026-11-12T18:00:30Z",
+            "consecutive_failures": 2,
+            "summary": "Proxy integration.velocity (velocity-edge-001, production) is unreachable since 2026-11-12T18:00:30Z.",
+            "player_name": "synthetic-player-name-canary"
+          }
+        },
+        "attempt": 1
+      },
+      {
+        "case_id": "player-data-in-summary-is-not-sent",
+        "input": {
+          "event": {
+            "event_id": "evt-c7c3a069d15225d3f11807f464f583de",
+            "event_type": "integration.proxy.unreachable",
+            "severity": "critical",
+            "occurred_at": "2026-11-12T18:01:00Z",
+            "environment_id": "production",
+            "adapter_id": "integration.velocity",
+            "subject": {
+              "adapter_id": "integration.velocity",
+              "environment_id": "production",
+              "resource_kind": "proxy-instance",
+              "external_id": "velocity-edge-001"
+            },
+            "outage_started_at": "2026-11-12T18:00:30Z",
+            "consecutive_failures": 2,
+            "summary": "Proxy integration.velocity dropped synthetic-player-name-canary at synthetic-ip-address-canary."
+          }
+        },
+        "attempt": 1
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "delivered-on-first-attempt",
+        "input_schema_valid": true,
+        "privacy_probes_absent": true,
+        "send_permitted": true,
+        "output_schema_valid": true,
+        "output_bound": true,
+        "effective_outcome": "delivered",
+        "delivered": true,
+        "retry_permitted": false,
+        "retry_delay_seconds": 0
+      },
+      {
+        "case_id": "rejected-is-final",
+        "input_schema_valid": true,
+        "privacy_probes_absent": true,
+        "send_permitted": true,
+        "output_schema_valid": true,
+        "output_bound": true,
+        "effective_outcome": "rejected",
+        "delivered": false,
+        "retry_permitted": false,
+        "retry_delay_seconds": 0
+      },
+      {
+        "case_id": "unknown-is-retried-after-30s",
+        "input_schema_valid": true,
+        "privacy_probes_absent": true,
+        "send_permitted": true,
+        "output_schema_valid": true,
+        "output_bound": true,
+        "effective_outcome": "outcome_unknown",
+        "delivered": false,
+        "retry_permitted": true,
+        "retry_delay_seconds": 30
+      },
+      {
+        "case_id": "unknown-third-attempt-waits-2m",
+        "input_schema_valid": true,
+        "privacy_probes_absent": true,
+        "send_permitted": true,
+        "output_schema_valid": true,
+        "output_bound": true,
+        "effective_outcome": "outcome_unknown",
+        "delivered": false,
+        "retry_permitted": true,
+        "retry_delay_seconds": 120
+      },
+      {
+        "case_id": "unknown-on-last-attempt-is-not-retried",
+        "input_schema_valid": true,
+        "privacy_probes_absent": true,
+        "send_permitted": true,
+        "output_schema_valid": true,
+        "output_bound": true,
+        "effective_outcome": "outcome_unknown",
+        "delivered": false,
+        "retry_permitted": false,
+        "retry_delay_seconds": 0
+      },
+      {
+        "case_id": "output-for-another-event-counts-as-unknown",
+        "input_schema_valid": true,
+        "privacy_probes_absent": true,
+        "send_permitted": true,
+        "output_schema_valid": true,
+        "output_bound": false,
+        "effective_outcome": "outcome_unknown",
+        "delivered": false,
+        "retry_permitted": true,
+        "retry_delay_seconds": 30
+      },
+      {
+        "case_id": "schema-invalid-output-counts-as-unknown",
+        "input_schema_valid": true,
+        "privacy_probes_absent": true,
+        "send_permitted": true,
+        "output_schema_valid": false,
+        "output_bound": true,
+        "effective_outcome": "outcome_unknown",
+        "delivered": false,
+        "retry_permitted": true,
+        "retry_delay_seconds": 60
+      },
+      {
+        "case_id": "player-field-is-rejected-by-the-schema",
+        "input_schema_valid": false,
+        "privacy_probes_absent": false,
+        "send_permitted": false,
+        "delivered": false,
+        "retry_permitted": false,
+        "retry_delay_seconds": 0
+      },
+      {
+        "case_id": "player-data-in-summary-is-not-sent",
+        "input_schema_valid": true,
+        "privacy_probes_absent": false,
+        "send_permitted": false,
+        "delivered": false,
+        "retry_permitted": false,
+        "retry_delay_seconds": 0
+      }
+    ]
+  }
+}
