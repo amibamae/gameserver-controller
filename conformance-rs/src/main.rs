@@ -4,6 +4,7 @@
 //! docs/PROTOCOL_INTEROPERABILITY_PLAN.md ("Evidence to retain").
 
 mod fixtures;
+mod jcs;
 mod json;
 mod manifest;
 mod schemas;

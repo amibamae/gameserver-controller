@@ -206,6 +206,7 @@ The build uses the Rust toolchain (rustc and cargo, MIT OR Apache-2.0, by the Ru
 | `regex-automata` | 0.4.18 | MIT OR Apache-2.0 | The Rust Project Developers, Andrew Gallant | [source](https://github.com/rust-lang/regex) |  |
 | `regex-syntax` | 0.8.11 | MIT OR Apache-2.0 | The Rust Project Developers, Andrew Gallant | [source](https://github.com/rust-lang/regex) |  |
 | `rustversion` | 1.0.23 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/rustversion) |  |
+| `ryu-js` | 1.0.3 | Apache-2.0 OR BSL-1.0 (used under Apache-2.0) | David Tolnay, boa-dev | [source](https://github.com/boa-dev/ryu-js) | ECMAScript number formatting for RFC 8785 JCS in `conformance-rs`. License checked in the crate's `Cargo.toml` and `LICENSE-APACHE`. |
 | `scopeguard` | 1.2.0 | MIT OR Apache-2.0 | bluss | [source](https://github.com/bluss/scopeguard) |  |
 | `serde` | 1.0.229 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay | [source](https://github.com/serde-rs/serde) |  |
 | `serde_core` | 1.0.229 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay | [source](https://github.com/serde-rs/serde) |  |
