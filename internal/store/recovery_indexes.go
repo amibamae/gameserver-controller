@@ -20,86 +20,117 @@ func verifyRecoveryIndexes(tx *bolt.Tx) error {
 	operationLocks := tx.Bucket(operationLocksBucket)
 	keyVersions := tx.Bucket(keyVersionsBucket)
 
+	knownVersions, err := verifyRecoveryKeyVersions(keyVersions)
+	if err != nil {
+		return err
+	}
+	idempotencyByOperation, err := verifyRecoveryIdempotency(idempotency, knownVersions)
+	if err != nil {
+		return err
+	}
+	reverseLocks, err := verifyRecoveryReverseLocks(operations, operationLocks, locks)
+	if err != nil {
+		return err
+	}
+	if err := verifyRecoveryForwardLocks(operations, locks, reverseLocks); err != nil {
+		return err
+	}
+	return verifyRecoveryOperations(operations, idempotencyByOperation, reverseLocks)
+}
+
+func verifyRecoveryKeyVersions(keyVersions *bolt.Bucket) (map[string]struct{}, error) {
 	knownVersions := make(map[string]struct{})
 	versionCursor := keyVersions.Cursor()
 	for version, value := versionCursor.First(); version != nil; version, value = versionCursor.Next() {
 		if !validKeyVersion(string(version)) || len(value) == 0 {
-			return fmt.Errorf("%w: invalid idempotency key version metadata", ErrCorruptStore)
+			return nil, fmt.Errorf("%w: invalid idempotency key version metadata", ErrCorruptStore)
 		}
 		knownVersions[string(version)] = struct{}{}
 	}
 
+	return knownVersions, nil
+}
+
+func verifyRecoveryIdempotency(idempotency *bolt.Bucket, knownVersions map[string]struct{}) (map[string]idempotencyEntry, error) {
 	idempotencyByOperation := make(map[string]idempotencyEntry)
 	cursor := idempotency.Cursor()
 	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
 		entry, err := decodeIdempotencyEntry(value)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		parts := strings.SplitN(string(key), ":", 2)
 		if len(parts) != 2 || parts[0] != entry.KeyVersion || len(parts[1]) != 64 {
-			return fmt.Errorf("%w: invalid idempotency verifier index", ErrCorruptStore)
+			return nil, fmt.Errorf("%w: invalid idempotency verifier index", ErrCorruptStore)
 		}
 		if _, err := hex.DecodeString(parts[1]); err != nil {
-			return fmt.Errorf("%w: invalid idempotency verifier index", ErrCorruptStore)
+			return nil, fmt.Errorf("%w: invalid idempotency verifier index", ErrCorruptStore)
 		}
 		if _, ok := knownVersions[entry.KeyVersion]; !ok {
-			return fmt.Errorf("%w: idempotency entry references an unknown key version", ErrCorruptStore)
+			return nil, fmt.Errorf("%w: idempotency entry references an unknown key version", ErrCorruptStore)
 		}
 		if _, duplicate := idempotencyByOperation[entry.OperationID]; duplicate {
-			return fmt.Errorf("%w: operation has multiple idempotency entries", ErrCorruptStore)
+			return nil, fmt.Errorf("%w: operation has multiple idempotency entries", ErrCorruptStore)
 		}
 		idempotencyByOperation[entry.OperationID] = entry
 	}
 
+	return idempotencyByOperation, nil
+}
+
+func verifyRecoveryReverseLocks(operations, operationLocks, locks *bolt.Bucket) (map[string][]string, error) {
 	reverseLocks := make(map[string][]string)
-	cursor = operationLocks.Cursor()
+	cursor := operationLocks.Cursor()
 	for operationID, value := cursor.First(); operationID != nil; operationID, value = cursor.Next() {
 		id := string(operationID)
 		var scopes []string
 		if err := json.Unmarshal(value, &scopes); err != nil {
-			return fmt.Errorf("%w: decode operation lock scopes: %v", ErrCorruptStore, err)
+			return nil, fmt.Errorf("%w: decode operation lock scopes: %v", ErrCorruptStore, err)
 		}
 		if len(scopes) == 0 {
-			return fmt.Errorf("%w: empty operation lock index", ErrCorruptStore)
+			return nil, fmt.Errorf("%w: empty operation lock index", ErrCorruptStore)
 		}
 		validated, err := validateLockScopes(scopes)
 		if err != nil || len(validated) != len(scopes) {
-			return fmt.Errorf("%w: invalid operation lock scopes", ErrCorruptStore)
+			return nil, fmt.Errorf("%w: invalid operation lock scopes", ErrCorruptStore)
 		}
 		for i := range scopes {
 			if scopes[i] != validated[i] {
-				return fmt.Errorf("%w: operation lock scopes are not in stable order", ErrCorruptStore)
+				return nil, fmt.Errorf("%w: operation lock scopes are not in stable order", ErrCorruptStore)
 			}
 		}
 		operationValue := operations.Get(operationID)
 		if operationValue == nil {
-			return fmt.Errorf("%w: resource locks refer to a missing operation", ErrCorruptStore)
+			return nil, fmt.Errorf("%w: resource locks refer to a missing operation", ErrCorruptStore)
 		}
 		stored, err := decodeEnvelope(operationValue)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if protocolstate.IsTerminalOperation(stored.Record.Status) {
-			return fmt.Errorf("%w: terminal operation still owns resource locks", ErrCorruptStore)
+			return nil, fmt.Errorf("%w: terminal operation still owns resource locks", ErrCorruptStore)
 		}
 		reverseLocks[id] = scopes
 		for _, scope := range scopes {
 			lockValue := locks.Get([]byte(scope))
 			if lockValue == nil {
-				return fmt.Errorf("%w: operation lock %q is missing", ErrCorruptStore, scope)
+				return nil, fmt.Errorf("%w: operation lock %q is missing", ErrCorruptStore, scope)
 			}
 			lock, err := decodeResourceLock(lockValue)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if lock.Scope != scope || lock.OperationID != id {
-				return fmt.Errorf("%w: operation does not own lock %q", ErrCorruptStore, scope)
+				return nil, fmt.Errorf("%w: operation does not own lock %q", ErrCorruptStore, scope)
 			}
 		}
 	}
 
-	cursor = locks.Cursor()
+	return reverseLocks, nil
+}
+
+func verifyRecoveryForwardLocks(operations, locks *bolt.Bucket, reverseLocks map[string][]string) error {
+	cursor := locks.Cursor()
 	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
 		lock, err := decodeResourceLock(value)
 		if err != nil {
@@ -121,7 +152,11 @@ func verifyRecoveryIndexes(tx *bolt.Tx) error {
 		}
 	}
 
-	cursor = operations.Cursor()
+	return nil
+}
+
+func verifyRecoveryOperations(operations *bolt.Bucket, idempotencyByOperation map[string]idempotencyEntry, reverseLocks map[string][]string) error {
+	cursor := operations.Cursor()
 	for operationID, value := cursor.First(); operationID != nil; operationID, value = cursor.Next() {
 		stored, err := decodeEnvelope(value)
 		if err != nil {
