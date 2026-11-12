@@ -48,6 +48,12 @@ type Runtime struct {
 	// startup. They are registered, but every proxy call is refused until the
 	// bridge passes its identity check.
 	unreachableProxies []string
+	// servers are the configured server profiles, for network checks.
+	servers map[string]config.ServerProfile
+	// adapterEnvironments records the environment each environment-bound
+	// adapter was built for. Adapters without one cannot satisfy a network
+	// requirement.
+	adapterEnvironments map[string]string
 }
 
 // AdapterIDs returns the IDs of the adapters that were started and registered.
@@ -102,7 +108,10 @@ func Build(ctx context.Context, value config.Config, configPath string, options 
 	if err := Validate(value); err != nil {
 		return nil, err
 	}
-	runtime := &Runtime{}
+	runtime := &Runtime{servers: map[string]config.ServerProfile{}, adapterEnvironments: map[string]string{}}
+	for _, server := range value.Servers {
+		runtime.servers[server.ID] = server
+	}
 	defer func() {
 		if err != nil {
 			runtime.Close()
@@ -200,6 +209,7 @@ func (r *Runtime) registerAdapters(ctx context.Context, value config.Config, opt
 				r.unreachableProxies = append(r.unreachableProxies, profile.ID)
 			}
 			implementation = parts.adapter
+			r.adapterEnvironments[profile.ID] = profile.Velocity.EnvironmentID
 		case config.ImplementationCloudflare:
 			resolver, err := credentials(profile.ID)
 			if err != nil {
@@ -210,6 +220,7 @@ func (r *Runtime) registerAdapters(ctx context.Context, value config.Config, opt
 				return fmt.Errorf("adapter %s: %w", profile.ID, err)
 			}
 			implementation = cloudflare
+			r.adapterEnvironments[profile.ID] = profile.Cloudflare.EnvironmentID
 		default:
 			return fmt.Errorf("adapter %s: unsupported implementation", profile.ID)
 		}
