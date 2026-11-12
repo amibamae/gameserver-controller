@@ -65,67 +65,134 @@ func evaluateGameMigrate(pkg *protocolPackage, fixture map[string]any) (map[stri
 	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:common:request-context", requestContext); err != nil {
 		return nil, fmt.Errorf("migration request context does not match schema: %w", err)
 	}
+	m := newMigrationCase(migrationInput)
+	backupBound := m.backupBound()
+	compatibilityRequiresMigration := backupBound && m.compatibilityBound() &&
+		stringValue(m.compatibility, "compatibility_status") == "migration_required"
+	distinctTarget := !reflect.DeepEqual(m.sourceRef, m.targetRef)
+	manifestObjects, streams := arrayValue(m.manifest, "objects"), arrayValue(migrationInput, "object_streams")
+	transfersBound, err := migrationTransfersBound(manifestObjects, streams, arrayValue(requestContext, "stream_transfers"))
+	if err != nil {
+		return nil, err
+	}
+	streamsBound := migrationStreamsMatchManifest(manifestObjects, streams) && transfersBound
+	preconditions := asObject(fixture["core_preconditions"])
+	targetStopped := boolValue(preconditions, "target_stopped")
+	dispatchAllowed := boolValue(preconditions, "approval_valid") && boolValue(preconditions, "backup_verified") && backupBound &&
+		targetStopped && compatibilityRequiresMigration && distinctTarget && streamsBound
+
+	output := asObject(input["migration_output"])
+	outputPresent := len(output) > 0
+	var result migrationResult
+	if outputPresent {
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:migrate-output", output); err != nil {
+			return nil, fmt.Errorf("migration output does not match schema: %w", err)
+		}
+		result = m.checkOutput(output)
+	}
+	migrationConfirmed := dispatchAllowed && outputPresent && result.bound && result.outcome == "migrated" &&
+		result.checksComplete && result.checksPassed && result.generationAdvanced
+	return map[string]any{
+		"schemas_valid":                    true,
+		"backup_result_bound":              backupBound,
+		"compatibility_requires_migration": compatibilityRequiresMigration,
+		"dispatch_allowed":                 dispatchAllowed,
+		"target_stopped":                   targetStopped,
+		"source_preserved":                 distinctTarget && (!outputPresent || result.bound),
+		"output_bound":                     result.bound,
+		"required_checks_complete":         result.checksComplete,
+		"required_checks_passed":           result.checksPassed,
+		"data_generation_advanced":         result.generationAdvanced,
+		"migration_confirmed":              migrationConfirmed,
+		"must_reconcile_before_retry":      outputPresent && (!result.bound || result.outcome == "outcome_unknown"),
+		"reconciliation_reference_present": result.reconciliationPresent,
+	}, nil
+}
+
+// migrationCase holds the parts of a game.migrate request the checks bind
+// together: the source backup and its manifest, the compatibility result,
+// and the target instance and release.
+type migrationCase struct {
+	input, sourceBackup, backupData, manifest map[string]any
+	compatibility, target, targetRelease      map[string]any
+	targetRef, sourceRef                      map[string]any
+}
+
+func newMigrationCase(migrationInput map[string]any) migrationCase {
 	sourceBackup := asObject(migrationInput["source_backup"])
 	backupData := asObject(sourceBackup["operation_data"])
 	manifest := asObject(backupData["manifest"])
-	compatibility := asObject(migrationInput["compatibility_result"])
 	target := asObject(migrationInput["target"])
-	targetRef := asObject(target["instance_ref"])
-	sourceRef := asObject(manifest["source_instance_ref"])
-	targetRelease := asObject(migrationInput["target_release"])
+	return migrationCase{
+		input: migrationInput, sourceBackup: sourceBackup, backupData: backupData, manifest: manifest,
+		compatibility: asObject(migrationInput["compatibility_result"]), target: target,
+		targetRelease: asObject(migrationInput["target_release"]),
+		targetRef:     asObject(target["instance_ref"]), sourceRef: asObject(manifest["source_instance_ref"]),
+	}
+}
 
-	backupBound := stringValue(sourceBackup, "operation_type") == "server.backup" &&
-		stringValue(backupData, "backup_id") == stringValue(manifest, "backup_id") &&
-		stringValue(backupData, "environment_id") == stringValue(manifest, "environment_id") &&
-		stringValue(backupData, "data_generation_id") == stringValue(manifest, "data_generation_id")
-	compatibilityBound := backupBound &&
-		stringValue(compatibility, "backup_id") == stringValue(backupData, "backup_id") &&
-		stringValue(compatibility, "environment_id") == stringValue(backupData, "environment_id") &&
-		stringValue(compatibility, "data_generation_id") == stringValue(backupData, "data_generation_id") &&
-		stringValue(compatibility, "source_game_adapter_id") == stringValue(asObject(manifest["game"]), "adapter_id") &&
-		stringValue(compatibility, "source_game_version") == stringValue(asObject(manifest["game"]), "version") &&
-		stringValue(compatibility, "target_game_adapter_id") == stringValue(targetRelease, "game_adapter_id") &&
-		stringValue(compatibility, "target_release_id") == stringValue(targetRelease, "release_id") &&
-		stringValue(compatibility, "target_game_version") == stringValue(targetRelease, "game_version")
-	compatibilityRequiresMigration := compatibilityBound && stringValue(compatibility, "compatibility_status") == "migration_required"
-	distinctTarget := !reflect.DeepEqual(sourceRef, targetRef)
+// backupBound: the source is a server.backup result whose operation data
+// matches its own manifest.
+func (m migrationCase) backupBound() bool {
+	return stringValue(m.sourceBackup, "operation_type") == "server.backup" &&
+		stringValue(m.backupData, "backup_id") == stringValue(m.manifest, "backup_id") &&
+		stringValue(m.backupData, "environment_id") == stringValue(m.manifest, "environment_id") &&
+		stringValue(m.backupData, "data_generation_id") == stringValue(m.manifest, "data_generation_id")
+}
 
-	manifestObjects := arrayValue(manifest, "objects")
-	streams := arrayValue(migrationInput, "object_streams")
-	streamsBound := len(manifestObjects) == len(streams)
-	matchedStreams := make([]bool, len(streams))
+// compatibilityBound: the compatibility result was computed for this
+// backup's game and data and for the target release.
+func (m migrationCase) compatibilityBound() bool {
+	sourceGame := asObject(m.manifest["game"])
+	return stringValue(m.compatibility, "backup_id") == stringValue(m.backupData, "backup_id") &&
+		stringValue(m.compatibility, "environment_id") == stringValue(m.backupData, "environment_id") &&
+		stringValue(m.compatibility, "data_generation_id") == stringValue(m.backupData, "data_generation_id") &&
+		stringValue(m.compatibility, "source_game_adapter_id") == stringValue(sourceGame, "adapter_id") &&
+		stringValue(m.compatibility, "source_game_version") == stringValue(sourceGame, "version") &&
+		stringValue(m.compatibility, "target_game_adapter_id") == stringValue(m.targetRelease, "game_adapter_id") &&
+		stringValue(m.compatibility, "target_release_id") == stringValue(m.targetRelease, "release_id") &&
+		stringValue(m.compatibility, "target_game_version") == stringValue(m.targetRelease, "game_version")
+}
+
+// migrationStreamsMatchManifest: the object streams are exactly the
+// manifest's objects, one stream per object.
+func migrationStreamsMatchManifest(manifestObjects, streams []any) bool {
+	bound := len(manifestObjects) == len(streams)
+	matched := make([]bool, len(streams))
 	for _, rawObject := range manifestObjects {
 		objectRef := asObject(asObject(rawObject)["object_ref"])
 		match := -1
 		for i, rawStream := range streams {
-			stream := asObject(rawStream)
-			if !matchedStreams[i] && reflect.DeepEqual(objectRef, asObject(stream["object_ref"])) {
+			if !matched[i] && reflect.DeepEqual(objectRef, asObject(asObject(rawStream)["object_ref"])) {
 				match = i
 				break
 			}
 		}
 		if match < 0 {
-			streamsBound = false
+			bound = false
 		} else {
-			matchedStreams[match] = true
+			matched[match] = true
 		}
 	}
-	for _, matched := range matchedStreams {
-		if !matched {
-			streamsBound = false
+	for _, ok := range matched {
+		if !ok {
+			bound = false
 		}
 	}
-	transfers := arrayValue(requestContext, "stream_transfers")
-	if len(transfers) != len(streams) {
-		streamsBound = false
-	}
+	return bound
+}
+
+// migrationTransfersBound: there is one controller-to-adapter transfer per
+// stream, in order, each large enough for its manifest object.
+func migrationTransfersBound(manifestObjects, streams, transfers []any) (bool, error) {
+	bound := len(transfers) == len(streams)
 	for i, rawStream := range streams {
 		if i >= len(transfers) {
 			break
 		}
 		transfer := asObject(transfers[i])
 		if stringValue(transfer, "direction") != "controller_to_adapter" {
-			streamsBound = false
+			bound = false
 		}
 		for _, rawObject := range manifestObjects {
 			object := asObject(rawObject)
@@ -134,86 +201,76 @@ func evaluateGameMigrate(pkg *protocolPackage, fixture map[string]any) (map[stri
 			}
 			expectedSize, err := integerValue(object["size_bytes"])
 			if err != nil {
-				return nil, err
+				return false, err
 			}
 			maximumBytes, err := integerValue(transfer["maximum_bytes"])
 			if err != nil {
-				return nil, err
+				return false, err
 			}
 			if maximumBytes < expectedSize {
-				streamsBound = false
+				bound = false
 			}
 			break
 		}
 	}
-	preconditions := asObject(fixture["core_preconditions"])
-	approvalValid := boolValue(preconditions, "approval_valid")
-	backupVerified := boolValue(preconditions, "backup_verified")
-	targetStopped := boolValue(preconditions, "target_stopped")
-	dispatchAllowed := approvalValid && backupVerified && backupBound && targetStopped && compatibilityRequiresMigration && distinctTarget && streamsBound
+	return bound, nil
+}
 
-	output := asObject(input["migration_output"])
-	outputPresent := len(output) > 0
-	outputBound, checksComplete, checksPassed, generationAdvanced := false, false, false, false
-	outcome := ""
-	reconciliationPresent := false
-	if outputPresent {
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:migrate-output", output); err != nil {
-			return nil, fmt.Errorf("migration output does not match schema: %w", err)
-		}
-		outputTarget := asObject(output["target"])
-		outputDataID := stringValue(output, "migrated_data_generation_id")
-		outputBound = stringValue(output, "source_backup_id") == stringValue(backupData, "backup_id") &&
-			stringValue(output, "source_data_generation_id") == stringValue(backupData, "data_generation_id") &&
-			reflect.DeepEqual(asObject(outputTarget["instance_ref"]), targetRef) &&
-			stringValue(outputTarget, "server_id") == stringValue(target, "server_id") &&
-			stringValue(outputTarget, "environment_id") == stringValue(target, "environment_id") &&
-			stringValue(output, "target_release_id") == stringValue(targetRelease, "release_id")
-		outcome = stringValue(output, "outcome")
-		requested := make(map[string]bool)
-		for _, rawID := range arrayValue(migrationInput, "required_check_ids") {
-			requested[rawID.(string)] = true
-		}
-		observed := make(map[string]string)
-		results := arrayValue(output, "check_results")
-		checksComplete = len(results) == len(requested)
-		for _, rawResult := range results {
-			result := asObject(rawResult)
-			checkID := stringValue(result, "check_id")
-			if !requested[checkID] {
-				checksComplete = false
-			}
-			if _, exists := observed[checkID]; exists {
-				checksComplete = false
-			}
-			observed[checkID] = stringValue(result, "result")
-		}
-		checksPassed = checksComplete
-		for checkID := range requested {
-			if observed[checkID] != "pass" {
-				checksPassed = false
-			}
-		}
-		generationAdvanced = outputDataID != "" && outputDataID != stringValue(backupData, "data_generation_id")
-		reconciliationPresent = len(asObject(output["reconciliation_ref"])) > 0
+// migrationResult is what a migration output proves.
+type migrationResult struct {
+	bound, checksComplete, checksPassed, generationAdvanced, reconciliationPresent bool
+	outcome                                                                        string
+}
+
+// checkOutput binds a schema-valid migration output to the request: the
+// source backup, target and release, exactly one passing result per
+// required check, and a new data generation.
+func (m migrationCase) checkOutput(output map[string]any) migrationResult {
+	outputTarget := asObject(output["target"])
+	outputDataID := stringValue(output, "migrated_data_generation_id")
+	result := migrationResult{
+		bound: stringValue(output, "source_backup_id") == stringValue(m.backupData, "backup_id") &&
+			stringValue(output, "source_data_generation_id") == stringValue(m.backupData, "data_generation_id") &&
+			reflect.DeepEqual(asObject(outputTarget["instance_ref"]), m.targetRef) &&
+			stringValue(outputTarget, "server_id") == stringValue(m.target, "server_id") &&
+			stringValue(outputTarget, "environment_id") == stringValue(m.target, "environment_id") &&
+			stringValue(output, "target_release_id") == stringValue(m.targetRelease, "release_id"),
+		outcome:               stringValue(output, "outcome"),
+		generationAdvanced:    outputDataID != "" && outputDataID != stringValue(m.backupData, "data_generation_id"),
+		reconciliationPresent: len(asObject(output["reconciliation_ref"])) > 0,
 	}
-	migrationConfirmed := dispatchAllowed && outputPresent && outputBound && outcome == "migrated" &&
-		checksComplete && checksPassed && generationAdvanced
-	return map[string]any{
-		"schemas_valid":                    true,
-		"backup_result_bound":              backupBound,
-		"compatibility_requires_migration": compatibilityRequiresMigration,
-		"dispatch_allowed":                 dispatchAllowed,
-		"target_stopped":                   targetStopped,
-		"source_preserved":                 distinctTarget && (!outputPresent || outputBound),
-		"output_bound":                     outputBound,
-		"required_checks_complete":         checksComplete,
-		"required_checks_passed":           checksPassed,
-		"data_generation_advanced":         generationAdvanced,
-		"migration_confirmed":              migrationConfirmed,
-		"must_reconcile_before_retry":      outputPresent && (!outputBound || outcome == "outcome_unknown"),
-		"reconciliation_reference_present": reconciliationPresent,
-	}, nil
+	result.checksComplete, result.checksPassed = requiredChecksResult(arrayValue(m.input, "required_check_ids"), arrayValue(output, "check_results"))
+	return result
+}
+
+// requiredChecksResult: complete means exactly one result for every
+// required check and nothing else; passed means complete and every
+// required check passed.
+func requiredChecksResult(requiredIDs, results []any) (complete, passed bool) {
+	requested := make(map[string]bool)
+	for _, rawID := range requiredIDs {
+		requested[rawID.(string)] = true
+	}
+	observed := make(map[string]string)
+	complete = len(results) == len(requested)
+	for _, rawResult := range results {
+		result := asObject(rawResult)
+		checkID := stringValue(result, "check_id")
+		if !requested[checkID] {
+			complete = false
+		}
+		if _, exists := observed[checkID]; exists {
+			complete = false
+		}
+		observed[checkID] = stringValue(result, "result")
+	}
+	passed = complete
+	for checkID := range requested {
+		if observed[checkID] != "pass" {
+			passed = false
+		}
+	}
+	return complete, passed
 }
 
 // evaluateGameCompatibilityCheck evaluates the conformance fixtures
@@ -389,56 +446,81 @@ func evaluateGameBackupValidate(pkg *protocolPackage, fixture map[string]any) (m
 		stringValue(backupOutput, "backup_id") == stringValue(manifest, "backup_id") &&
 		stringValue(backupOutput, "environment_id") == stringValue(manifest, "environment_id") &&
 		stringValue(backupOutput, "data_generation_id") == stringValue(manifest, "data_generation_id")
-	manifestRefs := make([]any, 0, len(arrayValue(manifest, "objects")))
-	for _, rawObject := range arrayValue(manifest, "objects") {
+	streamsBound, err := backupValidateStreamsBound(backupInput, manifest, arrayValue(requestContext, "stream_transfers"))
+	if err != nil {
+		return nil, err
+	}
+	complete, derived := deriveBackupValidation(arrayValue(backupInput, "required_check_ids"), arrayValue(backupOutput, "check_results"))
+	return map[string]any{
+		"schemas_valid":                 true,
+		"manifest_binding_valid":        manifestBinding,
+		"object_streams_match_manifest": streamsBound,
+		"check_set_complete":            complete,
+		"derived_validation_result":     derived,
+		"backup_valid": manifestBinding && streamsBound && complete && derived == "valid" &&
+			stringValue(backupOutput, "validation_result") == "valid",
+	}, nil
+}
+
+// backupValidateStreamsBound: the object streams are exactly the
+// manifest's objects in the backup's environment, each with a
+// controller-to-adapter transfer at its position large enough for it.
+func backupValidateStreamsBound(backupInput, manifest map[string]any, transfers []any) (bool, error) {
+	objects := arrayValue(manifest, "objects")
+	manifestRefs := make([]any, 0, len(objects))
+	for _, rawObject := range objects {
 		manifestRefs = append(manifestRefs, asObject(rawObject)["object_ref"])
 	}
-	streamRefs := make([]any, 0, len(arrayValue(backupInput, "object_streams")))
-	for _, rawStream := range arrayValue(backupInput, "object_streams") {
+	streams := arrayValue(backupInput, "object_streams")
+	streamRefs := make([]any, 0, len(streams))
+	for _, rawStream := range streams {
 		streamRefs = append(streamRefs, asObject(rawStream)["object_ref"])
 	}
-	streamsBound := sameObjectRefSet(manifestRefs, streamRefs)
-	streams := arrayValue(backupInput, "object_streams")
-	transfers := arrayValue(requestContext, "stream_transfers")
-	if len(transfers) != len(streams) {
-		streamsBound = false
-	}
+	bound := sameObjectRefSet(manifestRefs, streamRefs) && len(transfers) == len(streams)
 	for i, rawStream := range streams {
 		stream := asObject(rawStream)
 		if stringValue(asObject(stream["object_ref"]), "environment_id") != stringValue(backupInput, "environment_id") {
-			streamsBound = false
+			bound = false
 		}
-		matched := false
-		for _, rawObject := range arrayValue(manifest, "objects") {
-			object := asObject(rawObject)
-			if !reflect.DeepEqual(object["object_ref"], stream["object_ref"]) {
-				continue
-			}
-			matched = true
-			expectedSize, err := integerValue(object["size_bytes"])
-			if err != nil {
-				return nil, err
-			}
-			if i >= len(transfers) {
-				streamsBound = false
-				break
-			}
-			transfer := asObject(transfers[i])
-			maximumBytes, err := integerValue(transfer["maximum_bytes"])
-			if err != nil {
-				return nil, err
-			}
-			if maximumBytes < expectedSize || stringValue(transfer, "direction") != "controller_to_adapter" {
-				streamsBound = false
-			}
-			break
+		streamBound, err := backupValidateStreamTransfer(objects, stream, transfers, i)
+		if err != nil {
+			return false, err
 		}
-		if !matched {
-			streamsBound = false
-		}
+		bound = bound && streamBound
 	}
-	required := arrayValue(backupInput, "required_check_ids")
-	results := arrayValue(backupOutput, "check_results")
+	return bound, nil
+}
+
+// backupValidateStreamTransfer: the stream names a manifest object, and
+// transfer i is controller-to-adapter and at least that object's size.
+func backupValidateStreamTransfer(objects []any, stream map[string]any, transfers []any, i int) (bool, error) {
+	for _, rawObject := range objects {
+		object := asObject(rawObject)
+		if !reflect.DeepEqual(object["object_ref"], stream["object_ref"]) {
+			continue
+		}
+		expectedSize, err := integerValue(object["size_bytes"])
+		if err != nil {
+			return false, err
+		}
+		if i >= len(transfers) {
+			return false, nil
+		}
+		transfer := asObject(transfers[i])
+		maximumBytes, err := integerValue(transfer["maximum_bytes"])
+		if err != nil {
+			return false, err
+		}
+		return maximumBytes >= expectedSize && stringValue(transfer, "direction") == "controller_to_adapter", nil
+	}
+	return false, nil
+}
+
+// deriveBackupValidation: the check set is complete when there is exactly
+// one known result for every required check and nothing else. Any failure
+// makes the backup invalid; otherwise an unknown or missing result makes it
+// unknown.
+func deriveBackupValidation(required, results []any) (bool, string) {
 	requested := make(map[string]bool, len(required))
 	for _, rawID := range required {
 		requested[rawID.(string)] = true
@@ -456,7 +538,6 @@ func evaluateGameBackupValidate(pkg *protocolPackage, fixture map[string]any) (m
 		}
 		observed[id] = stringValue(item, "result")
 	}
-	derived := "valid"
 	hasFailure, hasUnknown := false, false
 	for id := range requested {
 		result, ok := observed[id]
@@ -473,20 +554,14 @@ func evaluateGameBackupValidate(pkg *protocolPackage, fixture map[string]any) (m
 			complete = false
 		}
 	}
-	if hasFailure {
-		derived = "invalid"
-	} else if hasUnknown || !complete {
-		derived = "unknown"
+	switch {
+	case hasFailure:
+		return complete, "invalid"
+	case hasUnknown || !complete:
+		return complete, "unknown"
+	default:
+		return complete, "valid"
 	}
-	return map[string]any{
-		"schemas_valid":                 true,
-		"manifest_binding_valid":        manifestBinding,
-		"object_streams_match_manifest": streamsBound,
-		"check_set_complete":            complete,
-		"derived_validation_result":     derived,
-		"backup_valid": manifestBinding && streamsBound && complete && derived == "valid" &&
-			stringValue(backupOutput, "validation_result") == "valid",
-	}, nil
 }
 
 // evaluateGameDataSaveBackupPrepare evaluates the conformance fixtures
@@ -520,7 +595,29 @@ func evaluateGameDataSaveBackupPrepare(pkg *protocolPackage, fixture map[string]
 		prepareInput["backup_id"] == prepareOutput["backup_id"] &&
 		prepareInput["data_generation_id"] == prepareOutput["data_generation_id"] &&
 		prepareInput["consistency_mode"] == prepareOutput["consistency_mode"]
-	dataSets := arrayValue(dataOutput, "data_sets")
+	dataSetIDs, supportedModes, pathsSafe := describeDataSets(arrayValue(dataOutput, "data_sets"))
+	selectedIDs := arrayValue(prepareInput, "data_set_ids")
+	dataSetSelectionBound := uniqueStrings(dataSetIDs) && uniqueStrings(selectedIDs) &&
+		sameStringSet(selectedIDs, arrayValue(prepareOutput, "data_set_ids"))
+	dataSetsSupportConsistency := dataSetSelectionBound &&
+		selectedSetsSupport(selectedIDs, supportedModes, stringValue(prepareInput, "consistency_mode"))
+	saveConfirmed := stringValue(saveOutput, "outcome") == "confirmed" && stringValue(saveOutput, "saved_at") != ""
+	preparationConfirmed := stringValue(prepareOutput, "outcome") == "prepared" &&
+		stringValue(prepareOutput, "preparation_id") != "" && stringValue(prepareOutput, "consistency_evidence") != ""
+	return map[string]any{
+		"schemas_valid":                  true,
+		"data_targets_bound":             dataTargetBound,
+		"data_sets_unique_and_path_safe": uniqueStrings(dataSetIDs) && pathsSafe,
+		"save_confirmed":                 saveTargetBound && saveConfirmed,
+		"backup_preparation_bound":       prepareTargetBound && dataSetSelectionBound,
+		"data_sets_support_consistency":  dataSetsSupportConsistency,
+		"preparation_confirmed":          preparationConfirmed,
+	}, nil
+}
+
+// describeDataSets returns the data set IDs in order, each set's supported
+// consistency modes, and whether every relative path is safe.
+func describeDataSets(dataSets []any) ([]any, map[string]map[string]bool, bool) {
 	dataSetIDs := make([]any, 0, len(dataSets))
 	supportedModes := make(map[string]map[string]bool, len(dataSets))
 	pathsSafe := true
@@ -535,41 +632,40 @@ func evaluateGameDataSaveBackupPrepare(pkg *protocolPackage, fixture map[string]
 			}
 		}
 		for _, rawPath := range arrayValue(dataSet, "relative_paths") {
-			pathValue, ok := rawPath.(string)
-			if !ok || pathValue == "" || strings.HasPrefix(pathValue, "/") || strings.Contains(pathValue, "\\") {
+			if !safeRelativePath(rawPath) {
 				pathsSafe = false
-				continue
-			}
-			for _, segment := range strings.Split(pathValue, "/") {
-				if segment == "" || segment == "." || segment == ".." {
-					pathsSafe = false
-				}
 			}
 		}
 	}
-	selectedIDs := arrayValue(prepareInput, "data_set_ids")
-	selectedOutputIDs := arrayValue(prepareOutput, "data_set_ids")
-	dataSetSelectionBound := uniqueStrings(dataSetIDs) && uniqueStrings(selectedIDs) &&
-		sameStringSet(selectedIDs, selectedOutputIDs)
-	dataSetsSupportConsistency := dataSetSelectionBound
+	return dataSetIDs, supportedModes, pathsSafe
+}
+
+// safeRelativePath: a non-empty, slash-separated relative path with no
+// backslash and no empty, "." or ".." segment.
+func safeRelativePath(rawPath any) bool {
+	pathValue, ok := rawPath.(string)
+	if !ok || pathValue == "" || strings.HasPrefix(pathValue, "/") || strings.Contains(pathValue, "\\") {
+		return false
+	}
+	for _, segment := range strings.Split(pathValue, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+// selectedSetsSupport: every selected data set supports the requested
+// consistency mode.
+func selectedSetsSupport(selectedIDs []any, supportedModes map[string]map[string]bool, mode string) bool {
+	supported := true
 	for _, rawID := range selectedIDs {
 		id, ok := rawID.(string)
-		if !ok || !supportedModes[id][stringValue(prepareInput, "consistency_mode")] {
-			dataSetsSupportConsistency = false
+		if !ok || !supportedModes[id][mode] {
+			supported = false
 		}
 	}
-	saveConfirmed := stringValue(saveOutput, "outcome") == "confirmed" && stringValue(saveOutput, "saved_at") != ""
-	preparationConfirmed := stringValue(prepareOutput, "outcome") == "prepared" &&
-		stringValue(prepareOutput, "preparation_id") != "" && stringValue(prepareOutput, "consistency_evidence") != ""
-	return map[string]any{
-		"schemas_valid":                  true,
-		"data_targets_bound":             dataTargetBound,
-		"data_sets_unique_and_path_safe": uniqueStrings(dataSetIDs) && pathsSafe,
-		"save_confirmed":                 saveTargetBound && saveConfirmed,
-		"backup_preparation_bound":       prepareTargetBound && dataSetSelectionBound,
-		"data_sets_support_consistency":  dataSetsSupportConsistency,
-		"preparation_confirmed":          preparationConfirmed,
-	}, nil
+	return supported
 }
 
 // evaluateGameSaveUnknownRequiresReconciliation evaluates the game.save.unknown-requires-reconciliation conformance fixture.
