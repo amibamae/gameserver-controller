@@ -156,8 +156,12 @@ func (p *Provisioner) Provision(ctx context.Context, request CreateRequest) (sto
 		previous = &existing
 	}
 
+	return p.provisionWithCredential(ctx, request, create, reservation, previous, dispatchable)
+}
+
+func (p *Provisioner) provisionWithCredential(ctx context.Context, request CreateRequest, create vultrapi.CreateInstanceRequest, reservation store.CapacityReservation, previous *store.CapacityReservation, dispatchable bool) (store.CapacityReservation, error) {
 	var result store.CapacityReservation
-	err = p.credentials.WithCredential(p.credential, func(token []byte) error {
+	err := p.credentials.WithCredential(p.credential, func(token []byte) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -185,104 +189,111 @@ func (p *Provisioner) Provision(ctx context.Context, request CreateRequest) (sto
 				return err
 			}
 		}
-		var reserveErr error
-		result, _, reserveErr = p.policy.ReserveCapacity(p.store, reservation)
-		if reserveErr != nil {
-			return reserveErr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		switch result.State {
-		case store.CapacityActive:
-			return nil
-		case store.CapacityAbsent, store.CapacityDestroyed:
-			return ErrOperationClosed
-		case store.CapacityCreateOutcomeUnknown:
-			result, reserveErr = p.reconcile(ctx, token, result)
-			return reserveErr
-		case store.CapacityReserved:
-			// A crash before this one-shot claim is known to precede provider
-			// dispatch. Concurrent callers can claim it only once.
-		default:
-			return store.ErrCapacityTransition
-		}
-
-		// The single-use host key (protocol hosting section 6.1) is generated
-		// for this dispatch only. Its public half is stored in the same
-		// transaction as the claim; the private half exists only in memory
-		// and in the create request's user data.
-		hostPublic, hostPrivate, keyErr := sshkey.Generate()
-		if keyErr != nil {
-			return keyErr
-		}
-		defer clear(hostPrivate)
-		userData, keyErr := oneTimeHostKeyUserData(hostPublic, hostPrivate)
-		if keyErr != nil {
-			return keyErr
-		}
-		create.UserData = userData
-		result, reserveErr = p.store.ClaimCapacityCreateWithHandoff(result.OperationID, hosthandoff.New(hostPublic, p.now(), hosthandoff.DefaultLifetime))
-		if errors.Is(reserveErr, store.ErrCapacityTransition) {
-			result, reserveErr = p.store.GetCapacityReservation(reservation.OperationID)
-			if reserveErr != nil {
-				return reserveErr
-			}
-			switch result.State {
-			case store.CapacityActive:
-				return nil
-			case store.CapacityCreateOutcomeUnknown:
-				result, reserveErr = p.reconcile(ctx, token, result)
-				return reserveErr
-			case store.CapacityAbsent, store.CapacityDestroyed:
-				return ErrOperationClosed
-			default:
-				return store.ErrCapacityTransition
-			}
-		}
-		if reserveErr != nil {
-			return reserveErr
-		}
-
-		created, createErr := p.provider.CreateInstance(ctx, token, create)
-		if errors.Is(createErr, vultrapi.ErrProviderReject) {
-			result, reserveErr = p.recordAbsence(result)
-			if reserveErr != nil {
-				return ErrOutcomeUnknown
-			}
-			return ErrProviderRejected
-		}
-		if createErr != nil {
-			result, reserveErr = p.reconcile(ctx, token, result)
-			if reserveErr == nil {
-				return nil
-			}
-			return reserveErr
-		}
-		if created.ID == "" || created.Label != create.Label {
-			result, reserveErr = p.reconcile(ctx, token, result)
-			if reserveErr == nil {
-				return nil
-			}
-			return reserveErr
-		}
-
-		observed, inspectErr := p.provider.GetInstance(ctx, token, created.ID)
-		if inspectErr == nil && observed.ID == created.ID && observed.Label == create.Label {
-			result, reserveErr = p.recordPresent(result, observed)
-			return reserveErr
-		}
-		result, reserveErr = p.reconcile(ctx, token, result)
-		if reserveErr == nil {
-			return nil
-		}
-		return reserveErr
+		var dispatchErr error
+		result, dispatchErr = p.reserveAndDispatch(ctx, token, create, reservation)
+		return dispatchErr
 	})
 	if err != nil {
 		return result, err
 	}
 	return result, nil
+}
+
+func (p *Provisioner) reserveAndDispatch(ctx context.Context, token []byte, create vultrapi.CreateInstanceRequest, reservation store.CapacityReservation) (store.CapacityReservation, error) {
+	var result store.CapacityReservation
+	var reserveErr error
+	result, _, reserveErr = p.policy.ReserveCapacity(p.store, reservation)
+	if reserveErr != nil {
+		return result, reserveErr
+	}
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+
+	switch result.State {
+	case store.CapacityActive:
+		return result, nil
+	case store.CapacityAbsent, store.CapacityDestroyed:
+		return result, ErrOperationClosed
+	case store.CapacityCreateOutcomeUnknown:
+		result, reserveErr = p.reconcile(ctx, token, result)
+		return result, reserveErr
+	case store.CapacityReserved:
+		// A crash before this one-shot claim is known to precede provider
+		// dispatch. Concurrent callers can claim it only once.
+	default:
+		return result, store.ErrCapacityTransition
+	}
+
+	// The single-use host key (protocol hosting section 6.1) is generated
+	// for this dispatch only. Its public half is stored in the same
+	// transaction as the claim; the private half exists only in memory
+	// and in the create request's user data.
+	hostPublic, hostPrivate, keyErr := sshkey.Generate()
+	if keyErr != nil {
+		return result, keyErr
+	}
+	defer clear(hostPrivate)
+	userData, keyErr := oneTimeHostKeyUserData(hostPublic, hostPrivate)
+	if keyErr != nil {
+		return result, keyErr
+	}
+	create.UserData = userData
+	result, reserveErr = p.store.ClaimCapacityCreateWithHandoff(result.OperationID, hosthandoff.New(hostPublic, p.now(), hosthandoff.DefaultLifetime))
+	if errors.Is(reserveErr, store.ErrCapacityTransition) {
+		result, reserveErr = p.store.GetCapacityReservation(reservation.OperationID)
+		if reserveErr != nil {
+			return result, reserveErr
+		}
+		switch result.State {
+		case store.CapacityActive:
+			return result, nil
+		case store.CapacityCreateOutcomeUnknown:
+			result, reserveErr = p.reconcile(ctx, token, result)
+			return result, reserveErr
+		case store.CapacityAbsent, store.CapacityDestroyed:
+			return result, ErrOperationClosed
+		default:
+			return result, store.ErrCapacityTransition
+		}
+	}
+	if reserveErr != nil {
+		return result, reserveErr
+	}
+
+	created, createErr := p.provider.CreateInstance(ctx, token, create)
+	if errors.Is(createErr, vultrapi.ErrProviderReject) {
+		result, reserveErr = p.recordAbsence(result)
+		if reserveErr != nil {
+			return result, ErrOutcomeUnknown
+		}
+		return result, ErrProviderRejected
+	}
+	if createErr != nil {
+		result, reserveErr = p.reconcile(ctx, token, result)
+		if reserveErr == nil {
+			return result, nil
+		}
+		return result, reserveErr
+	}
+	if created.ID == "" || created.Label != create.Label {
+		result, reserveErr = p.reconcile(ctx, token, result)
+		if reserveErr == nil {
+			return result, nil
+		}
+		return result, reserveErr
+	}
+
+	observed, inspectErr := p.provider.GetInstance(ctx, token, created.ID)
+	if inspectErr == nil && observed.ID == created.ID && observed.Label == create.Label {
+		result, reserveErr = p.recordPresent(result, observed)
+		return result, reserveErr
+	}
+	result, reserveErr = p.reconcile(ctx, token, result)
+	if reserveErr == nil {
+		return result, nil
+	}
+	return result, reserveErr
 }
 
 func (p *Provisioner) prepare(request CreateRequest) (vultrapi.CreateInstanceRequest, store.CapacityReservation, error) {
