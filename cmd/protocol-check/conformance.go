@@ -49,605 +49,192 @@ func (pkg *protocolPackage) runConformance() error {
 func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
 	fixtureID := stringValue(fixture, "fixture_id")
 	input := asObject(fixture["input"])
+	switch {
+	case strings.HasPrefix(fixtureID, "protocol."):
+		return evaluateConformanceProtocol(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "execution."):
+		return evaluateConformanceExecution(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "hosting."):
+		return evaluateConformanceHosting(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "game."):
+		return evaluateConformanceGame(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "operations."):
+		return evaluateConformanceOperations(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "integration."):
+		return evaluateConformanceIntegration(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "lifecycle."):
+		return evaluateConformanceLifecycle(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "compatibility."):
+		return evaluateConformanceCompatibility(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "transport."):
+		return evaluateConformanceTransport(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "management."):
+		return evaluateConformanceManagement(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "safety."):
+		return evaluateConformanceSafety(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "security."):
+		return evaluateConformanceSecurity(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "readiness-"):
+		return evaluateConformanceReadiness(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "velocity-"):
+		return evaluateConformanceVelocity(pkg, fixture, input)
+	case strings.HasPrefix(fixtureID, "storage."):
+		return evaluateConformanceStorage(pkg, fixture, input)
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceProtocol(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
 	switch fixtureID {
 	case "protocol.json.raw-wire-interoperability":
 		return evaluateRawJSONInteroperability(fixture)
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceExecution(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
 	case "execution.unit.restart.clean-stop-distinct-runtime":
 		return evaluateUnitRestart(pkg, fixture)
 	case "execution.unit.create.exact-definition-no-autostart":
 		return evaluateUnitCreate(pkg, fixture)
+	case "execution.unit.inspect.exact-target-state":
+		return evaluateSystemdUnitInspection(pkg, fixture)
+	case "execution.unit.start.accepted-not-ready", "execution.unit.start.unknown-requires-inspection", "execution.unit.start.target-mismatch", "execution.unit.graceful-stop.completed-stopped", "execution.unit.graceful-stop.unknown-requires-inspection":
+		executionInput, executionOutput := asObject(input["execution_input"]), asObject(input["execution_output"])
+		inputSchemaID, outputSchemaID := "", ""
+		if strings.HasPrefix(fixtureID, "execution.unit.start.") {
+			inputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-start-input"
+			outputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-start-output"
+		} else {
+			inputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-graceful-stop-input"
+			outputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-graceful-stop-output"
+		}
+		if err := pkg.validateSchema(inputSchemaID, executionInput); err != nil {
+			return nil, fmt.Errorf("execution input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema(outputSchemaID, executionOutput); err != nil {
+			return nil, fmt.Errorf("execution output does not match schema: %w", err)
+		}
+		unitRef := asObject(executionInput["unit_ref"])
+		resultUnitRef := asObject(executionOutput["unit_ref"])
+		unitBound := reflect.DeepEqual(unitRef, resultUnitRef)
+		outcome := stringValue(executionOutput, "outcome")
+		state := stringValue(executionOutput, "state")
+		operationRef, hasOperationRef := executionOutput["external_operation_ref"]
+		operationEnvironmentMatches := !hasOperationRef ||
+			stringValue(asObject(operationRef), "environment_id") == stringValue(unitRef, "environment_id")
+		unknown := outcome == "outcome_unknown"
+		resultRequiresInspection := !unitBound || unknown
+		startSucceeded := strings.HasPrefix(fixtureID, "execution.unit.start.") && unitBound && outcome == "completed" && state == "running"
+		return map[string]any{
+			"schemas_valid":                     true,
+			"unit_bound":                        unitBound,
+			"outcome":                           outcome,
+			"state":                             state,
+			"external_operation_ref_present":    hasOperationRef,
+			"operation_ref_environment_matches": operationEnvironmentMatches,
+			"readiness_established":             false,
+			"reconciliation_required":           resultRequiresInspection,
+			"result_requires_inspection":        resultRequiresInspection,
+			"retry_without_inspection":          false,
+			"successful_start_claim_accepted":   startSucceeded,
+			"termination_confirmed":             unitBound && outcome == "completed" && state == "stopped",
+		}, nil
+	case "execution.unit.force-stop.approval-required", "execution.unit.force-stop.approval-scope-denied", "execution.unit.force-stop.completed-stopped", "execution.unit.force-stop.accepted-not-stopped", "execution.unit.force-stop.target-mismatch", "execution.unit.force-stop.unknown-requires-inspection":
+		forceStopInput := asObject(input["force_stop_input"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-force-stop-input", forceStopInput); err != nil {
+			return map[string]any{"schemas_valid": false, "approval_required": forceStopInput["approval_id"] == nil, "dispatch_allowed": false, "termination_confirmed": false}, nil
+		}
+		preconditions := asObject(fixture["core_preconditions"])
+		approvalValid := boolValue(preconditions, "approval_valid")
+		dispatchAllowed := approvalValid
+		output := asObject(input["force_stop_output"])
+		outputPresent := len(output) > 0
+		targetBound, terminationConfirmed, acceptedNotComplete, mustInspect := false, false, false, false
+		if outputPresent {
+			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-force-stop-output", output); err != nil {
+				return nil, fmt.Errorf("force-stop output does not match schema: %w", err)
+			}
+			targetBound = reflect.DeepEqual(asObject(forceStopInput["unit_ref"]), asObject(output["unit_ref"]))
+			outcome := stringValue(output, "outcome")
+			state := stringValue(output, "state")
+			terminationConfirmed = dispatchAllowed && targetBound && outcome == "completed" && state == "stopped"
+			acceptedNotComplete = outcome == "accepted" && !terminationConfirmed
+			mustInspect = !targetBound || outcome == "outcome_unknown"
+		}
+		return map[string]any{
+			"schemas_valid":             true,
+			"approval_required":         true,
+			"dispatch_allowed":          dispatchAllowed,
+			"target_bound":              targetBound,
+			"termination_confirmed":     terminationConfirmed,
+			"accepted_not_complete":     acceptedNotComplete,
+			"must_inspect_before_retry": mustInspect,
+		}, nil
+	case "execution.logs.health.delete.safety":
+		logsInput, logsOutput := asObject(input["logs_input"]), asObject(input["logs_output"])
+		healthInput, healthOutput := asObject(input["health_input"]), asObject(input["health_output"])
+		deleteInput, deleteOutput := asObject(input["delete_input"]), asObject(input["delete_output"])
+		for schemaID, message := range map[string]struct {
+			value map[string]any
+			name  string
+		}{
+			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-logs-read-input":       {logsInput, "logs input"},
+			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-logs-read-output":      {logsOutput, "logs output"},
+			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-health-inspect-input":  {healthInput, "health input"},
+			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-health-inspect-output": {healthOutput, "health output"},
+			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-delete-input":          {deleteInput, "delete input"},
+			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-delete-output":         {deleteOutput, "delete output"},
+		} {
+			if err := pkg.validateSchema(schemaID, message.value); err != nil {
+				return nil, fmt.Errorf("%s does not match schema: %w", message.name, err)
+			}
+		}
+		logsBound := reflect.DeepEqual(logsInput["unit_ref"], logsOutput["unit_ref"])
+		healthBound := reflect.DeepEqual(healthInput["unit_ref"], healthOutput["unit_ref"])
+		deleteBound := reflect.DeepEqual(deleteInput["unit_ref"], deleteOutput["unit_ref"])
+		maxBytes, err := integerValue(logsInput["max_bytes"])
+		if err != nil {
+			return nil, err
+		}
+		var totalBytes int64
+		for i, rawLine := range arrayValue(logsOutput, "lines") {
+			line, ok := rawLine.(string)
+			if !ok {
+				return nil, fmt.Errorf("log lines must be strings")
+			}
+			totalBytes += int64(len([]byte(line)))
+			if i > 0 {
+				totalBytes++
+			}
+		}
+		return map[string]any{
+			"schemas_valid": true, "unit_targets_bound": logsBound && healthBound && deleteBound,
+			"logs_within_bound": totalBytes <= maxBytes, "logs_redacted": boolValue(logsOutput, "redaction_applied"),
+			"unknown_health_not_healthy": stringValue(healthOutput, "health") == "unknown",
+			"persistent_data_preserved":  boolValue(deleteOutput, "persistent_data_preserved"),
+		}, nil
+	case "execution.unit.health.diagnostic-redaction-and-binding":
+		return evaluateExecutionHealthDiagnostics(pkg, fixture)
+	case "execution.unit.logs.byte-bound-and-redaction":
+		return evaluateExecutionLogRead(pkg, fixture)
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceHosting(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
 	case "hosting.instance.find-by-resource-key.create-recovery":
 		return evaluateInstanceCreateRecovery(pkg, fixture)
-	case "game.release.describe.integrity-and-identity":
-		return evaluateGameReleaseDescription(pkg, fixture)
-	case "game.install.release-binding-and-reconciliation":
-		return evaluateGameInstallContract(pkg, fixture)
-	case "game.backup.capture.binding-and-stream-integrity":
-		return evaluateBackupCapture(pkg, fixture)
-	case "operations.type-binding":
-		return evaluateOperationTypeBinding(pkg, fixture)
-	case "operations.unknown-result-reference-projection":
-		return evaluateUnknownResultReferenceProjection(pkg, fixture)
-	case "operations.request-fingerprint-jcs":
-		return evaluateRequestFingerprintJCS(fixture)
-	case "integration.proxy.backend.drain-unregister-state-confirmation":
-		return evaluateProxyBackendDrainUnregisterState(pkg, fixture)
-	case "integration.proxy.inspect.target-state-and-routability":
-		return evaluateProxyBackendInspect(pkg, fixture)
-	case "integration.proxy.players.inspect.fresh-count-and-target-binding":
-		return evaluateProxyBackendPlayersInspect(pkg, fixture)
-	case "integration.proxy.cohort.inspect.binding-and-freshness":
-		return evaluateProxyCohortInspect(pkg, fixture)
-	case "integration.dns.record.upsert.purpose-readiness-and-confirmation":
-		return evaluateDNSRecordUpsert(pkg, fixture)
 	case "hosting.bootstrap.host-key-handoff":
 		return evaluateHostKeyHandoff(pkg, fixture)
-	case "integration.network-profile.requirements":
-		return evaluateNetworkProfileRequirements(pkg, fixture)
-	case "integration.notification.proxy-outage-transitions":
-		return evaluateProxyOutageTransitions(pkg, fixture)
-	case "integration.notification.send.outcome-and-privacy":
-		return evaluateNotificationSend(pkg, fixture)
-	case "game.configure.pinned-schema-and-result-binding":
-		return evaluateConfiguration(pkg, fixture)
-	case "lifecycle.reject.unlisted-transition":
-		transition := asObject(fixture["requested_transition"])
-		allowed := protocolstate.CanTransitionServer(
-			protocolstate.ServerState(stringValue(fixture, "initial_state")),
-			protocolstate.ServerState(stringValue(transition, "to")),
-		)
-		result := map[string]any{"accepted": allowed, "side_effect_permitted": allowed}
-		if !allowed {
-			result["error_code"] = "core.lifecycle.invalid_transition"
-		}
-		return result, nil
-	case "lifecycle.replacement.identity":
-		previous := asObject(input["previous_server"])
-		replacement := asObject(input["replacement_server"])
-		serverSchemaID := "urn:gameserver-controller:0.21.0-draft:lifecycle:server"
-		if err := pkg.validateSchema(serverSchemaID, previous); err != nil {
-			return nil, fmt.Errorf("previous server does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema(serverSchemaID, replacement); err != nil {
-			return nil, fmt.Errorf("replacement server does not match schema: %w", err)
-		}
-		previousRef, replacementRef := previous["instance_ref"], replacement["instance_ref"]
-		identityPreserved := previous["server_id"] == replacement["server_id"] && previous["environment_id"] == replacement["environment_id"]
-		previousDestroyed := stringValue(previous, "lifecycle_state") == "destroyed"
-		replacementInstanceDistinct := previousRef != nil && replacementRef != nil && !reflect.DeepEqual(previousRef, replacementRef)
-		generationRotated := previous["data_generation_id"] != nil && replacement["data_generation_id"] != nil && previous["data_generation_id"] != replacement["data_generation_id"]
-		reprovisionPermitted := protocolstate.CanTransitionServer(protocolstate.ServerDestroyed, protocolstate.ServerProvisioning)
-		return map[string]any{
-			"previous_server_schema_valid": true, "replacement_server_schema_valid": true,
-			"logical_identity_preserved": identityPreserved, "previous_instance_destroyed": previousDestroyed,
-			"replacement_instance_distinct": replacementInstanceDistinct, "data_generation_rotated": generationRotated,
-			"reprovision_transition_permitted": reprovisionPermitted,
-			"replacement_safe":                 identityPreserved && previousDestroyed && replacementInstanceDistinct && generationRotated && reprovisionPermitted,
-		}, nil
-	case "lifecycle.required-readiness-set":
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:readiness-check-input", input); err != nil {
-			return nil, fmt.Errorf("readiness request does not match schema: %w", err)
-		}
-		set := asObject(fixture["declared_check_set"])
-		requiredEntries := arrayValue(input, "required_checks")
-		declared := arrayValue(set, "check_ids")
-		versions := asObject(set["check_versions"])
-		required := make([]any, 0, len(requiredEntries))
-		requiredVersions := make(map[string]string, len(requiredEntries))
-		setValid := stringValue(set, "readiness_check_set_id") != "" &&
-			stringValue(input, "readiness_check_set_id") == stringValue(set, "readiness_check_set_id") &&
-			uniqueStrings(declared)
-		for _, rawRequirement := range requiredEntries {
-			requirement := asObject(rawRequirement)
-			checkID := stringValue(requirement, "check_id")
-			checkVersion := stringValue(requirement, "check_version")
-			if checkID == "" || checkVersion == "" {
-				setValid = false
-				continue
-			}
-			if _, duplicate := requiredVersions[checkID]; duplicate {
-				setValid = false
-			}
-			required = append(required, checkID)
-			requiredVersions[checkID] = checkVersion
-			if declaredVersion, ok := versions[checkID].(string); !ok || declaredVersion == "" || declaredVersion != checkVersion {
-				setValid = false
-			}
-		}
-		setValid = setValid && sameStringSet(required, declared)
-		caseResults := make([]any, 0, len(arrayValue(fixture, "evaluations")))
-		for _, rawCase := range arrayValue(fixture, "evaluations") {
-			readinessCase := asObject(rawCase)
-			output := asObject(readinessCase["output"])
-			result := map[string]any{
-				"case_id":                    stringValue(readinessCase, "case_id"),
-				"ready_transition_permitted": false,
-				"readiness":                  "not_ready",
-				"block_reason":               any(nil),
-				"error_code":                 any(nil),
-			}
-			unknownState := false
-			for _, rawResult := range arrayValue(output, "check_results") {
-				status := stringValue(asObject(rawResult), "result")
-				if status != "pass" && status != "fail" && status != "unknown" {
-					unknownState = true
-				}
-			}
-			if unknownState {
-				result["readiness"] = "unknown"
-				result["block_reason"] = "unknown_state"
-				result["error_code"] = "core.compatibility.unknown_state"
-				caseResults = append(caseResults, result)
-				continue
-			}
-			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:readiness-check-output", output); err != nil {
-				return nil, fmt.Errorf("readiness output %q does not match schema: %w", stringValue(readinessCase, "case_id"), err)
-			}
-			bound := input["server_id"] == output["server_id"] &&
-				input["environment_id"] == output["environment_id"] &&
-				input["game_release_id"] == output["game_release_id"] &&
-				reflect.DeepEqual(input["instance_ref"], output["instance_ref"])
-			if !setValid {
-				result["block_reason"] = "invalid_required_check_set"
-			} else if !bound {
-				result["block_reason"] = "target_mismatch"
-			} else {
-				observed := make(map[string]int)
-				versionsMatch := true
-				allPassed := true
-				for _, rawResult := range arrayValue(output, "check_results") {
-					check := asObject(rawResult)
-					checkID := stringValue(check, "check_id")
-					observed[checkID]++
-					if check["check_version"] != versions[checkID] {
-						versionsMatch = false
-					}
-					if stringValue(check, "result") != "pass" {
-						allPassed = false
-					}
-				}
-				complete := len(observed) == len(required) && len(arrayValue(output, "check_results")) == len(required)
-				for _, rawID := range required {
-					if id, ok := rawID.(string); !ok || observed[id] != 1 {
-						complete = false
-					}
-				}
-				if !complete {
-					result["block_reason"] = "required_check_set_mismatch"
-				} else if !versionsMatch {
-					result["block_reason"] = "required_check_set_mismatch"
-				} else if !allPassed {
-					result["readiness"] = "unknown"
-					result["block_reason"] = "required_check_not_passed"
-				} else {
-					result["ready_transition_permitted"] = true
-					result["readiness"] = "ready"
-				}
-			}
-			caseResults = append(caseResults, result)
-		}
-		return map[string]any{"readiness_check_set_valid": setValid, "evaluations": caseResults, "ready_transition_requires_complete_passing_set": true}, nil
-	case "compatibility.protocol-version-negotiation":
-		results := make([]any, 0, len(arrayValue(fixture, "cases")))
-		for _, rawCase := range arrayValue(fixture, "cases") {
-			item := asObject(rawCase)
-			local, remote := arrayValue(item, "local_protocol_versions"), arrayValue(item, "peer_protocol_versions")
-			selected := stringValue(item, "selected_protocol_version")
-			mutual := false
-			for _, localVersion := range local {
-				for _, peerVersion := range remote {
-					if localVersion == peerVersion && localVersion == selected {
-						mutual = true
-					}
-				}
-			}
-			priorFailureVersion := stringValue(item, "version_that_failed_validation_or_authorization")
-			downgradeAfterError := priorFailureVersion != "" && selected != priorFailureVersion
-			accepted := mutual && !downgradeAfterError
-			var errorCode any
-			if !accepted {
-				errorCode = "core.compatibility.unsupported_version"
-			}
-			results = append(results, map[string]any{
-				"case_id": stringValue(item, "case_id"), "accepted": accepted,
-				"error_code": errorCode, "session_created": accepted, "adapter_calls": 0,
-			})
-		}
-		return map[string]any{"cases": results}, nil
-	case "compatibility.response-evolution":
-		server := asObject(input["server"])
-		operation := asObject(input["operation"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:lifecycle:server", server); err != nil {
-			return nil, fmt.Errorf("extensible server resource does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation); err != nil {
-			return nil, fmt.Errorf("extensible operation resource does not match schema: %w", err)
-		}
-		request := asObject(input["request"])
-		requestWithUnknown := asObject(input["request_with_unknown_field"])
-		requestValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation-request", request) == nil
-		unknownRequestRejected := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation-request", requestWithUnknown) != nil
-		nestedServer := asObject(input["server_with_unknown_nested_observation_field"])
-		nestedServerRejected := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:lifecycle:server", nestedServer) != nil
-		unknownLifecycle := asObject(input["server_with_unknown_lifecycle_state"])
-		unknownLifecycleRejected := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:lifecycle:server", unknownLifecycle) != nil
-		unknownOperationStatus := asObject(input["operation_with_unknown_status"])
-		unknownOperationStatusRejected := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", unknownOperationStatus) != nil
-		return map[string]any{
-			"server_resource_valid": true, "operation_resource_valid": true,
-			"unknown_optional_top_level_fields_ignored": true, "valid_request_accepted": requestValid,
-			"unknown_request_field_rejected":         unknownRequestRejected,
-			"unknown_nested_response_field_rejected": nestedServerRejected,
-			"unknown_lifecycle_state_rejected":       unknownLifecycleRejected,
-			"unknown_operation_status_rejected":      unknownOperationStatusRejected,
-			"unknown_state_error_code":               "core.compatibility.unknown_state", "adapter_calls": 0,
-		}, nil
-	case "compatibility.operation-upgrade-recovery":
-		operation := asObject(input["operation"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation); err != nil {
-			return nil, fmt.Errorf("in-flight operation does not match schema: %w", err)
-		}
-		results := make([]any, 0, len(arrayValue(input, "recovery_cases")))
-		for _, rawCase := range arrayValue(input, "recovery_cases") {
-			item := asObject(rawCase)
-			available := false
-			for _, rawCapability := range arrayValue(item, "available_capabilities") {
-				capability := asObject(rawCapability)
-				for _, rawStep := range arrayValue(operation, "steps") {
-					step := asObject(rawStep)
-					if stringValue(step, "adapter_id") == stringValue(capability, "adapter_id") &&
-						stringValue(step, "capability_name") == stringValue(capability, "capability_name") &&
-						stringValue(step, "capability_version") == stringValue(capability, "capability_version") &&
-						stringValue(step, "status") != "succeeded" {
-						available = true
-					}
-				}
-			}
-			completedSteps, unknownSteps := 0, 0
-			for _, rawStep := range arrayValue(operation, "steps") {
-				switch stringValue(asObject(rawStep), "status") {
-				case "succeeded":
-					completedSteps++
-				case "outcome_unknown":
-					unknownSteps++
-				}
-			}
-			recoveryStatus := "needs_operator"
-			if available && boolValue(item, "tested_migration_available") {
-				recoveryStatus = "reconciling"
-			} else if available {
-				recoveryStatus = "reconciling"
-			}
-			results = append(results, map[string]any{
-				"case_id": stringValue(item, "case_id"), "recorded_protocol_version_preserved": true,
-				"recorded_capability_exactly_supported": available, "recovery_status": recoveryStatus,
-				"completed_steps_replayed": 0, "unknown_steps_retried_before_reconciliation": false,
-				"completed_step_count": completedSteps, "unknown_step_count": unknownSteps,
-				"adapter_dispatches": 0,
-			})
-		}
-		return map[string]any{"operation_schema_valid": true, "operation_id_preserved": operation["operation_id"], "cases": results}, nil
-	case "transport.storage.profile-negotiated", "transport.storage.profile-not-selected", "transport.storage.selection-not-offered":
-		initRequest := asObject(input["initialize_request"])
-		initResult := asObject(input["initialize_result"])
-		descriptor := asObject(input["adapter_descriptor"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:rpc:adapter-initialize-request", initRequest); err != nil {
-			return nil, fmt.Errorf("stream initialize request does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:rpc:adapter-initialize-result", initResult); err != nil {
-			return nil, fmt.Errorf("stream initialize result does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:common:capability-descriptor", descriptor); err != nil {
-			return nil, fmt.Errorf("stream adapter descriptor does not match schema: %w", err)
-		}
-		offer := asObject(asObject(initRequest["params"])["stream_transport"])
-		selected := stringValue(asObject(initResult["result"]), "selected_stream_transport")
-		profile := "local-unix-stream-v1"
-		profileNegotiated := stringValue(offer, "profile") == profile && selected == profile
-		profileDeclared := contains(arrayValue(descriptor, "stream_transport_profiles"), profile)
-		hasPut, hasGet := false, false
-		for _, raw := range arrayValue(descriptor, "capabilities") {
-			name := stringValue(asObject(raw), "name")
-			hasPut = hasPut || name == "storage.object.put"
-			hasGet = hasGet || name == "storage.object.get"
-		}
-		storageStreamCapabilitiesAccepted := (!hasPut && !hasGet) || profileNegotiated && profileDeclared
-		return map[string]any{
-			"initialization_valid":                 true,
-			"descriptor_valid":                     true,
-			"stream_profile_negotiated":            profileNegotiated,
-			"stream_profile_declared":              profileDeclared,
-			"storage_put_advertised":               hasPut,
-			"storage_get_advertised":               hasGet,
-			"storage_stream_capabilities_accepted": storageStreamCapabilitiesAccepted,
-		}, nil
-	case "management.pagination.cursor-scope":
-		cursor := asObject(input["cursor"])
-		cursorActor := stringValue(cursor, "actor_id")
-		cursorFilters, filtersValid := cursor["filter_scope"].(map[string]any)
-		attempts := arrayValue(input, "attempts")
-		if cursorActor == "" || !filtersValid || len(attempts) == 0 {
-			return nil, fmt.Errorf("cursor scope fixture must include an actor, filter scope, and attempts")
-		}
-		outcomes := make([]any, 0, len(attempts))
-		for index, rawAttempt := range attempts {
-			attempt := asObject(rawAttempt)
-			attemptID := stringValue(attempt, "attempt_id")
-			actorID := stringValue(attempt, "actor_id")
-			filters, attemptFiltersValid := attempt["filter_scope"].(map[string]any)
-			if attemptID == "" || actorID == "" || !attemptFiltersValid {
-				return nil, fmt.Errorf("cursor attempt %d must include an attempt ID, actor, and filter scope", index)
-			}
-			sameScope := actorID == cursorActor && reflect.DeepEqual(filters, cursorFilters)
-			if !sameScope {
-				outcomes = append(outcomes, map[string]any{
-					"attempt_id":                 attemptID,
-					"accepted":                   false,
-					"error_code":                 "core.validation.invalid_request",
-					"items":                      []any{},
-					"cursor_advanced":            false,
-					"resource_metadata_returned": false,
-				})
-				continue
-			}
-			items := arrayValue(attempt, "page_items")
-			outcomes = append(outcomes, map[string]any{
-				"attempt_id":                 attemptID,
-				"accepted":                   true,
-				"error_code":                 nil,
-				"items":                      items,
-				"cursor_advanced":            true,
-				"resource_metadata_returned": len(items) > 0,
-			})
-		}
-		return map[string]any{"binding_enforced": true, "attempts": outcomes}, nil
-	case "management.authentication.credential-profiles":
-		remote := asObject(input["remote_profile"])
-		expectedAudience := stringValue(remote, "expected_audience")
-		remoteAttempts := arrayValue(remote, "attempts")
-		if expectedAudience == "" || len(remoteAttempts) == 0 {
-			return nil, fmt.Errorf("remote authentication fixture must include an expected audience and attempts")
-		}
-		remoteResults := make([]any, 0, len(remoteAttempts))
-		for index, rawAttempt := range remoteAttempts {
-			attempt := asObject(rawAttempt)
-			attemptID := stringValue(attempt, "case_id")
-			actorID := stringValue(attempt, "authenticated_actor_id")
-			if attemptID == "" {
-				return nil, fmt.Errorf("remote authentication attempt %d must have a case_id", index)
-			}
-			authenticated := boolValue(attempt, "tls") &&
-				boolValue(attempt, "signature_valid") &&
-				boolValue(attempt, "not_expired") &&
-				stringValue(attempt, "audience") == expectedAudience &&
-				!boolValue(attempt, "revoked") &&
-				actorID != ""
-			httpStatus := 401
-			var trustedActor any
-			if authenticated {
-				httpStatus = 200
-				trustedActor = actorID
-			}
-			remoteResults = append(remoteResults, map[string]any{
-				"case_id": attemptID, "authenticated": authenticated, "http_status": httpStatus,
-				"actor_id": trustedActor, "request_claims_used_for_auth": false,
-				"protected_resource_data_returned": false, "operation_created": false,
-				"adapter_dispatch_count": 0,
-			})
-		}
-		local := asObject(input["local_profile"])
-		localAttempts := arrayValue(local, "attempts")
-		if len(localAttempts) == 0 {
-			return nil, fmt.Errorf("local authentication fixture must include attempts")
-		}
-		localResults := make([]any, 0, len(localAttempts))
-		for index, rawAttempt := range localAttempts {
-			attempt := asObject(rawAttempt)
-			attemptID := stringValue(attempt, "case_id")
-			if attemptID == "" {
-				return nil, fmt.Errorf("local authentication attempt %d must have a case_id", index)
-			}
-			actorID := stringValue(attempt, "peer_actor_id")
-			authenticated := boolValue(attempt, "peer_identity_verified") && actorID != ""
-			httpStatus := 401
-			var trustedActor any
-			if authenticated {
-				httpStatus = 200
-				trustedActor = actorID
-			}
-			localResults = append(localResults, map[string]any{
-				"case_id": attemptID, "authenticated": authenticated, "http_status": httpStatus,
-				"actor_id": trustedActor, "request_claims_used_for_auth": false,
-				"protected_resource_data_returned": false, "operation_created": false,
-				"adapter_dispatch_count": 0,
-			})
-		}
-		redaction := asObject(input["token_redaction"])
-		token := stringValue(redaction, "synthetic_token")
-		surfaces := asObject(redaction["surfaces"])
-		if token == "" || len(surfaces) == 0 {
-			return nil, fmt.Errorf("token redaction fixture must include a synthetic token and observed surfaces")
-		}
-		authorizationHeader := stringValue(redaction, "authorization_header")
-		authorizationOverTLS := boolValue(redaction, "authorization_over_tls")
-		tokenInCorrectHeader := authorizationHeader == "Bearer "+token
-		leakedSurfaces := make([]string, 0)
-		for surface, rawValue := range surfaces {
-			if strings.Contains(fmt.Sprint(rawValue), token) {
-				leakedSurfaces = append(leakedSurfaces, surface)
-			}
-		}
-		sort.Strings(leakedSurfaces)
-		return map[string]any{
-			"remote_attempts": remoteResults,
-			"local_attempts":  localResults,
-			"token_redaction": map[string]any{
-				"token_in_authorization_header_over_tls": tokenInCorrectHeader && authorizationOverTLS,
-				"token_absent_from_observed_surfaces":    len(leakedSurfaces) == 0,
-				"leaked_surfaces":                        leakedSurfaces,
-			},
-		}, nil
-	case "management.authentication.actor-spoofing":
-		principal := asObject(input["authenticated_principal"])
-		authenticatedActor := stringValue(principal, "actor_id")
-		principalPermissions := arrayValue(principal, "permissions")
-		principalEnvironments := arrayValue(principal, "environments")
-		attempts := arrayValue(input, "attempts")
-		if authenticatedActor == "" || len(attempts) == 0 {
-			return nil, fmt.Errorf("actor-spoofing fixture must include an authenticated principal and attempts")
-		}
-		outcomes := make([]any, 0, len(attempts))
-		for index, rawAttempt := range attempts {
-			attempt := asObject(rawAttempt)
-			attemptID := stringValue(attempt, "attempt_id")
-			claimedActor := stringValue(attempt, "claimed_actor_id")
-			claimedRoles := arrayValue(attempt, "claimed_roles")
-			claimedPermissions := arrayValue(attempt, "claimed_permissions")
-			requiredPermission := stringValue(attempt, "required_permission")
-			targetEnvironment := stringValue(attempt, "target_environment")
-			if attemptID == "" || claimedActor == "" || claimedActor == authenticatedActor ||
-				len(claimedRoles) == 0 || len(claimedPermissions) == 0 ||
-				requiredPermission == "" || targetEnvironment == "" {
-				return nil, fmt.Errorf("actor-spoofing attempt %d must include spoofed claims and an authorization target", index)
-			}
-			allowed := contains(principalPermissions, requiredPermission) &&
-				contains(principalEnvironments, targetEnvironment)
-			operationResource := any(nil)
-			protectedResourceDataReturned := false
-			errorCategory := any("authorization")
-			if allowed {
-				operationID := stringValue(attempt, "operation_id")
-				if operationID == "" {
-					return nil, fmt.Errorf("accepted actor-spoofing attempt %d must identify its durable operation", index)
-				}
-				operationResource = map[string]any{
-					"operation_id": operationID,
-					"actor_id":     authenticatedActor,
-				}
-				protectedResourceDataReturned = true
-				errorCategory = nil
-			}
-			outcomes = append(outcomes, map[string]any{
-				"attempt_id":                       attemptID,
-				"accepted":                         allowed,
-				"error_category":                   errorCategory,
-				"operation_resource":               operationResource,
-				"request_claims_used_for_auth":     false,
-				"protected_resource_data_returned": protectedResourceDataReturned,
-			})
-		}
-		return map[string]any{
-			"authenticated_actor_id":      authenticatedActor,
-			"attempts":                    outcomes,
-			"credential_material_exposed": false,
-		}, nil
-	case "operations.authentication.client-session-expiry":
-		operation := asObject(input["operation"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation); err != nil {
-			return nil, fmt.Errorf("accepted operation does not match schema: %w", err)
-		}
-		if !boolValue(input, "durably_accepted") || !boolValue(input, "client_session_expired") {
-			return nil, fmt.Errorf("fixture requires an accepted operation and an expired client session")
-		}
-		if stringValue(operation, "status") != "running" {
-			return nil, fmt.Errorf("fixture requires a running accepted operation")
-		}
-		if !boolValue(input, "authorization_context_unchanged") || boolValue(input, "next_sensitive_step_reauthorization_required") {
-			return nil, fmt.Errorf("fixture requires unchanged authorization and no separate sensitive-step reauthorization gate")
-		}
-		return map[string]any{
-			"operation_schema_valid":                             true,
-			"operation_id":                                       stringValue(operation, "operation_id"),
-			"operation_status_after_expiry":                      stringValue(operation, "status"),
-			"operation_remains_durable":                          true,
-			"operation_continues_without_client_session":         true,
-			"operation_cancelled_due_to_session_expiry":          false,
-			"session_expiry_alone_requires_client_token_refresh": false,
-			"authorization_context_unchanged":                    true,
-			"sensitive_step_reauthorization_still_applies":       true,
-			"token_material_exposed":                             false,
-		}, nil
-	case "operations.cancellation.before-dispatch", "operations.cancellation.unknown-after-dispatch":
-		initial := asObject(fixture["initial"])
-		cancellationRequested := boolValue(fixture, "cancellation_requested")
-		dispatchRecorded := boolValue(initial, "dispatch_recorded")
-		providerResponseReceived := boolValue(initial, "provider_response_received")
-		operationStatus, stepStatus := "", ""
-		cancelled, cancellationApplied, reconciliationRequired := false, false, false
-		resourceLockRetained := false
-		completedSteps := arrayValue(initial, "completed_step_ids")
-		if cancellationRequested && !dispatchRecorded && !boolValue(initial, "external_effect_possible") {
-			operationStatus, stepStatus = "cancelled", "cancelled"
-			cancelled, cancellationApplied = true, true
-		} else if cancellationRequested && dispatchRecorded && !providerResponseReceived {
-			operationStatus, stepStatus = "reconciling", "outcome_unknown"
-			reconciliationRequired = true
-			resourceLockRetained = boolValue(initial, "resource_lock_held")
-		} else {
-			return nil, fmt.Errorf("cancellation fixture must describe an undispatched step or a dispatched step with unknown outcome")
-		}
-		return map[string]any{
-			"cancellation_request_recorded": cancellationRequested,
-			"cancellation_applied":          cancellationApplied,
-			"cancelled":                     cancelled,
-			"operation_status":              operationStatus,
-			"step_status":                   stepStatus,
-			"reconciliation_required":       reconciliationRequired,
-			"retry_without_reconciliation":  false,
-			"additional_provider_calls":     0,
-			"resource_lock_retained":        resourceLockRetained,
-			"completed_step_ids_preserved":  completedSteps,
-		}, nil
-	case "operations.reconcile.unknown-create-outcome":
-		initial := asObject(fixture["initial"])
-		unknown := boolValue(initial, "dispatch_recorded") && !boolValue(initial, "provider_response_received")
-		result := map[string]any{
-			"operation_status":         "reconciling",
-			"step_status":              "outcome_unknown",
-			"retry_create_immediately": false,
-			"inspect_exact_target_or_search_by_idempotency_reference": unknown,
-			"if_unresolvable": "needs_operator",
-		}
-		if !unknown {
-			result["operation_status"] = initial["operation_status"]
-			result["step_status"] = initial["step_status"]
-			result["retry_create_immediately"] = true
-			result["inspect_exact_target_or_search_by_idempotency_reference"] = false
-			result["if_unresolvable"] = nil
-		}
-		return result, nil
-	case "safety.destroy.blocked-stale-data-generation", "safety.destroy.blocked-unverified-backup":
-		state := asObject(fixture["initial_state"])
-		backup := asObject(state["backup"])
-		code := any(nil)
-		if !boolValue(backup, "verified") {
-			code = "core.safety.backup_not_verified"
-		} else if state["data_generation_status"] != "known" || backup["data_generation_id"] != state["data_generation_id"] {
-			code = "core.safety.backup_generation_mismatch"
-		}
-		accepted := code == nil
-		lifecycle := state["lifecycle_state"]
-		if accepted {
-			lifecycle = "destroying"
-		}
-		calls := 0
-		if accepted {
-			calls = 1
-		}
-		return map[string]any{
-			"accepted": accepted, "error_code": code,
-			"provider_destroy_calls": calls, "logical_server_state": lifecycle,
-		}, nil
-	case "security.staging.cannot-write-production-backup", "security.staging.production-write-scope-denied", "security.production.backup-write-authorized":
-		actor := stringValue(fixture, "actor_environment")
-		target := stringValue(fixture, "target_environment")
-		requiredScope := "storage.backup.write:" + target
-		allowed := actor == target && contains(arrayValue(fixture, "credential_scope"), requiredScope)
-		category := any(nil)
-		if !allowed {
-			category = "authorization"
-		}
-		return map[string]any{"accepted": allowed, "side_effect_permitted": allowed, "error_category": category}, nil
 	case "hosting.instance.wait.pending-remains-pending", "hosting.instance.wait.succeeded-postcondition-confirmed", "hosting.instance.wait.succeeded-state-mismatch", "hosting.instance.wait.unknown-requires-inspection", "hosting.instance.wait.operation-reference-mismatch", "hosting.instance.wait.failed-terminal-requires-inspection", "hosting.instance.wait.without-operation-reference":
 		waitInput, waitOutput := asObject(input["wait_input"]), asObject(input["wait_output"])
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-input", waitInput); err != nil {
@@ -972,80 +559,62 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"safe_to_treat_as_active": targetBound && state == "active",
 			"inspection_read_only":    true,
 		}, nil
-	case "execution.unit.inspect.exact-target-state":
-		return evaluateSystemdUnitInspection(pkg, fixture)
-	case "execution.unit.start.accepted-not-ready", "execution.unit.start.unknown-requires-inspection", "execution.unit.start.target-mismatch", "execution.unit.graceful-stop.completed-stopped", "execution.unit.graceful-stop.unknown-requires-inspection":
-		executionInput, executionOutput := asObject(input["execution_input"]), asObject(input["execution_output"])
-		inputSchemaID, outputSchemaID := "", ""
-		if strings.HasPrefix(fixtureID, "execution.unit.start.") {
-			inputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-start-input"
-			outputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-start-output"
-		} else {
-			inputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-graceful-stop-input"
-			outputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-graceful-stop-output"
+	case "hosting.provision.valid.standard-os":
+		if err := pkg.validateSchema(provisionSchemaID, input); err != nil {
+			return nil, err
 		}
-		if err := pkg.validateSchema(inputSchemaID, executionInput); err != nil {
-			return nil, fmt.Errorf("execution input does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema(outputSchemaID, executionOutput); err != nil {
-			return nil, fmt.Errorf("execution output does not match schema: %w", err)
-		}
-		unitRef := asObject(executionInput["unit_ref"])
-		resultUnitRef := asObject(executionOutput["unit_ref"])
-		unitBound := reflect.DeepEqual(unitRef, resultUnitRef)
-		outcome := stringValue(executionOutput, "outcome")
-		state := stringValue(executionOutput, "state")
-		operationRef, hasOperationRef := executionOutput["external_operation_ref"]
-		operationEnvironmentMatches := !hasOperationRef ||
-			stringValue(asObject(operationRef), "environment_id") == stringValue(unitRef, "environment_id")
-		unknown := outcome == "outcome_unknown"
-		resultRequiresInspection := !unitBound || unknown
-		startSucceeded := strings.HasPrefix(fixtureID, "execution.unit.start.") && unitBound && outcome == "completed" && state == "running"
-		return map[string]any{
-			"schemas_valid":                     true,
-			"unit_bound":                        unitBound,
-			"outcome":                           outcome,
-			"state":                             state,
-			"external_operation_ref_present":    hasOperationRef,
-			"operation_ref_environment_matches": operationEnvironmentMatches,
-			"readiness_established":             false,
-			"reconciliation_required":           resultRequiresInspection,
-			"result_requires_inspection":        resultRequiresInspection,
-			"retry_without_inspection":          false,
-			"successful_start_claim_accepted":   startSucceeded,
-			"termination_confirmed":             unitBound && outcome == "completed" && state == "stopped",
-		}, nil
-	case "execution.unit.force-stop.approval-required", "execution.unit.force-stop.approval-scope-denied", "execution.unit.force-stop.completed-stopped", "execution.unit.force-stop.accepted-not-stopped", "execution.unit.force-stop.target-mismatch", "execution.unit.force-stop.unknown-requires-inspection":
-		forceStopInput := asObject(input["force_stop_input"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-force-stop-input", forceStopInput); err != nil {
-			return map[string]any{"schemas_valid": false, "approval_required": forceStopInput["approval_id"] == nil, "dispatch_allowed": false, "termination_confirmed": false}, nil
-		}
-		preconditions := asObject(fixture["core_preconditions"])
-		approvalValid := boolValue(preconditions, "approval_valid")
-		dispatchAllowed := approvalValid
-		output := asObject(input["force_stop_output"])
-		outputPresent := len(output) > 0
-		targetBound, terminationConfirmed, acceptedNotComplete, mustInspect := false, false, false, false
-		if outputPresent {
-			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-force-stop-output", output); err != nil {
-				return nil, fmt.Errorf("force-stop output does not match schema: %w", err)
+		return map[string]any{"schema_valid": true, "side_effect_permitted": false}, nil
+	case "hosting.bootstrap.execution-binding-and-readiness-gate":
+		results := make([]any, 0, len(arrayValue(fixture, "cases")))
+		for _, rawCase := range arrayValue(fixture, "cases") {
+			item := asObject(rawCase)
+			deliverInput := asObject(item["deliver_input"])
+			output := asObject(item["execution_output"])
+			inspectInput := asObject(item["inspect_input"])
+			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-deliver-input", deliverInput); err != nil {
+				return nil, fmt.Errorf("case %q delivery input does not match schema: %w", stringValue(item, "case_id"), err)
 			}
-			targetBound = reflect.DeepEqual(asObject(forceStopInput["unit_ref"]), asObject(output["unit_ref"]))
-			outcome := stringValue(output, "outcome")
-			state := stringValue(output, "state")
-			terminationConfirmed = dispatchAllowed && targetBound && outcome == "completed" && state == "stopped"
-			acceptedNotComplete = outcome == "accepted" && !terminationConfirmed
-			mustInspect = !targetBound || outcome == "outcome_unknown"
+			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-execution-output", output); err != nil {
+				return nil, fmt.Errorf("case %q execution output does not match schema: %w", stringValue(item, "case_id"), err)
+			}
+			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-inspect-input", inspectInput); err != nil {
+				return nil, fmt.Errorf("case %q inspection input does not match schema: %w", stringValue(item, "case_id"), err)
+			}
+			bootstrap := asObject(deliverInput["bootstrap"])
+			instanceBound := reflect.DeepEqual(deliverInput["instance_ref"], output["instance_ref"]) &&
+				reflect.DeepEqual(deliverInput["instance_ref"], inspectInput["instance_ref"])
+			revisionBound := bootstrap["revision"] == output["revision"] && bootstrap["digest"] == output["digest"]
+			executionBound := reflect.DeepEqual(output["bootstrap_execution_ref"], inspectInput["bootstrap_execution_ref"])
+			results = append(results, map[string]any{
+				"case_id":                    stringValue(item, "case_id"),
+				"instance_bound":             instanceBound,
+				"revision_and_digest_bound":  revisionBound,
+				"execution_reference_bound":  executionBound,
+				"bootstrap_completed":        output["state"] == "succeeded" && output["exit_code"] == json.Number("0"),
+				"ready_transition_permitted": false,
+			})
 		}
-		return map[string]any{
-			"schemas_valid":             true,
-			"approval_required":         true,
-			"dispatch_allowed":          dispatchAllowed,
-			"target_bound":              targetBound,
-			"termination_confirmed":     terminationConfirmed,
-			"accepted_not_complete":     acceptedNotComplete,
-			"must_inspect_before_retry": mustInspect,
-		}, nil
+		return map[string]any{"cases": results, "bootstrap_completion_alone_never_permits_ready": true}, nil
+	case "hosting.bootstrap.rejects-false-success":
+		output := asObject(fixture["execution_output"])
+		err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-execution-output", output)
+		return map[string]any{"accepted": err == nil}, nil
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceGame(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "game.release.describe.integrity-and-identity":
+		return evaluateGameReleaseDescription(pkg, fixture)
+	case "game.install.release-binding-and-reconciliation":
+		return evaluateGameInstallContract(pkg, fixture)
+	case "game.backup.capture.binding-and-stream-integrity":
+		return evaluateBackupCapture(pkg, fixture)
+	case "game.configure.pinned-schema-and-result-binding":
+		return evaluateConfiguration(pkg, fixture)
 	case "game.migrate.approved-copy-success", "game.migrate.approval-required", "game.migrate.verified-backup-required", "game.migrate.distinct-target-required", "game.migrate.target-binding", "game.migrate.complete-checks-required", "game.migrate.compatibility-required", "game.migrate.backup-result-binding", "game.migrate.target-stopped", "game.migrate.unknown-requires-reconciliation":
 		migrationInput := asObject(input["migration_input"])
 		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:migrate-input", migrationInput); err != nil {
@@ -1555,6 +1124,303 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"reconciliation_reference_present":       unknown && hasReference && targetBound,
 			"retry_permitted_without_reconciliation": !unknown || !hasReference,
 		}, nil
+	case "game.release.install.configure.fail-closed":
+		releaseInput := asObject(input["release_describe_input"])
+		releaseOutput := asObject(input["release_describe_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:release-describe-input", releaseInput); err != nil {
+			return nil, fmt.Errorf("release input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:release-describe-output", releaseOutput); err != nil {
+			return nil, fmt.Errorf("release output does not match schema: %w", err)
+		}
+		releaseBound := stringValue(releaseInput, "release_id") == stringValue(releaseOutput, "release_id")
+		if !releaseBound {
+			return nil, fmt.Errorf("release output must describe the exact requested release")
+		}
+		artifacts := arrayValue(releaseOutput, "artifacts")
+		artifactIDs := make([]any, 0, len(artifacts))
+		checksummed := true
+		for _, rawArtifact := range artifacts {
+			artifact := asObject(rawArtifact)
+			artifactIDs = append(artifactIDs, artifact["artifact_id"])
+			checksum := asObject(artifact["checksum"])
+			if stringValue(checksum, "algorithm") != "sha256" || stringValue(checksum, "digest") == "" {
+				checksummed = false
+			}
+		}
+		if !uniqueStrings(artifactIDs) {
+			return nil, fmt.Errorf("release artifact IDs must be unique")
+		}
+		installInput := asObject(input["install_input"])
+		installOutput := asObject(input["install_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:install-input", installInput); err != nil {
+			return nil, fmt.Errorf("install input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:install-output", installOutput); err != nil {
+			return nil, fmt.Errorf("install output does not match schema: %w", err)
+		}
+		installBound := reflect.DeepEqual(installInput["target"], installOutput["target"]) &&
+			stringValue(installInput, "release_id") == stringValue(installOutput, "release_id")
+		if !installBound || stringValue(installInput, "release_id") != stringValue(releaseOutput, "release_id") {
+			return nil, fmt.Errorf("install messages must remain bound to the described release and exact target")
+		}
+		installationBlocked := stringValue(installOutput, "artifact_verification") == "mismatch" &&
+			stringValue(installOutput, "outcome") == "rejected" && !boolValue(installOutput, "installation_started")
+		configureInput := asObject(input["configure_input"])
+		configureOutput := asObject(input["configure_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:configure-input", configureInput); err != nil {
+			return nil, fmt.Errorf("configure input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:configure-output", configureOutput); err != nil {
+			return nil, fmt.Errorf("configure output does not match schema: %w", err)
+		}
+		configureBound := reflect.DeepEqual(configureInput["target"], configureOutput["target"]) &&
+			stringValue(configureInput, "release_id") == stringValue(configureOutput, "release_id")
+		if !configureBound || stringValue(configureInput, "release_id") != stringValue(releaseOutput, "release_id") ||
+			configureInput["configuration_schema_uri"] != releaseOutput["configuration_schema_uri"] ||
+			!reflect.DeepEqual(configureInput["configuration_schema_checksum"], releaseOutput["configuration_schema_checksum"]) {
+			return nil, fmt.Errorf("configuration must remain bound to the described release schema and target")
+		}
+		invalidNotApplied := stringValue(configureOutput, "validation_result") == "invalid" &&
+			stringValue(configureOutput, "outcome") == "rejected" && !boolValue(configureOutput, "application_started")
+		return map[string]any{
+			"release_schema_valid": true, "release_bound": releaseBound, "release_artifacts_checksummed": checksummed,
+			"install_schema_valid": true, "installation_blocked_before_start": installationBlocked,
+			"configure_schema_valid": true, "invalid_configuration_not_applied": invalidNotApplied,
+		}, nil
+	case "game.install.repeat-same-release-is-idempotent", "game.install.completed-verifies-exact-artifacts", "game.install.incomplete-artifact-set-requires-reconciliation":
+		installInput := asObject(input["install_request"])
+		installOutput := asObject(input["install_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:install-input", installInput); err != nil {
+			return nil, fmt.Errorf("install input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:install-output", installOutput); err != nil {
+			return nil, fmt.Errorf("install output does not match schema: %w", err)
+		}
+		bound := reflect.DeepEqual(installInput["target"], installOutput["target"]) &&
+			stringValue(installInput, "release_id") == stringValue(installOutput, "release_id") &&
+			stringValue(installInput, "release_id") == stringValue(input, "release_id")
+		requiredArtifacts := arrayValue(input, "required_artifacts")
+		artifactResults := arrayValue(installOutput, "artifact_results")
+		complete, checksumsVerified := compareArtifactVerifications(requiredArtifacts, artifactResults)
+		outcome, verification := stringValue(installOutput, "outcome"), stringValue(installOutput, "artifact_verification")
+		started := boolValue(installOutput, "installation_started")
+		outcomeConsistent := outcome == "installed" && started || outcome == "already_installed" && !started
+		accepted := bound && complete && checksumsVerified && verification == "verified" && outcomeConsistent
+		return map[string]any{
+			"schema_valid": true, "target_bound": bound, "artifact_set_complete": complete,
+			"artifact_checksums_verified":       checksumsVerified,
+			"installation_result_accepted":      accepted,
+			"duplicate_install_started":         outcome == "already_installed" && started,
+			"operation_reconciliation_required": started && !accepted,
+		}, nil
+	case "game.validate-installation.unknown-blocks-start", "game.validate-installation.valid-exact-artifacts", "game.validate-installation.valid-incomplete-artifacts-blocks-start", "game.validate-installation.valid-claim-with-unverified-artifact", "game.validate-installation.valid-claim-with-checksum-mismatch":
+		validateInput := asObject(input["validate_request"])
+		validateOutput := asObject(input["validate_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:validate-installation-input", validateInput); err != nil {
+			return nil, fmt.Errorf("validation input does not match schema: %w", err)
+		}
+		bound := reflect.DeepEqual(validateInput["target"], validateOutput["target"]) &&
+			stringValue(validateInput, "release_id") == stringValue(validateOutput, "release_id")
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:validate-installation-output", validateOutput); err != nil {
+			if stringValue(fixture, "fixture_id") == "game.validate-installation.valid-claim-with-unverified-artifact" {
+				return map[string]any{
+					"schema_valid": false, "target_bound": bound, "artifact_set_complete": true,
+					"aggregate_consistent": false, "start_permitted": false,
+				}, nil
+			}
+			return nil, fmt.Errorf("validation output does not match schema: %w", err)
+		}
+		requiredArtifacts := arrayValue(input, "required_artifact_ids")
+		results := arrayValue(validateOutput, "artifact_results")
+		resultIDs := make([]any, 0, len(results))
+		allVerified := len(results) > 0
+		for _, raw := range results {
+			result := asObject(raw)
+			resultIDs = append(resultIDs, result["artifact_id"])
+			allVerified = allVerified && stringValue(result, "result") == "verified" && reflect.DeepEqual(result["expected_checksum"], result["observed_checksum"])
+		}
+		complete := uniqueStrings(requiredArtifacts) && uniqueStrings(resultIDs) && sameStringSet(requiredArtifacts, resultIDs)
+		validationResult := stringValue(validateOutput, "validation_result")
+		aggregateConsistent := validationResult != "valid" || allVerified
+		return map[string]any{
+			"schema_valid": true, "target_bound": bound, "artifact_set_complete": complete,
+			"aggregate_consistent": aggregateConsistent,
+			"validation_result":    validationResult,
+			"start_permitted":      bound && complete && aggregateConsistent && validationResult == "valid",
+		}, nil
+	case "game.readiness.unknown-required-check-blocks-ready":
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:readiness-check-input", input); err != nil {
+			return nil, fmt.Errorf("readiness input does not match schema: %w", err)
+		}
+		output := asObject(fixture["output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:readiness-check-output", output); err != nil {
+			return nil, fmt.Errorf("readiness output does not match schema: %w", err)
+		}
+		bound := input["server_id"] == output["server_id"] &&
+			input["environment_id"] == output["environment_id"] &&
+			input["game_release_id"] == output["game_release_id"] &&
+			reflect.DeepEqual(input["instance_ref"], output["instance_ref"])
+		if !bound {
+			return nil, fmt.Errorf("readiness output must remain bound to the exact requested target and release")
+		}
+		requiredChecks := arrayValue(input, "required_checks")
+		if len(requiredChecks) == 0 {
+			return nil, fmt.Errorf("readiness request must contain required checks")
+		}
+		requested := make(map[string]string, len(requiredChecks))
+		for _, rawRequirement := range requiredChecks {
+			requirement := asObject(rawRequirement)
+			checkID := stringValue(requirement, "check_id")
+			checkVersion := stringValue(requirement, "check_version")
+			if checkID == "" || checkVersion == "" {
+				return nil, fmt.Errorf("required check IDs and versions must be non-empty")
+			}
+			if _, duplicate := requested[checkID]; duplicate {
+				return nil, fmt.Errorf("required check IDs must be unique")
+			}
+			requested[checkID] = checkVersion
+		}
+		results := arrayValue(output, "check_results")
+		if len(results) != len(requested) {
+			return nil, fmt.Errorf("readiness output must contain exactly one result for every required check")
+		}
+		type observedReadiness struct {
+			result string
+		}
+		observed := make(map[string]observedReadiness, len(results))
+		for _, rawResult := range results {
+			item := asObject(rawResult)
+			checkID := stringValue(item, "check_id")
+			expectedVersion, exists := requested[checkID]
+			if !exists {
+				return nil, fmt.Errorf("readiness output contains an unrequested check %q", checkID)
+			}
+			if _, exists := observed[checkID]; exists {
+				return nil, fmt.Errorf("readiness output contains duplicate check %q", checkID)
+			}
+			version := stringValue(item, "check_version")
+			if version == "" || version != expectedVersion {
+				return nil, fmt.Errorf("readiness output check %q has a missing or mismatched version", checkID)
+			}
+			observed[checkID] = observedReadiness{result: stringValue(item, "result")}
+		}
+		allPassed, hasFailure, hasUnknown := true, false, false
+		for checkID := range requested {
+			result, exists := observed[checkID]
+			if !exists {
+				return nil, fmt.Errorf("readiness output is missing required check %q", checkID)
+			}
+			switch result.result {
+			case "pass":
+			case "fail":
+				allPassed, hasFailure = false, true
+			case "unknown":
+				allPassed, hasUnknown = false, true
+			default:
+				return nil, fmt.Errorf("unknown readiness result %q for check %q", result.result, checkID)
+			}
+		}
+		readiness := "ready"
+		if hasFailure {
+			readiness = "not_ready"
+		} else if hasUnknown {
+			readiness = "unknown"
+		}
+		return map[string]any{
+			"schema_valid": true, "target_bound": bound,
+			"required_checks_complete": true, "all_required_checks_passed": allPassed,
+			"readiness": readiness, "ready_transition_permitted": allPassed,
+		}, nil
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceOperations(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "operations.type-binding":
+		return evaluateOperationTypeBinding(pkg, fixture)
+	case "operations.unknown-result-reference-projection":
+		return evaluateUnknownResultReferenceProjection(pkg, fixture)
+	case "operations.request-fingerprint-jcs":
+		return evaluateRequestFingerprintJCS(fixture)
+	case "operations.authentication.client-session-expiry":
+		operation := asObject(input["operation"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation); err != nil {
+			return nil, fmt.Errorf("accepted operation does not match schema: %w", err)
+		}
+		if !boolValue(input, "durably_accepted") || !boolValue(input, "client_session_expired") {
+			return nil, fmt.Errorf("fixture requires an accepted operation and an expired client session")
+		}
+		if stringValue(operation, "status") != "running" {
+			return nil, fmt.Errorf("fixture requires a running accepted operation")
+		}
+		if !boolValue(input, "authorization_context_unchanged") || boolValue(input, "next_sensitive_step_reauthorization_required") {
+			return nil, fmt.Errorf("fixture requires unchanged authorization and no separate sensitive-step reauthorization gate")
+		}
+		return map[string]any{
+			"operation_schema_valid":                             true,
+			"operation_id":                                       stringValue(operation, "operation_id"),
+			"operation_status_after_expiry":                      stringValue(operation, "status"),
+			"operation_remains_durable":                          true,
+			"operation_continues_without_client_session":         true,
+			"operation_cancelled_due_to_session_expiry":          false,
+			"session_expiry_alone_requires_client_token_refresh": false,
+			"authorization_context_unchanged":                    true,
+			"sensitive_step_reauthorization_still_applies":       true,
+			"token_material_exposed":                             false,
+		}, nil
+	case "operations.cancellation.before-dispatch", "operations.cancellation.unknown-after-dispatch":
+		initial := asObject(fixture["initial"])
+		cancellationRequested := boolValue(fixture, "cancellation_requested")
+		dispatchRecorded := boolValue(initial, "dispatch_recorded")
+		providerResponseReceived := boolValue(initial, "provider_response_received")
+		operationStatus, stepStatus := "", ""
+		cancelled, cancellationApplied, reconciliationRequired := false, false, false
+		resourceLockRetained := false
+		completedSteps := arrayValue(initial, "completed_step_ids")
+		if cancellationRequested && !dispatchRecorded && !boolValue(initial, "external_effect_possible") {
+			operationStatus, stepStatus = "cancelled", "cancelled"
+			cancelled, cancellationApplied = true, true
+		} else if cancellationRequested && dispatchRecorded && !providerResponseReceived {
+			operationStatus, stepStatus = "reconciling", "outcome_unknown"
+			reconciliationRequired = true
+			resourceLockRetained = boolValue(initial, "resource_lock_held")
+		} else {
+			return nil, fmt.Errorf("cancellation fixture must describe an undispatched step or a dispatched step with unknown outcome")
+		}
+		return map[string]any{
+			"cancellation_request_recorded": cancellationRequested,
+			"cancellation_applied":          cancellationApplied,
+			"cancelled":                     cancelled,
+			"operation_status":              operationStatus,
+			"step_status":                   stepStatus,
+			"reconciliation_required":       reconciliationRequired,
+			"retry_without_reconciliation":  false,
+			"additional_provider_calls":     0,
+			"resource_lock_retained":        resourceLockRetained,
+			"completed_step_ids_preserved":  completedSteps,
+		}, nil
+	case "operations.reconcile.unknown-create-outcome":
+		initial := asObject(fixture["initial"])
+		unknown := boolValue(initial, "dispatch_recorded") && !boolValue(initial, "provider_response_received")
+		result := map[string]any{
+			"operation_status":         "reconciling",
+			"step_status":              "outcome_unknown",
+			"retry_create_immediately": false,
+			"inspect_exact_target_or_search_by_idempotency_reference": unknown,
+			"if_unresolvable": "needs_operator",
+		}
+		if !unknown {
+			result["operation_status"] = initial["operation_status"]
+			result["step_status"] = initial["step_status"]
+			result["retry_create_immediately"] = true
+			result["inspect_exact_target_or_search_by_idempotency_reference"] = false
+			result["if_unresolvable"] = nil
+		}
+		return result, nil
 	case "operations.backup.no-resume-final-state":
 		return evaluateBackupNoResumePolicy(pkg, fixture)
 	case "operations.backup.initial-state-resume-policy":
@@ -1765,546 +1631,6 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			"define_has_no_infrastructure":      defineNoInfrastructure,
 			"start_readiness_bound_and_current": startReadinessCurrent,
 			"stop_postconditions_confirmed":     stopPostconditions,
-		}, nil
-	case "execution.logs.health.delete.safety":
-		logsInput, logsOutput := asObject(input["logs_input"]), asObject(input["logs_output"])
-		healthInput, healthOutput := asObject(input["health_input"]), asObject(input["health_output"])
-		deleteInput, deleteOutput := asObject(input["delete_input"]), asObject(input["delete_output"])
-		for schemaID, message := range map[string]struct {
-			value map[string]any
-			name  string
-		}{
-			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-logs-read-input":       {logsInput, "logs input"},
-			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-logs-read-output":      {logsOutput, "logs output"},
-			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-health-inspect-input":  {healthInput, "health input"},
-			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-health-inspect-output": {healthOutput, "health output"},
-			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-delete-input":          {deleteInput, "delete input"},
-			"urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-delete-output":         {deleteOutput, "delete output"},
-		} {
-			if err := pkg.validateSchema(schemaID, message.value); err != nil {
-				return nil, fmt.Errorf("%s does not match schema: %w", message.name, err)
-			}
-		}
-		logsBound := reflect.DeepEqual(logsInput["unit_ref"], logsOutput["unit_ref"])
-		healthBound := reflect.DeepEqual(healthInput["unit_ref"], healthOutput["unit_ref"])
-		deleteBound := reflect.DeepEqual(deleteInput["unit_ref"], deleteOutput["unit_ref"])
-		maxBytes, err := integerValue(logsInput["max_bytes"])
-		if err != nil {
-			return nil, err
-		}
-		var totalBytes int64
-		for i, rawLine := range arrayValue(logsOutput, "lines") {
-			line, ok := rawLine.(string)
-			if !ok {
-				return nil, fmt.Errorf("log lines must be strings")
-			}
-			totalBytes += int64(len([]byte(line)))
-			if i > 0 {
-				totalBytes++
-			}
-		}
-		return map[string]any{
-			"schemas_valid": true, "unit_targets_bound": logsBound && healthBound && deleteBound,
-			"logs_within_bound": totalBytes <= maxBytes, "logs_redacted": boolValue(logsOutput, "redaction_applied"),
-			"unknown_health_not_healthy": stringValue(healthOutput, "health") == "unknown",
-			"persistent_data_preserved":  boolValue(deleteOutput, "persistent_data_preserved"),
-		}, nil
-	case "execution.unit.health.diagnostic-redaction-and-binding":
-		return evaluateExecutionHealthDiagnostics(pkg, fixture)
-	case "execution.unit.logs.byte-bound-and-redaction":
-		return evaluateExecutionLogRead(pkg, fixture)
-	case "integration.proxy.register.expired-readiness-rejected":
-		registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
-			return nil, fmt.Errorf("register input does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
-			return nil, fmt.Errorf("register output does not match schema: %w", err)
-		}
-		requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
-		targetInstance := asObject(requestTarget["instance_ref"])
-		assertedInstance := asObject(assertion["instance_ref"])
-		bound := reflect.DeepEqual(requestTarget, registerOutput["target"]) &&
-			stringValue(requestTarget, "server_id") == stringValue(assertion, "server_id") &&
-			stringValue(requestTarget, "environment_id") == stringValue(assertion, "environment_id") &&
-			stringValue(requestTarget, "environment_id") == stringValue(targetInstance, "environment_id") &&
-			stringValue(assertion, "environment_id") == stringValue(assertedInstance, "environment_id") &&
-			reflect.DeepEqual(requestTarget["instance_ref"], assertion["instance_ref"])
-		current, err := parseTime(stringValue(input, "validation_time"))
-		if err != nil {
-			return nil, err
-		}
-		expires, err := parseTime(stringValue(assertion, "expires_at"))
-		if err != nil {
-			return nil, err
-		}
-		readinessCurrent := bound && current.Before(expires)
-		rejected := stringValue(registerOutput, "request_outcome") == "rejected" &&
-			stringValue(registerOutput, "registration_state") == "unregistered" &&
-			stringValue(registerOutput, "routability") == "not_routable"
-		return map[string]any{
-			"schemas_valid": true, "target_bound": bound, "readiness_current": readinessCurrent,
-			"registration_rejected": rejected, "routing_permitted": readinessCurrent && stringValue(registerOutput, "routability") == "routable",
-		}, nil
-	case "integration.proxy.register.accepted-is-not-routable":
-		registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
-			return nil, fmt.Errorf("register input does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
-			return nil, fmt.Errorf("register output does not match schema: %w", err)
-		}
-		requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
-		targetInstance := asObject(requestTarget["instance_ref"])
-		assertedInstance := asObject(assertion["instance_ref"])
-		bound := reflect.DeepEqual(requestTarget, registerOutput["target"]) &&
-			stringValue(requestTarget, "server_id") == stringValue(assertion, "server_id") &&
-			stringValue(requestTarget, "environment_id") == stringValue(assertion, "environment_id") &&
-			stringValue(requestTarget, "environment_id") == stringValue(targetInstance, "environment_id") &&
-			stringValue(assertion, "environment_id") == stringValue(assertedInstance, "environment_id") &&
-			reflect.DeepEqual(requestTarget["instance_ref"], assertion["instance_ref"])
-		current, err := parseTime(stringValue(input, "validation_time"))
-		if err != nil {
-			return nil, err
-		}
-		expires, err := parseTime(stringValue(assertion, "expires_at"))
-		if err != nil {
-			return nil, err
-		}
-		readinessCurrent := bound && current.Before(expires)
-		confirmed := stringValue(registerOutput, "request_outcome") == "confirmed"
-		routingPermitted := readinessCurrent && confirmed &&
-			stringValue(registerOutput, "registration_state") == "registered" &&
-			stringValue(registerOutput, "routability") == "routable"
-		return map[string]any{
-			"schemas_valid": true, "target_bound": bound, "readiness_current": readinessCurrent,
-			"registration_confirmed": confirmed, "accepted_not_routable": stringValue(registerOutput, "request_outcome") != "accepted" || stringValue(registerOutput, "routability") != "routable", "routing_permitted": routingPermitted,
-		}, nil
-	case "integration.proxy.unknown-drain-and-unregister-require-inspection":
-		drainInput, drainOutput := asObject(input["drain_input"]), asObject(input["drain_output"])
-		unregisterInput, unregisterOutput := asObject(input["unregister_input"]), asObject(input["unregister_output"])
-		for schemaID, message := range map[string]struct {
-			value map[string]any
-			name  string
-		}{
-			"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-drain-input":       {drainInput, "drain input"},
-			"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-drain-output":      {drainOutput, "drain output"},
-			"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-input":  {unregisterInput, "unregister input"},
-			"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-output": {unregisterOutput, "unregister output"},
-		} {
-			if err := pkg.validateSchema(schemaID, message.value); err != nil {
-				return nil, fmt.Errorf("%s does not match schema: %w", message.name, err)
-			}
-		}
-		drainUnknown := stringValue(drainOutput, "request_outcome") == "outcome_unknown" &&
-			stringValue(drainOutput, "registration_state") == "unknown" && stringValue(drainOutput, "routability") == "unknown"
-		unregisterUnknown := stringValue(unregisterOutput, "request_outcome") == "outcome_unknown" &&
-			stringValue(unregisterOutput, "registration_state") == "unknown" && stringValue(unregisterOutput, "routability") == "unknown"
-		bound := reflect.DeepEqual(drainInput["target"], drainOutput["target"]) &&
-			reflect.DeepEqual(unregisterInput["target"], unregisterOutput["target"])
-		return map[string]any{
-			"schemas_valid": true, "drain_requires_inspection": drainUnknown,
-			"unregister_requires_inspection": unregisterUnknown, "retry_without_inspection": !drainUnknown || !unregisterUnknown || !bound,
-		}, nil
-	case "game.release.install.configure.fail-closed":
-		releaseInput := asObject(input["release_describe_input"])
-		releaseOutput := asObject(input["release_describe_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:release-describe-input", releaseInput); err != nil {
-			return nil, fmt.Errorf("release input does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:release-describe-output", releaseOutput); err != nil {
-			return nil, fmt.Errorf("release output does not match schema: %w", err)
-		}
-		releaseBound := stringValue(releaseInput, "release_id") == stringValue(releaseOutput, "release_id")
-		if !releaseBound {
-			return nil, fmt.Errorf("release output must describe the exact requested release")
-		}
-		artifacts := arrayValue(releaseOutput, "artifacts")
-		artifactIDs := make([]any, 0, len(artifacts))
-		checksummed := true
-		for _, rawArtifact := range artifacts {
-			artifact := asObject(rawArtifact)
-			artifactIDs = append(artifactIDs, artifact["artifact_id"])
-			checksum := asObject(artifact["checksum"])
-			if stringValue(checksum, "algorithm") != "sha256" || stringValue(checksum, "digest") == "" {
-				checksummed = false
-			}
-		}
-		if !uniqueStrings(artifactIDs) {
-			return nil, fmt.Errorf("release artifact IDs must be unique")
-		}
-		installInput := asObject(input["install_input"])
-		installOutput := asObject(input["install_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:install-input", installInput); err != nil {
-			return nil, fmt.Errorf("install input does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:install-output", installOutput); err != nil {
-			return nil, fmt.Errorf("install output does not match schema: %w", err)
-		}
-		installBound := reflect.DeepEqual(installInput["target"], installOutput["target"]) &&
-			stringValue(installInput, "release_id") == stringValue(installOutput, "release_id")
-		if !installBound || stringValue(installInput, "release_id") != stringValue(releaseOutput, "release_id") {
-			return nil, fmt.Errorf("install messages must remain bound to the described release and exact target")
-		}
-		installationBlocked := stringValue(installOutput, "artifact_verification") == "mismatch" &&
-			stringValue(installOutput, "outcome") == "rejected" && !boolValue(installOutput, "installation_started")
-		configureInput := asObject(input["configure_input"])
-		configureOutput := asObject(input["configure_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:configure-input", configureInput); err != nil {
-			return nil, fmt.Errorf("configure input does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:configure-output", configureOutput); err != nil {
-			return nil, fmt.Errorf("configure output does not match schema: %w", err)
-		}
-		configureBound := reflect.DeepEqual(configureInput["target"], configureOutput["target"]) &&
-			stringValue(configureInput, "release_id") == stringValue(configureOutput, "release_id")
-		if !configureBound || stringValue(configureInput, "release_id") != stringValue(releaseOutput, "release_id") ||
-			configureInput["configuration_schema_uri"] != releaseOutput["configuration_schema_uri"] ||
-			!reflect.DeepEqual(configureInput["configuration_schema_checksum"], releaseOutput["configuration_schema_checksum"]) {
-			return nil, fmt.Errorf("configuration must remain bound to the described release schema and target")
-		}
-		invalidNotApplied := stringValue(configureOutput, "validation_result") == "invalid" &&
-			stringValue(configureOutput, "outcome") == "rejected" && !boolValue(configureOutput, "application_started")
-		return map[string]any{
-			"release_schema_valid": true, "release_bound": releaseBound, "release_artifacts_checksummed": checksummed,
-			"install_schema_valid": true, "installation_blocked_before_start": installationBlocked,
-			"configure_schema_valid": true, "invalid_configuration_not_applied": invalidNotApplied,
-		}, nil
-	case "game.install.repeat-same-release-is-idempotent", "game.install.completed-verifies-exact-artifacts", "game.install.incomplete-artifact-set-requires-reconciliation":
-		installInput := asObject(input["install_request"])
-		installOutput := asObject(input["install_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:install-input", installInput); err != nil {
-			return nil, fmt.Errorf("install input does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:install-output", installOutput); err != nil {
-			return nil, fmt.Errorf("install output does not match schema: %w", err)
-		}
-		bound := reflect.DeepEqual(installInput["target"], installOutput["target"]) &&
-			stringValue(installInput, "release_id") == stringValue(installOutput, "release_id") &&
-			stringValue(installInput, "release_id") == stringValue(input, "release_id")
-		requiredArtifacts := arrayValue(input, "required_artifacts")
-		artifactResults := arrayValue(installOutput, "artifact_results")
-		complete, checksumsVerified := compareArtifactVerifications(requiredArtifacts, artifactResults)
-		outcome, verification := stringValue(installOutput, "outcome"), stringValue(installOutput, "artifact_verification")
-		started := boolValue(installOutput, "installation_started")
-		outcomeConsistent := outcome == "installed" && started || outcome == "already_installed" && !started
-		accepted := bound && complete && checksumsVerified && verification == "verified" && outcomeConsistent
-		return map[string]any{
-			"schema_valid": true, "target_bound": bound, "artifact_set_complete": complete,
-			"artifact_checksums_verified":       checksumsVerified,
-			"installation_result_accepted":      accepted,
-			"duplicate_install_started":         outcome == "already_installed" && started,
-			"operation_reconciliation_required": started && !accepted,
-		}, nil
-	case "game.validate-installation.unknown-blocks-start", "game.validate-installation.valid-exact-artifacts", "game.validate-installation.valid-incomplete-artifacts-blocks-start", "game.validate-installation.valid-claim-with-unverified-artifact", "game.validate-installation.valid-claim-with-checksum-mismatch":
-		validateInput := asObject(input["validate_request"])
-		validateOutput := asObject(input["validate_output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:validate-installation-input", validateInput); err != nil {
-			return nil, fmt.Errorf("validation input does not match schema: %w", err)
-		}
-		bound := reflect.DeepEqual(validateInput["target"], validateOutput["target"]) &&
-			stringValue(validateInput, "release_id") == stringValue(validateOutput, "release_id")
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:validate-installation-output", validateOutput); err != nil {
-			if stringValue(fixture, "fixture_id") == "game.validate-installation.valid-claim-with-unverified-artifact" {
-				return map[string]any{
-					"schema_valid": false, "target_bound": bound, "artifact_set_complete": true,
-					"aggregate_consistent": false, "start_permitted": false,
-				}, nil
-			}
-			return nil, fmt.Errorf("validation output does not match schema: %w", err)
-		}
-		requiredArtifacts := arrayValue(input, "required_artifact_ids")
-		results := arrayValue(validateOutput, "artifact_results")
-		resultIDs := make([]any, 0, len(results))
-		allVerified := len(results) > 0
-		for _, raw := range results {
-			result := asObject(raw)
-			resultIDs = append(resultIDs, result["artifact_id"])
-			allVerified = allVerified && stringValue(result, "result") == "verified" && reflect.DeepEqual(result["expected_checksum"], result["observed_checksum"])
-		}
-		complete := uniqueStrings(requiredArtifacts) && uniqueStrings(resultIDs) && sameStringSet(requiredArtifacts, resultIDs)
-		validationResult := stringValue(validateOutput, "validation_result")
-		aggregateConsistent := validationResult != "valid" || allVerified
-		return map[string]any{
-			"schema_valid": true, "target_bound": bound, "artifact_set_complete": complete,
-			"aggregate_consistent": aggregateConsistent,
-			"validation_result":    validationResult,
-			"start_permitted":      bound && complete && aggregateConsistent && validationResult == "valid",
-		}, nil
-	case "game.readiness.unknown-required-check-blocks-ready":
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:readiness-check-input", input); err != nil {
-			return nil, fmt.Errorf("readiness input does not match schema: %w", err)
-		}
-		output := asObject(fixture["output"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:readiness-check-output", output); err != nil {
-			return nil, fmt.Errorf("readiness output does not match schema: %w", err)
-		}
-		bound := input["server_id"] == output["server_id"] &&
-			input["environment_id"] == output["environment_id"] &&
-			input["game_release_id"] == output["game_release_id"] &&
-			reflect.DeepEqual(input["instance_ref"], output["instance_ref"])
-		if !bound {
-			return nil, fmt.Errorf("readiness output must remain bound to the exact requested target and release")
-		}
-		requiredChecks := arrayValue(input, "required_checks")
-		if len(requiredChecks) == 0 {
-			return nil, fmt.Errorf("readiness request must contain required checks")
-		}
-		requested := make(map[string]string, len(requiredChecks))
-		for _, rawRequirement := range requiredChecks {
-			requirement := asObject(rawRequirement)
-			checkID := stringValue(requirement, "check_id")
-			checkVersion := stringValue(requirement, "check_version")
-			if checkID == "" || checkVersion == "" {
-				return nil, fmt.Errorf("required check IDs and versions must be non-empty")
-			}
-			if _, duplicate := requested[checkID]; duplicate {
-				return nil, fmt.Errorf("required check IDs must be unique")
-			}
-			requested[checkID] = checkVersion
-		}
-		results := arrayValue(output, "check_results")
-		if len(results) != len(requested) {
-			return nil, fmt.Errorf("readiness output must contain exactly one result for every required check")
-		}
-		type observedReadiness struct {
-			result string
-		}
-		observed := make(map[string]observedReadiness, len(results))
-		for _, rawResult := range results {
-			item := asObject(rawResult)
-			checkID := stringValue(item, "check_id")
-			expectedVersion, exists := requested[checkID]
-			if !exists {
-				return nil, fmt.Errorf("readiness output contains an unrequested check %q", checkID)
-			}
-			if _, exists := observed[checkID]; exists {
-				return nil, fmt.Errorf("readiness output contains duplicate check %q", checkID)
-			}
-			version := stringValue(item, "check_version")
-			if version == "" || version != expectedVersion {
-				return nil, fmt.Errorf("readiness output check %q has a missing or mismatched version", checkID)
-			}
-			observed[checkID] = observedReadiness{result: stringValue(item, "result")}
-		}
-		allPassed, hasFailure, hasUnknown := true, false, false
-		for checkID := range requested {
-			result, exists := observed[checkID]
-			if !exists {
-				return nil, fmt.Errorf("readiness output is missing required check %q", checkID)
-			}
-			switch result.result {
-			case "pass":
-			case "fail":
-				allPassed, hasFailure = false, true
-			case "unknown":
-				allPassed, hasUnknown = false, true
-			default:
-				return nil, fmt.Errorf("unknown readiness result %q for check %q", result.result, checkID)
-			}
-		}
-		readiness := "ready"
-		if hasFailure {
-			readiness = "not_ready"
-		} else if hasUnknown {
-			readiness = "unknown"
-		}
-		return map[string]any{
-			"schema_valid": true, "target_bound": bound,
-			"required_checks_complete": true, "all_required_checks_passed": allPassed,
-			"readiness": readiness, "ready_transition_permitted": allPassed,
-		}, nil
-	case "readiness-required-before-transfer", "readiness-target-mismatch-before-transfer", "readiness-server-mismatch-before-transfer":
-		request := asObject(input["transfer_request"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-request", request); err != nil {
-			return nil, fmt.Errorf("transfer request does not match schema: %w", err)
-		}
-		assertion := asObject(request["readiness_assertion"])
-		requestTarget := asObject(request["expected_instance_ref"])
-		assertedTarget := asObject(assertion["instance_ref"])
-		bound := stringValue(request, "server_id") == stringValue(assertion, "server_id") &&
-			stringValue(request, "environment_id") == stringValue(assertion, "environment_id") &&
-			stringValue(request, "environment_id") == stringValue(requestTarget, "environment_id") &&
-			stringValue(assertion, "environment_id") == stringValue(assertedTarget, "environment_id") &&
-			reflect.DeepEqual(requestTarget, assertedTarget)
-		current, err := parseTime(stringValue(input, "validation_time"))
-		if err != nil {
-			return nil, err
-		}
-		observedAt, err := parseTime(stringValue(assertion, "observed_at"))
-		if err != nil {
-			return nil, err
-		}
-		expiresAt, err := parseTime(stringValue(assertion, "expires_at"))
-		if err != nil {
-			return nil, err
-		}
-		readinessCurrent := bound && !current.Before(observedAt) && current.Before(expiresAt)
-		outcome, code := "accepted", any(nil)
-		if !bound {
-			outcome, code = "rejected", "readiness_assertion_target_mismatch"
-		} else if current.Before(observedAt) {
-			outcome, code = "rejected", "readiness_assertion_not_current"
-		} else if !current.Before(expiresAt) {
-			outcome, code = "rejected", "readiness_assertion_expired"
-		}
-		calls := len(arrayValue(request, "player_session_ids"))
-		if !readinessCurrent {
-			calls = 0
-		}
-		return map[string]any{
-			"request_schema_valid": true,
-			"target_bound":         bound,
-			"readiness_current":    readinessCurrent,
-			"outcome":              outcome,
-			"error_code":           code,
-			"proxy_transfer_calls": calls,
-		}, nil
-	case "velocity-transfer-outcome-unknown-reconciliation":
-		return evaluateVelocityTransferUnknownReconciliation(pkg, fixture)
-	case "velocity-transfer-privacy-canaries":
-		return evaluateVelocityTransferPrivacy(pkg, fixture)
-	case "velocity-transfer-partial-results", "velocity-transfer-count-mismatch", "velocity-transfer-context-mismatch", "velocity-transfer-duplicate-session-result", "velocity-transfer-target-mismatch":
-		request := asObject(input["transfer_request"])
-		result := asObject(input["transfer_result"])
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-request", request); err != nil {
-			return nil, fmt.Errorf("transfer request does not match schema: %w", err)
-		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-result", result); err != nil {
-			return nil, fmt.Errorf("transfer result does not match schema: %w", err)
-		}
-		sessions := arrayValue(request, "player_session_ids")
-		results := arrayValue(result, "results")
-		requestTarget := asObject(request["expected_instance_ref"])
-		assertion := asObject(request["readiness_assertion"])
-		assertedTarget := asObject(assertion["instance_ref"])
-		readinessBound := stringValue(request, "server_id") == stringValue(assertion, "server_id") &&
-			stringValue(request, "environment_id") == stringValue(assertion, "environment_id") &&
-			stringValue(request, "environment_id") == stringValue(requestTarget, "environment_id") &&
-			stringValue(assertion, "environment_id") == stringValue(assertedTarget, "environment_id") &&
-			reflect.DeepEqual(requestTarget, assertedTarget)
-		targetBound := reflect.DeepEqual(requestTarget, asObject(result["target_instance_ref"]))
-		requestResultBound := targetBound &&
-			stringValue(request, "waiting_cohort_id") == stringValue(result, "waiting_cohort_id") &&
-			stringValue(request, "source_backend_id") == stringValue(result, "source_backend_id") &&
-			stringValue(request, "destination_backend_id") == stringValue(result, "destination_backend_id")
-		current, err := parseTime(stringValue(input, "validation_time"))
-		if err != nil {
-			return nil, err
-		}
-		observedAt, err := parseTime(stringValue(assertion, "observed_at"))
-		if err != nil {
-			return nil, err
-		}
-		expiresAt, err := parseTime(stringValue(assertion, "expires_at"))
-		if err != nil {
-			return nil, err
-		}
-		readinessCurrent := readinessBound && !current.Before(observedAt) && current.Before(expiresAt)
-		resultIDs := make([]any, 0, len(results))
-		counts := map[string]int{
-			"transferred":            0,
-			"already_at_destination": 0,
-			"disconnected":           0,
-			"rejected":               0,
-			"failed":                 0,
-			"outcome_unknown":        0,
-		}
-		for _, raw := range results {
-			item := asObject(raw)
-			id, outcome := item["proxy_session_id"], stringValue(item, "outcome")
-			if _, ok := counts[outcome]; !ok {
-				return nil, fmt.Errorf("unknown transfer outcome: %q", outcome)
-			}
-			resultIDs = append(resultIDs, id)
-			counts[outcome]++
-		}
-		sessionSetComplete := uniqueStrings(sessions) && uniqueStrings(resultIDs) &&
-			len(results) == len(sessions) && sameStringSet(sessions, resultIDs)
-		countsMatch := len(results) == len(sessions)
-		requestedCount, err := integerValue(result["requested_count"])
-		if err != nil {
-			return nil, err
-		}
-		countsMatch = countsMatch && requestedCount == int64(len(sessions))
-		reportedCounts := asObject(result["outcome_counts"])
-		for outcome, count := range counts {
-			reported, err := integerValue(reportedCounts[outcome])
-			if err != nil || reported != int64(count) {
-				countsMatch = false
-			}
-		}
-		normalizedCounts := make(map[string]any, len(counts))
-		hasUnknown := counts["outcome_unknown"] > 0
-		for outcome, count := range counts {
-			normalizedCounts[outcome] = count
-		}
-		accepted := readinessCurrent && requestResultBound && sessionSetComplete && countsMatch
-		return map[string]any{
-			"request_schema_valid":                 true,
-			"result_schema_valid":                  true,
-			"requested_count":                      len(sessions),
-			"outcome_counts":                       normalizedCounts,
-			"target_bound":                         targetBound,
-			"request_result_bound":                 requestResultBound,
-			"readiness_current":                    readinessCurrent,
-			"session_set_complete":                 sessionSetComplete,
-			"aggregate_counts_match":               countsMatch,
-			"result_valid_and_bound":               accepted,
-			"retry_unknown_without_reconciliation": !hasUnknown,
-		}, nil
-	case "storage.backup.partial-upload-not-verified":
-		required := arrayValue(input, "required_object_ids")
-		uploaded := arrayValue(input, "uploaded_object_ids")
-		allUploaded := uniqueStrings(required) && uniqueStrings(uploaded) && sameStringSet(required, uploaded)
-		verified := allUploaded && boolValue(input, "manifest_verified")
-		return map[string]any{
-			"all_required_objects_uploaded": allUploaded,
-			"backup_verified":               verified,
-			"destruction_allowed":           verified,
-			"partial":                       !allUploaded || !boolValue(input, "manifest_verified"),
-		}, nil
-	case "storage.object.checksum-mismatch-blocks-restore":
-		sizeMatches := input["expected_size_bytes"] == input["actual_size_bytes"]
-		expected := strings.ToLower(stringValue(input, "expected_checksum"))
-		actual := strings.ToLower(stringValue(input, "actual_checksum"))
-		checksumMatches := expected == actual
-		verified, reason := sizeMatches && checksumMatches, any(nil)
-		if !verified {
-			reason = "checksum_mismatch"
-			if !sizeMatches {
-				reason = "size_mismatch"
-			}
-		}
-		return map[string]any{"verified": verified, "restore_allowed": verified, "verification_reason": reason}, nil
-	case "storage.object.etag-not-checksum":
-		expected := strings.ToLower(stringValue(input, "expected_checksum"))
-		verified := false
-		for _, key := range []string{"trusted_provider_checksum", "content_digest"} {
-			if value, ok := input[key].(string); ok && strings.ToLower(value) == expected {
-				verified = true
-			}
-		}
-		source := "insufficient_evidence"
-		if verified {
-			source = "trusted_checksum"
-		}
-		return map[string]any{"verified": verified, "verification_source": source}, nil
-	case "storage.staging.cannot-delete-production-object", "storage.staging.production-delete-scope-denied", "storage.production.backup-delete-authorized":
-		actor := stringValue(fixture, "actor_environment")
-		target := stringValue(fixture, "target_environment")
-		requiredScope := "storage.backup.delete:" + target
-		allowed := actor == target && contains(arrayValue(fixture, "credential_scope"), requiredScope)
-		category := any(nil)
-		calls := 0
-		if allowed {
-			calls = 1
-		} else {
-			category = "authorization"
-		}
-		return map[string]any{
-			"accepted": allowed, "error_category": category,
-			"side_effect_permitted": allowed, "adapter_delete_calls": calls,
 		}, nil
 	case "operations.idempotency.same-key-same-request":
 		first, second := asObject(fixture["first_request"]), asObject(fixture["second_request"])
@@ -2538,46 +1864,870 @@ func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, err
 			}
 		}
 		return map[string]any{"schema_valid": true, "sequence_strictly_increasing": increasing}, nil
-	case "hosting.provision.valid.standard-os":
-		if err := pkg.validateSchema(provisionSchemaID, input); err != nil {
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceIntegration(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "integration.proxy.backend.drain-unregister-state-confirmation":
+		return evaluateProxyBackendDrainUnregisterState(pkg, fixture)
+	case "integration.proxy.inspect.target-state-and-routability":
+		return evaluateProxyBackendInspect(pkg, fixture)
+	case "integration.proxy.players.inspect.fresh-count-and-target-binding":
+		return evaluateProxyBackendPlayersInspect(pkg, fixture)
+	case "integration.proxy.cohort.inspect.binding-and-freshness":
+		return evaluateProxyCohortInspect(pkg, fixture)
+	case "integration.dns.record.upsert.purpose-readiness-and-confirmation":
+		return evaluateDNSRecordUpsert(pkg, fixture)
+	case "integration.network-profile.requirements":
+		return evaluateNetworkProfileRequirements(pkg, fixture)
+	case "integration.notification.proxy-outage-transitions":
+		return evaluateProxyOutageTransitions(pkg, fixture)
+	case "integration.notification.send.outcome-and-privacy":
+		return evaluateNotificationSend(pkg, fixture)
+	case "integration.proxy.register.expired-readiness-rejected":
+		registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
+			return nil, fmt.Errorf("register input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
+			return nil, fmt.Errorf("register output does not match schema: %w", err)
+		}
+		requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
+		targetInstance := asObject(requestTarget["instance_ref"])
+		assertedInstance := asObject(assertion["instance_ref"])
+		bound := reflect.DeepEqual(requestTarget, registerOutput["target"]) &&
+			stringValue(requestTarget, "server_id") == stringValue(assertion, "server_id") &&
+			stringValue(requestTarget, "environment_id") == stringValue(assertion, "environment_id") &&
+			stringValue(requestTarget, "environment_id") == stringValue(targetInstance, "environment_id") &&
+			stringValue(assertion, "environment_id") == stringValue(assertedInstance, "environment_id") &&
+			reflect.DeepEqual(requestTarget["instance_ref"], assertion["instance_ref"])
+		current, err := parseTime(stringValue(input, "validation_time"))
+		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"schema_valid": true, "side_effect_permitted": false}, nil
-	case "hosting.bootstrap.execution-binding-and-readiness-gate":
+		expires, err := parseTime(stringValue(assertion, "expires_at"))
+		if err != nil {
+			return nil, err
+		}
+		readinessCurrent := bound && current.Before(expires)
+		rejected := stringValue(registerOutput, "request_outcome") == "rejected" &&
+			stringValue(registerOutput, "registration_state") == "unregistered" &&
+			stringValue(registerOutput, "routability") == "not_routable"
+		return map[string]any{
+			"schemas_valid": true, "target_bound": bound, "readiness_current": readinessCurrent,
+			"registration_rejected": rejected, "routing_permitted": readinessCurrent && stringValue(registerOutput, "routability") == "routable",
+		}, nil
+	case "integration.proxy.register.accepted-is-not-routable":
+		registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
+			return nil, fmt.Errorf("register input does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
+			return nil, fmt.Errorf("register output does not match schema: %w", err)
+		}
+		requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
+		targetInstance := asObject(requestTarget["instance_ref"])
+		assertedInstance := asObject(assertion["instance_ref"])
+		bound := reflect.DeepEqual(requestTarget, registerOutput["target"]) &&
+			stringValue(requestTarget, "server_id") == stringValue(assertion, "server_id") &&
+			stringValue(requestTarget, "environment_id") == stringValue(assertion, "environment_id") &&
+			stringValue(requestTarget, "environment_id") == stringValue(targetInstance, "environment_id") &&
+			stringValue(assertion, "environment_id") == stringValue(assertedInstance, "environment_id") &&
+			reflect.DeepEqual(requestTarget["instance_ref"], assertion["instance_ref"])
+		current, err := parseTime(stringValue(input, "validation_time"))
+		if err != nil {
+			return nil, err
+		}
+		expires, err := parseTime(stringValue(assertion, "expires_at"))
+		if err != nil {
+			return nil, err
+		}
+		readinessCurrent := bound && current.Before(expires)
+		confirmed := stringValue(registerOutput, "request_outcome") == "confirmed"
+		routingPermitted := readinessCurrent && confirmed &&
+			stringValue(registerOutput, "registration_state") == "registered" &&
+			stringValue(registerOutput, "routability") == "routable"
+		return map[string]any{
+			"schemas_valid": true, "target_bound": bound, "readiness_current": readinessCurrent,
+			"registration_confirmed": confirmed, "accepted_not_routable": stringValue(registerOutput, "request_outcome") != "accepted" || stringValue(registerOutput, "routability") != "routable", "routing_permitted": routingPermitted,
+		}, nil
+	case "integration.proxy.unknown-drain-and-unregister-require-inspection":
+		drainInput, drainOutput := asObject(input["drain_input"]), asObject(input["drain_output"])
+		unregisterInput, unregisterOutput := asObject(input["unregister_input"]), asObject(input["unregister_output"])
+		for schemaID, message := range map[string]struct {
+			value map[string]any
+			name  string
+		}{
+			"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-drain-input":       {drainInput, "drain input"},
+			"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-drain-output":      {drainOutput, "drain output"},
+			"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-input":  {unregisterInput, "unregister input"},
+			"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-output": {unregisterOutput, "unregister output"},
+		} {
+			if err := pkg.validateSchema(schemaID, message.value); err != nil {
+				return nil, fmt.Errorf("%s does not match schema: %w", message.name, err)
+			}
+		}
+		drainUnknown := stringValue(drainOutput, "request_outcome") == "outcome_unknown" &&
+			stringValue(drainOutput, "registration_state") == "unknown" && stringValue(drainOutput, "routability") == "unknown"
+		unregisterUnknown := stringValue(unregisterOutput, "request_outcome") == "outcome_unknown" &&
+			stringValue(unregisterOutput, "registration_state") == "unknown" && stringValue(unregisterOutput, "routability") == "unknown"
+		bound := reflect.DeepEqual(drainInput["target"], drainOutput["target"]) &&
+			reflect.DeepEqual(unregisterInput["target"], unregisterOutput["target"])
+		return map[string]any{
+			"schemas_valid": true, "drain_requires_inspection": drainUnknown,
+			"unregister_requires_inspection": unregisterUnknown, "retry_without_inspection": !drainUnknown || !unregisterUnknown || !bound,
+		}, nil
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceLifecycle(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "lifecycle.reject.unlisted-transition":
+		transition := asObject(fixture["requested_transition"])
+		allowed := protocolstate.CanTransitionServer(
+			protocolstate.ServerState(stringValue(fixture, "initial_state")),
+			protocolstate.ServerState(stringValue(transition, "to")),
+		)
+		result := map[string]any{"accepted": allowed, "side_effect_permitted": allowed}
+		if !allowed {
+			result["error_code"] = "core.lifecycle.invalid_transition"
+		}
+		return result, nil
+	case "lifecycle.replacement.identity":
+		previous := asObject(input["previous_server"])
+		replacement := asObject(input["replacement_server"])
+		serverSchemaID := "urn:gameserver-controller:0.21.0-draft:lifecycle:server"
+		if err := pkg.validateSchema(serverSchemaID, previous); err != nil {
+			return nil, fmt.Errorf("previous server does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema(serverSchemaID, replacement); err != nil {
+			return nil, fmt.Errorf("replacement server does not match schema: %w", err)
+		}
+		previousRef, replacementRef := previous["instance_ref"], replacement["instance_ref"]
+		identityPreserved := previous["server_id"] == replacement["server_id"] && previous["environment_id"] == replacement["environment_id"]
+		previousDestroyed := stringValue(previous, "lifecycle_state") == "destroyed"
+		replacementInstanceDistinct := previousRef != nil && replacementRef != nil && !reflect.DeepEqual(previousRef, replacementRef)
+		generationRotated := previous["data_generation_id"] != nil && replacement["data_generation_id"] != nil && previous["data_generation_id"] != replacement["data_generation_id"]
+		reprovisionPermitted := protocolstate.CanTransitionServer(protocolstate.ServerDestroyed, protocolstate.ServerProvisioning)
+		return map[string]any{
+			"previous_server_schema_valid": true, "replacement_server_schema_valid": true,
+			"logical_identity_preserved": identityPreserved, "previous_instance_destroyed": previousDestroyed,
+			"replacement_instance_distinct": replacementInstanceDistinct, "data_generation_rotated": generationRotated,
+			"reprovision_transition_permitted": reprovisionPermitted,
+			"replacement_safe":                 identityPreserved && previousDestroyed && replacementInstanceDistinct && generationRotated && reprovisionPermitted,
+		}, nil
+	case "lifecycle.required-readiness-set":
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:readiness-check-input", input); err != nil {
+			return nil, fmt.Errorf("readiness request does not match schema: %w", err)
+		}
+		set := asObject(fixture["declared_check_set"])
+		requiredEntries := arrayValue(input, "required_checks")
+		declared := arrayValue(set, "check_ids")
+		versions := asObject(set["check_versions"])
+		required := make([]any, 0, len(requiredEntries))
+		requiredVersions := make(map[string]string, len(requiredEntries))
+		setValid := stringValue(set, "readiness_check_set_id") != "" &&
+			stringValue(input, "readiness_check_set_id") == stringValue(set, "readiness_check_set_id") &&
+			uniqueStrings(declared)
+		for _, rawRequirement := range requiredEntries {
+			requirement := asObject(rawRequirement)
+			checkID := stringValue(requirement, "check_id")
+			checkVersion := stringValue(requirement, "check_version")
+			if checkID == "" || checkVersion == "" {
+				setValid = false
+				continue
+			}
+			if _, duplicate := requiredVersions[checkID]; duplicate {
+				setValid = false
+			}
+			required = append(required, checkID)
+			requiredVersions[checkID] = checkVersion
+			if declaredVersion, ok := versions[checkID].(string); !ok || declaredVersion == "" || declaredVersion != checkVersion {
+				setValid = false
+			}
+		}
+		setValid = setValid && sameStringSet(required, declared)
+		caseResults := make([]any, 0, len(arrayValue(fixture, "evaluations")))
+		for _, rawCase := range arrayValue(fixture, "evaluations") {
+			readinessCase := asObject(rawCase)
+			output := asObject(readinessCase["output"])
+			result := map[string]any{
+				"case_id":                    stringValue(readinessCase, "case_id"),
+				"ready_transition_permitted": false,
+				"readiness":                  "not_ready",
+				"block_reason":               any(nil),
+				"error_code":                 any(nil),
+			}
+			unknownState := false
+			for _, rawResult := range arrayValue(output, "check_results") {
+				status := stringValue(asObject(rawResult), "result")
+				if status != "pass" && status != "fail" && status != "unknown" {
+					unknownState = true
+				}
+			}
+			if unknownState {
+				result["readiness"] = "unknown"
+				result["block_reason"] = "unknown_state"
+				result["error_code"] = "core.compatibility.unknown_state"
+				caseResults = append(caseResults, result)
+				continue
+			}
+			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:readiness-check-output", output); err != nil {
+				return nil, fmt.Errorf("readiness output %q does not match schema: %w", stringValue(readinessCase, "case_id"), err)
+			}
+			bound := input["server_id"] == output["server_id"] &&
+				input["environment_id"] == output["environment_id"] &&
+				input["game_release_id"] == output["game_release_id"] &&
+				reflect.DeepEqual(input["instance_ref"], output["instance_ref"])
+			if !setValid {
+				result["block_reason"] = "invalid_required_check_set"
+			} else if !bound {
+				result["block_reason"] = "target_mismatch"
+			} else {
+				observed := make(map[string]int)
+				versionsMatch := true
+				allPassed := true
+				for _, rawResult := range arrayValue(output, "check_results") {
+					check := asObject(rawResult)
+					checkID := stringValue(check, "check_id")
+					observed[checkID]++
+					if check["check_version"] != versions[checkID] {
+						versionsMatch = false
+					}
+					if stringValue(check, "result") != "pass" {
+						allPassed = false
+					}
+				}
+				complete := len(observed) == len(required) && len(arrayValue(output, "check_results")) == len(required)
+				for _, rawID := range required {
+					if id, ok := rawID.(string); !ok || observed[id] != 1 {
+						complete = false
+					}
+				}
+				if !complete {
+					result["block_reason"] = "required_check_set_mismatch"
+				} else if !versionsMatch {
+					result["block_reason"] = "required_check_set_mismatch"
+				} else if !allPassed {
+					result["readiness"] = "unknown"
+					result["block_reason"] = "required_check_not_passed"
+				} else {
+					result["ready_transition_permitted"] = true
+					result["readiness"] = "ready"
+				}
+			}
+			caseResults = append(caseResults, result)
+		}
+		return map[string]any{"readiness_check_set_valid": setValid, "evaluations": caseResults, "ready_transition_requires_complete_passing_set": true}, nil
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceCompatibility(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "compatibility.protocol-version-negotiation":
 		results := make([]any, 0, len(arrayValue(fixture, "cases")))
 		for _, rawCase := range arrayValue(fixture, "cases") {
 			item := asObject(rawCase)
-			deliverInput := asObject(item["deliver_input"])
-			output := asObject(item["execution_output"])
-			inspectInput := asObject(item["inspect_input"])
-			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-deliver-input", deliverInput); err != nil {
-				return nil, fmt.Errorf("case %q delivery input does not match schema: %w", stringValue(item, "case_id"), err)
+			local, remote := arrayValue(item, "local_protocol_versions"), arrayValue(item, "peer_protocol_versions")
+			selected := stringValue(item, "selected_protocol_version")
+			mutual := false
+			for _, localVersion := range local {
+				for _, peerVersion := range remote {
+					if localVersion == peerVersion && localVersion == selected {
+						mutual = true
+					}
+				}
 			}
-			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-execution-output", output); err != nil {
-				return nil, fmt.Errorf("case %q execution output does not match schema: %w", stringValue(item, "case_id"), err)
+			priorFailureVersion := stringValue(item, "version_that_failed_validation_or_authorization")
+			downgradeAfterError := priorFailureVersion != "" && selected != priorFailureVersion
+			accepted := mutual && !downgradeAfterError
+			var errorCode any
+			if !accepted {
+				errorCode = "core.compatibility.unsupported_version"
 			}
-			if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-inspect-input", inspectInput); err != nil {
-				return nil, fmt.Errorf("case %q inspection input does not match schema: %w", stringValue(item, "case_id"), err)
-			}
-			bootstrap := asObject(deliverInput["bootstrap"])
-			instanceBound := reflect.DeepEqual(deliverInput["instance_ref"], output["instance_ref"]) &&
-				reflect.DeepEqual(deliverInput["instance_ref"], inspectInput["instance_ref"])
-			revisionBound := bootstrap["revision"] == output["revision"] && bootstrap["digest"] == output["digest"]
-			executionBound := reflect.DeepEqual(output["bootstrap_execution_ref"], inspectInput["bootstrap_execution_ref"])
 			results = append(results, map[string]any{
-				"case_id":                    stringValue(item, "case_id"),
-				"instance_bound":             instanceBound,
-				"revision_and_digest_bound":  revisionBound,
-				"execution_reference_bound":  executionBound,
-				"bootstrap_completed":        output["state"] == "succeeded" && output["exit_code"] == json.Number("0"),
-				"ready_transition_permitted": false,
+				"case_id": stringValue(item, "case_id"), "accepted": accepted,
+				"error_code": errorCode, "session_created": accepted, "adapter_calls": 0,
 			})
 		}
-		return map[string]any{"cases": results, "bootstrap_completion_alone_never_permits_ready": true}, nil
-	case "hosting.bootstrap.rejects-false-success":
-		output := asObject(fixture["execution_output"])
-		err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-execution-output", output)
-		return map[string]any{"accepted": err == nil}, nil
+		return map[string]any{"cases": results}, nil
+	case "compatibility.response-evolution":
+		server := asObject(input["server"])
+		operation := asObject(input["operation"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:lifecycle:server", server); err != nil {
+			return nil, fmt.Errorf("extensible server resource does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation); err != nil {
+			return nil, fmt.Errorf("extensible operation resource does not match schema: %w", err)
+		}
+		request := asObject(input["request"])
+		requestWithUnknown := asObject(input["request_with_unknown_field"])
+		requestValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation-request", request) == nil
+		unknownRequestRejected := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation-request", requestWithUnknown) != nil
+		nestedServer := asObject(input["server_with_unknown_nested_observation_field"])
+		nestedServerRejected := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:lifecycle:server", nestedServer) != nil
+		unknownLifecycle := asObject(input["server_with_unknown_lifecycle_state"])
+		unknownLifecycleRejected := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:lifecycle:server", unknownLifecycle) != nil
+		unknownOperationStatus := asObject(input["operation_with_unknown_status"])
+		unknownOperationStatusRejected := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", unknownOperationStatus) != nil
+		return map[string]any{
+			"server_resource_valid": true, "operation_resource_valid": true,
+			"unknown_optional_top_level_fields_ignored": true, "valid_request_accepted": requestValid,
+			"unknown_request_field_rejected":         unknownRequestRejected,
+			"unknown_nested_response_field_rejected": nestedServerRejected,
+			"unknown_lifecycle_state_rejected":       unknownLifecycleRejected,
+			"unknown_operation_status_rejected":      unknownOperationStatusRejected,
+			"unknown_state_error_code":               "core.compatibility.unknown_state", "adapter_calls": 0,
+		}, nil
+	case "compatibility.operation-upgrade-recovery":
+		operation := asObject(input["operation"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:operations:operation", operation); err != nil {
+			return nil, fmt.Errorf("in-flight operation does not match schema: %w", err)
+		}
+		results := make([]any, 0, len(arrayValue(input, "recovery_cases")))
+		for _, rawCase := range arrayValue(input, "recovery_cases") {
+			item := asObject(rawCase)
+			available := false
+			for _, rawCapability := range arrayValue(item, "available_capabilities") {
+				capability := asObject(rawCapability)
+				for _, rawStep := range arrayValue(operation, "steps") {
+					step := asObject(rawStep)
+					if stringValue(step, "adapter_id") == stringValue(capability, "adapter_id") &&
+						stringValue(step, "capability_name") == stringValue(capability, "capability_name") &&
+						stringValue(step, "capability_version") == stringValue(capability, "capability_version") &&
+						stringValue(step, "status") != "succeeded" {
+						available = true
+					}
+				}
+			}
+			completedSteps, unknownSteps := 0, 0
+			for _, rawStep := range arrayValue(operation, "steps") {
+				switch stringValue(asObject(rawStep), "status") {
+				case "succeeded":
+					completedSteps++
+				case "outcome_unknown":
+					unknownSteps++
+				}
+			}
+			recoveryStatus := "needs_operator"
+			if available && boolValue(item, "tested_migration_available") {
+				recoveryStatus = "reconciling"
+			} else if available {
+				recoveryStatus = "reconciling"
+			}
+			results = append(results, map[string]any{
+				"case_id": stringValue(item, "case_id"), "recorded_protocol_version_preserved": true,
+				"recorded_capability_exactly_supported": available, "recovery_status": recoveryStatus,
+				"completed_steps_replayed": 0, "unknown_steps_retried_before_reconciliation": false,
+				"completed_step_count": completedSteps, "unknown_step_count": unknownSteps,
+				"adapter_dispatches": 0,
+			})
+		}
+		return map[string]any{"operation_schema_valid": true, "operation_id_preserved": operation["operation_id"], "cases": results}, nil
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceTransport(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "transport.storage.profile-negotiated", "transport.storage.profile-not-selected", "transport.storage.selection-not-offered":
+		initRequest := asObject(input["initialize_request"])
+		initResult := asObject(input["initialize_result"])
+		descriptor := asObject(input["adapter_descriptor"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:rpc:adapter-initialize-request", initRequest); err != nil {
+			return nil, fmt.Errorf("stream initialize request does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:rpc:adapter-initialize-result", initResult); err != nil {
+			return nil, fmt.Errorf("stream initialize result does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:common:capability-descriptor", descriptor); err != nil {
+			return nil, fmt.Errorf("stream adapter descriptor does not match schema: %w", err)
+		}
+		offer := asObject(asObject(initRequest["params"])["stream_transport"])
+		selected := stringValue(asObject(initResult["result"]), "selected_stream_transport")
+		profile := "local-unix-stream-v1"
+		profileNegotiated := stringValue(offer, "profile") == profile && selected == profile
+		profileDeclared := contains(arrayValue(descriptor, "stream_transport_profiles"), profile)
+		hasPut, hasGet := false, false
+		for _, raw := range arrayValue(descriptor, "capabilities") {
+			name := stringValue(asObject(raw), "name")
+			hasPut = hasPut || name == "storage.object.put"
+			hasGet = hasGet || name == "storage.object.get"
+		}
+		storageStreamCapabilitiesAccepted := (!hasPut && !hasGet) || profileNegotiated && profileDeclared
+		return map[string]any{
+			"initialization_valid":                 true,
+			"descriptor_valid":                     true,
+			"stream_profile_negotiated":            profileNegotiated,
+			"stream_profile_declared":              profileDeclared,
+			"storage_put_advertised":               hasPut,
+			"storage_get_advertised":               hasGet,
+			"storage_stream_capabilities_accepted": storageStreamCapabilitiesAccepted,
+		}, nil
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceManagement(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "management.pagination.cursor-scope":
+		cursor := asObject(input["cursor"])
+		cursorActor := stringValue(cursor, "actor_id")
+		cursorFilters, filtersValid := cursor["filter_scope"].(map[string]any)
+		attempts := arrayValue(input, "attempts")
+		if cursorActor == "" || !filtersValid || len(attempts) == 0 {
+			return nil, fmt.Errorf("cursor scope fixture must include an actor, filter scope, and attempts")
+		}
+		outcomes := make([]any, 0, len(attempts))
+		for index, rawAttempt := range attempts {
+			attempt := asObject(rawAttempt)
+			attemptID := stringValue(attempt, "attempt_id")
+			actorID := stringValue(attempt, "actor_id")
+			filters, attemptFiltersValid := attempt["filter_scope"].(map[string]any)
+			if attemptID == "" || actorID == "" || !attemptFiltersValid {
+				return nil, fmt.Errorf("cursor attempt %d must include an attempt ID, actor, and filter scope", index)
+			}
+			sameScope := actorID == cursorActor && reflect.DeepEqual(filters, cursorFilters)
+			if !sameScope {
+				outcomes = append(outcomes, map[string]any{
+					"attempt_id":                 attemptID,
+					"accepted":                   false,
+					"error_code":                 "core.validation.invalid_request",
+					"items":                      []any{},
+					"cursor_advanced":            false,
+					"resource_metadata_returned": false,
+				})
+				continue
+			}
+			items := arrayValue(attempt, "page_items")
+			outcomes = append(outcomes, map[string]any{
+				"attempt_id":                 attemptID,
+				"accepted":                   true,
+				"error_code":                 nil,
+				"items":                      items,
+				"cursor_advanced":            true,
+				"resource_metadata_returned": len(items) > 0,
+			})
+		}
+		return map[string]any{"binding_enforced": true, "attempts": outcomes}, nil
+	case "management.authentication.credential-profiles":
+		remote := asObject(input["remote_profile"])
+		expectedAudience := stringValue(remote, "expected_audience")
+		remoteAttempts := arrayValue(remote, "attempts")
+		if expectedAudience == "" || len(remoteAttempts) == 0 {
+			return nil, fmt.Errorf("remote authentication fixture must include an expected audience and attempts")
+		}
+		remoteResults := make([]any, 0, len(remoteAttempts))
+		for index, rawAttempt := range remoteAttempts {
+			attempt := asObject(rawAttempt)
+			attemptID := stringValue(attempt, "case_id")
+			actorID := stringValue(attempt, "authenticated_actor_id")
+			if attemptID == "" {
+				return nil, fmt.Errorf("remote authentication attempt %d must have a case_id", index)
+			}
+			authenticated := boolValue(attempt, "tls") &&
+				boolValue(attempt, "signature_valid") &&
+				boolValue(attempt, "not_expired") &&
+				stringValue(attempt, "audience") == expectedAudience &&
+				!boolValue(attempt, "revoked") &&
+				actorID != ""
+			httpStatus := 401
+			var trustedActor any
+			if authenticated {
+				httpStatus = 200
+				trustedActor = actorID
+			}
+			remoteResults = append(remoteResults, map[string]any{
+				"case_id": attemptID, "authenticated": authenticated, "http_status": httpStatus,
+				"actor_id": trustedActor, "request_claims_used_for_auth": false,
+				"protected_resource_data_returned": false, "operation_created": false,
+				"adapter_dispatch_count": 0,
+			})
+		}
+		local := asObject(input["local_profile"])
+		localAttempts := arrayValue(local, "attempts")
+		if len(localAttempts) == 0 {
+			return nil, fmt.Errorf("local authentication fixture must include attempts")
+		}
+		localResults := make([]any, 0, len(localAttempts))
+		for index, rawAttempt := range localAttempts {
+			attempt := asObject(rawAttempt)
+			attemptID := stringValue(attempt, "case_id")
+			if attemptID == "" {
+				return nil, fmt.Errorf("local authentication attempt %d must have a case_id", index)
+			}
+			actorID := stringValue(attempt, "peer_actor_id")
+			authenticated := boolValue(attempt, "peer_identity_verified") && actorID != ""
+			httpStatus := 401
+			var trustedActor any
+			if authenticated {
+				httpStatus = 200
+				trustedActor = actorID
+			}
+			localResults = append(localResults, map[string]any{
+				"case_id": attemptID, "authenticated": authenticated, "http_status": httpStatus,
+				"actor_id": trustedActor, "request_claims_used_for_auth": false,
+				"protected_resource_data_returned": false, "operation_created": false,
+				"adapter_dispatch_count": 0,
+			})
+		}
+		redaction := asObject(input["token_redaction"])
+		token := stringValue(redaction, "synthetic_token")
+		surfaces := asObject(redaction["surfaces"])
+		if token == "" || len(surfaces) == 0 {
+			return nil, fmt.Errorf("token redaction fixture must include a synthetic token and observed surfaces")
+		}
+		authorizationHeader := stringValue(redaction, "authorization_header")
+		authorizationOverTLS := boolValue(redaction, "authorization_over_tls")
+		tokenInCorrectHeader := authorizationHeader == "Bearer "+token
+		leakedSurfaces := make([]string, 0)
+		for surface, rawValue := range surfaces {
+			if strings.Contains(fmt.Sprint(rawValue), token) {
+				leakedSurfaces = append(leakedSurfaces, surface)
+			}
+		}
+		sort.Strings(leakedSurfaces)
+		return map[string]any{
+			"remote_attempts": remoteResults,
+			"local_attempts":  localResults,
+			"token_redaction": map[string]any{
+				"token_in_authorization_header_over_tls": tokenInCorrectHeader && authorizationOverTLS,
+				"token_absent_from_observed_surfaces":    len(leakedSurfaces) == 0,
+				"leaked_surfaces":                        leakedSurfaces,
+			},
+		}, nil
+	case "management.authentication.actor-spoofing":
+		principal := asObject(input["authenticated_principal"])
+		authenticatedActor := stringValue(principal, "actor_id")
+		principalPermissions := arrayValue(principal, "permissions")
+		principalEnvironments := arrayValue(principal, "environments")
+		attempts := arrayValue(input, "attempts")
+		if authenticatedActor == "" || len(attempts) == 0 {
+			return nil, fmt.Errorf("actor-spoofing fixture must include an authenticated principal and attempts")
+		}
+		outcomes := make([]any, 0, len(attempts))
+		for index, rawAttempt := range attempts {
+			attempt := asObject(rawAttempt)
+			attemptID := stringValue(attempt, "attempt_id")
+			claimedActor := stringValue(attempt, "claimed_actor_id")
+			claimedRoles := arrayValue(attempt, "claimed_roles")
+			claimedPermissions := arrayValue(attempt, "claimed_permissions")
+			requiredPermission := stringValue(attempt, "required_permission")
+			targetEnvironment := stringValue(attempt, "target_environment")
+			if attemptID == "" || claimedActor == "" || claimedActor == authenticatedActor ||
+				len(claimedRoles) == 0 || len(claimedPermissions) == 0 ||
+				requiredPermission == "" || targetEnvironment == "" {
+				return nil, fmt.Errorf("actor-spoofing attempt %d must include spoofed claims and an authorization target", index)
+			}
+			allowed := contains(principalPermissions, requiredPermission) &&
+				contains(principalEnvironments, targetEnvironment)
+			operationResource := any(nil)
+			protectedResourceDataReturned := false
+			errorCategory := any("authorization")
+			if allowed {
+				operationID := stringValue(attempt, "operation_id")
+				if operationID == "" {
+					return nil, fmt.Errorf("accepted actor-spoofing attempt %d must identify its durable operation", index)
+				}
+				operationResource = map[string]any{
+					"operation_id": operationID,
+					"actor_id":     authenticatedActor,
+				}
+				protectedResourceDataReturned = true
+				errorCategory = nil
+			}
+			outcomes = append(outcomes, map[string]any{
+				"attempt_id":                       attemptID,
+				"accepted":                         allowed,
+				"error_category":                   errorCategory,
+				"operation_resource":               operationResource,
+				"request_claims_used_for_auth":     false,
+				"protected_resource_data_returned": protectedResourceDataReturned,
+			})
+		}
+		return map[string]any{
+			"authenticated_actor_id":      authenticatedActor,
+			"attempts":                    outcomes,
+			"credential_material_exposed": false,
+		}, nil
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceSafety(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "safety.destroy.blocked-stale-data-generation", "safety.destroy.blocked-unverified-backup":
+		state := asObject(fixture["initial_state"])
+		backup := asObject(state["backup"])
+		code := any(nil)
+		if !boolValue(backup, "verified") {
+			code = "core.safety.backup_not_verified"
+		} else if state["data_generation_status"] != "known" || backup["data_generation_id"] != state["data_generation_id"] {
+			code = "core.safety.backup_generation_mismatch"
+		}
+		accepted := code == nil
+		lifecycle := state["lifecycle_state"]
+		if accepted {
+			lifecycle = "destroying"
+		}
+		calls := 0
+		if accepted {
+			calls = 1
+		}
+		return map[string]any{
+			"accepted": accepted, "error_code": code,
+			"provider_destroy_calls": calls, "logical_server_state": lifecycle,
+		}, nil
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceSecurity(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "security.staging.cannot-write-production-backup", "security.staging.production-write-scope-denied", "security.production.backup-write-authorized":
+		actor := stringValue(fixture, "actor_environment")
+		target := stringValue(fixture, "target_environment")
+		requiredScope := "storage.backup.write:" + target
+		allowed := actor == target && contains(arrayValue(fixture, "credential_scope"), requiredScope)
+		category := any(nil)
+		if !allowed {
+			category = "authorization"
+		}
+		return map[string]any{"accepted": allowed, "side_effect_permitted": allowed, "error_category": category}, nil
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceReadiness(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "readiness-required-before-transfer", "readiness-target-mismatch-before-transfer", "readiness-server-mismatch-before-transfer":
+		request := asObject(input["transfer_request"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-request", request); err != nil {
+			return nil, fmt.Errorf("transfer request does not match schema: %w", err)
+		}
+		assertion := asObject(request["readiness_assertion"])
+		requestTarget := asObject(request["expected_instance_ref"])
+		assertedTarget := asObject(assertion["instance_ref"])
+		bound := stringValue(request, "server_id") == stringValue(assertion, "server_id") &&
+			stringValue(request, "environment_id") == stringValue(assertion, "environment_id") &&
+			stringValue(request, "environment_id") == stringValue(requestTarget, "environment_id") &&
+			stringValue(assertion, "environment_id") == stringValue(assertedTarget, "environment_id") &&
+			reflect.DeepEqual(requestTarget, assertedTarget)
+		current, err := parseTime(stringValue(input, "validation_time"))
+		if err != nil {
+			return nil, err
+		}
+		observedAt, err := parseTime(stringValue(assertion, "observed_at"))
+		if err != nil {
+			return nil, err
+		}
+		expiresAt, err := parseTime(stringValue(assertion, "expires_at"))
+		if err != nil {
+			return nil, err
+		}
+		readinessCurrent := bound && !current.Before(observedAt) && current.Before(expiresAt)
+		outcome, code := "accepted", any(nil)
+		if !bound {
+			outcome, code = "rejected", "readiness_assertion_target_mismatch"
+		} else if current.Before(observedAt) {
+			outcome, code = "rejected", "readiness_assertion_not_current"
+		} else if !current.Before(expiresAt) {
+			outcome, code = "rejected", "readiness_assertion_expired"
+		}
+		calls := len(arrayValue(request, "player_session_ids"))
+		if !readinessCurrent {
+			calls = 0
+		}
+		return map[string]any{
+			"request_schema_valid": true,
+			"target_bound":         bound,
+			"readiness_current":    readinessCurrent,
+			"outcome":              outcome,
+			"error_code":           code,
+			"proxy_transfer_calls": calls,
+		}, nil
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceVelocity(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "velocity-transfer-outcome-unknown-reconciliation":
+		return evaluateVelocityTransferUnknownReconciliation(pkg, fixture)
+	case "velocity-transfer-privacy-canaries":
+		return evaluateVelocityTransferPrivacy(pkg, fixture)
+	case "velocity-transfer-partial-results", "velocity-transfer-count-mismatch", "velocity-transfer-context-mismatch", "velocity-transfer-duplicate-session-result", "velocity-transfer-target-mismatch":
+		request := asObject(input["transfer_request"])
+		result := asObject(input["transfer_result"])
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-request", request); err != nil {
+			return nil, fmt.Errorf("transfer request does not match schema: %w", err)
+		}
+		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:velocity-player-transfer-result", result); err != nil {
+			return nil, fmt.Errorf("transfer result does not match schema: %w", err)
+		}
+		sessions := arrayValue(request, "player_session_ids")
+		results := arrayValue(result, "results")
+		requestTarget := asObject(request["expected_instance_ref"])
+		assertion := asObject(request["readiness_assertion"])
+		assertedTarget := asObject(assertion["instance_ref"])
+		readinessBound := stringValue(request, "server_id") == stringValue(assertion, "server_id") &&
+			stringValue(request, "environment_id") == stringValue(assertion, "environment_id") &&
+			stringValue(request, "environment_id") == stringValue(requestTarget, "environment_id") &&
+			stringValue(assertion, "environment_id") == stringValue(assertedTarget, "environment_id") &&
+			reflect.DeepEqual(requestTarget, assertedTarget)
+		targetBound := reflect.DeepEqual(requestTarget, asObject(result["target_instance_ref"]))
+		requestResultBound := targetBound &&
+			stringValue(request, "waiting_cohort_id") == stringValue(result, "waiting_cohort_id") &&
+			stringValue(request, "source_backend_id") == stringValue(result, "source_backend_id") &&
+			stringValue(request, "destination_backend_id") == stringValue(result, "destination_backend_id")
+		current, err := parseTime(stringValue(input, "validation_time"))
+		if err != nil {
+			return nil, err
+		}
+		observedAt, err := parseTime(stringValue(assertion, "observed_at"))
+		if err != nil {
+			return nil, err
+		}
+		expiresAt, err := parseTime(stringValue(assertion, "expires_at"))
+		if err != nil {
+			return nil, err
+		}
+		readinessCurrent := readinessBound && !current.Before(observedAt) && current.Before(expiresAt)
+		resultIDs := make([]any, 0, len(results))
+		counts := map[string]int{
+			"transferred":            0,
+			"already_at_destination": 0,
+			"disconnected":           0,
+			"rejected":               0,
+			"failed":                 0,
+			"outcome_unknown":        0,
+		}
+		for _, raw := range results {
+			item := asObject(raw)
+			id, outcome := item["proxy_session_id"], stringValue(item, "outcome")
+			if _, ok := counts[outcome]; !ok {
+				return nil, fmt.Errorf("unknown transfer outcome: %q", outcome)
+			}
+			resultIDs = append(resultIDs, id)
+			counts[outcome]++
+		}
+		sessionSetComplete := uniqueStrings(sessions) && uniqueStrings(resultIDs) &&
+			len(results) == len(sessions) && sameStringSet(sessions, resultIDs)
+		countsMatch := len(results) == len(sessions)
+		requestedCount, err := integerValue(result["requested_count"])
+		if err != nil {
+			return nil, err
+		}
+		countsMatch = countsMatch && requestedCount == int64(len(sessions))
+		reportedCounts := asObject(result["outcome_counts"])
+		for outcome, count := range counts {
+			reported, err := integerValue(reportedCounts[outcome])
+			if err != nil || reported != int64(count) {
+				countsMatch = false
+			}
+		}
+		normalizedCounts := make(map[string]any, len(counts))
+		hasUnknown := counts["outcome_unknown"] > 0
+		for outcome, count := range counts {
+			normalizedCounts[outcome] = count
+		}
+		accepted := readinessCurrent && requestResultBound && sessionSetComplete && countsMatch
+		return map[string]any{
+			"request_schema_valid":                 true,
+			"result_schema_valid":                  true,
+			"requested_count":                      len(sessions),
+			"outcome_counts":                       normalizedCounts,
+			"target_bound":                         targetBound,
+			"request_result_bound":                 requestResultBound,
+			"readiness_current":                    readinessCurrent,
+			"session_set_complete":                 sessionSetComplete,
+			"aggregate_counts_match":               countsMatch,
+			"result_valid_and_bound":               accepted,
+			"retry_unknown_without_reconciliation": !hasUnknown,
+		}, nil
+	default:
+		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
+	}
+}
+
+func evaluateConformanceStorage(pkg *protocolPackage, fixture, input map[string]any) (map[string]any, error) {
+	fixtureID := stringValue(fixture, "fixture_id")
+	switch fixtureID {
+	case "storage.backup.partial-upload-not-verified":
+		required := arrayValue(input, "required_object_ids")
+		uploaded := arrayValue(input, "uploaded_object_ids")
+		allUploaded := uniqueStrings(required) && uniqueStrings(uploaded) && sameStringSet(required, uploaded)
+		verified := allUploaded && boolValue(input, "manifest_verified")
+		return map[string]any{
+			"all_required_objects_uploaded": allUploaded,
+			"backup_verified":               verified,
+			"destruction_allowed":           verified,
+			"partial":                       !allUploaded || !boolValue(input, "manifest_verified"),
+		}, nil
+	case "storage.object.checksum-mismatch-blocks-restore":
+		sizeMatches := input["expected_size_bytes"] == input["actual_size_bytes"]
+		expected := strings.ToLower(stringValue(input, "expected_checksum"))
+		actual := strings.ToLower(stringValue(input, "actual_checksum"))
+		checksumMatches := expected == actual
+		verified, reason := sizeMatches && checksumMatches, any(nil)
+		if !verified {
+			reason = "checksum_mismatch"
+			if !sizeMatches {
+				reason = "size_mismatch"
+			}
+		}
+		return map[string]any{"verified": verified, "restore_allowed": verified, "verification_reason": reason}, nil
+	case "storage.object.etag-not-checksum":
+		expected := strings.ToLower(stringValue(input, "expected_checksum"))
+		verified := false
+		for _, key := range []string{"trusted_provider_checksum", "content_digest"} {
+			if value, ok := input[key].(string); ok && strings.ToLower(value) == expected {
+				verified = true
+			}
+		}
+		source := "insufficient_evidence"
+		if verified {
+			source = "trusted_checksum"
+		}
+		return map[string]any{"verified": verified, "verification_source": source}, nil
+	case "storage.staging.cannot-delete-production-object", "storage.staging.production-delete-scope-denied", "storage.production.backup-delete-authorized":
+		actor := stringValue(fixture, "actor_environment")
+		target := stringValue(fixture, "target_environment")
+		requiredScope := "storage.backup.delete:" + target
+		allowed := actor == target && contains(arrayValue(fixture, "credential_scope"), requiredScope)
+		category := any(nil)
+		calls := 0
+		if allowed {
+			calls = 1
+		} else {
+			category = "authorization"
+		}
+		return map[string]any{
+			"accepted": allowed, "error_category": category,
+			"side_effect_permitted": allowed, "adapter_delete_calls": calls,
+		}, nil
 	default:
 		return nil, fmt.Errorf("no evaluator registered for fixture %q", fixtureID)
 	}
