@@ -1,0 +1,11 @@
+{
+  "join_mode": "proxy",
+  "proxy_adapter_id": "integration.velocity",
+  "dns_adapter_id": "integration.cloudflare-dns",
+  "backends": [
+    {
+      "backend_id": "paper-main",
+      "address_mode": "hostname"
+    }
+  ]
+}

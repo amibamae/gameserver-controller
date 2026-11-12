@@ -114,6 +114,8 @@ A server's network profile (`network_profile` in the [server definition](../sche
 
 Independently of the join mode, a profile MAY give each backend a managed `backend_address` hostname, either per backend or from one naming scheme for all backends. The proxy then reaches the backend by name, so an instance IP change updates DNS instead of the proxy configuration. Such a profile requires the DNS record capabilities as well. Each backend hostname MUST belong to exactly one backend: two backends MUST NOT share a hostname, so one backend's DNS update cannot redirect another backend's traffic.
 
+The structured profile is described by the [network-profile schema](../schemas/integrations/network-profile.schema.json); `network_profile` in a server definition names one. A profile that waits players in a cohort is treated as always doing so in `proxy` mode, so the cohort, session, and transfer capabilities are required there.
+
 The controller MUST resolve a server's network profile before planning operations for it, and MUST reject planning when a required capability is not advertised by an adapter registered for that environment. It MUST NOT skip a required routing or DNS step because the adapter is missing, and MUST NOT emulate a missing capability. A profile that requires no integration capabilities MUST NOT cause the controller to call one.
 
 ## 7. Monitoring and notifications

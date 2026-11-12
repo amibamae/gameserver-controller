@@ -31,6 +31,13 @@ var (
 	errBridgeResponse  = errors.New("proxy bridge returned an invalid response")
 	errBridgeRefused   = errors.New("proxy bridge refused the request")
 
+	// ErrBridgeIdentity means the bridge answered but is not the configured
+	// proxy instance or speaks an unsupported API version. Do not use it.
+	ErrBridgeIdentity = errors.New("proxy bridge identity check failed")
+	// ErrBridgeUnreachable means CheckInfo got no usable answer (a transport
+	// failure, a server error, or an unreadable response). Retry later.
+	ErrBridgeUnreachable = errors.New("proxy bridge is unreachable")
+
 	backendIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
 	cohortIDPattern  = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,127}$`)
 )
@@ -109,16 +116,23 @@ type bridgeInfo struct {
 
 // CheckInfo verifies that the bridge speaks API version 1 and is the
 // configured proxy instance.
+//
+// A wrong instance or API version wraps ErrBridgeIdentity; no usable answer
+// wraps ErrBridgeUnreachable. Other errors (such as a refused token) mean the
+// configuration is wrong.
 func (b *HTTPBridge) CheckInfo(ctx context.Context) error {
 	var info bridgeInfo
 	if _, err := b.do(ctx, http.MethodGet, "/v1/info", nil, &info); err != nil {
+		if errors.Is(err, errBridgeTransport) || errors.Is(err, errBridgeResponse) {
+			return fmt.Errorf("%w: %w", ErrBridgeUnreachable, err)
+		}
 		return err
 	}
 	if info.APIVersion != bridgeAPIVersion {
-		return fmt.Errorf("proxy bridge API version %q is not supported", info.APIVersion)
+		return fmt.Errorf("%w: API version %q is not supported", ErrBridgeIdentity, info.APIVersion)
 	}
 	if info.ProxyInstanceID != b.instanceID {
-		return errors.New("proxy bridge reports a different proxy instance")
+		return fmt.Errorf("%w: the bridge reports a different proxy instance", ErrBridgeIdentity)
 	}
 	return nil
 }

@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:network-profile",
+  "title": "Network profile",
+  "description": "How players reach one logical server and which integration adapters route them. The controller derives the required integration capabilities from it before planning (integrations contract, section 6).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "join_mode"
+  ],
+  "properties": {
+    "join_mode": {
+      "enum": [
+        "proxy",
+        "direct_dns",
+        "none"
+      ]
+    },
+    "proxy_adapter_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "dns_adapter_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "join_hostname": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253
+    },
+    "backends": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "backend_id",
+          "address_mode"
+        ],
+        "properties": {
+          "backend_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "address_mode": {
+            "enum": [
+              "instance_ip",
+              "hostname"
+            ],
+            "description": "instance_ip reaches the instance's current public IP; hostname reaches a managed backend_address DNS name kept pointed at the instance."
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "join_mode": {
+            "const": "proxy"
+          }
+        },
+        "required": [
+          "join_mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "proxy_adapter_id",
+          "backends"
+        ],
+        "properties": {
+          "backends": {
+            "minItems": 1
+          }
+        },
+        "not": {
+          "required": [
+            "join_hostname"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "join_mode": {
+            "const": "direct_dns"
+          }
+        },
+        "required": [
+          "join_mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "dns_adapter_id",
+          "join_hostname"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "proxy_adapter_id"
+              ]
+            },
+            {
+              "required": [
+                "backends"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "join_mode": {
+            "const": "none"
+          }
+        },
+        "required": [
+          "join_mode"
+        ]
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "proxy_adapter_id"
+              ]
+            },
+            {
+              "required": [
+                "dns_adapter_id"
+              ]
+            },
+            {
+              "required": [
+                "join_hostname"
+              ]
+            },
+            {
+              "required": [
+                "backends"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "backends": {
+            "contains": {
+              "properties": {
+                "address_mode": {
+                  "const": "hostname"
+                }
+              },
+              "required": [
+                "address_mode"
+              ]
+            }
+          }
+        },
+        "required": [
+          "backends"
+        ]
+      },
+      "then": {
+        "required": [
+          "dns_adapter_id"
+        ]
+      }
+    }
+  ]
+}
