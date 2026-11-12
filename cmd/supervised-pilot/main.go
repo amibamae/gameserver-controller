@@ -87,8 +87,8 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 	}
 
 	action := args[0]
-	if action != "status" && action != "backup" && action != "history" && action != "provision" && action != "capacity" && action != "boot-status" && action != "adopt" && action != "handoff" && action != "register-ssh-key" {
-		return fmt.Errorf("unknown action %q; expected status, backup, history, provision, capacity, boot-status, or adopt", action)
+	if !knownAction(action) {
+		return unknownActionError(action)
 	}
 
 	flags := flag.NewFlagSet("gsc-pilot "+action, flag.ContinueOnError)
@@ -294,15 +294,9 @@ func allowOnlyFlags(flags *flag.FlagSet, allowed ...string) error {
 
 func usage(w io.Writer) error {
 	fmt.Fprintln(w, "Supervised Minecraft server pilot")
-	fmt.Fprintln(w, "  gsc-pilot status --host <ssh-alias>")
-	fmt.Fprintln(w, "  gsc-pilot backup --host <ssh-alias> [--execute --confirm-host <same-alias>]")
-	fmt.Fprintln(w, "  gsc-pilot history")
-	fmt.Fprintln(w, "  gsc-pilot boot-status --server-id <id> --environment <environment>")
-	fmt.Fprintln(w, "  gsc-pilot provision --server-id <id> --environment staging --region <id> --plan <id> --os-id <id> --ssh-key-id <id> --startup-script-id <id> --startup-script-sha256 <digest> --firewall-group-id <id> --controller-ip <ip>")
-	fmt.Fprintln(w, "  gsc-pilot adopt --server-id <id> --environment <environment> --instance-id <id> --expected-ip <IPv4> --region <id> --plan <id> --os-id <id> --os-name <name>")
-	fmt.Fprintln(w, "  gsc-pilot handoff --operation-id <id> --wasabi-region <region> [--execute --confirm-handoff <server>@<environment>/<instance-id>]")
-	fmt.Fprintln(w, "  gsc-pilot register-ssh-key --public-key-file <path> --name <name> [--execute]")
-	fmt.Fprintln(w, "  gsc-pilot capacity")
+	for _, action := range pilotActions {
+		fmt.Fprintln(w, "  "+action.usage)
+	}
 	return errors.New("an action is required")
 }
 
