@@ -2,17 +2,21 @@ package pilotvultr
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/pilotcapacity"
+	"github.com/amibamae/gameserver-controller/internal/sshkey"
 	"github.com/amibamae/gameserver-controller/internal/store"
 	"github.com/amibamae/gameserver-controller/internal/vultrapi"
 )
@@ -62,11 +66,38 @@ type scriptedProvider struct {
 	get         func(context.Context, []byte, string) (vultrapi.Instance, error)
 	list        func(context.Context, []byte, string) ([]vultrapi.Instance, error)
 	script      func(context.Context, []byte, string) (vultrapi.StartupScript, error)
+	sshKeys     map[string]string
+	firewall    []vultrapi.FirewallRule
+	created     []vultrapi.CreateInstanceRequest
+}
+
+func (p *scriptedProvider) GetSSHKey(_ context.Context, _ []byte, id string) (vultrapi.SSHKey, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	keys := p.sshKeys
+	if keys == nil {
+		keys = map[string]string{"sshkey-123": testControllerKey}
+	}
+	key, ok := keys[id]
+	if !ok {
+		return vultrapi.SSHKey{}, vultrapi.ErrProviderReject
+	}
+	return vultrapi.SSHKey{ID: id, Name: id, PublicKey: key}, nil
+}
+
+func (p *scriptedProvider) ListFirewallRules(context.Context, []byte, string) ([]vultrapi.FirewallRule, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.firewall == nil {
+		return []vultrapi.FirewallRule{{ID: 1, Action: "accept", Protocol: "tcp", Port: "22", Subnet: "203.0.113.10", SubnetSize: 32}}, nil
+	}
+	return p.firewall, nil
 }
 
 func (p *scriptedProvider) CreateInstance(ctx context.Context, token []byte, request vultrapi.CreateInstanceRequest) (vultrapi.Instance, error) {
 	p.mu.Lock()
 	p.createCalls++
+	p.created = append(p.created, request)
 	create := p.create
 	p.mu.Unlock()
 	return create(ctx, token, request)
@@ -148,6 +179,9 @@ func successfulProvider() *scriptedProvider {
 	return provider
 }
 
+// testControllerKey is the RFC 8032 test 1 public key.
+const testControllerKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINdamAGCsQq31Uv+08lkBzoO4XLz2qYjJa8CGmj3B1Ea"
+
 func request(operationID, serverID, environment string) CreateRequest {
 	scriptDigest := sha256.Sum256([]byte("bootstrap"))
 	return CreateRequest{
@@ -155,6 +189,8 @@ func request(operationID, serverID, environment string) CreateRequest {
 		Region: "ewr", Plan: "vc2-1c-2gb", OSID: "362", Hostname: "pilot.example.invalid",
 		SSHKeyIDs:       []string{"sshkey-123"},
 		StartupScriptID: "script-123", StartupScriptSHA256: hex.EncodeToString(scriptDigest[:]),
+		FirewallGroupID: "firewall-123", ControllerIP: netip.MustParseAddr("203.0.113.10"),
+		ControllerSSHPublicKey: testControllerKey + " gameserver-controller",
 	}
 }
 
@@ -249,7 +285,7 @@ func TestProvisionReconcilesLegacyUnknownCreateWithoutRecreatingIt(t *testing.T)
 	provider.list = func(context.Context, []byte, string) ([]vultrapi.Instance, error) { return nil, nil }
 	provisioner, repository, _ := newTestProvisioner(t, provider)
 	legacy := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
-	legacy.StartupScriptID, legacy.StartupScriptSHA256 = "", ""
+	legacy.StartupScriptID, legacy.StartupScriptSHA256, legacy.FirewallGroupID = "", "", ""
 	_, reservation, err := provisioner.prepare(legacy)
 	if err != nil {
 		t.Fatal(err)
@@ -275,7 +311,7 @@ func TestProvisionReleasesLegacyReservedOperationBeforeBootstrappedCreate(t *tes
 	provider := successfulProvider()
 	provisioner, repository, _ := newTestProvisioner(t, provider)
 	legacy := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
-	legacy.StartupScriptID, legacy.StartupScriptSHA256 = "", ""
+	legacy.StartupScriptID, legacy.StartupScriptSHA256, legacy.FirewallGroupID = "", "", ""
 	_, reservation, err := provisioner.prepare(legacy)
 	if err != nil {
 		t.Fatal(err)
@@ -564,5 +600,109 @@ func TestObservationTimeIsNotBeforeReservation(t *testing.T) {
 	provisioner := &Provisioner{now: func() time.Time { return reservation.CreatedAt.Add(-time.Second) }}
 	if !provisioner.observationTime(reservation).Equal(reservation.CreatedAt) {
 		t.Fatal(fmt.Sprintf("observation time was before reservation: %v", provisioner.observationTime(reservation)))
+	}
+}
+
+// A reservation from the build before firewall groups (script pinned, no
+// firewall) is reconciled, never recreated with the new identity.
+func TestProvisionReconcilesPreFirewallUnknownCreate(t *testing.T) {
+	provider := successfulProvider()
+	provisioner, repository, _ := newTestProvisioner(t, provider)
+	legacy := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	legacy.FirewallGroupID = ""
+	_, reservation, err := provisioner.prepare(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := repository.ReserveCapacity(reservation, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.MarkCapacityCreateSent(reservation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	result, err := provisioner.Provision(context.Background(), request(legacy.OperationID, legacy.ServerID, legacy.Environment))
+	if !errors.Is(err, ErrOutcomeUnknown) || result.ResourceKey != reservation.ResourceKey {
+		t.Fatalf("pre-firewall reconciliation = %+v, %v", result, err)
+	}
+	if created, _, _ := provider.counts(); created != 0 {
+		t.Fatal("a pre-firewall create was sent again")
+	}
+}
+
+func TestProvisionSendsAOneTimeHostKeyAndStoresOnlyItsPublicHalf(t *testing.T) {
+	provider := successfulProvider()
+	provisioner, repository, _ := newTestProvisioner(t, provider)
+	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	if _, err := provisioner.Provision(context.Background(), input); err != nil {
+		t.Fatal(err)
+	}
+	sent := provider.created[0]
+	if sent.FirewallGroupID != "firewall-123" {
+		t.Fatalf("firewall group not attached: %+v", sent)
+	}
+	userData, err := base64.StdEncoding.DecodeString(sent.UserData)
+	if err != nil || !strings.HasPrefix(string(userData), "#cloud-config\nssh_deletekeys: true\nssh_genkeytypes: []\n") {
+		t.Fatalf("user data = %q, %v", userData, err)
+	}
+	record, err := repository.GetHostHandoff(input.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(userData), "ed25519_public: "+record.OneTimeHostKey+" ") {
+		t.Fatal("stored public key is not the key that was sent")
+	}
+	start := strings.Index(string(userData), "-----BEGIN")
+	end := strings.Index(string(userData), "-----END OPENSSH PRIVATE KEY-----")
+	var pemLines []string
+	for _, line := range strings.Split(string(userData)[start:end+len("-----END OPENSSH PRIVATE KEY-----")], "\n") {
+		pemLines = append(pemLines, strings.TrimSpace(line))
+	}
+	private, err := sshkey.ParsePrivateKey([]byte(strings.Join(pemLines, "\n") + "\n"))
+	if err != nil {
+		t.Fatalf("user data private key: %v", err)
+	}
+	if sshkey.AuthorizedKey(private.Public().(ed25519.PublicKey)) != record.OneTimeHostKey {
+		t.Fatal("private and stored public halves differ")
+	}
+	encoded, _ := json.Marshal(record)
+	if strings.Contains(string(encoded), "PRIVATE") {
+		t.Fatal("the store holds the private key")
+	}
+}
+
+func TestProvisionRefusesWrongSSHKeysOrAnOpenFirewall(t *testing.T) {
+	other := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE"
+	for name, test := range map[string]struct {
+		keys     map[string]string
+		firewall []vultrapi.FirewallRule
+		want     error
+	}{
+		"another ed25519 key": {keys: map[string]string{"sshkey-123": other}, want: ErrSSHKeyMismatch},
+		"two ed25519 keys":    {keys: map[string]string{"sshkey-123": testControllerKey, "sshkey-456": other}, want: ErrSSHKeyMismatch},
+		"open firewall":       {firewall: []vultrapi.FirewallRule{{ID: 1, Action: "accept", Protocol: "tcp", Port: "22", Subnet: "0.0.0.0"}}, want: ErrFirewall},
+	} {
+		t.Run(name, func(t *testing.T) {
+			provider := successfulProvider()
+			provider.sshKeys, provider.firewall = test.keys, test.firewall
+			provisioner, repository, _ := newTestProvisioner(t, provider)
+			input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+			if len(test.keys) == 2 {
+				input.SSHKeyIDs = []string{"sshkey-123", "sshkey-456"}
+			}
+			if _, err := provisioner.Provision(context.Background(), input); !errors.Is(err, test.want) {
+				t.Fatalf("Provision = %v, want %v", err, test.want)
+			}
+			reservations, _ := repository.ListCapacityReservations()
+			if created, _, _ := provider.counts(); created != 0 || len(reservations) != 0 {
+				t.Fatalf("create=%d reservations=%d", created, len(reservations))
+			}
+		})
+	}
+	provider := successfulProvider()
+	provisioner, _, _ := newTestProvisioner(t, provider)
+	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	input.FirewallGroupID = ""
+	if _, err := provisioner.Provision(context.Background(), input); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("create without a firewall group: %v", err)
 	}
 }

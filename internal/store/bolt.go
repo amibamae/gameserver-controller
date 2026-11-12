@@ -27,6 +27,7 @@ const (
 	logicalServersBucketName       = "logical_servers"
 	capacityReservationsBucketName = "capacity_reservations"
 	managementAPIKeysBucketName    = "management_api_keys"
+	hostHandoffsBucketName         = "host_handoffs"
 	databaseSchema                 = "5"
 )
 
@@ -40,6 +41,7 @@ var (
 	logicalServersBucket       = []byte(logicalServersBucketName)
 	capacityReservationsBucket = []byte(capacityReservationsBucketName)
 	managementAPIKeysBucket    = []byte(managementAPIKeysBucketName)
+	hostHandoffsBucket         = []byte(hostHandoffsBucketName)
 	schemaKey                  = []byte("schema_version")
 )
 
@@ -80,7 +82,7 @@ func OpenBolt(path string) (*BoltStore, error) {
 		if _, err := tx.CreateBucketIfNotExists(operationsBucket); err != nil {
 			return err
 		}
-		for _, name := range [][]byte{idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket, capacityReservationsBucket, managementAPIKeysBucket} {
+		for _, name := range [][]byte{idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket, capacityReservationsBucket, managementAPIKeysBucket, hostHandoffsBucket} {
 			if _, err := tx.CreateBucketIfNotExists(name); err != nil {
 				return err
 			}

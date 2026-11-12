@@ -1,0 +1,603 @@
+{
+  "fixture_id": "hosting.bootstrap.host-key-handoff",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "hosting.bootstrap",
+  "purpose": "A new instance is trusted with secrets only after the controller connects with the single-use host key it chose, the instance swaps it for a new ed25519 host key over that verified connection, and the controller pins the new key. A mismatched, expired, reused, or malformed key never leads to a secret being sent.",
+  "side_effect_expected": "simulated",
+  "input": {
+    "handoff": {
+      "one_time_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP",
+      "created_at": "2026-11-12T18:00:00Z",
+      "expires_at": "2026-11-13T18:00:00Z"
+    },
+    "evaluations": [
+      {
+        "case_id": "verified-handoff-then-secret",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT\n"
+          },
+          {
+            "step": "replace_user_data",
+            "succeeded": true
+          },
+          {
+            "step": "connect_pinned",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT"
+          },
+          {
+            "step": "send_secret"
+          }
+        ]
+      },
+      {
+        "case_id": "impostor-at-first-connection",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKp3pD19w7FB7dT+nq44tfu83Zn64naUJvI5aFTi/3t1"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT\n"
+          },
+          {
+            "step": "send_secret"
+          }
+        ]
+      },
+      {
+        "case_id": "secret-before-rotation-is-refused",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "send_secret"
+          }
+        ]
+      },
+      {
+        "case_id": "malformed-rotation-output",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "rotate",
+            "output": "Host key rotated.\n"
+          },
+          {
+            "step": "send_secret"
+          }
+        ]
+      },
+      {
+        "case_id": "rotation-that-returns-the-one-time-key",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP\n"
+          },
+          {
+            "step": "send_secret"
+          }
+        ]
+      },
+      {
+        "case_id": "rotation-output-with-two-keys",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKp3pD19w7FB7dT+nq44tfu83Zn64naUJvI5aFTi/3t1\n"
+          }
+        ]
+      },
+      {
+        "case_id": "rotation-output-with-another-key-type",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-rsa AAAAB3NzaC1yc2EAAABDAQABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\n"
+          }
+        ]
+      },
+      {
+        "case_id": "rotation-output-with-a-short-key",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAEPmwB4td9ZbS6hkBDAAbvQA=\n"
+          }
+        ]
+      },
+      {
+        "case_id": "impostor-after-rotation",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT\n"
+          },
+          {
+            "step": "replace_user_data",
+            "succeeded": true
+          },
+          {
+            "step": "connect_pinned",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "send_secret"
+          }
+        ]
+      },
+      {
+        "case_id": "expired-handoff",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-13T18:00:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "send_secret"
+          }
+        ]
+      },
+      {
+        "case_id": "one-time-key-refused-after-rotation",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT\n"
+          },
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "send_secret"
+          }
+        ]
+      },
+      {
+        "case_id": "provider-copy-not-replaced",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT\n"
+          },
+          {
+            "step": "replace_user_data",
+            "succeeded": false
+          },
+          {
+            "step": "connect_pinned",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT"
+          },
+          {
+            "step": "send_secret"
+          }
+        ]
+      },
+      {
+        "case_id": "pinned-connection-before-rotation",
+        "steps": [
+          {
+            "step": "connect_pinned",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT"
+          },
+          {
+            "step": "send_secret"
+          }
+        ]
+      },
+      {
+        "case_id": "secret-needs-the-latest-connection-verified",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT\n"
+          },
+          {
+            "step": "connect_pinned",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT"
+          },
+          {
+            "step": "connect_pinned",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKp3pD19w7FB7dT+nq44tfu83Zn64naUJvI5aFTi/3t1"
+          },
+          {
+            "step": "send_secret"
+          }
+        ]
+      },
+      {
+        "case_id": "rotation-runs-once-per-verified-connection",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "at": "2026-11-12T18:05:00Z",
+            "presented_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOek6uNMEqssBRhzmdKVWu/HkYFGdedjQmNwvOsF26tP"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT\n"
+          },
+          {
+            "step": "rotate",
+            "output": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBY2eqy2ekoBfI2oq5VoLMs5CGN4D3EU3aCg4MVWRMfE\n"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "verified-handoff-then-secret",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "rotate",
+            "result": "pinned"
+          },
+          {
+            "step": "replace_user_data",
+            "result": "replaced"
+          },
+          {
+            "step": "connect_pinned",
+            "result": "permitted"
+          },
+          {
+            "step": "send_secret",
+            "result": "permitted"
+          }
+        ],
+        "final_state": "rotated",
+        "pinned_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT",
+        "user_data_replaced": true
+      },
+      {
+        "case_id": "impostor-at-first-connection",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "host_key_mismatch"
+          },
+          {
+            "step": "rotate",
+            "result": "not_verified"
+          },
+          {
+            "step": "send_secret",
+            "result": "refused"
+          }
+        ],
+        "final_state": "pending_rotation",
+        "pinned_host_key": null,
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "secret-before-rotation-is-refused",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "send_secret",
+            "result": "refused"
+          }
+        ],
+        "final_state": "pending_rotation",
+        "pinned_host_key": null,
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "malformed-rotation-output",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "rotate",
+            "result": "invalid_output"
+          },
+          {
+            "step": "send_secret",
+            "result": "refused"
+          }
+        ],
+        "final_state": "pending_rotation",
+        "pinned_host_key": null,
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "rotation-that-returns-the-one-time-key",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "rotate",
+            "result": "reused_one_time_key"
+          },
+          {
+            "step": "send_secret",
+            "result": "refused"
+          }
+        ],
+        "final_state": "pending_rotation",
+        "pinned_host_key": null,
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "rotation-output-with-two-keys",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "rotate",
+            "result": "invalid_output"
+          }
+        ],
+        "final_state": "pending_rotation",
+        "pinned_host_key": null,
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "rotation-output-with-another-key-type",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "rotate",
+            "result": "invalid_output"
+          }
+        ],
+        "final_state": "pending_rotation",
+        "pinned_host_key": null,
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "rotation-output-with-a-short-key",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "rotate",
+            "result": "invalid_output"
+          }
+        ],
+        "final_state": "pending_rotation",
+        "pinned_host_key": null,
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "impostor-after-rotation",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "rotate",
+            "result": "pinned"
+          },
+          {
+            "step": "replace_user_data",
+            "result": "replaced"
+          },
+          {
+            "step": "connect_pinned",
+            "result": "host_key_mismatch"
+          },
+          {
+            "step": "send_secret",
+            "result": "refused"
+          }
+        ],
+        "final_state": "rotated",
+        "pinned_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT",
+        "user_data_replaced": true
+      },
+      {
+        "case_id": "expired-handoff",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "expired"
+          },
+          {
+            "step": "send_secret",
+            "result": "refused"
+          }
+        ],
+        "final_state": "pending_rotation",
+        "pinned_host_key": null,
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "one-time-key-refused-after-rotation",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "rotate",
+            "result": "pinned"
+          },
+          {
+            "step": "connect_one_time",
+            "result": "not_pending"
+          },
+          {
+            "step": "send_secret",
+            "result": "refused"
+          }
+        ],
+        "final_state": "rotated",
+        "pinned_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT",
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "provider-copy-not-replaced",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "rotate",
+            "result": "pinned"
+          },
+          {
+            "step": "replace_user_data",
+            "result": "not_replaced"
+          },
+          {
+            "step": "connect_pinned",
+            "result": "permitted"
+          },
+          {
+            "step": "send_secret",
+            "result": "permitted"
+          }
+        ],
+        "final_state": "rotated",
+        "pinned_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT",
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "pinned-connection-before-rotation",
+        "steps": [
+          {
+            "step": "connect_pinned",
+            "result": "not_rotated"
+          },
+          {
+            "step": "send_secret",
+            "result": "refused"
+          }
+        ],
+        "final_state": "pending_rotation",
+        "pinned_host_key": null,
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "secret-needs-the-latest-connection-verified",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "rotate",
+            "result": "pinned"
+          },
+          {
+            "step": "connect_pinned",
+            "result": "permitted"
+          },
+          {
+            "step": "connect_pinned",
+            "result": "host_key_mismatch"
+          },
+          {
+            "step": "send_secret",
+            "result": "refused"
+          }
+        ],
+        "final_state": "rotated",
+        "pinned_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT",
+        "user_data_replaced": false
+      },
+      {
+        "case_id": "rotation-runs-once-per-verified-connection",
+        "steps": [
+          {
+            "step": "connect_one_time",
+            "result": "permitted"
+          },
+          {
+            "step": "rotate",
+            "result": "pinned"
+          },
+          {
+            "step": "rotate",
+            "result": "not_verified"
+          }
+        ],
+        "final_state": "rotated",
+        "pinned_host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPQlRtXs3UUlCYCLLW0EE7WnOMcKeTuZzPjtb0I6rIPT",
+        "user_data_replaced": false
+      }
+    ]
+  }
+}

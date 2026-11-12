@@ -44,6 +44,11 @@ BOOTSTRAP_MARKER="$STATE_DIR/bootstrap-complete"
 ADMIN_FINALIZER="/usr/local/sbin/minecraft-finalize-security"
 RCLONE_INSTALLER="/usr/local/sbin/minecraft-install-rclone-config"
 
+# Single-use host key handoff (protocol hosting section 6.1). The controller's
+# first login uses HOSTKEY_USER, which can run only HOST_KEY_ROTATOR.
+HOSTKEY_USER="gsc-hostkey"
+HOST_KEY_ROTATOR="/usr/local/sbin/gsc-rotate-host-key"
+
 section() {
     echo
     echo "============================================================"
@@ -186,6 +191,87 @@ chown \
 
 chmod 0600 \
     "/home/$ADMIN_USER/.ssh/authorized_keys"
+
+section "Creating the host key swap account"
+
+# The controller verifies this VM by the single-use host key that cloud-init
+# installed from the create request, then logs in here to swap it for a new
+# key generated on this VM. The account can run that one command and nothing
+# else: restrict disables terminals, forwarding, and user rc files, and the
+# forced command replaces anything the client asks to run.
+
+if ! id "$HOSTKEY_USER" >/dev/null 2>&1; then
+    useradd \
+        --create-home \
+        --shell /bin/sh \
+        "$HOSTKEY_USER"
+fi
+
+passwd -l "$HOSTKEY_USER" >/dev/null 2>&1 || true
+
+install \
+    -d \
+    -m 0700 \
+    -o "$HOSTKEY_USER" \
+    -g "$HOSTKEY_USER" \
+    "/home/$HOSTKEY_USER/.ssh"
+
+cat > "$HOST_KEY_ROTATOR" <<'EOF_ROTATE'
+#!/usr/bin/env bash
+# Swap the single-use SSH host key for a new one generated here. Prints only
+# the new public key, as the very last step, on stdout.
+set -Eeuo pipefail
+umask 077
+
+STATE_DIR="/var/lib/minecraft-bootstrap"
+MARKER="$STATE_DIR/host-key-rotated"
+HOSTKEY_USER="gsc-hostkey"
+
+exec 9>/run/gsc-rotate-host-key.lock
+flock -n 9
+
+if [[ -e "$MARKER" ]]; then
+    echo "The host key was already swapped; this runs only once." >&2
+    exit 1
+fi
+
+work="$(mktemp -d /etc/ssh/.gsc-rotate.XXXXXX)"
+trap 'rm -rf "$work"' EXIT
+ssh-keygen -q -t ed25519 -N '' -C '' -f "$work/key" >&2
+
+install -m 0600 -o root -g root "$work/key" /etc/ssh/ssh_host_ed25519_key
+install -m 0644 -o root -g root "$work/key.pub" /etc/ssh/ssh_host_ed25519_key.pub
+rm -f /etc/ssh/ssh_host_rsa_key* /etc/ssh/ssh_host_ecdsa_key* /etc/ssh/ssh_host_dsa_key*
+
+printf 'HostKey /etc/ssh/ssh_host_ed25519_key\n' > /etc/ssh/sshd_config.d/05-gsc-host-key.conf
+chmod 0644 /etc/ssh/sshd_config.d/05-gsc-host-key.conf
+sshd -t
+
+# cloud-init's copies of the user data hold the single-use private key.
+rm -f /var/lib/cloud/instances/*/user-data.txt* \
+      /var/lib/cloud/instances/*/cloud-config.txt \
+      /var/lib/cloud/instances/*/obj.pkl \
+      /run/cloud-init/instance-data-sensitive.json
+
+# Close the swap account: no key, no sudo rule, then remove it once this
+# session has ended.
+rm -f "/home/$HOSTKEY_USER/.ssh/authorized_keys" /etc/sudoers.d/gsc-hostkey
+systemd-run --quiet --on-active=60 --unit=gsc-remove-hostkey-user \
+    /usr/sbin/userdel --force --remove "$HOSTKEY_USER" >&2 || true
+
+date --iso-8601=seconds > "$MARKER"
+chmod 0644 "$MARKER"
+
+systemctl reload ssh >&2
+
+fingerprint="$(ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub)"
+echo "gameserver-controller: new SSH host key $fingerprint" > /dev/console 2>/dev/null || true
+logger -t gsc-rotate-host-key "new SSH host key $fingerprint" || true
+
+awk '{print $1 " " $2}' /etc/ssh/ssh_host_ed25519_key.pub
+EOF_ROTATE
+
+chmod 0755 "$HOST_KEY_ROTATOR"
 
 section "Preparing Minecraft directories"
 
@@ -520,9 +606,12 @@ ufw --force reset
 ufw default deny incoming
 ufw default allow outgoing
 
-# Temporary SSH access so the controller can test minecraft-admin.
-# The finalizer later restricts this to the controller IP only.
-ufw allow 22/tcp
+# SSH is reachable only from the controller, from the first firewall rule
+# on. The provider firewall group applies the same rule before boot.
+ufw allow \
+    from "$CONTROLLER_IP" \
+    to any port 22 \
+    proto tcp
 
 # Minecraft is restricted to the controller IP immediately.
 ufw allow \
@@ -554,6 +643,8 @@ id "$MINECRAFT_USER"
 id "$ADMIN_USER"
 
 test -f "/home/$ADMIN_USER/.ssh/authorized_keys"
+id "$HOSTKEY_USER"
+test -x "$HOST_KEY_ROTATOR"
 
 sshd -t
 fail2ban-client -t
@@ -573,6 +664,25 @@ echo "Systemd services:"
 systemctl is-enabled fail2ban
 systemctl is-enabled minecraft-restore.service
 
+section "Enabling the host key swap account"
+
+# Enabled last: once the login key exists, the controller may swap the host
+# key at any moment, and nothing after this point depends on the account.
+# The sudo rule is installed before the login key, so a login can always run
+# the swap.
+
+printf '%s ALL=(root) NOPASSWD: %s\n' "$HOSTKEY_USER" "$HOST_KEY_ROTATOR" \
+    > /etc/sudoers.d/.gsc-hostkey.new
+chmod 0440 /etc/sudoers.d/.gsc-hostkey.new
+visudo -cf /etc/sudoers.d/.gsc-hostkey.new
+mv -f /etc/sudoers.d/.gsc-hostkey.new /etc/sudoers.d/gsc-hostkey
+
+printf 'restrict,command="sudo -n %s" %s\n' "$HOST_KEY_ROTATOR" "$KEY" \
+    > "/home/$HOSTKEY_USER/.ssh/authorized_keys.new"
+chown "$HOSTKEY_USER:$HOSTKEY_USER" "/home/$HOSTKEY_USER/.ssh/authorized_keys.new"
+chmod 0600 "/home/$HOSTKEY_USER/.ssh/authorized_keys.new"
+mv -f "/home/$HOSTKEY_USER/.ssh/authorized_keys.new" "/home/$HOSTKEY_USER/.ssh/authorized_keys"
+
 echo
 echo "Bootstrap complete."
 
@@ -585,9 +695,9 @@ chmod 0644 "$BOOTSTRAP_MARKER"
 section "BOOTSTRAP COMPLETE"
 
 echo "The VM is intentionally NOT running Minecraft yet."
-echo "Next steps:"
-echo "1. Test minecraft-admin SSH from the controller IP."
-echo "2. Transfer the Vultr-only Wasabi rclone config."
+echo "Next steps (gsc-pilot handoff does steps 1-5):"
+echo "1. Verify this VM by its single-use host key and swap it for a new one."
+echo "2. Transfer the Vultr-only Wasabi rclone config to the pinned host key only."
 echo "3. Run the security finalizer."
 echo "4. Run the rclone installer; it will automatically start the Wasabi restore."
 echo "5. Wait for minecraft-restore.service to complete successfully."

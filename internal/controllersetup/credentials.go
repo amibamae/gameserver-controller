@@ -3,16 +3,19 @@ package controllersetup
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/amibamae/gameserver-controller/internal/config"
+	"github.com/amibamae/gameserver-controller/internal/sshkey"
 )
 
 const (
@@ -83,13 +86,67 @@ func SetEncryptedCredential(ctx context.Context, value config.Config, name, dire
 	if encryptor == nil || !credentialNamePattern.MatchString(name) || !isConfiguredCredential(value, name) {
 		return errors.New("credential name is not referenced by the validated configuration")
 	}
-	if len(plaintext) == 0 || len(plaintext) > maxProviderSecret || len(bytes.TrimSpace(plaintext)) == 0 {
+	if !validSingleLineSecret(plaintext) {
 		return errors.New("credential input is empty or invalid")
+	}
+	return storeEncryptedCredential(ctx, name, directory, plaintext, replace, encryptor)
+}
+
+// PilotCredentialNames are the credentials gsc-pilot reads that the
+// controller configuration does not reference.
+var PilotCredentialNames = []string{
+	"vultr-pilot-api-token",
+	"gsc-pilot-vm-wasabi-access-key-id",
+	"gsc-pilot-vm-wasabi-secret-access-key",
+}
+
+// PilotSSHKeyName is the credential holding the controller's SSH private key.
+const PilotSSHKeyName = "gsc-pilot-ssh-key"
+
+// SetPilotCredential stores one single-line pilot credential, with the same
+// file handling as SetEncryptedCredential.
+func SetPilotCredential(ctx context.Context, name, directory string, plaintext []byte, replace bool, encryptor Encryptor) error {
+	defer zeroBytes(plaintext)
+	if encryptor == nil || !slices.Contains(PilotCredentialNames, name) {
+		return errors.New("credential name is not a pilot credential")
+	}
+	if !validSingleLineSecret(plaintext) {
+		return errors.New("credential input is empty or invalid")
+	}
+	return storeEncryptedCredential(ctx, name, directory, plaintext, replace, encryptor)
+}
+
+// SetSSHPrivateKey stores the controller's SSH private key. It accepts only
+// an unencrypted OpenSSH ed25519 key, re-encoded in canonical form.
+func SetSSHPrivateKey(ctx context.Context, name, directory string, key ed25519.PrivateKey, replace bool, encryptor Encryptor) error {
+	if encryptor == nil || name != PilotSSHKeyName {
+		return errors.New("credential name is not the pilot SSH key")
+	}
+	encoded, err := sshkey.MarshalPrivateKey(key, "gameserver-controller")
+	if err != nil {
+		return errors.New("SSH private key is invalid")
+	}
+	defer zeroBytes(encoded)
+	return storeEncryptedCredential(ctx, name, directory, encoded, replace, encryptor)
+}
+
+func validSingleLineSecret(plaintext []byte) bool {
+	if len(plaintext) == 0 || len(plaintext) > maxProviderSecret || len(bytes.TrimSpace(plaintext)) == 0 {
+		return false
 	}
 	for _, character := range plaintext {
 		if character == 0 || character == '\r' || character == '\n' {
-			return errors.New("credential input is empty or invalid")
+			return false
 		}
+	}
+	return true
+}
+
+// storeEncryptedCredential atomically creates or replaces one encrypted
+// credential file. Callers validate the name and plaintext first.
+func storeEncryptedCredential(ctx context.Context, name, directory string, plaintext []byte, replace bool, encryptor Encryptor) (err error) {
+	if !credentialNamePattern.MatchString(name) || len(plaintext) == 0 || len(plaintext) > maxProviderSecret {
+		return errors.New("credential input is empty or invalid")
 	}
 	if !filepath.IsAbs(directory) || strings.ContainsRune(directory, '\x00') {
 		return errors.New("credential directory must be an absolute path")

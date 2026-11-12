@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/amibamae/gameserver-controller/internal/controllersetup"
+	"github.com/amibamae/gameserver-controller/internal/sshkey"
 )
 
 type testEncryptor struct {
@@ -243,5 +245,87 @@ func TestCredentialSetRejectsLiteralSecretArgument(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "synthetic-secret") {
 		t.Fatal("credential error output exposed argument content")
+	}
+}
+
+func TestSSHKeyGenerateStoresOnlyTheEncryptedPrivateKey(t *testing.T) {
+	encryptor := &testEncryptor{}
+	directory := t.TempDir()
+	publicOut := filepath.Join(t.TempDir(), "gsc.pub")
+	var stdout, stderr bytes.Buffer
+	if err := runSSHKeyCommand([]string{"generate", "--public-key-out", publicOut}, &stdout, &stderr, true, encryptor, directory); err != nil {
+		t.Fatalf("%v; %s", err, stderr.String())
+	}
+	key, err := sshkey.ParsePrivateKey(encryptor.plaintext)
+	if err != nil {
+		t.Fatalf("stored credential is not a private key: %v", err)
+	}
+	public := sshkey.AuthorizedKey(key.Public().(ed25519.PublicKey))
+	written, _ := os.ReadFile(publicOut)
+	if !strings.Contains(stdout.String(), public) || !strings.HasPrefix(string(written), public) {
+		t.Fatalf("printed or written public key differs: %q / %q", stdout.String(), written)
+	}
+	if strings.Contains(stdout.String()+stderr.String(), "PRIVATE KEY") {
+		t.Fatal("the private key was printed")
+	}
+	if _, err := os.Stat(filepath.Join(directory, "gsc-pilot-ssh-key")); err != nil {
+		t.Fatalf("credential file missing: %v", err)
+	}
+	// A second generate must not silently replace the key.
+	if err := runSSHKeyCommand([]string{"generate"}, &stdout, &stderr, true, encryptor, directory); err == nil {
+		t.Fatal("an existing SSH key was replaced without confirmation")
+	}
+	if err := runSSHKeyCommand([]string{"generate", "--replace", "--confirm-replace", "gsc-pilot-ssh-key"}, &stdout, &stderr, true, encryptor, directory); err != nil {
+		t.Fatalf("confirmed replacement: %v", err)
+	}
+	if err := runSSHKeyCommand([]string{"generate"}, &stdout, &stderr, false, encryptor, t.TempDir()); err == nil {
+		t.Fatal("generate ran without administrator privileges")
+	}
+}
+
+func TestSSHKeyImportChecksTheFile(t *testing.T) {
+	_, private, _ := sshkey.Generate()
+	encoded, _ := sshkey.MarshalPrivateKey(private, "mine")
+	dir := t.TempDir()
+	path := filepath.Join(dir, "id_ed25519")
+	if err := os.WriteFile(path, encoded, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	encryptor := &testEncryptor{}
+	var stdout, stderr bytes.Buffer
+	if err := runSSHKeyCommand([]string{"import", "--private-key-file", path}, &stdout, &stderr, true, encryptor, t.TempDir()); err == nil || !strings.Contains(err.Error(), "chmod 600") {
+		t.Fatalf("world-readable key: %v", err)
+	}
+	_ = os.Chmod(path, 0o600)
+	if err := runSSHKeyCommand([]string{"import", "--private-key-file", path}, &stdout, &stderr, true, encryptor, t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if stored, _ := sshkey.ParsePrivateKey(encryptor.plaintext); !bytes.Equal(stored, private) {
+		t.Fatal("imported key differs")
+	}
+	if err := os.WriteFile(path, []byte("not a key"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := runSSHKeyCommand([]string{"import", "--private-key-file", path}, &stdout, &stderr, true, encryptor, t.TempDir()); err == nil {
+		t.Fatal("an invalid key was imported")
+	}
+}
+
+func TestPilotCredentialSetUsesTheAllowList(t *testing.T) {
+	value := []byte("synthetic-pilot-secret")
+	prompt := func(context.Context, string) ([]byte, error) { return append([]byte(nil), value...), nil }
+	encryptor := &testEncryptor{}
+	var stdout, stderr bytes.Buffer
+	if err := runCredentialCommand([]string{"set", "--pilot", "--name", "gsc-pilot-vm-wasabi-secret-access-key"}, &stdout, &stderr, true, prompt, encryptor, t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	if string(encryptor.plaintext) != "synthetic-pilot-secret" {
+		t.Fatal("pilot credential not stored")
+	}
+	if err := runCredentialCommand([]string{"set", "--pilot", "--name", "anything-else"}, &stdout, &stderr, true, prompt, encryptor, t.TempDir()); err == nil {
+		t.Fatal("an unlisted pilot credential was accepted")
+	}
+	if err := runCredentialCommand([]string{"set", "--pilot", "--config", "x.yaml", "--name", "vultr-pilot-api-token"}, &stdout, &stderr, true, prompt, encryptor, t.TempDir()); err == nil {
+		t.Fatal("--pilot with --config was accepted")
 	}
 }

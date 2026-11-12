@@ -24,6 +24,7 @@ Written 2026-11-11, last updated 2026-11-12, for another AI agent (or a human) t
   - #165: planned vertical scaling and migration target server docs. #166: one file per adapter (`adapter_<name>.go`) and `adapters.d/`.
   - #167 and the R5 part 2 PR: `conformance-rs`, which passes the full initial interoperability profile.
   - The proxy outage notifications PR (N2): monitor and Discord/Slack/JSON webhook, SMTP, ntfy and controller-log notifications; see `docs/NOTIFICATIONS.md`.
+  - The SSH handoff PR (N3) and #173 (alphabetical notices).
   - #168: AI-use disclosure with measured figures. #169: player-monitoring policy in `SECURITY.md`. #170: no-session-link rule in `CLAUDE.md`.
 - **Leftover remote branches nobody has judged:** `codex/pilot-invocation-binding-rebased-20261106` and `codex/resolve-open-protocol-decisions-20261107`. They look abandoned (no PR, last touched Nov 6) but are not proven merged. Ask the owner before deleting.
 
@@ -48,6 +49,7 @@ Do these in order. "Model / reasoning" is the recommended setting for that task.
 | N1 | done (#166) | One file per adapter: `internal/controllerruntime/adapter_<name>.go` registers each implementation; `adapters.d/` holds one profile per file. | — |
 | R5 | done (#167 and the part 2 PR) | Rust consumer `conformance-rs/` passes all 17 initial-profile fixtures plus the network-profile requirements, with RFC 8785 JCS (numbers via `ryu-js`; Rust's own float formatting breaks ties differently from ECMAScript). | R2 |
 | N2 | done (proxy outage notifications PR) | `internal/integrationmonitor` (outage tracker, probe loop, dispatcher with retries, controller log line) and `internal/notification` (webhook, SMTP, ntfy senders). Runtime files `adapter_webhook.go`, `adapter_smtp.go`, `adapter_ntfy.go`, and the `controller.monitoring.proxy` config. Protocol: integrations §7.1–7.2, `notification-*` schemas, two vectors. `integration.notification.send` is non-mutating by design (no durable operation), and delivery is at least once and in memory only. Not yet: monitoring integrations other than Velocity, and durable delivery. | N1 |
+| N3 | done (SSH handoff PR) | SSH keys (`internal/sshkey`, `controller-setup ssh-key`), single-use host key handoff (`internal/hosthandoff`, protocol hosting §6.1 and vector), provision checks for the controller key and an SSH-only-from-controller firewall group, the bootstrap swap account, and `gsc-pilot handoff` (`internal/pilothandoff`) that sends the VM Wasabi credentials only to the pinned key. Needs a live Vultr test of cloud-init `ssh_keys` alongside a startup script. | N2 |
 | R6 | Opus 5.5, high | Management API routes, with a new `server.define` permission (see below). | — |
 | R7 | Opus 5.5, high | Finish controller setup (`internal/controllersetup`): provider credential checks, local audit, rollback of all host changes. | R6 |
 | R8 | Opus 5.5, high | Attach adopted VMs to a logical server (builds on `internal/pilotcapacity`). | R6 |
