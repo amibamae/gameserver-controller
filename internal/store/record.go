@@ -166,72 +166,72 @@ func validateRecord(record OperationRecord) error {
 }
 
 func validateRecordIdentity(record OperationRecord) error {
-if !validIdentifier(record.OperationID, 200) {
-	return invalidField("operation_id")
-}
-if !validQualifiedName(record.OperationType, 160) {
-	return invalidField("operation_type")
-}
-if record.ProtocolVersion == "" || len(record.ProtocolVersion) > 100 {
-	return invalidField("protocol_version")
-}
-if len(record.SchemaPackageRevision) > 200 {
-	return invalidField("schema_package_revision")
-}
-if !validIdentifier(record.Target.ServerID, 200) || !validIdentifier(record.Target.EnvironmentID, 200) {
-	return invalidField("target")
-}
-if record.ActorID == "" || len(record.ActorID) > 200 {
-	return invalidField("actor_id")
-}
-if record.CorrelationID != "" && len(record.CorrelationID) > 200 {
-	return invalidField("correlation_id")
-}
-if record.IdempotencyKey != "" && !validIdempotencyKey(record.IdempotencyKey) {
-	return invalidField("idempotency_key")
-}
-if record.RequestFingerprint != "" && !validFingerprint(record.RequestFingerprint) {
-	return invalidField("request_fingerprint")
-}
-if record.CreatedAt.IsZero() || record.UpdatedAt.IsZero() || record.UpdatedAt.Before(record.CreatedAt) {
-	return invalidField("timestamps")
-}
+i	f !validIdentifier(record.OperationID, 200) {
+		return invalidField("operation_id")
+	}
+	if !validQualifiedName(record.OperationType, 160) {
+		return invalidField("operation_type")
+	}
+	if record.ProtocolVersion == "" || len(record.ProtocolVersion) > 100 {
+		return invalidField("protocol_version")
+	}
+	if len(record.SchemaPackageRevision) > 200 {
+		return invalidField("schema_package_revision")
+	}
+	if !validIdentifier(record.Target.ServerID, 200) || !validIdentifier(record.Target.EnvironmentID, 200) {
+		return invalidField("target")
+	}
+	if record.ActorID == "" || len(record.ActorID) > 200 {
+		return invalidField("actor_id")
+	}
+	if record.CorrelationID != "" && len(record.CorrelationID) > 200 {
+		return invalidField("correlation_id")
+	}
+	if record.IdempotencyKey != "" && !validIdempotencyKey(record.IdempotencyKey) {
+		return invalidField("idempotency_key")
+	}
+	if record.RequestFingerprint != "" && !validFingerprint(record.RequestFingerprint) {
+		return invalidField("request_fingerprint")
+	}
+	if record.CreatedAt.IsZero() || record.UpdatedAt.IsZero() || record.UpdatedAt.Before(record.CreatedAt) {
+		return invalidField("timestamps")
+	}
 	return nil
 }
 
 func validateRecordPayload(record OperationRecord) error {
-if !knownOperationStatus(record.Status) {
-	return invalidField("status")
-}
-if record.RequestSnapshot.OperationType != record.OperationType || !isJSONObject(record.RequestSnapshot.Parameters) {
-	return invalidField("request_snapshot")
-}
-for _, ref := range record.RequestSnapshot.SecretRefs {
-	if !validSecretReference(ref) {
-		return invalidField("request_snapshot.secret_refs")
+i	f !knownOperationStatus(record.Status) {
+		return invalidField("status")
 	}
-}
-if len(record.Target.InstanceRef) > 0 && !isJSONObject(record.Target.InstanceRef) {
-	return invalidField("target.instance_ref")
-}
-if len(record.Progress) > 0 && !isJSONObject(record.Progress) {
-	return invalidField("progress")
-}
-if len(record.Result) > 0 && !isJSONObject(record.Result) {
-	return invalidField("result")
-}
-if len(record.Error) > 0 && !isJSONObject(record.Error) {
-	return invalidField("error")
-}
-if record.StartedAt != nil && record.StartedAt.Before(record.CreatedAt) {
-	return invalidField("started_at")
-}
-if record.StartedAt != nil && record.StartedAt.After(record.UpdatedAt) {
-	return invalidField("started_at")
-}
-if record.CompletedAt != nil && (record.CompletedAt.Before(record.CreatedAt) || !record.CompletedAt.Equal(record.UpdatedAt)) {
-	return invalidField("completed_at")
-}
+	if record.RequestSnapshot.OperationType != record.OperationType || !isJSONObject(record.RequestSnapshot.Parameters) {
+		return invalidField("request_snapshot")
+	}
+	for _, ref := range record.RequestSnapshot.SecretRefs {
+		if !validSecretReference(ref) {
+			return invalidField("request_snapshot.secret_refs")
+		}
+	}
+	if len(record.Target.InstanceRef) > 0 && !isJSONObject(record.Target.InstanceRef) {
+		return invalidField("target.instance_ref")
+	}
+	if len(record.Progress) > 0 && !isJSONObject(record.Progress) {
+		return invalidField("progress")
+	}
+	if len(record.Result) > 0 && !isJSONObject(record.Result) {
+		return invalidField("result")
+	}
+	if len(record.Error) > 0 && !isJSONObject(record.Error) {
+		return invalidField("error")
+	}
+	if record.StartedAt != nil && record.StartedAt.Before(record.CreatedAt) {
+		return invalidField("started_at")
+	}
+	if record.StartedAt != nil && record.StartedAt.After(record.UpdatedAt) {
+		return invalidField("started_at")
+	}
+	if record.CompletedAt != nil && (record.CompletedAt.Before(record.CreatedAt) || !record.CompletedAt.Equal(record.UpdatedAt)) {
+		return invalidField("completed_at")
+	}
 	return nil
 }
 
@@ -289,29 +289,29 @@ func validateRecordStepTimes(record OperationRecord, step OperationStep, i int) 
 }
 
 func validateRecordSteps(record OperationRecord) (map[string]struct{}, error) {
-seenSteps := make(map[string]struct{}, len(record.Steps))
-for i, step := range record.Steps {
-	if record.OperationType == "server.backup" && record.BackupInitialLifecycleState == "" && (step.Attempt != 0 || step.Status == protocolstate.StepRunning || step.Status == protocolstate.StepSucceeded || step.Status == protocolstate.StepWaiting || step.Status == protocolstate.StepOutcomeUnknown) {
-		return nil, invalidField("backup_initial_lifecycle_state must precede dispatch")
+s	eenSteps := make(map[string]struct{}, len(record.Steps))
+	for i, step := range record.Steps {
+		if record.OperationType == "server.backup" && record.BackupInitialLifecycleState == "" && (step.Attempt != 0 || step.Status == protocolstate.StepRunning || step.Status == protocolstate.StepSucceeded || step.Status == protocolstate.StepWaiting || step.Status == protocolstate.StepOutcomeUnknown) {
+			return nil, invalidField("backup_initial_lifecycle_state must precede dispatch")
+		}
+		if !validIdentifier(step.StepID, 200) || !validCapabilityName(step.StepType, 160) || !knownStepStatus(step.Status) || step.Attempt < 0 {
+			return nil, invalidField(fmt.Sprintf("steps[%d]", i))
+		}
+		if (step.Status == protocolstate.StepPending && step.Attempt != 0) ||
+			(step.Status != protocolstate.StepPending && step.Status != protocolstate.StepSkipped && step.Status != protocolstate.StepCancelled && step.Attempt == 0) {
+			return nil, invalidField(fmt.Sprintf("steps[%d].attempt", i))
+		}
+		if _, exists := seenSteps[step.StepID]; exists {
+			return nil, invalidField("duplicate step_id")
+		}
+		seenSteps[step.StepID] = struct{}{}
+		if err := validateRecordStepCapability(step, i); err != nil {
+			return nil, err
+		}
+		if err := validateRecordStepTimes(record, step, i); err != nil {
+			return nil, err
+		}
 	}
-	if !validIdentifier(step.StepID, 200) || !validCapabilityName(step.StepType, 160) || !knownStepStatus(step.Status) || step.Attempt < 0 {
-		return nil, invalidField(fmt.Sprintf("steps[%d]", i))
-	}
-	if (step.Status == protocolstate.StepPending && step.Attempt != 0) ||
-		(step.Status != protocolstate.StepPending && step.Status != protocolstate.StepSkipped && step.Status != protocolstate.StepCancelled && step.Attempt == 0) {
-		return nil, invalidField(fmt.Sprintf("steps[%d].attempt", i))
-	}
-	if _, exists := seenSteps[step.StepID]; exists {
-		return nil, invalidField("duplicate step_id")
-	}
-	seenSteps[step.StepID] = struct{}{}
-	if err := validateRecordStepCapability(step, i); err != nil {
-		return nil, err
-	}
-	if err := validateRecordStepTimes(record, step, i); err != nil {
-		return nil, err
-	}
-}
 	return seenSteps, nil
 }
 
