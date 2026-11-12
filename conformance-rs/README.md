@@ -16,19 +16,22 @@ The command exits non-zero if any fixture it evaluates fails, or if the recomput
 - **Package identity:** recomputes `sha256-path-filehash-v1` for the schema registry and the fixture suite from the algorithm documented in `protocol/conformance/requirements.md`.
 - **JSON rules:** a parser written here, which every package file goes through first. It rejects invalid UTF-8, duplicate member names (compared after unescaping), unpaired escaped surrogates, non-finite numbers, and integral numbers outside ±(2^53 − 1).
 - **Schemas:** compiles every schema in `protocol/schemas/index.json` with the `jsonschema` crate (draft 2020-12, `format` asserted, offline), and validates every example listed in `protocol/examples/index.json`.
-- **Fixtures:** its own evaluator for each fixture below, compared with the fixture's published `expected` object.
+- **Canonical JSON:** RFC 8785 JCS, written from the RFC (UTF-16 member ordering, minimal string escapes), with ECMAScript number formatting from the `ryu-js` crate. It is used for the `game.configure` digests and tested against the RFC's sample values.
+- **Fixtures:** its own evaluator for each fixture below, written from the normative protocol text and compared with the fixture's published `expected` object.
 
-| Fixture | Status |
+It evaluates every fixture of the initial interoperability profile, plus the network-profile requirements:
+
+| Area | Fixtures |
 |---|---|
-| `protocol.json.raw-wire-interoperability` | evaluated |
-| `operations.type-binding` | evaluated |
-| `operations.restore.final-state-policy` | evaluated |
-| `operations.backup.no-resume-final-state` | evaluated |
-| `operations.backup.initial-state-resume-policy` | evaluated |
-| `integration.network-profile.requirements` | evaluated |
-| The other 11 fixtures of the initial interoperability profile | not yet; listed in the report under `profile_fixtures_not_covered` |
+| JSON wire | `protocol.json.raw-wire-interoperability` |
+| Operations | `operations.type-binding`, `operations.restore.final-state-policy`, `operations.backup.no-resume-final-state`, `operations.backup.initial-state-resume-policy` |
+| Game | `game.release.describe.integrity-and-identity`, `game.install.release-binding-and-reconciliation`, `game.configure.pinned-schema-and-result-binding` |
+| Execution | `execution.unit.start.accepted-not-ready`, `execution.unit.graceful-stop.unknown-requires-inspection`, `execution.unit.inspect.exact-target-state`, `execution.unit.logs.byte-bound-and-redaction`, `execution.unit.health.diagnostic-redaction-and-binding` |
+| Proxy | `integration.proxy.register.accepted-is-not-routable`, `integration.proxy.players.inspect.fresh-count-and-target-binding` |
+| Velocity | `velocity-transfer-outcome-unknown-reconciliation`, `velocity-transfer-privacy-canaries` |
+| Network | `integration.network-profile.requirements` (not part of the profile) |
 
-Until every profile fixture is evaluated, the report claims `exploratory-subset-of-initial-profile`, not the full profile.
+When all of them pass, the report claims `initial-interoperability-profile`. If a future package adds a profile fixture this consumer cannot evaluate, the claim drops back to `exploratory-subset-of-initial-profile` and the report lists the missing fixture under `profile_fixtures_not_covered`.
 
 ## Limitations
 

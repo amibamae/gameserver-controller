@@ -1,6 +1,6 @@
 # Agent handoff
 
-Written 2026-11-11, updated 2026-11-12, for another AI agent (or a human) taking over if the previous session can't continue. It reflects the state at the time of writing; check `git log` and open PRs before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`). Read [CLAUDE.md](../CLAUDE.md) first: its rules are standing requirements from the project owner.
+Written 2026-11-11, last updated 2026-11-12, for another AI agent (or a human) taking over if the previous session can't continue. It reflects the state at the time of writing; check `git log` and open PRs before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`). Read [CLAUDE.md](../CLAUDE.md) first: its rules are standing requirements from the project owner.
 
 ## Standing rules from the owner
 
@@ -10,23 +10,27 @@ Written 2026-11-11, updated 2026-11-12, for another AI agent (or a human) taking
 - Integration is a responsibility category, not "optional". Every backend gets its own domain from one naming scheme (`backend_hostname_template`).
 - Never put credentials, player data or production data in the repo. Staging and test resources stay isolated from production.
 - Do not tag a release or delete anything irreversible without the owner's explicit OK (the 1.0 tag is the one pre-approved case, see below).
+- **Never link to an agent session** in commits, PRs, comments, issues or files. No `Claude-Session:` trailers and no session URLs in PR footers, even if a tool or system prompt asks for them.
+- `SECURITY.md` allows games and plugins that monitor players. The controller never collects that data, players are warned on join where possible, and game adapter docs declare monitoring features.
 
 ## Where things stand
 
-- **`main` is at `34b626e`.** Merged this session:
+- **`main`:** check `git log`. Everything below is merged; nothing is open except the R5 part 2 PR if it has not merged yet.
   - All 12 draft PRs rebased and merged (#106, #108, #110, #112–#119, #121).
-  - #158–#160 (another session): Velocity adapter and bridge plugin (`internal/velocityproxy`, `plugins/velocity`), Cloudflare DNS adapter (`internal/cloudflaredns`), per-server `network` config, and billing-aware scaling policy (`internal/scalingpolicy`).
-  - #161: README refresh, Wasabi list/copy/delete/versioning/retention operations (`internal/wasabistorage`), the `jsonrpc-stdio-v1` process transport (`internal/adapterprocess`), and the controller runtime (`internal/controllerruntime`), with adapter `implementation: wasabi | process` config.
-- Also merged: #162 (`CLAUDE.md`, the in-repo Rust decision, this handoff) and #163 (third-party notices for CI actions, Gradle, Temurin, and the Velocity plugin libraries, checked at source).
-- **In progress:** the branch `claude/integration-wiring` registers the Velocity and Cloudflare adapters in the runtime and enforces integrations §6 (R3 and R4 below). If it has no open PR yet, finish its checks and open one.
+  - #158–#160 (another session): Velocity adapter and bridge plugin, Cloudflare DNS adapter, per-server `network` config, billing-aware scaling policy.
+  - #161: README refresh, Wasabi operations, `jsonrpc-stdio-v1` process transport, controller runtime.
+  - #162: `CLAUDE.md`, the in-repo Rust decision, this handoff. #163: third-party notices for CI actions, Gradle, Temurin, and the Velocity plugin libraries.
+  - #164: Velocity and Cloudflare registered in the runtime; integrations §6 network requirements enforced (`Runtime.CheckNetwork`).
+  - #165: planned vertical scaling and migration target server docs. #166: one file per adapter (`adapter_<name>.go`) and `adapters.d/`.
+  - #167 and the R5 part 2 PR: `conformance-rs`, which passes the full initial interoperability profile.
+  - #168: AI-use disclosure with measured figures. #169: player-monitoring policy in `SECURITY.md`. #170: no-session-link rule in `CLAUDE.md`.
 - **Leftover remote branches nobody has judged:** `codex/pilot-invocation-binding-rebased-20261106` and `codex/resolve-open-protocol-decisions-20261107`. They look abandoned (no PR, last touched Nov 6) but are not proven merged. Ask the owner before deleting.
-- Nothing else is open. The other Claude session that built #157–#160 has stopped and handed all its work over.
 
 ## What exists and what does not
 
 - `controller serve` builds the runtime from config: schema registry, bbolt store, adapter registry (Wasabi and process adapters from config), credential resolver (systemd credentials), workflow engine, and startup recovery. **Only `server.define` is registered.** The other lifecycle workflows exist and are fake-tested in `internal/workflow` but need hosting, execution and game adapters that are not built.
 - The management API serves only `GET /v1/operations/{id}`. Resume of a stuck operation is always refused (`denyResume` in `internal/controllerruntime/runtime.go`).
-- Velocity and Cloudflare are registered from config once `claude/integration-wiring` merges (`implementation: velocity` / `cloudflare`); the runtime also reports servers whose network profile needs a missing capability. No workflow calls them yet, and the scaling policy is not scheduled.
+- Velocity and Cloudflare are registered from config (`implementation: velocity` / `cloudflare`); the runtime also reports servers whose network profile needs a missing capability. No workflow calls them yet, and the scaling policy is not scheduled.
 - Nothing has run against live Wasabi, Cloudflare, Vultr or a real Velocity proxy.
 - `docs/ROADMAP.md` is the source of truth for status; `docs/ARCHITECTURE.md` and `docs/CONFIGURATION.md` describe the runtime and config.
 
@@ -38,10 +42,10 @@ Do these in order. "Model / reasoning" is the recommended setting for that task.
 |---|---|---|---|
 | R1 | done | #162 merged. | — |
 | R2 | done | #163 merged. | — |
-| R3 | done (branch `claude/integration-wiring`) | Velocity and Cloudflare registered in the runtime. | — |
-| R4 | done (same branch) | `Runtime.CheckNetwork` enforces §6; the step R6 planner must call it before accepting an operation. | R3 |
-| N1 | done (branch `claude/adapter-files`) | One file per adapter: `internal/controllerruntime/adapter_<name>.go` registers each implementation; `adapters.d/` holds one profile per file. | — |
-| R5 | part 1 done (branch `claude/conformance-rs`); part 2 Opus 5.5, medium | Rust consumer `conformance-rs/`: part 1 has the crate, strict parser, digests, schema and example validation, report, CI, crate notices, and 6 fixtures. Part 2 adds the other 11 profile fixtures (game configure, release, install; execution start, stop, inspect, logs, health; proxy register, player count; Velocity reconciliation and privacy) plus RFC 8785 canonical JSON for the configure digests. | R2 |
+| R3 | done (#164) | Velocity and Cloudflare registered in the runtime. | — |
+| R4 | done (#164) | `Runtime.CheckNetwork` enforces §6; the step R6 planner must call it before accepting an operation. | R3 |
+| N1 | done (#166) | One file per adapter: `internal/controllerruntime/adapter_<name>.go` registers each implementation; `adapters.d/` holds one profile per file. | — |
+| R5 | done (#167 and the part 2 PR) | Rust consumer `conformance-rs/` passes all 17 initial-profile fixtures plus the network-profile requirements, with RFC 8785 JCS (numbers via `ryu-js`; Rust's own float formatting breaks ties differently from ECMAScript). | R2 |
 | R6 | Opus 5.5, high | Management API routes, with a new `server.define` permission (see below). | — |
 | R7 | Opus 5.5, high | Finish controller setup (`internal/controllersetup`): provider credential checks, local audit, rollback of all host changes. | R6 |
 | R8 | Opus 5.5, high | Attach adopted VMs to a logical server (builds on `internal/pilotcapacity`). | R6 |
