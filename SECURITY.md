@@ -69,22 +69,18 @@ If a record identifies a player and is collected as optional monitoring, both th
 
 ### Enforce consent centrally
 
-A central project component or policy interface must enforce consent. Games, hosting and storage providers, plugins, and integrations must not create a second path around that decision.
+A central project component or policy interface must enforce consent for everything the controller collects or sends. Hosting and storage providers, integrations, adapters, and the controller's own plugins must not create a second path around that decision.
 
-When you add or change telemetry, include tests showing that collection and external transmission stop when required consent is missing or withdrawn.
+Games and game or proxy plugins that monitor players are allowed. Examples are anti-cheat, chat logging, moderation tools, and gameplay analytics. Their monitoring stays inside the game and is not controller telemetry, so the consent rule above applies to it only where data reaches the controller:
 
-## Games and plugins that monitor players
-
-The controller may manage games, game plugins, and proxy plugins that monitor players. Examples are anti-cheat, chat logging, moderation tools, and gameplay analytics. Monitoring by the game itself does not stop a game from being supported.
-
-Some limits still apply:
-
-- **The controller does not collect this data.** Adapters must not pass player monitoring data to the controller, its logs, its operation records, or its telemetry. The consent rules above still govern anything the controller collects or sends. A game's monitoring must not become a second path around them.
+- **The controller does not collect it.** Adapters must not pass player monitoring data to the controller, its logs, its operation records, or its telemetry. A game's monitoring must not become a second path into them.
 - **The server owner is responsible.** The owner chooses to run monitoring software and is responsible for meeting the privacy law that applies to them and their players.
-- **Warn players where possible.** When a managed game or plugin monitors players, players should be told before or when they join. Where the game or proxy can show a message, such as a join notice, server list description, or welcome message, the project should show a short warning. The warning names what is monitored, for example "This server uses anti-cheat and logs chat", and says where to read the owner's privacy notice. If the game or proxy offers no way to show a warning, document that limit in the adapter's docs so the owner can warn players another way.
+- **Warn players where possible.** Players should be told before or when they join. Where the game or proxy can show a message, such as a join notice, server list description, or welcome message, the project should show a short warning. It names what is monitored, for example "This server uses anti-cheat and logs chat", and says where to read the owner's privacy notice. If the game or proxy offers no way to show a warning, the adapter's docs say so, so the owner can warn players another way.
 - **Declare it.** A game adapter's docs must list each player-monitoring feature it installs or knows the release enables, so the owner can decide and write the warning.
 
 The warning is information, not consent. It does not replace the separate opt-in that optional identifiable telemetry requires.
+
+When you add or change telemetry, include tests showing that collection and external transmission stop when required consent is missing or withdrawn. When you add a game adapter, include a test that no player monitoring data reaches controller records.
 
 ## Security design principles
 
