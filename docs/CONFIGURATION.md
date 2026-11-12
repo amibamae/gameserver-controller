@@ -101,6 +101,32 @@ lifecycle:
 
 While a server is running, the controller adds or removes servers only inside the decision window, measured from the start of each hour the server has run (by default minutes 58 to 59). An idle server is shut down only when it has been idle for at least `idle_shutdown` and the window is open; otherwise it stays up for the rest of the paid hour, and returning players cancel the shutdown. Starting a server when none is running is never delayed, because players are waiting. If `hourly_cost` is below `ignore_billing_below_hourly_cost`, the window is ignored and the server scales as soon as it is idle.
 
+#### Planned: vertical auto-scaling and side-by-side migration
+
+**These options are planned and not yet accepted by the validator.** Adding them to a configuration today makes it fail validation, because unknown fields are rejected. They are documented here so operators can plan for them.
+
+```yaml
+controller:
+  capacity:
+    side_by_side_migration:
+      enabled: true        # default true; false never allows a third server
+      max_servers: 1       # default 1 extra server; 0 means unlimited
+
+servers:
+  - id: example
+    lifecycle:
+      side_by_side_migration:   # optional per-server override of the controller setting
+        enabled: true
+        max_servers: 1
+      scaling:
+        plans:                  # plan ladder, cheapest first; scale one rung at a time
+          - vc2-1c-2gb
+          - vc2-2c-4gb
+          - vc2-4c-8gb
+```
+
+The controller will move a server one rung up or down the plan ladder at a time, through a side-by-side migration (see [core design](CORE_DESIGN.md#vertical-auto-scaling-planned)). The old live server is destroyed only after its final backup is verified. A migration is the only case where more than two managed servers may run, within `max_servers`. The thresholds that trigger a move are not designed yet.
+
 Shutting down includes stopping the game, backing up, verifying, and destroying the instance. If that takes longer than the time left in the hour after the window, the next hour is charged; move the window earlier once real shutdown times are known. The validator checks these settings; the controller runtime does not schedule them yet.
 
 Each server may define `lifecycle.backups.schedule` and `lifecycle.backups.retention`. The defaults are every 9 hours and keep the newest five verified backups. Schedule units are `minutes`, `hours`, `days`, `weeks`, `months`, or `years`; month and year intervals use calendar units, anchored to the original schedule date. If a month lacks that day, the occurrence uses that month's last day and later occurrences return to the original day. Set `keep_last: 0` to retain backups indefinitely. The configuration validator checks this policy, but scheduled execution and retention cleanup are not wired into a controller runtime yet. Cleanup must run only after a new backup is verified and must use the normal exact-object authorization and retention checks.

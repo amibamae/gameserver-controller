@@ -98,6 +98,18 @@ Hosting providers such as Vultr bill each instance in whole increments (one hour
 
 The policy lives in `internal/scalingpolicy` and is configured per server under `lifecycle.scaling` (see [configuration](CONFIGURATION.md#scaling-and-billing)). Hosting adapters may declare their billing increment with the `billing_increment_seconds` descriptor constraint. The runtime scheduler that applies it is future work.
 
+### Vertical auto-scaling (planned)
+
+**Status: planned, not implemented.** The controller will be able to move a server to a larger or smaller hosting plan automatically, one step at a time:
+
+- The operator lists the allowed plans for a server in order, from cheapest to most expensive. That ordered list is the server's plan ladder.
+- Scaling is linear: the controller moves at most one rung up or down per decision. It moves up after sustained high load and down after sustained low load. It never skips a rung, and never leaves the ladder.
+- Each move is a side-by-side migration (`server.migrate`). The controller provisions the new plan, restores the newest verified backup, and waits for readiness. It then moves players through the proxy, takes and verifies a final backup of the old live server, and only then destroys the exact old server. If anything fails before players move, the new server is destroyed and the old one keeps serving.
+- A migration is the only case where more than two controller-managed servers may run. The side-by-side capacity options decide whether it is allowed and how many extra servers may run at once. When side-by-side servers are disabled, the controller does not auto-scale vertically.
+- Moves start only inside the billing decision window above, so a server is not replaced partway through an hour that is already paid for.
+
+The load signals and thresholds are not designed yet. Until this is built, change a server's plan by hand.
+
 ### Restore and stage
 
 Restore one identified backup. Check its integrity and version compatibility; require approval when replacing data or crossing a major-version boundary. Reject archive traversal and unsafe symlinks.
