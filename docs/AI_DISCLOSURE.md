@@ -24,7 +24,7 @@ Measured from the git history and GitHub on 2026-11-12, from the first commit (2
 | Non-merge commits on `main` | 201 |
 | Commits with a `Co-Authored-By: Claude …` trailer | 37 |
 
-Codex commits are recorded under my name without a trailer, so the commit authors alone understate AI use. Treat the branch prefix as the marker. Claude Code commits carry the trailer and a `Claude-Session` link.
+Codex commits are recorded under my name without a trailer, so the commit authors alone understate AI use. Treat the branch prefix as the marker. Claude Code commits carry the `Co-Authored-By` trailer.
 
 To refresh the counts:
 
