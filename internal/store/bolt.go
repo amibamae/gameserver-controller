@@ -164,182 +164,37 @@ func (s *BoltStore) createOperation(record OperationRecord) (StoredOperation, er
 // proof must be derived from the authenticated actor and client key by the
 // acceptance service.
 func (s *BoltStore) AcceptOperation(record OperationRecord, proof IdempotencyProof, lockScopes []string) (StoredOperation, bool, error) {
-	if record.IdempotencyKey == "" || !validFingerprint(record.RequestFingerprint) {
-		return StoredOperation{}, false, fmt.Errorf("%w: acceptance requires an idempotency key and request fingerprint", ErrInvalidRecord)
-	}
-	if err := validateIdempotencyProof(proof); err != nil {
-		return StoredOperation{}, false, err
-	}
-	scopes, err := validateLockScopes(lockScopes)
-	if err != nil {
-		return StoredOperation{}, false, err
-	}
-	if requiredScope, required := requiredLogicalServerLock(record); required && !containsString(scopes, requiredScope) {
-		return StoredOperation{}, false, fmt.Errorf("%w: standard server operation requires lock %q", ErrInvalidRecord, requiredScope)
-	}
-	prepared, err := prepareNewRecord(record, time.Now().UTC())
+	prepared, scopes, err := prepareAcceptance(record, proof, lockScopes)
 	if err != nil {
 		return StoredOperation{}, false, err
 	}
 	var accepted StoredOperation
 	replayed := false
 	err = s.db.Update(func(tx *bolt.Tx) error {
-		operations := tx.Bucket(operationsBucket)
-		idempotency := tx.Bucket(idempotencyBucket)
-		keyVersions := tx.Bucket(keyVersionsBucket)
-		cursor := keyVersions.Cursor()
-		for version, _ := cursor.First(); version != nil; version, _ = cursor.Next() {
-			if _, ok := findVerifier(proof, string(version)); !ok {
-				return fmt.Errorf("%w: %s", ErrKeyVersionMissing, version)
-			}
+		if err := requireVerifierForEveryKeyVersion(tx, proof); err != nil {
+			return err
 		}
-		var existing *StoredOperation
-		for _, candidate := range proof.Candidates {
-			value := idempotency.Get(verifierIndex(candidate))
-			if value == nil {
-				continue
-			}
-			entry, err := decodeIdempotencyEntry(value)
-			if err != nil {
-				return err
-			}
-			if entry.KeyVersion != candidate.KeyVersion || keyVersions.Get([]byte(entry.KeyVersion)) == nil {
-				return fmt.Errorf("%w: idempotency entry key version mismatch", ErrCorruptStore)
-			}
-			if !requestMatches(entry, candidate) {
-				return ErrIdempotencyConflict
-			}
-			value = operations.Get([]byte(entry.OperationID))
-			if value == nil {
-				return ErrIdempotencyExpired
-			}
-			stored, err := decodeEnvelope(value)
-			if err != nil {
-				return err
-			}
-			if stored.Record.ActorID != prepared.ActorID {
-				return fmt.Errorf("%w: idempotency verifier actor mismatch", ErrCorruptStore)
-			}
-			if existing != nil && existing.Record.OperationID != stored.Record.OperationID {
-				return fmt.Errorf("%w: verifier candidates identify multiple operations", ErrCorruptStore)
-			}
-			existing = &stored
+		existing, err := findReplayedOperation(tx, proof, prepared.ActorID)
+		if err != nil {
+			return err
 		}
 		if existing != nil {
 			accepted = *existing
 			replayed = true
 			return nil
 		}
-		if operations.Get([]byte(prepared.OperationID)) != nil {
+		if tx.Bucket(operationsBucket).Get([]byte(prepared.OperationID)) != nil {
 			return ErrAlreadyExists
 		}
-		var logicalServer *LogicalServer
-		if prepared.OperationType == "server.define" {
-			if len(prepared.Steps) != 0 || len(prepared.RequestSnapshot.SecretRefs) != 0 || len(prepared.Target.InstanceRef) != 0 {
-				return fmt.Errorf("%w: server.define must contain only a logical definition", ErrInvalidRecord)
-			}
-			server, err := newLogicalServerFromDefinition(prepared)
-			if err != nil {
-				return err
-			}
-			key := logicalServerKey(server.EnvironmentID, server.ServerID)
-			if tx.Bucket(logicalServersBucket).Get(key) != nil {
-				return ErrLogicalServerAlreadyExists
-			}
-			// Server IDs are unique across environments, because management
-			// routes after definition name only the server.
-			if err := tx.Bucket(logicalServersBucket).ForEach(func(_, value []byte) error {
-				var existing StoredLogicalServer
-				if json.Unmarshal(value, &existing) == nil && existing.Record.ServerID == server.ServerID {
-					return ErrLogicalServerAlreadyExists
-				}
-				return nil
-			}); err != nil {
-				return err
-			}
-			server.CreatedAt = prepared.CreatedAt
-			server.UpdatedAt = prepared.CreatedAt
-			server.LastOperationID = prepared.OperationID
-			logicalServer = &server
-		} else if strings.HasPrefix(prepared.OperationType, "server.") {
-			key := logicalServerKey(prepared.Target.EnvironmentID, prepared.Target.ServerID)
-			value := tx.Bucket(logicalServersBucket).Get(key)
-			if value == nil {
-				return ErrLogicalServerNotFound
-			}
-			var server StoredLogicalServer
-			if err := json.Unmarshal(value, &server); err != nil {
-				return fmt.Errorf("%w: decode logical server: %v", ErrCorruptStore, err)
-			}
-			if server.Revision == 0 || server.Record.EnvironmentID != prepared.Target.EnvironmentID || server.Record.ServerID != prepared.Target.ServerID {
-				return fmt.Errorf("%w: logical server key does not match its record", ErrCorruptStore)
-			}
-			if err := validatePersistedLogicalServer(server.Record); err != nil {
-				return fmt.Errorf("%w: invalid logical server record", ErrCorruptStore)
-			}
-		}
-		for _, scope := range scopes {
-			value := tx.Bucket(locksBucket).Get([]byte(scope))
-			if value == nil {
-				continue
-			}
-			lock, err := decodeResourceLock(value)
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("%w: scope %q owned by operation %q", ErrResourceConflict, lock.Scope, lock.OperationID)
-		}
-		encoded, err := json.Marshal(operationEnvelope{Revision: 1, Record: prepared})
+		logicalServer, err := acceptanceLogicalServer(tx, prepared)
 		if err != nil {
-			return fmt.Errorf("encode operation record: %w", err)
-		}
-		if err := operations.Put([]byte(prepared.OperationID), encoded); err != nil {
 			return err
 		}
-		if logicalServer != nil {
-			serverJSON, err := encodeLogicalServer(*logicalServer)
-			if err != nil {
-				return err
-			}
-			if err := tx.Bucket(logicalServersBucket).Put(logicalServerKey(logicalServer.EnvironmentID, logicalServer.ServerID), serverJSON); err != nil {
-				return err
-			}
-		}
-		activeVerifier, _ := findVerifier(proof, proof.ActiveKeyVersion)
-		entry := idempotencyEntry{
-			OperationID:   prepared.OperationID,
-			BindingDigest: activeVerifier.BindingDigest,
-			KeyVersion:    proof.ActiveKeyVersion,
-			RecordedAt:    prepared.CreatedAt,
-		}
-		entryJSON, err := json.Marshal(entry)
-		if err != nil {
-			return fmt.Errorf("encode idempotency entry: %w", err)
-		}
-		if err := idempotency.Put(verifierIndex(activeVerifier), entryJSON); err != nil {
+		if err := requireFreeLocks(tx, scopes); err != nil {
 			return err
 		}
-		if err := keyVersions.Put([]byte(proof.ActiveKeyVersion), []byte{1}); err != nil {
+		if err := writeAcceptedOperation(tx, prepared, logicalServer, proof, scopes); err != nil {
 			return err
-		}
-		if len(scopes) > 0 {
-			locks := tx.Bucket(locksBucket)
-			for _, scope := range scopes {
-				lockJSON, err := json.Marshal(ResourceLock{Scope: scope, OperationID: prepared.OperationID, AcquiredAt: prepared.CreatedAt})
-				if err != nil {
-					return err
-				}
-				if err := locks.Put([]byte(scope), lockJSON); err != nil {
-					return err
-				}
-			}
-			scopesJSON, err := json.Marshal(scopes)
-			if err != nil {
-				return err
-			}
-			if err := tx.Bucket(operationLocksBucket).Put([]byte(prepared.OperationID), scopesJSON); err != nil {
-				return err
-			}
 		}
 		accepted = StoredOperation{Record: prepared, Revision: 1}
 		return nil
@@ -348,6 +203,218 @@ func (s *BoltStore) AcceptOperation(record OperationRecord, proof IdempotencyPro
 		return StoredOperation{}, false, err
 	}
 	return accepted, replayed, nil
+}
+
+// prepareAcceptance checks the request outside the transaction: it needs an
+// idempotency key, a request fingerprint, a valid proof and lock scopes, and
+// the logical-server lock when it is a server operation. It returns the
+// record as it will be stored and the sorted scopes.
+func prepareAcceptance(record OperationRecord, proof IdempotencyProof, lockScopes []string) (OperationRecord, []string, error) {
+	if record.IdempotencyKey == "" || !validFingerprint(record.RequestFingerprint) {
+		return OperationRecord{}, nil, fmt.Errorf("%w: acceptance requires an idempotency key and request fingerprint", ErrInvalidRecord)
+	}
+	if err := validateIdempotencyProof(proof); err != nil {
+		return OperationRecord{}, nil, err
+	}
+	scopes, err := validateLockScopes(lockScopes)
+	if err != nil {
+		return OperationRecord{}, nil, err
+	}
+	if requiredScope, required := requiredLogicalServerLock(record); required && !containsString(scopes, requiredScope) {
+		return OperationRecord{}, nil, fmt.Errorf("%w: standard server operation requires lock %q", ErrInvalidRecord, requiredScope)
+	}
+	prepared, err := prepareNewRecord(record, time.Now().UTC())
+	if err != nil {
+		return OperationRecord{}, nil, err
+	}
+	return prepared, scopes, nil
+}
+
+// requireVerifierForEveryKeyVersion fails unless the proof carries a verifier
+// for every key version the store has recorded, so a replay under a rotated
+// key is still found.
+func requireVerifierForEveryKeyVersion(tx *bolt.Tx, proof IdempotencyProof) error {
+	cursor := tx.Bucket(keyVersionsBucket).Cursor()
+	for version, _ := cursor.First(); version != nil; version, _ = cursor.Next() {
+		if _, ok := findVerifier(proof, string(version)); !ok {
+			return fmt.Errorf("%w: %s", ErrKeyVersionMissing, version)
+		}
+	}
+	return nil
+}
+
+// findReplayedOperation returns the operation an earlier identical request
+// created, or nil when no verifier candidate is recorded. A recorded verifier
+// for a different request is a conflict; one whose operation is gone has
+// expired; and entries that disagree with their key version, actor, or each
+// other mean the store is corrupt.
+func findReplayedOperation(tx *bolt.Tx, proof IdempotencyProof, actorID string) (*StoredOperation, error) {
+	operations := tx.Bucket(operationsBucket)
+	idempotency := tx.Bucket(idempotencyBucket)
+	keyVersions := tx.Bucket(keyVersionsBucket)
+	var existing *StoredOperation
+	for _, candidate := range proof.Candidates {
+		value := idempotency.Get(verifierIndex(candidate))
+		if value == nil {
+			continue
+		}
+		entry, err := decodeIdempotencyEntry(value)
+		if err != nil {
+			return nil, err
+		}
+		if entry.KeyVersion != candidate.KeyVersion || keyVersions.Get([]byte(entry.KeyVersion)) == nil {
+			return nil, fmt.Errorf("%w: idempotency entry key version mismatch", ErrCorruptStore)
+		}
+		if !requestMatches(entry, candidate) {
+			return nil, ErrIdempotencyConflict
+		}
+		value = operations.Get([]byte(entry.OperationID))
+		if value == nil {
+			return nil, ErrIdempotencyExpired
+		}
+		stored, err := decodeEnvelope(value)
+		if err != nil {
+			return nil, err
+		}
+		if stored.Record.ActorID != actorID {
+			return nil, fmt.Errorf("%w: idempotency verifier actor mismatch", ErrCorruptStore)
+		}
+		if existing != nil && existing.Record.OperationID != stored.Record.OperationID {
+			return nil, fmt.Errorf("%w: verifier candidates identify multiple operations", ErrCorruptStore)
+		}
+		existing = &stored
+	}
+	return existing, nil
+}
+
+// acceptanceLogicalServer applies the logical-server rules for a new
+// operation. server.define returns the server record to create, after
+// checking that the definition holds no steps, secrets, or instance and that
+// its server ID is unused in every environment. Any other server operation
+// requires an existing, valid logical server and returns nil.
+func acceptanceLogicalServer(tx *bolt.Tx, prepared OperationRecord) (*LogicalServer, error) {
+	servers := tx.Bucket(logicalServersBucket)
+	if prepared.OperationType == "server.define" {
+		if len(prepared.Steps) != 0 || len(prepared.RequestSnapshot.SecretRefs) != 0 || len(prepared.Target.InstanceRef) != 0 {
+			return nil, fmt.Errorf("%w: server.define must contain only a logical definition", ErrInvalidRecord)
+		}
+		server, err := newLogicalServerFromDefinition(prepared)
+		if err != nil {
+			return nil, err
+		}
+		key := logicalServerKey(server.EnvironmentID, server.ServerID)
+		if servers.Get(key) != nil {
+			return nil, ErrLogicalServerAlreadyExists
+		}
+		// Server IDs are unique across environments, because management
+		// routes after definition name only the server.
+		if err := servers.ForEach(func(_, value []byte) error {
+			var existing StoredLogicalServer
+			if json.Unmarshal(value, &existing) == nil && existing.Record.ServerID == server.ServerID {
+				return ErrLogicalServerAlreadyExists
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		server.CreatedAt = prepared.CreatedAt
+		server.UpdatedAt = prepared.CreatedAt
+		server.LastOperationID = prepared.OperationID
+		return &server, nil
+	}
+	if !strings.HasPrefix(prepared.OperationType, "server.") {
+		return nil, nil
+	}
+	value := servers.Get(logicalServerKey(prepared.Target.EnvironmentID, prepared.Target.ServerID))
+	if value == nil {
+		return nil, ErrLogicalServerNotFound
+	}
+	var server StoredLogicalServer
+	if err := json.Unmarshal(value, &server); err != nil {
+		return nil, fmt.Errorf("%w: decode logical server: %v", ErrCorruptStore, err)
+	}
+	if server.Revision == 0 || server.Record.EnvironmentID != prepared.Target.EnvironmentID || server.Record.ServerID != prepared.Target.ServerID {
+		return nil, fmt.Errorf("%w: logical server key does not match its record", ErrCorruptStore)
+	}
+	if err := validatePersistedLogicalServer(server.Record); err != nil {
+		return nil, fmt.Errorf("%w: invalid logical server record", ErrCorruptStore)
+	}
+	return nil, nil
+}
+
+// requireFreeLocks fails with ErrResourceConflict when another operation
+// holds any of the scopes.
+func requireFreeLocks(tx *bolt.Tx, scopes []string) error {
+	locks := tx.Bucket(locksBucket)
+	for _, scope := range scopes {
+		value := locks.Get([]byte(scope))
+		if value == nil {
+			continue
+		}
+		lock, err := decodeResourceLock(value)
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("%w: scope %q owned by operation %q", ErrResourceConflict, lock.Scope, lock.OperationID)
+	}
+	return nil
+}
+
+// writeAcceptedOperation stores the operation at revision 1, the logical
+// server a definition creates, the active-key idempotency entry, the key
+// version, and the forward and reverse lock indexes, in one transaction.
+func writeAcceptedOperation(tx *bolt.Tx, prepared OperationRecord, logicalServer *LogicalServer, proof IdempotencyProof, scopes []string) error {
+	encoded, err := json.Marshal(operationEnvelope{Revision: 1, Record: prepared})
+	if err != nil {
+		return fmt.Errorf("encode operation record: %w", err)
+	}
+	if err := tx.Bucket(operationsBucket).Put([]byte(prepared.OperationID), encoded); err != nil {
+		return err
+	}
+	if logicalServer != nil {
+		serverJSON, err := encodeLogicalServer(*logicalServer)
+		if err != nil {
+			return err
+		}
+		if err := tx.Bucket(logicalServersBucket).Put(logicalServerKey(logicalServer.EnvironmentID, logicalServer.ServerID), serverJSON); err != nil {
+			return err
+		}
+	}
+	activeVerifier, _ := findVerifier(proof, proof.ActiveKeyVersion)
+	entry := idempotencyEntry{
+		OperationID:   prepared.OperationID,
+		BindingDigest: activeVerifier.BindingDigest,
+		KeyVersion:    proof.ActiveKeyVersion,
+		RecordedAt:    prepared.CreatedAt,
+	}
+	entryJSON, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("encode idempotency entry: %w", err)
+	}
+	if err := tx.Bucket(idempotencyBucket).Put(verifierIndex(activeVerifier), entryJSON); err != nil {
+		return err
+	}
+	if err := tx.Bucket(keyVersionsBucket).Put([]byte(proof.ActiveKeyVersion), []byte{1}); err != nil {
+		return err
+	}
+	if len(scopes) == 0 {
+		return nil
+	}
+	locks := tx.Bucket(locksBucket)
+	for _, scope := range scopes {
+		lockJSON, err := json.Marshal(ResourceLock{Scope: scope, OperationID: prepared.OperationID, AcquiredAt: prepared.CreatedAt})
+		if err != nil {
+			return err
+		}
+		if err := locks.Put([]byte(scope), lockJSON); err != nil {
+			return err
+		}
+	}
+	scopesJSON, err := json.Marshal(scopes)
+	if err != nil {
+		return err
+	}
+	return tx.Bucket(operationLocksBucket).Put([]byte(prepared.OperationID), scopesJSON)
 }
 
 func (s *BoltStore) GetResourceLock(scope string) (ResourceLock, error) {
