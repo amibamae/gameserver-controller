@@ -18,6 +18,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/amibamae/gameserver-controller/internal/backuppolicy"
+	"github.com/amibamae/gameserver-controller/internal/integrationmonitor"
 	"github.com/amibamae/gameserver-controller/internal/scalingpolicy"
 )
 
@@ -46,6 +47,49 @@ type Controller struct {
 	Defaults      Defaults      `yaml:"defaults"`
 	Audit         Audit         `yaml:"audit"`
 	ManagementAPI ManagementAPI `yaml:"management_api"`
+	Monitoring    Monitoring    `yaml:"monitoring"`
+}
+
+// Monitoring configures background integration monitoring. Every field is
+// optional; ProxyPolicy fills defaults.
+type Monitoring struct {
+	Proxy ProxyMonitoring `yaml:"proxy"`
+}
+
+// ProxyMonitoring sets how often proxy bridges are probed and when an outage
+// is declared (integrations section 7).
+type ProxyMonitoring struct {
+	CheckInterval    string `yaml:"check_interval"`
+	FailureThreshold *int   `yaml:"failure_threshold"`
+	InitialBackoff   string `yaml:"initial_backoff"`
+	MaxBackoff       string `yaml:"max_backoff"`
+}
+
+// ProxyPolicy returns the proxy monitoring policy with defaults applied. It
+// returns an error for a value that does not parse or is out of range.
+func (m Monitoring) ProxyPolicy() (integrationmonitor.Policy, error) {
+	policy := integrationmonitor.DefaultPolicy
+	for _, field := range []struct {
+		name, text string
+		target     *time.Duration
+	}{
+		{"check_interval", m.Proxy.CheckInterval, &policy.CheckInterval},
+		{"initial_backoff", m.Proxy.InitialBackoff, &policy.InitialBackoff},
+		{"max_backoff", m.Proxy.MaxBackoff, &policy.MaxBackoff},
+	} {
+		if field.text == "" {
+			continue
+		}
+		parsed, err := time.ParseDuration(field.text)
+		if err != nil {
+			return policy, fmt.Errorf("%s must be a duration", field.name)
+		}
+		*field.target = parsed
+	}
+	if m.Proxy.FailureThreshold != nil {
+		policy.FailureThreshold = *m.Proxy.FailureThreshold
+	}
+	return policy, policy.Validate()
 }
 
 // ManagementAPI configures the optional remote HTTPS management listener.
@@ -251,6 +295,9 @@ func Validate(value Config) error {
 	add(value.Controller.Audit.Enabled, "controller.audit.enabled must be true")
 	add(value.Controller.Audit.Destination == "local", "controller.audit.destination must be local")
 	validateManagementAPI(&problems, value.Controller.ManagementAPI)
+	if _, err := value.Controller.Monitoring.ProxyPolicy(); err != nil {
+		add(false, "controller.monitoring.proxy."+err.Error())
+	}
 	add(len(value.Adapters) > 0, "at least one adapter profile is required")
 	add(len(value.Environments) > 0, "at least one environment is required")
 	add(len(value.Servers) > 0, "at least one server profile is required")

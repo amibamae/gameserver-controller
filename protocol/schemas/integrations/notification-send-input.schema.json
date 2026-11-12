@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:notification-send-input",
+  "title": "Notification send input",
+  "description": "Input for integration.notification.send: one event for this adapter's configured destination.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event"
+  ],
+  "properties": {
+    "event": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:integrations:notification-event"
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:notification-event",
+  "title": "Notification event",
+  "description": "One operator notification about an integration's availability. It carries only these fields: no player names, account IDs, session IDs, addresses, chat, or raw error text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "event_type",
+    "severity",
+    "occurred_at",
+    "environment_id",
+    "adapter_id",
+    "subject",
+    "outage_started_at",
+    "consecutive_failures",
+    "summary"
+  ],
+  "properties": {
+    "event_id": {
+      "description": "Stable for one event across delivery attempts, so receivers can drop duplicates.",
+      "type": "string",
+      "pattern": "^evt-[0-9a-f]{32}$"
+    },
+    "event_type": {
+      "enum": [
+        "integration.proxy.unreachable",
+        "integration.proxy.identity_mismatch",
+        "integration.proxy.recovered"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "critical",
+        "warning",
+        "info"
+      ]
+    },
+    "occurred_at": {
+      "description": "When the controller declared the outage, the changed reason, or the recovery.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "environment_id": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:identifier"
+    },
+    "adapter_id": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:identifier"
+    },
+    "subject": {
+      "description": "The proxy instance the event is about.",
+      "allOf": [
+        {
+          "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+        },
+        {
+          "properties": {
+            "resource_kind": {
+              "const": "proxy-instance"
+            }
+          }
+        }
+      ]
+    },
+    "outage_started_at": {
+      "description": "The first failed probe of this outage.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "consecutive_failures": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "summary": {
+      "description": "A short operator message rendered from a fixed template. It names only the adapter, proxy instance, environment, and times.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 280
+    }
+  }
+}

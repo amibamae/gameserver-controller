@@ -109,6 +109,8 @@ var exampleSchemaIDs = map[string]string{
 	"proxy-backend-inspect-output.json":             "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-inspect-output",
 	"proxy-backend-players-inspect-input.json":      "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-players-inspect-input",
 	"network-profile.proxy.json":                    "urn:gameserver-controller:0.21.0-draft:integrations:network-profile",
+	"notification-send-input.json":                  "urn:gameserver-controller:0.21.0-draft:integrations:notification-send-input",
+	"notification-send-output.json":                 "urn:gameserver-controller:0.21.0-draft:integrations:notification-send-output",
 	"proxy-backend-players-inspect-output.json":     "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-players-inspect-output",
 	"proxy-backend-register-input.json":             "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input",
 	"proxy-backend-register-output.json":            "urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-output",
