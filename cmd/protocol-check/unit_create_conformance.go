@@ -147,3 +147,7 @@ func evaluateUnitCreateCase(pkg *protocolPackage, creationCase map[string]any) m
 		"readiness_established":     false,
 	}
 }
+
+func init() {
+	registerEvaluator(evaluateUnitCreate, "execution.unit.create.exact-definition-no-autostart")
+}

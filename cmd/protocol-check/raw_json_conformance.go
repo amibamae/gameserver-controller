@@ -23,3 +23,7 @@ func evaluateRawJSONInteroperability(fixture map[string]any) (map[string]any, er
 	}
 	return map[string]any{"evaluations": results}, nil
 }
+
+func init() {
+	registerEvaluator(withoutPackage(evaluateRawJSONInteroperability), "protocol.json.raw-wire-interoperability")
+}

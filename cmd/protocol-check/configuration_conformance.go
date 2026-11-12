@@ -81,3 +81,7 @@ func requestedConfigurationDigest(request map[string]any) (map[string]any, error
 		"digest":    hex.EncodeToString(digest[:]),
 	}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateConfiguration, "game.configure.pinned-schema-and-result-binding")
+}

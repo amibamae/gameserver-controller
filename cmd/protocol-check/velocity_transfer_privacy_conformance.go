@@ -110,3 +110,7 @@ func containsPrivacyProbe(value any, probes []any) (bool, error) {
 	}
 	return false, nil
 }
+
+func init() {
+	registerEvaluator(evaluateVelocityTransferPrivacy, "velocity-transfer-privacy-canaries")
+}

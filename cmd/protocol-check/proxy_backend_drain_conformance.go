@@ -92,3 +92,7 @@ func evaluateProxyBackendDrainUnregisterState(pkg *protocolPackage, fixture map[
 		"case_results":            caseResults,
 	}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateProxyBackendDrainUnregisterState, "integration.proxy.backend.drain-unregister-state-confirmation")
+}

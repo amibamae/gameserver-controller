@@ -262,3 +262,7 @@ func backupCaptureBoolValue(value any) bool {
 	result, _ := value.(bool)
 	return result
 }
+
+func init() {
+	registerEvaluator(evaluateBackupCapture, "game.backup.capture.binding-and-stream-integrity")
+}

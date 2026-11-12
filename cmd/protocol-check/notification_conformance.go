@@ -209,3 +209,8 @@ func containsSubstring(value any, target string) bool {
 	}
 	return false
 }
+
+func init() {
+	registerEvaluator(evaluateProxyOutageTransitions, "integration.notification.proxy-outage-transitions")
+	registerEvaluator(evaluateNotificationSend, "integration.notification.send.outcome-and-privacy")
+}

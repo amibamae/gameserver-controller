@@ -207,3 +207,7 @@ func findAdapterCapability(pkg *protocolPackage, adapterID, capabilityName strin
 	}
 	return nil, fmt.Errorf("selected adapter descriptor %q is missing", adapterID)
 }
+
+func init() {
+	registerEvaluator(evaluateUnitRestart, "execution.unit.restart.clean-stop-distinct-runtime")
+}

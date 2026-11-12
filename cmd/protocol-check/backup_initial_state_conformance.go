@@ -32,3 +32,7 @@ func evaluateBackupInitialStatePolicy(pkg *protocolPackage, fixture map[string]a
 	}
 	return map[string]any{"evaluations": results}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateBackupInitialStatePolicy, "operations.backup.initial-state-resume-policy")
+}

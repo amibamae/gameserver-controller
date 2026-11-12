@@ -83,3 +83,7 @@ func evaluateManagementSubmitDecision(_ *protocolPackage, fixture map[string]any
 }
 
 func jsonInt(value int) json.Number { return json.Number(strconv.Itoa(value)) }
+
+func init() {
+	registerEvaluator(evaluateManagementSubmitDecision, "management.operations.submit-decision")
+}

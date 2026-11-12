@@ -38,3 +38,7 @@ func evaluateProxyBackendInspect(pkg *protocolPackage, fixture map[string]any) (
 	}
 	return map[string]any{"evaluations": evaluations}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateProxyBackendInspect, "integration.proxy.inspect.target-state-and-routability")
+}

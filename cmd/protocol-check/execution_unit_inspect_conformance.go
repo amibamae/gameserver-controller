@@ -43,3 +43,7 @@ func evaluateSystemdUnitInspection(pkg *protocolPackage, fixture map[string]any)
 	}
 	return map[string]any{"evaluations": results}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateSystemdUnitInspection, "execution.unit.inspect.exact-target-state")
+}

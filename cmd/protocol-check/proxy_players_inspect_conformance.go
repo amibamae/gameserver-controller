@@ -55,3 +55,7 @@ func evaluateProxyBackendPlayersInspect(pkg *protocolPackage, fixture map[string
 	}
 	return map[string]any{"evaluations": evaluations}, nil
 }
+
+func init() {
+	registerEvaluator(evaluateProxyBackendPlayersInspect, "integration.proxy.players.inspect.fresh-count-and-target-binding")
+}
