@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -82,17 +84,45 @@ type AdapterProfile struct {
 	Implementation string                     `yaml:"implementation"`
 	Wasabi         *WasabiProfile             `yaml:"wasabi"`
 	Process        *ProcessProfile            `yaml:"process"`
+	Velocity       *VelocityProfile           `yaml:"velocity"`
+	Cloudflare     *CloudflareProfile         `yaml:"cloudflare"`
 }
 
 const (
-	ImplementationWasabi  = "wasabi"
-	ImplementationProcess = "process"
+	ImplementationWasabi     = "wasabi"
+	ImplementationProcess    = "process"
+	ImplementationVelocity   = "velocity"
+	ImplementationCloudflare = "cloudflare"
 
 	// WasabiAccessKeyIDSecret and WasabiSecretAccessKeySecret are the
 	// secret_refs names a Wasabi adapter profile must define.
 	WasabiAccessKeyIDSecret     = "access_key_id"
 	WasabiSecretAccessKeySecret = "secret_access_key"
+	// VelocityBridgeTokenSecret is the secret_refs name holding the proxy
+	// bridge bearer token.
+	VelocityBridgeTokenSecret = "bridge_token"
+	// CloudflareAPITokenSecret is the secret_refs name holding a Cloudflare API
+	// token scoped to DNS edit for one zone.
+	CloudflareAPITokenSecret = "api_token"
 )
+
+// VelocityProfile configures the built-in Velocity proxy integration adapter.
+// The bridge token comes from the profile's secret_refs.
+type VelocityProfile struct {
+	EnvironmentID   string `yaml:"environment_id"`
+	BridgeURL       string `yaml:"bridge_url"`
+	ProxyInstanceID string `yaml:"proxy_instance_id"`
+	Timeout         string `yaml:"timeout"`
+}
+
+// CloudflareProfile configures the built-in Cloudflare DNS integration
+// adapter for one zone. Managed record names are derived from the network
+// profiles of the servers that use this adapter.
+type CloudflareProfile struct {
+	EnvironmentID string `yaml:"environment_id"`
+	ZoneID        string `yaml:"zone_id"`
+	ZoneName      string `yaml:"zone_name"`
+}
 
 // WasabiProfile holds the non-secret settings for the built-in Wasabi storage
 // adapter. Keys come from the profile's secret_refs.
@@ -159,6 +189,10 @@ type ServerNetwork struct {
 	BackendHostnameTemplate string `yaml:"backend_hostname_template"`
 	// Backends are the proxy backends for this server (proxy mode only).
 	Backends []NetworkBackend `yaml:"backends"`
+	// FallbackRecords are the values the join hostname points at while the
+	// server is not ready, normally the lobby's address, keyed by record type
+	// ("A" or "AAAA"). Required for join mode direct_dns.
+	FallbackRecords map[string][]string `yaml:"fallback_records"`
 }
 
 // NetworkBackend says how the proxy reaches one backend.
@@ -327,6 +361,7 @@ func Validate(value Config) error {
 	}
 	validateStorageSecretIsolation(&problems, value.Servers, environmentByID, adapterByID)
 	validateUniqueBackendHostnames(&problems, value.Servers)
+	validateProxyBackendIDs(&problems, value.Servers)
 
 	if len(problems) > 0 {
 		sort.Strings(problems)
@@ -368,20 +403,39 @@ func validateImplementation(problems *[]string, label string, profile AdapterPro
 			*problems = append(*problems, label+message)
 		}
 	}
+	// Each implementation takes exactly its own settings block.
+	blocks := map[string]bool{ImplementationWasabi: profile.Wasabi != nil, ImplementationProcess: profile.Process != nil,
+		ImplementationVelocity: profile.Velocity != nil, ImplementationCloudflare: profile.Cloudflare != nil}
+	for name, set := range blocks {
+		if set && name != profile.Implementation {
+			if profile.Implementation == "" {
+				add(false, " has "+name+" settings but no implementation")
+			} else {
+				add(false, " must not have "+name+" settings with implementation "+profile.Implementation)
+			}
+		}
+	}
+	exactSecrets := func(names ...string) bool {
+		if len(profile.SecretRefs) != len(names) {
+			return false
+		}
+		for _, name := range names {
+			if _, ok := profile.SecretRefs[name]; !ok {
+				return false
+			}
+		}
+		return true
+	}
 	switch profile.Implementation {
 	case "":
-		add(profile.Wasabi == nil && profile.Process == nil, " has wasabi or process settings but no implementation")
 	case ImplementationWasabi:
 		add(profile.Category == "storage", ".implementation wasabi requires category storage")
-		add(profile.Process == nil, " must not have process settings with implementation wasabi")
 		if profile.Wasabi == nil {
 			*problems = append(*problems, label+".wasabi is required with implementation wasabi")
 			return
 		}
 		w := profile.Wasabi
-		_, hasAccess := profile.SecretRefs[WasabiAccessKeyIDSecret]
-		_, hasSecret := profile.SecretRefs[WasabiSecretAccessKeySecret]
-		add(len(profile.SecretRefs) == 2 && hasAccess && hasSecret, ".secret_refs must define exactly access_key_id and secret_access_key for implementation wasabi")
+		add(exactSecrets(WasabiAccessKeyIDSecret, WasabiSecretAccessKeySecret), ".secret_refs must define exactly access_key_id and secret_access_key for implementation wasabi")
 		add(strings.TrimSpace(w.StorageProfileID) != "" && len(w.StorageProfileID) <= 200, ".wasabi.storage_profile_id is required")
 		_, knownEnvironment := environments[w.EnvironmentID]
 		add(knownEnvironment, ".wasabi.environment_id must name a configured environment")
@@ -391,7 +445,6 @@ func validateImplementation(problems *[]string, label string, profile AdapterPro
 		add(strings.HasPrefix(w.EndpointURL, "https://"), ".wasabi.endpoint_url must be an HTTPS URL")
 		add(w.MaxObjectBytes > 0, ".wasabi.max_object_bytes must be positive")
 	case ImplementationProcess:
-		add(profile.Wasabi == nil, " must not have wasabi settings with implementation process")
 		if profile.Process == nil {
 			*problems = append(*problems, label+".process is required with implementation process")
 			return
@@ -416,9 +469,73 @@ func validateImplementation(problems *[]string, label string, profile AdapterPro
 			duration, err := time.ParseDuration(text)
 			add(err == nil && duration > 0 && duration <= 10*time.Minute, ".process."+field+" must be greater than zero and no more than 10m")
 		}
+	case ImplementationVelocity:
+		add(profile.Category == "integration", ".implementation velocity requires category integration")
+		if profile.Velocity == nil {
+			*problems = append(*problems, label+".velocity is required with implementation velocity")
+			return
+		}
+		v := profile.Velocity
+		add(exactSecrets(VelocityBridgeTokenSecret), ".secret_refs must define exactly bridge_token for implementation velocity")
+		_, knownEnvironment := environments[v.EnvironmentID]
+		add(knownEnvironment, ".velocity.environment_id must name a configured environment")
+		add(validBridgeURL(v.BridgeURL), ".velocity.bridge_url must be an https URL, or http to a loopback address, with no path, query, or user information")
+		add(strings.TrimSpace(v.ProxyInstanceID) != "" && len(v.ProxyInstanceID) <= 1024, ".velocity.proxy_instance_id is required")
+		if v.Timeout != "" {
+			timeout, err := time.ParseDuration(v.Timeout)
+			add(err == nil && timeout > 0 && timeout <= 2*time.Minute, ".velocity.timeout must be greater than zero and no more than 2m")
+		}
+	case ImplementationCloudflare:
+		add(profile.Category == "integration", ".implementation cloudflare requires category integration")
+		if profile.Cloudflare == nil {
+			*problems = append(*problems, label+".cloudflare is required with implementation cloudflare")
+			return
+		}
+		c := profile.Cloudflare
+		add(exactSecrets(CloudflareAPITokenSecret), ".secret_refs must define exactly api_token for implementation cloudflare")
+		_, knownEnvironment := environments[c.EnvironmentID]
+		add(knownEnvironment, ".cloudflare.environment_id must name a configured environment")
+		add(zoneIDPattern.MatchString(c.ZoneID), ".cloudflare.zone_id must be a 32-character lower-case hex Cloudflare zone ID")
+		add(validDNSHostname(c.ZoneName), ".cloudflare.zone_name must be a lower-case DNS name")
 	default:
-		*problems = append(*problems, label+".implementation must be wasabi or process when set")
+		*problems = append(*problems, label+".implementation must be wasabi, process, velocity, or cloudflare when set")
 	}
+}
+
+var zoneIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+// validBridgeURL mirrors velocityproxy.NewHTTPBridge: https anywhere, plain
+// http only to loopback, and no user information, path, query, or fragment.
+func validBridgeURL(value string) bool {
+	u, err := url.Parse(value)
+	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Hostname() == "" || (u.Path != "" && u.Path != "/") {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return true
+	case "http":
+		ip := net.ParseIP(u.Hostname())
+		return (ip != nil && ip.IsLoopback()) || strings.EqualFold(u.Hostname(), "localhost")
+	}
+	return false
+}
+
+// adapterEnvironment returns the environment a built-in integration adapter
+// profile is bound to, or "" for a declared-only profile.
+func adapterEnvironment(profile AdapterProfile) string {
+	switch {
+	case profile.Velocity != nil:
+		return profile.Velocity.EnvironmentID
+	case profile.Cloudflare != nil:
+		return profile.Cloudflare.EnvironmentID
+	}
+	return ""
+}
+
+// inZone reports whether name is the zone apex or a name below it.
+func inZone(name, zone string) bool {
+	return name == zone || strings.HasSuffix(name, "."+zone)
 }
 
 func validateSecretReference(problems *[]string, label, name string, reference SecretReference) {
@@ -555,6 +672,7 @@ func validateServerNetwork(problems *[]string, label string, server ServerProfil
 		add(network.Proxy == "", ".proxy is only used with join_mode proxy")
 		add(len(network.Backends) == 0, ".backends are only used with join_mode proxy")
 		add(validDNSHostname(network.JoinHostname), ".join_hostname must be a lower-case DNS hostname")
+		validateFallbackRecords(problems, label, network.FallbackRecords)
 	case "none":
 		add(network.Proxy == "" && network.DNS == "" && network.JoinHostname == "" && len(network.Backends) == 0,
 			" with join_mode none must not set proxy, dns, join_hostname, or backends")
@@ -566,6 +684,30 @@ func validateServerNetwork(problems *[]string, label string, server ServerProfil
 	checkServerAdapter(problems, label+".dns", network.DNS, "integration", adapters, network.JoinMode == "direct_dns" || usesHostname)
 	if network.JoinMode == "proxy" && !usesHostname {
 		add(network.DNS == "", ".dns is only used with join_mode direct_dns or hostname backends")
+	}
+	if network.JoinMode != "direct_dns" {
+		add(len(network.FallbackRecords) == 0, ".fallback_records are only used with join_mode direct_dns")
+	}
+	// Built-in integration adapters are bound to one environment; a server
+	// must not route through another environment's proxy or DNS zone.
+	for field, id := range map[string]string{".proxy": network.Proxy, ".dns": network.DNS} {
+		if environment := adapterEnvironment(adapters[id]); id != "" && environment != "" {
+			add(environment == server.EnvironmentID, field+" adapter "+id+" belongs to environment "+environment+", not "+server.EnvironmentID)
+		}
+	}
+	if zone := adapters[network.DNS].Cloudflare; zone != nil {
+		names := []string{}
+		if network.JoinMode == "direct_dns" {
+			names = append(names, network.JoinHostname)
+		}
+		for _, backend := range network.Backends {
+			if name, ok := network.BackendHostname(server.ID, server.EnvironmentID, backend); ok && name != "" {
+				names = append(names, name)
+			}
+		}
+		for _, name := range names {
+			add(inZone(name, zone.ZoneName), " hostname "+name+" is outside the DNS zone "+zone.ZoneName)
+		}
 	}
 	seen := make(map[string]bool, len(network.Backends))
 	for i, backend := range network.Backends {
@@ -587,6 +729,50 @@ func validateServerNetwork(problems *[]string, label string, server ServerProfil
 			}
 		default:
 			add(false, entry+".address_mode must be instance_ip or hostname")
+		}
+	}
+}
+
+// validateFallbackRecords checks the direct_dns fallback values: at least one
+// A (IPv4) or AAAA (IPv6) record, each a literal address.
+func validateFallbackRecords(problems *[]string, label string, records map[string][]string) {
+	if len(records) == 0 {
+		*problems = append(*problems, label+".fallback_records is required for join_mode direct_dns")
+		return
+	}
+	for recordType, values := range records {
+		if recordType != "A" && recordType != "AAAA" {
+			*problems = append(*problems, label+".fallback_records keys must be A or AAAA")
+			continue
+		}
+		if len(values) == 0 || len(values) > 20 {
+			*problems = append(*problems, label+".fallback_records."+recordType+" must list 1 to 20 addresses")
+		}
+		for _, value := range values {
+			address, err := netip.ParseAddr(value)
+			if err != nil || address.Zone() != "" || address.IsUnspecified() || (recordType == "A") != address.Is4() {
+				*problems = append(*problems, label+".fallback_records."+recordType+" has an invalid address "+value)
+			}
+		}
+	}
+}
+
+// validateProxyBackendIDs requires backend IDs to be unique among servers that
+// share a proxy, because the proxy knows backends only by ID.
+func validateProxyBackendIDs(problems *[]string, servers []ServerProfile) {
+	owners := map[string]string{}
+	for i, server := range servers {
+		if server.Network == nil || server.Network.Proxy == "" {
+			continue
+		}
+		for j, backend := range server.Network.Backends {
+			key := server.Network.Proxy + "\x00" + backend.ID
+			label := fmt.Sprintf("servers[%d].network.backends[%d]", i, j)
+			if owner, taken := owners[key]; taken && owner != fmt.Sprintf("servers[%d]", i) {
+				*problems = append(*problems, label+" id "+backend.ID+" is already used on proxy "+server.Network.Proxy+" by "+owner)
+				continue
+			}
+			owners[key] = fmt.Sprintf("servers[%d]", i)
 		}
 	}
 }
