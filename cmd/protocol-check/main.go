@@ -104,30 +104,10 @@ func loadPackage(root string) (*protocolPackage, error) {
 	if err != nil {
 		return nil, err
 	}
-	indexBytes, err := os.ReadFile(filepath.Join(absoluteRoot, schemaIndexPath))
-	if err != nil {
-		return nil, fmt.Errorf("read schema index: %w", err)
-	}
-	indexValue, err := parseJSON(indexBytes, schemaIndexPath)
+	version, rawEntries, err := readSchemaIndex(absoluteRoot)
 	if err != nil {
 		return nil, err
 	}
-	index := asObject(indexValue)
-	if index == nil {
-		return nil, fmt.Errorf("%s must be a JSON object", schemaIndexPath)
-	}
-	version, ok := index["protocol_version"].(string)
-	if !ok || version == "" {
-		return nil, fmt.Errorf("schema index must declare protocol_version")
-	}
-	if index["json_schema_dialect"] != "https://json-schema.org/draft/2020-12/schema" {
-		return nil, fmt.Errorf("schema index must select JSON Schema Draft 2020-12")
-	}
-	rawEntries, ok := index["schemas"].([]any)
-	if !ok || len(rawEntries) == 0 {
-		return nil, fmt.Errorf("schema index must contain a non-empty schemas array")
-	}
-
 	pkg := &protocolPackage{
 		root:       absoluteRoot,
 		version:    version,
@@ -137,48 +117,9 @@ func loadPackage(root string) (*protocolPackage, error) {
 	}
 	indexedPaths := make(map[string]bool)
 	for _, rawEntry := range rawEntries {
-		entryMap := asObject(rawEntry)
-		if entryMap == nil {
-			return nil, fmt.Errorf("schema index entries must be objects")
-		}
-		relative, okPath := entryMap["path"].(string)
-		id, okID := entryMap["id"].(string)
-		if !okPath || !okID || relative == "" || id == "" {
-			return nil, fmt.Errorf("schema index entry is missing path or id: %#v", rawEntry)
-		}
-		clean := filepath.Clean(filepath.FromSlash(relative))
-		if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-			return nil, fmt.Errorf("unsafe schema path in index: %s", relative)
-		}
-		if indexedPaths[relative] {
-			return nil, fmt.Errorf("duplicate schema path in index: %s", relative)
-		}
-		indexedPaths[relative] = true
-		path := filepath.Join(absoluteRoot, "protocol", "schemas", clean)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read indexed schema %s: %w", relative, err)
-		}
-		doc, err := parseJSON(data, filepath.Join("protocol", "schemas", relative))
-		if err != nil {
+		if err := pkg.loadIndexedSchema(rawEntry, indexedPaths); err != nil {
 			return nil, err
 		}
-		docMap := asObject(doc)
-		if docMap == nil {
-			return nil, fmt.Errorf("%s must be a JSON object", relative)
-		}
-		if docMap["$id"] != id {
-			return nil, fmt.Errorf("%s: index id does not match schema $id (%q != %v)", relative, id, docMap["$id"])
-		}
-		if docMap["$schema"] != "https://json-schema.org/draft/2020-12/schema" {
-			return nil, fmt.Errorf("%s: schema must declare Draft 2020-12", relative)
-		}
-		if _, exists := pkg.schemaDocs[id]; exists {
-			return nil, fmt.Errorf("duplicate schema $id: %s", id)
-		}
-		pkg.entries = append(pkg.entries, schemaEntry{Path: relative, ID: id})
-		pkg.schemaDocs[id] = docMap
-		pkg.rawSchemas[id] = data
 	}
 	if err := pkg.checkSchemaInventory(indexedPaths); err != nil {
 		return nil, err
@@ -187,6 +128,84 @@ func loadPackage(root string) (*protocolPackage, error) {
 		return nil, err
 	}
 	return pkg, nil
+}
+
+// readSchemaIndex reads protocol/schemas/index.json and returns its protocol
+// version and schema entries. The index must select JSON Schema Draft
+// 2020-12 and list at least one schema.
+func readSchemaIndex(root string) (string, []any, error) {
+	indexBytes, err := os.ReadFile(filepath.Join(root, schemaIndexPath))
+	if err != nil {
+		return "", nil, fmt.Errorf("read schema index: %w", err)
+	}
+	indexValue, err := parseJSON(indexBytes, schemaIndexPath)
+	if err != nil {
+		return "", nil, err
+	}
+	index := asObject(indexValue)
+	if index == nil {
+		return "", nil, fmt.Errorf("%s must be a JSON object", schemaIndexPath)
+	}
+	version, ok := index["protocol_version"].(string)
+	if !ok || version == "" {
+		return "", nil, fmt.Errorf("schema index must declare protocol_version")
+	}
+	if index["json_schema_dialect"] != "https://json-schema.org/draft/2020-12/schema" {
+		return "", nil, fmt.Errorf("schema index must select JSON Schema Draft 2020-12")
+	}
+	rawEntries, ok := index["schemas"].([]any)
+	if !ok || len(rawEntries) == 0 {
+		return "", nil, fmt.Errorf("schema index must contain a non-empty schemas array")
+	}
+	return version, rawEntries, nil
+}
+
+// loadIndexedSchema reads one index entry's schema file. The path must stay
+// inside protocol/schemas and appear once in the index, and the file must
+// be a Draft 2020-12 schema whose unique $id matches the entry.
+func (pkg *protocolPackage) loadIndexedSchema(rawEntry any, indexedPaths map[string]bool) error {
+	entryMap := asObject(rawEntry)
+	if entryMap == nil {
+		return fmt.Errorf("schema index entries must be objects")
+	}
+	relative, okPath := entryMap["path"].(string)
+	id, okID := entryMap["id"].(string)
+	if !okPath || !okID || relative == "" || id == "" {
+		return fmt.Errorf("schema index entry is missing path or id: %#v", rawEntry)
+	}
+	clean := filepath.Clean(filepath.FromSlash(relative))
+	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("unsafe schema path in index: %s", relative)
+	}
+	if indexedPaths[relative] {
+		return fmt.Errorf("duplicate schema path in index: %s", relative)
+	}
+	indexedPaths[relative] = true
+	data, err := os.ReadFile(filepath.Join(pkg.root, "protocol", "schemas", clean))
+	if err != nil {
+		return fmt.Errorf("read indexed schema %s: %w", relative, err)
+	}
+	doc, err := parseJSON(data, filepath.Join("protocol", "schemas", relative))
+	if err != nil {
+		return err
+	}
+	docMap := asObject(doc)
+	if docMap == nil {
+		return fmt.Errorf("%s must be a JSON object", relative)
+	}
+	if docMap["$id"] != id {
+		return fmt.Errorf("%s: index id does not match schema $id (%q != %v)", relative, id, docMap["$id"])
+	}
+	if docMap["$schema"] != "https://json-schema.org/draft/2020-12/schema" {
+		return fmt.Errorf("%s: schema must declare Draft 2020-12", relative)
+	}
+	if _, exists := pkg.schemaDocs[id]; exists {
+		return fmt.Errorf("duplicate schema $id: %s", id)
+	}
+	pkg.entries = append(pkg.entries, schemaEntry{Path: relative, ID: id})
+	pkg.schemaDocs[id] = docMap
+	pkg.rawSchemas[id] = data
+	return nil
 }
 
 func (pkg *protocolPackage) checkSchemaInventory(indexed map[string]bool) error {
@@ -320,16 +339,9 @@ func readExampleIndex(path string) (map[string]string, error) {
 
 func (pkg *protocolPackage) validateExamples() error {
 	examplesDir := filepath.Join(pkg.root, "protocol", "examples")
-	paths, err := filepath.Glob(filepath.Join(examplesDir, "*.json"))
+	actual, err := exampleFiles(examplesDir)
 	if err != nil {
 		return err
-	}
-	actual := make(map[string]bool)
-	for _, path := range paths {
-		if filepath.Base(path) == exampleIndexFile {
-			continue
-		}
-		actual[filepath.Base(path)] = true
 	}
 	exampleSchemaIDs, err := readExampleIndex(filepath.Join(examplesDir, exampleIndexFile))
 	if err != nil {
@@ -341,38 +353,62 @@ func (pkg *protocolPackage) validateExamples() error {
 		}
 	}
 	for name, id := range exampleSchemaIDs {
-		path := filepath.Join(examplesDir, name)
 		if !actual[name] {
 			return fmt.Errorf("mapped example does not exist: %s", name)
 		}
-		doc, err := parseJSONFile(path)
+		doc, err := parseJSONFile(filepath.Join(examplesDir, name))
 		if err != nil {
 			return err
 		}
-		if object := asObject(doc); object != nil {
-			if capabilities, ok := object["capabilities"].([]any); ok {
-				for i, rawCapability := range capabilities {
-					capability := asObject(rawCapability)
-					if capability == nil {
-						return fmt.Errorf("%s: capability %d must be an object", name, i)
-					}
-					for _, field := range []string{"input_schema_uri", "output_schema_uri"} {
-						uri, ok := capability[field].(string)
-						if !ok {
-							return fmt.Errorf("%s: capability %d %s must be a string", name, i, field)
-						}
-						if _, ok := pkg.validators[uri]; !ok {
-							return fmt.Errorf("%s: capability %d %s does not resolve in the local schema registry: %q", name, i, field, uri)
-						}
-					}
-				}
-			}
+		if err := pkg.checkCapabilitySchemaURIs(name, doc); err != nil {
+			return err
 		}
 		if err := pkg.validateSchema(id, doc); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
 	}
 	pkg.exampleCount = len(exampleSchemaIDs)
+	return nil
+}
+
+// exampleFiles lists the example file names in dir, without the index.
+func exampleFiles(dir string) (map[string]bool, error) {
+	paths, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil {
+		return nil, err
+	}
+	actual := make(map[string]bool)
+	for _, path := range paths {
+		if filepath.Base(path) == exampleIndexFile {
+			continue
+		}
+		actual[filepath.Base(path)] = true
+	}
+	return actual, nil
+}
+
+// checkCapabilitySchemaURIs: every capability an example descriptor lists
+// must name input and output schemas that resolve in the local registry.
+func (pkg *protocolPackage) checkCapabilitySchemaURIs(name string, doc any) error {
+	capabilities, ok := asObject(doc)["capabilities"].([]any)
+	if !ok {
+		return nil
+	}
+	for i, rawCapability := range capabilities {
+		capability := asObject(rawCapability)
+		if capability == nil {
+			return fmt.Errorf("%s: capability %d must be an object", name, i)
+		}
+		for _, field := range []string{"input_schema_uri", "output_schema_uri"} {
+			uri, ok := capability[field].(string)
+			if !ok {
+				return fmt.Errorf("%s: capability %d %s must be a string", name, i, field)
+			}
+			if _, ok := pkg.validators[uri]; !ok {
+				return fmt.Errorf("%s: capability %d %s does not resolve in the local schema registry: %q", name, i, field, uri)
+			}
+		}
+	}
 	return nil
 }
 
@@ -427,8 +463,23 @@ func (pkg *protocolPackage) validateOpenAPI() error {
 	if err := validateOpenAPIStructure(document); err != nil {
 		return fmt.Errorf("OpenAPI document does not match the OAS 3.2 schema: %w", err)
 	}
-	components := asObject(document["components"])
-	apiSchemas := asObject(components["schemas"])
+	if err := checkCanonicalComponents(document); err != nil {
+		return err
+	}
+	var refs []string
+	collectRefs(document, &refs)
+	for _, ref := range refs {
+		if err := pkg.checkOpenAPIReference(path, ref); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkCanonicalComponents: the API's Operation and Server components are
+// the canonical protocol schemas, not copies.
+func checkCanonicalComponents(document map[string]any) error {
+	apiSchemas := asObject(asObject(document["components"])["schemas"])
 	expectedRefs := map[string]string{
 		"Operation": "../schemas/operations/operation.schema.json",
 		"Server":    "../schemas/lifecycle/server.schema.json",
@@ -439,34 +490,42 @@ func (pkg *protocolPackage) validateOpenAPI() error {
 			return fmt.Errorf("OpenAPI component %s must reference the canonical schema %s", name, expected)
 		}
 	}
-	var refs []string
-	collectRefs(document, &refs)
-	for _, ref := range refs {
-		if strings.HasPrefix(ref, "#") {
-			continue
-		}
-		relative := strings.SplitN(ref, "#", 2)[0]
-		if relative == "" {
-			continue
-		}
-		target := filepath.Clean(filepath.Join(filepath.Dir(path), filepath.FromSlash(relative)))
-		relToRoot, err := filepath.Rel(pkg.root, target)
-		if err != nil || relToRoot == ".." || strings.HasPrefix(relToRoot, ".."+string(filepath.Separator)) {
-			return fmt.Errorf("OpenAPI reference escapes the repository: %s", ref)
-		}
-		if _, err := os.Stat(target); err != nil {
-			return fmt.Errorf("OpenAPI reference target does not exist: %s", ref)
-		}
-		schemaRoot := filepath.Join(pkg.root, "protocol", "schemas")
-		relToSchemas, err := filepath.Rel(schemaRoot, target)
-		if err != nil || relToSchemas == ".." || strings.HasPrefix(relToSchemas, ".."+string(filepath.Separator)) {
-			return fmt.Errorf("OpenAPI external reference must point to the local schema package: %s", ref)
-		}
-		if !pkg.pathIsIndexed(filepath.ToSlash(relToSchemas)) {
-			return fmt.Errorf("OpenAPI reference target is not registered in schemas/index.json: %s", ref)
-		}
+	return nil
+}
+
+// checkOpenAPIReference: an external reference from the document at path
+// must name an existing, indexed schema inside protocol/schemas. Local
+// (#...) references are not checked here.
+func (pkg *protocolPackage) checkOpenAPIReference(path, ref string) error {
+	if strings.HasPrefix(ref, "#") {
+		return nil
+	}
+	relative := strings.SplitN(ref, "#", 2)[0]
+	if relative == "" {
+		return nil
+	}
+	target := filepath.Clean(filepath.Join(filepath.Dir(path), filepath.FromSlash(relative)))
+	if !within(pkg.root, target) {
+		return fmt.Errorf("OpenAPI reference escapes the repository: %s", ref)
+	}
+	if _, err := os.Stat(target); err != nil {
+		return fmt.Errorf("OpenAPI reference target does not exist: %s", ref)
+	}
+	schemaRoot := filepath.Join(pkg.root, "protocol", "schemas")
+	if !within(schemaRoot, target) {
+		return fmt.Errorf("OpenAPI external reference must point to the local schema package: %s", ref)
+	}
+	relToSchemas, _ := filepath.Rel(schemaRoot, target)
+	if !pkg.pathIsIndexed(filepath.ToSlash(relToSchemas)) {
+		return fmt.Errorf("OpenAPI reference target is not registered in schemas/index.json: %s", ref)
 	}
 	return nil
+}
+
+// within reports whether target is base or lies under it.
+func within(base, target string) bool {
+	relative, err := filepath.Rel(base, target)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 func (pkg *protocolPackage) pathIsIndexed(path string) bool {
@@ -528,44 +587,9 @@ func parseJSONValue(decoder *json.Decoder) (any, error) {
 	}
 	switch delim, ok := token.(json.Delim); {
 	case ok && delim == '{':
-		object := make(map[string]any)
-		for decoder.More() {
-			keyToken, err := decoder.Token()
-			if err != nil {
-				return nil, err
-			}
-			key, ok := keyToken.(string)
-			if !ok {
-				return nil, fmt.Errorf("object member name is not a string")
-			}
-			if _, exists := object[key]; exists {
-				return nil, fmt.Errorf("duplicate JSON object member: %s", key)
-			}
-			value, err := parseJSONValue(decoder)
-			if err != nil {
-				return nil, err
-			}
-			object[key] = value
-		}
-		end, err := decoder.Token()
-		if err != nil || end != json.Delim('}') {
-			return nil, fmt.Errorf("unterminated JSON object")
-		}
-		return object, nil
+		return parseJSONObject(decoder)
 	case ok && delim == '[':
-		var values []any
-		for decoder.More() {
-			value, err := parseJSONValue(decoder)
-			if err != nil {
-				return nil, err
-			}
-			values = append(values, value)
-		}
-		end, err := decoder.Token()
-		if err != nil || end != json.Delim(']') {
-			return nil, fmt.Errorf("unterminated JSON array")
-		}
-		return values, nil
+		return parseJSONArray(decoder)
 	case ok:
 		return nil, fmt.Errorf("unexpected JSON delimiter %q", delim)
 	default:
@@ -576,6 +600,53 @@ func parseJSONValue(decoder *json.Decoder) (any, error) {
 		}
 		return token, nil
 	}
+}
+
+// parseJSONObject reads an object's members after its opening brace and
+// rejects a repeated member name.
+func parseJSONObject(decoder *json.Decoder) (any, error) {
+	object := make(map[string]any)
+	for decoder.More() {
+		keyToken, err := decoder.Token()
+		if err != nil {
+			return nil, err
+		}
+		key, ok := keyToken.(string)
+		if !ok {
+			return nil, fmt.Errorf("object member name is not a string")
+		}
+		if _, exists := object[key]; exists {
+			return nil, fmt.Errorf("duplicate JSON object member: %s", key)
+		}
+		value, err := parseJSONValue(decoder)
+		if err != nil {
+			return nil, err
+		}
+		object[key] = value
+	}
+	end, err := decoder.Token()
+	if err != nil || end != json.Delim('}') {
+		return nil, fmt.Errorf("unterminated JSON object")
+	}
+	return object, nil
+}
+
+// parseJSONArray reads an array's values after its opening bracket. An empty
+// array decodes as a nil []any.
+func parseJSONArray(decoder *json.Decoder) (any, error) {
+	var values []any
+	for decoder.More() {
+		value, err := parseJSONValue(decoder)
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	end, err := decoder.Token()
+	if err != nil || end != json.Delim(']') {
+		return nil, fmt.Errorf("unterminated JSON array")
+	}
+	return values, nil
 }
 
 func checkSafeIntegers(value any, source, location string) error {
