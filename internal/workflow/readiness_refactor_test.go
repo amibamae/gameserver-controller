@@ -15,11 +15,11 @@ func TestReadinessRefactorPreservesPreconditionFailures(t *testing.T) {
 	}
 	operation, server, step := readinessFixture(schemas.ProtocolVersion())
 	cases := []struct {
-		name string
+		name   string
 		stepID string
-		now time.Time
-		ttl time.Duration
-		want string
+		now    time.Time
+		ttl    time.Duration
+		want   string
 	}{
 		{"missing evidence step", "missing-step", readinessFixtureNow(), time.Minute, "not part of the persisted operation"},
 		{"missing clock", step.StepID, time.Time{}, time.Minute, "clock is required"},

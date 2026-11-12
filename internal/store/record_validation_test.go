@@ -19,8 +19,8 @@ func TestValidateRecordPreservesFieldAndStepFailures(t *testing.T) {
 		t.Fatalf("baseline is invalid: %v", err)
 	}
 	tests := []struct {
-		name string
-		field string
+		name   string
+		field  string
 		change func(*OperationRecord)
 	}{
 		{"invalid identity", "operation_id", func(r *OperationRecord) { r.OperationID = "" }},
