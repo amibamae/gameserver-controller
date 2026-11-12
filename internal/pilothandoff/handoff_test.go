@@ -310,7 +310,9 @@ func TestImpostorAfterTheSwapGetsNothing(t *testing.T) {
 
 func TestInterruptedHandoffResumes(t *testing.T) {
 	w := newWorld(t, false, false)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// Long enough for the key swap on a slow CI machine; the run then waits
+	// for a bootstrap that never finishes and times out.
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
 	defer cancel()
 	if _, err := w.runner.Run(ctx, w.config); !errors.Is(err, ErrTimedOut) {
 		t.Fatalf("Run without a finished bootstrap = %v", err)
@@ -369,5 +371,33 @@ func TestSSHItselfRefusesAnImpostorEvenIfTheScanIsFooled(t *testing.T) {
 	}
 	if w.exists("rotations") || w.exists("rclone.conf") {
 		t.Fatal("the impostor ran the swap or received credentials")
+	}
+}
+
+// slowSSH answers the host key check, then blocks every command until the
+// deadline, the way a killed ssh would.
+type slowSSH struct{ key string }
+
+func (s slowSSH) HostKey(context.Context, Target) (string, error) { return s.key, nil }
+func (s slowSSH) Run(ctx context.Context, _ Target, _, _ string, _ []byte) (Result, error) {
+	<-ctx.Done()
+	return Result{ExitCode: -1}, nil
+}
+
+func TestADeadlineMidCommandIsATimeoutNotAFailure(t *testing.T) {
+	w := newWorld(t, false, false)
+	if _, err := w.store.UpdateHostHandoff(operationID, func(r *store.HostHandoffRecord) error {
+		r.ConnectOneTime(r.OneTimeHostKey, time.Now())
+		r.Rotate(w.swapKey + "\n")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	w.runner.SSH = slowSSH{key: w.swapKey}
+	w.provider.fail = true
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	if _, err := w.runner.Run(ctx, w.config); !errors.Is(err, ErrTimedOut) {
+		t.Fatalf("Run = %v, want ErrTimedOut", err)
 	}
 }

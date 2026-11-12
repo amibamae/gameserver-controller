@@ -425,6 +425,10 @@ func (r Runner) mark(config Config, change func(*store.HostHandoffRecord)) (stor
 func (r Runner) until(ctx context.Context, config Config, step func() (bool, error)) error {
 	for {
 		done, err := step()
+		if ctx.Err() != nil && !done {
+			// A step cut short by the deadline says nothing about the VM.
+			return ErrTimedOut
+		}
 		if err != nil || done {
 			return err
 		}
