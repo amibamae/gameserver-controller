@@ -13,7 +13,7 @@ values in encrypted systemd credential files and load only the named values
 needed by the controller service. Use `systemd-creds encrypt` and the service
 unit's `LoadCredentialEncrypted=` setting. Do not place a value in a unit file,
 YAML configuration, shell command, environment variable, bootstrap script, or
-user-data. Run the controller under a dedicated unprivileged service account.
+user-data (the one exception is below). Run the controller under a dedicated unprivileged service account.
 The production command should read a named file through
 `$CREDENTIALS_DIRECTORY` only when the provider call needs it; the path is not
 hard-coded. Systemd documents that
@@ -117,3 +117,22 @@ Provider guidance: [Vultr service-user API access](https://docs.vultr.com/suppor
 [Wasabi user security practices](https://docs.wasabi.com/docs/what-are-wasabis-recommended-general-user-security-best-practices),
 [Wasabi bucket access policies](https://docs.wasabi.com/docs/how-do-i-restrict-bucket-access-with-resource-based-policies),
 and [Wasabi STS temporary credentials](https://docs.wasabi.com/docs/aws-sts-with-wasabi).
+
+## New VM SSH keys and the single-use host key
+
+The controller logs in to a new VM with its own SSH key and uses that connection to send the VM's Wasabi restore credentials. Two keys are involved:
+
+- **The controller's SSH key** (client key): an ed25519 key stored only as an encrypted systemd credential. `controller-setup ssh-key generate` creates it in memory, or `controller-setup ssh-key import` encrypts an existing unencrypted ed25519 key file. Its public half goes to Vultr, through the web panel or `gsc-pilot ssh-key register`, and Vultr installs it on each new VM.
+- **The VM's host key**, which proves the VM is the one the controller created. A new VM's host key is normally unknown, so an impostor answering at its address could receive the Wasabi keys.
+
+To close that gap, the provisioning request carries **one single-use ed25519 host key** in that VM's cloud-init user data. This is the only exception to the no-secrets-in-user-data rule, and it follows [hosting section 6.1](../protocol/adapters/hosting.md#61-verifying-a-new-instances-ssh-host-key):
+
+- **Generated fresh, private half never stored:** the controller generates the key for one create and keeps only its public half.
+- **First login can only swap keys:** the controller's first login uses an account restricted to a single forced command. That command swaps the key for a new one generated on the VM, deletes the single-use key and cloud-init's copies, and removes the account.
+- **Pinned before any secret:** the controller pins the new key. Only then does it send the Wasabi credentials, and only to that key.
+- **Vultr's copy overwritten:** afterwards the controller replaces the VM's user data at Vultr, so even the expired key is gone from provider metadata.
+
+Who can read the single-use key: Vultr, holders of the Vultr API token, and processes on the VM through the metadata service. All of them can already control the VM. The key never crosses the network in the clear, and it stops working minutes after first boot.
+
+The Wasabi key sent to a VM should be a **separate key** for the VMs, limited by Wasabi policy to the backup bucket or prefix, and rotated periodically. Do not send the controller's own storage key.
+

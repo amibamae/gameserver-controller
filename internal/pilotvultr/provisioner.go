@@ -12,11 +12,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"regexp"
+	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/amibamae/gameserver-controller/internal/hosthandoff"
 	"github.com/amibamae/gameserver-controller/internal/pilotcapacity"
+	"github.com/amibamae/gameserver-controller/internal/sshkey"
 	"github.com/amibamae/gameserver-controller/internal/store"
 	"github.com/amibamae/gameserver-controller/internal/vultrapi"
 )
@@ -30,6 +34,8 @@ var (
 	ErrProviderRejected = errors.New("Vultr rejected the pilot create request")
 	ErrOperationClosed  = errors.New("pilot capacity operation is already released")
 	ErrBootstrapScript  = errors.New("Vultr startup script ID or digest does not match the approved bootstrap")
+	ErrSSHKeyMismatch   = errors.New("the Vultr SSH keys must include exactly one ed25519 key, and it must be the controller's key")
+	ErrFirewall         = errors.New("the Vultr firewall group must admit SSH only from the controller's address")
 	operationIDPattern  = regexp.MustCompile(`^[a-f0-9]{32}$`)
 	sha256Pattern       = regexp.MustCompile(`^[a-f0-9]{64}$`)
 )
@@ -43,6 +49,8 @@ type Provider interface {
 	GetInstance(context.Context, []byte, string) (vultrapi.Instance, error)
 	ListInstancesByLabel(context.Context, []byte, string) ([]vultrapi.Instance, error)
 	GetStartupScript(context.Context, []byte, string) (vultrapi.StartupScript, error)
+	GetSSHKey(context.Context, []byte, string) (vultrapi.SSHKey, error)
+	ListFirewallRules(context.Context, []byte, string) ([]vultrapi.FirewallRule, error)
 }
 
 type CreateRequest struct {
@@ -56,6 +64,13 @@ type CreateRequest struct {
 	SSHKeyIDs           []string
 	StartupScriptID     string
 	StartupScriptSHA256 string
+	// FirewallGroupID is the Vultr firewall group attached at create. It
+	// must admit SSH only from ControllerIP.
+	FirewallGroupID string
+	ControllerIP    netip.Addr
+	// ControllerSSHPublicKey is the controller's own SSH public key. Exactly
+	// one ed25519 key among SSHKeyIDs must be this key.
+	ControllerSSHPublicKey string
 }
 
 type Provisioner struct {
@@ -93,11 +108,8 @@ func (p *Provisioner) Provision(ctx context.Context, request CreateRequest) (sto
 	existing, getErr := p.store.GetCapacityReservation(request.OperationID)
 	if getErr == nil {
 		if !sameReservationIdentity(existing, reservation) {
-			legacyRequest := request
-			legacyRequest.StartupScriptID = ""
-			legacyRequest.StartupScriptSHA256 = ""
-			legacyCreate, legacyReservation, legacyErr := p.prepare(legacyRequest)
-			if legacyErr != nil || !sameReservationIdentity(existing, legacyReservation) {
+			legacyRequest, legacyCreate, legacyReservation, found := p.legacyMatch(request, existing)
+			if !found {
 				return existing, store.ErrCapacityConflict
 			}
 			switch existing.State {
@@ -107,7 +119,7 @@ func (p *Provisioner) Provision(ctx context.Context, request CreateRequest) (sto
 				request, reservation = legacyRequest, legacyReservation
 				create = legacyCreate
 			case store.CapacityReserved:
-				if !hasBootstrapReference(request) {
+				if !hasBootstrapReference(request) || !hasAccessReference(request) {
 					return existing, ErrInvalidRequest
 				}
 				if releaseErr := p.store.ReleaseUnsentCapacityReservation(existing.OperationID, existing.ResourceKey); releaseErr != nil {
@@ -135,7 +147,8 @@ func (p *Provisioner) Provision(ctx context.Context, request CreateRequest) (sto
 	} else if !errors.Is(getErr, store.ErrCapacityNotFound) {
 		return store.CapacityReservation{}, getErr
 	}
-	if !hasBootstrapReference(request) && (getErr != nil || existing.State != store.CapacityCreateOutcomeUnknown) {
+	dispatchable := hasBootstrapReference(request) && hasAccessReference(request)
+	if !dispatchable && (getErr != nil || existing.State != store.CapacityCreateOutcomeUnknown) {
 		return store.CapacityReservation{}, ErrInvalidRequest
 	}
 	var previous *store.CapacityReservation
@@ -148,8 +161,8 @@ func (p *Provisioner) Provision(ctx context.Context, request CreateRequest) (sto
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if hasBootstrapReference(request) && (previous == nil || previous.State == store.CapacityReserved) {
-			if err := p.verifyStartupScript(ctx, token, create.StartupScriptID, request.StartupScriptSHA256); err != nil {
+		if dispatchable && (previous == nil || previous.State == store.CapacityReserved) {
+			if err := p.verifyBeforeDispatch(ctx, token, create, request); err != nil {
 				if previous != nil {
 					if releaseErr := p.store.ReleaseUnsentCapacityReservation(previous.OperationID, previous.ResourceKey); releaseErr != nil {
 						current, getErr := p.store.GetCapacityReservation(previous.OperationID)
@@ -196,7 +209,21 @@ func (p *Provisioner) Provision(ctx context.Context, request CreateRequest) (sto
 			return store.ErrCapacityTransition
 		}
 
-		result, reserveErr = p.store.MarkCapacityCreateSent(result.OperationID)
+		// The single-use host key (protocol hosting section 6.1) is generated
+		// for this dispatch only. Its public half is stored in the same
+		// transaction as the claim; the private half exists only in memory
+		// and in the create request's user data.
+		hostPublic, hostPrivate, keyErr := sshkey.Generate()
+		if keyErr != nil {
+			return keyErr
+		}
+		defer clear(hostPrivate)
+		userData, keyErr := oneTimeHostKeyUserData(hostPublic, hostPrivate)
+		if keyErr != nil {
+			return keyErr
+		}
+		create.UserData = userData
+		result, reserveErr = p.store.ClaimCapacityCreateWithHandoff(result.OperationID, hosthandoff.New(hostPublic, p.now(), hosthandoff.DefaultLifetime))
 		if errors.Is(reserveErr, store.ErrCapacityTransition) {
 			result, reserveErr = p.store.GetCapacityReservation(reservation.OperationID)
 			if reserveErr != nil {
@@ -280,11 +307,13 @@ func (p *Provisioner) prepare(request CreateRequest) (vultrapi.CreateInstanceReq
 		SSHKeyIDs           []string
 		StartupScriptID     string `json:",omitempty"`
 		StartupScriptSHA256 string `json:",omitempty"`
+		FirewallGroupID     string `json:",omitempty"`
 	}{
 		ServerID: request.ServerID, Environment: request.Environment,
 		Region: request.Region, Plan: request.Plan, OSID: osID,
 		Hostname: request.Hostname, SSHKeyIDs: request.SSHKeyIDs,
 		StartupScriptID: request.StartupScriptID, StartupScriptSHA256: request.StartupScriptSHA256,
+		FirewallGroupID: request.FirewallGroupID,
 	})
 	if err != nil {
 		return vultrapi.CreateInstanceRequest{}, store.CapacityReservation{}, ErrInvalidRequest
@@ -297,8 +326,8 @@ func (p *Provisioner) prepare(request CreateRequest) (vultrapi.CreateInstanceReq
 	create := vultrapi.CreateInstanceRequest{
 		Region: request.Region, Plan: request.Plan, OSID: osID, Label: label,
 		Hostname: request.Hostname, SSHKeyIDs: append([]string(nil), request.SSHKeyIDs...),
-		StartupScriptID: request.StartupScriptID,
-		Tags:            tags,
+		StartupScriptID: request.StartupScriptID, FirewallGroupID: request.FirewallGroupID,
+		Tags: tags,
 	}
 	if (request.StartupScriptID != "" && !sha256Pattern.MatchString(request.StartupScriptSHA256)) ||
 		(request.StartupScriptID == "" && request.StartupScriptSHA256 != "") || vultrapi.ValidateCreateInstanceRequest(create) != nil {
@@ -314,6 +343,93 @@ func (p *Provisioner) prepare(request CreateRequest) (vultrapi.CreateInstanceReq
 
 func hasBootstrapReference(request CreateRequest) bool {
 	return request.StartupScriptID != "" && request.StartupScriptSHA256 != ""
+}
+
+// hasAccessReference reports whether a new create carries what the SSH
+// handoff needs: a firewall group, the controller address, and its key.
+func hasAccessReference(request CreateRequest) bool {
+	return request.FirewallGroupID != "" && request.ControllerIP.IsValid() && request.ControllerSSHPublicKey != ""
+}
+
+// legacyMatch finds the request shape an existing reservation was created
+// with by an earlier build: before firewall groups, and before pinned
+// bootstrap scripts. Only identity is matched; nothing is re-sent.
+func (p *Provisioner) legacyMatch(request CreateRequest, existing store.CapacityReservation) (CreateRequest, vultrapi.CreateInstanceRequest, store.CapacityReservation, bool) {
+	withoutFirewall := request
+	withoutFirewall.FirewallGroupID = ""
+	withoutScript := withoutFirewall
+	withoutScript.StartupScriptID, withoutScript.StartupScriptSHA256 = "", ""
+	for _, candidate := range []CreateRequest{withoutFirewall, withoutScript} {
+		create, reservation, err := p.prepare(candidate)
+		if err == nil && sameReservationIdentity(existing, reservation) {
+			return candidate, create, reservation, true
+		}
+	}
+	return CreateRequest{}, vultrapi.CreateInstanceRequest{}, store.CapacityReservation{}, false
+}
+
+// verifyBeforeDispatch runs every check a new create needs before capacity
+// is claimed for dispatch.
+func (p *Provisioner) verifyBeforeDispatch(ctx context.Context, token []byte, create vultrapi.CreateInstanceRequest, request CreateRequest) error {
+	if err := p.verifyStartupScript(ctx, token, create.StartupScriptID, request.StartupScriptSHA256); err != nil {
+		return err
+	}
+	if err := p.verifySSHKeys(ctx, token, request); err != nil {
+		return err
+	}
+	rules, err := p.provider.ListFirewallRules(ctx, token, request.FirewallGroupID)
+	if err != nil {
+		return fmt.Errorf("%w: could not read the firewall group", ErrFirewall)
+	}
+	if err := vultrapi.SSHOnlyFrom(rules, request.ControllerIP); err != nil {
+		return fmt.Errorf("%w: %v", ErrFirewall, err)
+	}
+	return nil
+}
+
+// verifySSHKeys requires exactly one ed25519 key among the create's keys,
+// because the bootstrap installs exactly one, and it must be the controller's.
+func (p *Provisioner) verifySSHKeys(ctx context.Context, token []byte, request CreateRequest) error {
+	controller, err := sshkey.CanonicalAuthorizedKey(request.ControllerSSHPublicKey)
+	if err != nil {
+		return ErrSSHKeyMismatch
+	}
+	ed25519Keys, matches := 0, 0
+	for _, id := range request.SSHKeyIDs {
+		key, err := p.provider.GetSSHKey(ctx, token, id)
+		if err != nil || key.ID != id {
+			return fmt.Errorf("%w: could not read SSH key %s", ErrSSHKeyMismatch, id)
+		}
+		if !strings.HasPrefix(key.PublicKey, sshkey.KeyType+" ") {
+			continue
+		}
+		ed25519Keys++
+		if canonical, err := sshkey.CanonicalAuthorizedKey(key.PublicKey); err == nil && canonical == controller {
+			matches++
+		}
+	}
+	if ed25519Keys != 1 || matches != 1 {
+		return ErrSSHKeyMismatch
+	}
+	return nil
+}
+
+// oneTimeHostKeyUserData is the cloud-config that installs the single-use
+// host key: cloud-init deletes the image's host keys, installs this one, and
+// generates no others.
+func oneTimeHostKeyUserData(public []byte, private []byte) (string, error) {
+	encoded, err := sshkey.MarshalPrivateKey(private, "gsc-one-time-host-key")
+	if err != nil {
+		return "", err
+	}
+	defer clear(encoded)
+	var b strings.Builder
+	b.WriteString("#cloud-config\nssh_deletekeys: true\nssh_genkeytypes: []\nssh_keys:\n  ed25519_private: |\n")
+	for _, line := range strings.Split(strings.TrimSuffix(string(encoded), "\n"), "\n") {
+		b.WriteString("    " + line + "\n")
+	}
+	b.WriteString("  ed25519_public: " + sshkey.AuthorizedKey(public) + " gsc-one-time-host-key\n")
+	return base64.StdEncoding.EncodeToString([]byte(b.String())), nil
 }
 
 func (p *Provisioner) verifyStartupScript(ctx context.Context, token []byte, scriptID, expectedDigest string) error {

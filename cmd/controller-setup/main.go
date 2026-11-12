@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/subtle"
 	"debug/buildinfo"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +27,7 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/controllersetup"
 	"github.com/amibamae/gameserver-controller/internal/keyadmin"
 	"github.com/amibamae/gameserver-controller/internal/managementapi"
+	"github.com/amibamae/gameserver-controller/internal/sshkey"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
@@ -48,6 +51,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 			return errors.New("credential installation requires a Debian machine running systemd")
 		}
 		return runCredentialCommand(args[1:], stdout, stderr, os.Geteuid() == 0, askPassword, controllersetup.SystemdEncryptor{}, "/etc/credstore.encrypted")
+	}
+	if len(args) > 0 && args[0] == "ssh-key" {
+		host := inspectHost()
+		if host.OSReleaseID != "debian" || !host.Systemd {
+			return errors.New("SSH key installation requires a Debian machine running systemd")
+		}
+		return runSSHKeyCommand(args[1:], stdout, stderr, os.Geteuid() == 0, controllersetup.SystemdEncryptor{}, "/etc/credstore.encrypted")
 	}
 	return runWithHost(args, stdout, stderr, inspectHost())
 }
@@ -311,13 +321,14 @@ type passwordPrompt func(context.Context, string) ([]byte, error)
 
 func runCredentialCommand(args []string, stdout, stderr io.Writer, isRoot bool, prompt passwordPrompt, encryptor controllersetup.Encryptor, credentialDirectory string) error {
 	if len(args) == 0 || args[0] != "set" {
-		fmt.Fprintln(stderr, "usage: controller-setup credentials set --config <config.yaml> --name <configured-credential> [--replace --confirm-replace <name>]")
+		fmt.Fprintln(stderr, "usage: controller-setup credentials set (--config <config.yaml> | --pilot) --name <credential> [--replace --confirm-replace <name>]")
 		return errors.New("invalid command")
 	}
 	flags := flag.NewFlagSet("controller-setup credentials set", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	configPath := flags.String("config", "", "validated controller configuration")
 	name := flags.String("name", "", "configured systemd credential name")
+	pilot := flags.Bool("pilot", false, "store a gsc-pilot credential that the controller configuration does not reference")
 	replace := flags.Bool("replace", false, "replace an existing encrypted credential")
 	confirmReplace := flags.String("confirm-replace", "", "repeat the exact credential name to confirm replacement")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -326,8 +337,8 @@ func runCredentialCommand(args []string, stdout, stderr io.Writer, isRoot bool, 
 		}
 		return err
 	}
-	if flags.NArg() != 0 || strings.TrimSpace(*configPath) == "" || strings.TrimSpace(*name) == "" {
-		return errors.New("--config and --name are required; no secret may be supplied as a command-line argument")
+	if flags.NArg() != 0 || (strings.TrimSpace(*configPath) == "") == !*pilot || strings.TrimSpace(*name) == "" {
+		return errors.New("--name and exactly one of --config or --pilot are required; no secret may be supplied as a command-line argument")
 	}
 	if !isRoot {
 		return errors.New("credential installation must run with local administrator privileges")
@@ -335,9 +346,16 @@ func runCredentialCommand(args []string, stdout, stderr io.Writer, isRoot bool, 
 	if *replace != (*confirmReplace == *name) {
 		return errors.New("replacement requires --replace and --confirm-replace with the exact credential name")
 	}
-	value, err := config.Load(*configPath)
-	if err != nil {
-		return err
+	var value config.Config
+	if *pilot {
+		if !slices.Contains(controllersetup.PilotCredentialNames, *name) {
+			return fmt.Errorf("--pilot credentials are %s", strings.Join(controllersetup.PilotCredentialNames, ", "))
+		}
+	} else {
+		var err error
+		if value, err = config.Load(*configPath); err != nil {
+			return err
+		}
 	}
 	if prompt == nil || encryptor == nil {
 		return errors.New("secure credential input is unavailable")
@@ -357,7 +375,15 @@ func runCredentialCommand(args []string, stdout, stderr io.Writer, isRoot bool, 
 	if len(first) != len(second) || subtle.ConstantTimeCompare(first, second) != 1 {
 		return errors.New("credential entries did not match")
 	}
-	if err := controllersetup.SetEncryptedCredential(ctx, value, *name, credentialDirectory, first, *replace, encryptor); err != nil {
+	store := func() error {
+		return controllersetup.SetEncryptedCredential(ctx, value, *name, credentialDirectory, first, *replace, encryptor)
+	}
+	if *pilot {
+		store = func() error {
+			return controllersetup.SetPilotCredential(ctx, *name, credentialDirectory, first, *replace, encryptor)
+		}
+	}
+	if err := store(); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "Stored encrypted credential for configured reference %q. The value was not displayed.\n", *name)
@@ -426,4 +452,109 @@ func inspectHost() controllersetup.Host {
 	_, err := os.Stat("/run/systemd/system")
 	host.Systemd = err == nil
 	return host
+}
+
+// runSSHKeyCommand generates or imports the controller's ed25519 SSH key and
+// stores the private key only as an encrypted systemd credential. It prints
+// the public key and fingerprint; the private key is never displayed.
+func runSSHKeyCommand(args []string, stdout, stderr io.Writer, isRoot bool, encryptor controllersetup.Encryptor, credentialDirectory string) error {
+	usage := "usage: controller-setup ssh-key (generate | import --private-key-file <path>) [--public-key-out <path>] [--replace --confirm-replace " + controllersetup.PilotSSHKeyName + "]"
+	if len(args) == 0 || (args[0] != "generate" && args[0] != "import") {
+		fmt.Fprintln(stderr, usage)
+		return errors.New("invalid command")
+	}
+	flags := flag.NewFlagSet("controller-setup ssh-key "+args[0], flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	privateKeyFile := flags.String("private-key-file", "", "existing unencrypted ed25519 OpenSSH private key (import only)")
+	publicKeyOut := flags.String("public-key-out", "", "also write the public key to this new file")
+	replace := flags.Bool("replace", false, "replace the existing SSH key credential")
+	confirmReplace := flags.String("confirm-replace", "", "repeat the credential name to confirm replacement")
+	if err := flags.Parse(args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	if flags.NArg() != 0 || (args[0] == "import") != (*privateKeyFile != "") {
+		fmt.Fprintln(stderr, usage)
+		return errors.New("invalid arguments")
+	}
+	if !isRoot {
+		return errors.New("SSH key installation must run with local administrator privileges")
+	}
+	if *replace != (*confirmReplace == controllersetup.PilotSSHKeyName) {
+		return errors.New("replacement requires --replace and --confirm-replace " + controllersetup.PilotSSHKeyName)
+	}
+	var private ed25519.PrivateKey
+	if args[0] == "generate" {
+		var err error
+		if _, private, err = sshkey.Generate(); err != nil {
+			return errors.New("generate SSH key failed")
+		}
+	} else {
+		data, err := readPrivateKeyFile(*privateKeyFile)
+		if err != nil {
+			return err
+		}
+		private, err = sshkey.ParsePrivateKey(data)
+		zeroSecret(data)
+		if err != nil {
+			return err
+		}
+	}
+	defer zeroSecret(private)
+	public := private.Public().(ed25519.PublicKey)
+	line := sshkey.AuthorizedKey(public) + " gameserver-controller"
+	if *publicKeyOut != "" {
+		if err := writeNewPublicFile(*publicKeyOut, line+"\n"); err != nil {
+			return err
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	if err := controllersetup.SetSSHPrivateKey(ctx, controllersetup.PilotSSHKeyName, credentialDirectory, private, *replace, encryptor); err != nil {
+		return err
+	}
+	fmt.Fprintf(stdout, "Stored the SSH private key as encrypted credential %q. It was not displayed.\n", controllersetup.PilotSSHKeyName)
+	fmt.Fprintf(stdout, "Public key (add it in the Vultr web panel, or run gsc-pilot ssh-key register):\n%s\n", line)
+	fmt.Fprintf(stdout, "Fingerprint: %s\n", sshkey.Fingerprint(public))
+	if args[0] == "import" {
+		fmt.Fprintln(stdout, "The original private key file was left in place; delete it once you no longer need it.")
+	}
+	return nil
+}
+
+// readPrivateKeyFile reads a private key file that only its owner can read.
+func readPrivateKeyFile(path string) ([]byte, error) {
+	if !filepath.IsAbs(path) {
+		return nil, errors.New("--private-key-file must be an absolute path")
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > 16<<10 {
+		return nil, errors.New("--private-key-file must be a regular file of at most 16 KiB, not a symlink")
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return nil, errors.New("--private-key-file is readable by group or others; restrict it with chmod 600 first")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, errors.New("read --private-key-file failed")
+	}
+	return data, nil
+}
+
+// writeNewPublicFile writes a public key without replacing an existing file.
+func writeNewPublicFile(path, content string) error {
+	if !filepath.IsAbs(path) {
+		return errors.New("--public-key-out must be an absolute path")
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return errors.New("--public-key-out must name a new file")
+	}
+	if _, err := file.WriteString(content); err != nil {
+		file.Close()
+		return errors.New("write --public-key-out failed")
+	}
+	return file.Close()
 }

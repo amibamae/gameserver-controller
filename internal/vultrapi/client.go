@@ -66,7 +66,10 @@ type CreateInstanceRequest struct {
 	Hostname        string
 	SSHKeyIDs       []string
 	StartupScriptID string
-	UserData        string // Base64-encoded, non-secret cloud-init data.
+	// UserData is base64-encoded cloud-init data. It may hold only non-secret
+	// data plus the single-use SSH host key of protocol hosting section 6.1.
+	UserData        string
+	FirewallGroupID string
 	Tags            []string
 }
 
@@ -79,6 +82,7 @@ type createInstanceBody struct {
 	SSHKeyIDs []string `json:"sshkey_id,omitempty"`
 	ScriptID  string   `json:"script_id,omitempty"`
 	UserData  string   `json:"user_data,omitempty"`
+	Firewall  string   `json:"firewall_group_id,omitempty"`
 	Tags      []string `json:"tags,omitempty"`
 }
 
@@ -144,7 +148,7 @@ func (c *Client) CreateInstance(ctx context.Context, token []byte, input CreateI
 	body, err := json.Marshal(createInstanceBody{
 		Region: input.Region, Plan: input.Plan, OSID: input.OSID, Label: input.Label,
 		Hostname: input.Hostname, SSHKeyIDs: cloneStrings(input.SSHKeyIDs), ScriptID: input.StartupScriptID,
-		UserData: input.UserData, Tags: cloneStrings(input.Tags),
+		UserData: input.UserData, Firewall: input.FirewallGroupID, Tags: cloneStrings(input.Tags),
 	})
 	if err != nil {
 		return Instance{}, fmt.Errorf("%w: could not encode create request", ErrInvalidRequest)
@@ -282,6 +286,9 @@ func ValidateCreateInstanceRequest(input CreateInstanceRequest) error {
 	}
 	if input.StartupScriptID != "" && !validResourceID(input.StartupScriptID) {
 		return fmt.Errorf("%w: invalid startup script ID", ErrInvalidRequest)
+	}
+	if input.FirewallGroupID != "" && !validResourceID(input.FirewallGroupID) {
+		return fmt.Errorf("%w: invalid firewall group ID", ErrInvalidRequest)
 	}
 	if len(input.SSHKeyIDs) > 100 {
 		return fmt.Errorf("%w: too many SSH key IDs", ErrInvalidRequest)

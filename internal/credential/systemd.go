@@ -72,6 +72,26 @@ func (r *Resolver) WithCredential(reference string, use func([]byte) error) erro
 	return use(value)
 }
 
+// Path returns the checked path of a named credential file, for a tool such
+// as ssh that must open the file itself. The file must be a regular file,
+// not a symlink, and readable by no one but its owner. Prefer WithCredential
+// whenever the bytes can be passed directly.
+func (r *Resolver) Path(reference string) (string, error) {
+	if r == nil {
+		return "", ErrCredentialUnavailable
+	}
+	name, ok := credentialName(reference)
+	if !ok {
+		return "", ErrInvalidReference
+	}
+	path := filepath.Join(r.directory, name)
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || info.Size() == 0 || info.Size() > maxCredentialBytes {
+		return "", ErrCredentialUnavailable
+	}
+	return path, nil
+}
+
 func credentialName(reference string) (string, bool) {
 	if !strings.HasPrefix(reference, SystemdReferenceScheme) {
 		return "", false

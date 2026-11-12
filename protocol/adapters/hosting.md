@@ -54,7 +54,7 @@ A create request SHOULD include:
 
 Provider-native plan, region, and OS IDs are opaque strings. The protocol does not assume providers share catalog names.
 
-A request MUST NOT contain raw API tokens, passwords, private keys, storage credentials, or game-player data. Do not smuggle secrets in cloud-init/user-data or provider metadata.
+A request MUST NOT contain raw API tokens, passwords, private keys, storage credentials, or game-player data. Do not smuggle secrets in cloud-init/user-data or provider metadata. The only exception is the single-use SSH host key in section 6.1, under every condition listed there.
 
 ## 4. Operations and outcomes
 
@@ -81,6 +81,26 @@ A hosting adapter for a provider that bills instances in fixed increments SHOULD
 The initial preferred path uses a provider-supported standard OS image and a reviewed, versioned bootstrap. The adapter may deliver a protected script reference or start a separate bootstrap runner. A repeated delivery with the same instance, revision, digest, and operation step MUST be idempotent or return the exact existing execution reference; it MUST NOT launch an untracked duplicate run. The controller reconciles an accepted or uncertain execution by inspecting that exact reference rather than resubmitting blindly.
 
 Report how bootstrap started, its immutable revision/digest, execution reference, exit status, timestamps, and validation evidence. A successful script exit does not prove the game is installed or ready. The controller MUST perform separate host and game readiness checks before transitioning the logical server to `ready`. Uploading a script or submitting a remote command does not prove the host is prepared.
+
+### 6.1 Verifying a new instance's SSH host key
+
+Before the controller sends any secret to a new instance over SSH, such as storage credentials for a restore, it MUST verify the instance's SSH host key against a key the controller chose. Trusting the first key an address presents is not enough: until the controller has a verified key, anyone answering at that address could receive the secret.
+
+To make that possible, the create request MAY carry exactly one **single-use ed25519 SSH host key** in cloud-init user data. This is the only secret a create request may carry, and only when every condition below holds:
+
+1. **Fresh and unstored.** The key is generated for that one create and never reused. The controller does not store the private half. It stores the public half durably, in the same transaction that claims the create for dispatch, so the stored key is always the one actually sent.
+2. **Exact target only.** The controller connects only to the address the provider reports for that exact instance. It accepts only the stored single-use key with the `ssh-ed25519` algorithm, and only before the handoff expires (24 hours after creation unless configured otherwise).
+3. **A swap-only first login.** The first connection uses an account that can run one forced command and nothing else: no shell, terminal, forwarding, or file transfer. That command generates a new ed25519 host key on the instance, removes the single-use key and cloud-init's copies of the user data, reloads the SSH server, prints only the new public key, and removes the account. It refuses to run a second time.
+4. **Pin the new key.** The controller accepts the printed key only if it is one well-formed `ssh-ed25519` public key that differs from the single-use key. From then on it uses only this pinned key, and the single-use key is never accepted again.
+5. **Replace the provider copy.** After pinning, the controller replaces the instance's user data at the provider. If the provider does not allow that, the handoff record says the expired key remains in provider metadata.
+6. **Secrets last.** No secret is sent before the new key is pinned, and a secret is sent only on a connection whose host key is the pinned key.
+7. **Mismatch is a hard stop.** A presented host key that does not match the expected key is never accepted. The controller sends nothing and does not continue until an operator investigates.
+
+Where the provider offers a firewall that applies before the instance boots, the create request SHOULD attach one that admits SSH only from the controller's address. The instance's own firewall SHOULD do the same from its first configuration, so SSH is never reachable from other addresses.
+
+Who can read the single-use key: the provider, anyone holding the provider account's API token, and processes on the instance itself through the provider's metadata service. All of them can already control the instance, so the key gives them nothing new. It does not cross the network in the clear, and it stops working minutes after first boot.
+
+The handoff steps and their outcomes are checked by [hosting-bootstrap-host-key-handoff.json](../conformance/test-vectors/hosting-bootstrap-host-key-handoff.json).
 
 ## 7. Conformance cases
 

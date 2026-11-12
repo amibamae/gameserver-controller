@@ -39,6 +39,20 @@ These run in GitHub Actions workflows and are not distributed with the project o
 - **Gradle 8.14.3**, pinned in `.github/workflows/velocity-plugin.yml`: Apache-2.0, by Gradle Inc. ([LICENSE](https://github.com/gradle/gradle/blob/v8.14.3/LICENSE)).
 - **`gradle/actions/setup-gradle@v4`**: MIT, Copyright (c) 2023 Gradle Inc. ([LICENSE](https://github.com/gradle/actions/blob/v4/LICENSE)). Later major versions bundle a proprietary "Enhanced Caching" component (`gradle-actions-caching`) under Gradle's own terms and enable it by default. The `v4` tag has no such component or license file, and this project does not use a later version. Check this before upgrading.
 
+## Debian packages installed on pilot VMs
+
+The [VM bootstrap](scripts/bootstrap/minecraft-debian.sh.tmpl) installs these Debian packages on each new pilot VM with `apt-get`. They come from the VM's Debian mirror at install time, so the version is whatever that Debian release provides. This project does not distribute them. Licenses were checked in the packages' Debian copyright files in November 2026, using the Ubuntu 24.04 builds of the same upstream packages.
+
+- **ca-certificates**: MPL-2.0 for the certificate data, GPL-2+ for the packaging scripts.
+- **curl**: curl license (MIT-style), Copyright Daniel Stenberg and contributors.
+- **fail2ban**: GPL-2+, Copyright Cyril Jaquier and contributors.
+- **OpenJDK 25 JRE (`openjdk-25-jre-headless`)**: GPL-2 with the Classpath Exception, from the OpenJDK project. Checked in the `openjdk-21` package's copyright file, whose upstream license is the same.
+- **OpenSSH server (`openssh-server`)**: the OpenSSH license (BSD-style, several parts), Copyright Tatu Ylonen, Markus Friedl, and contributors.
+- **rclone**: MIT (Expat), Copyright Nick Craig-Wood and contributors. It restores and syncs the world data with Wasabi.
+- **rsync**: GPL-3 with an exception for linking OpenSSL and xxhash, Copyright Andrew Tridgell, Wayne Davison, and others.
+- **sudo**: ISC, Copyright Todd C. Miller.
+- **ufw**: GPL-3, Copyright Canonical Ltd.
+
 ## github.com/dlclark/regexp2
 
 - Version: `v1.11.0`, pinned in [go.mod](go.mod)
@@ -115,6 +129,14 @@ The four JSON resources in `cmd/protocol-check/openapi-schema/` are byte-for-byt
 - `oas-3.2-meta-2026-02-26.json` corresponds to upstream `oas/3.2/meta/2026-02-26`.
 - `oas-3.2-schema-2026-08-30.json` corresponds to upstream `oas/3.2/schema/2026-08-30`.
 - `oas-3.2-schema-base-2026-08-30.json` corresponds to upstream `oas/3.2/schema-base/2026-08-30`.
+
+## OpenSSH (controller host)
+
+`gsc-pilot handoff` runs the host's OpenSSH client (`ssh` and `ssh-keyscan`) to verify and set up new VMs. It is provided by the operating system (Debian package `openssh-client`) and is not distributed by this project. The tests also start the host's `sshd` when it is installed.
+
+- License: the OpenSSH license (BSD-style, several parts), checked in the Debian package's copyright file in November 2026
+- Copyright: Tatu Ylonen, Markus Friedl, Theo de Raadt, Niels Provos, Dug Song, Damien Miller, and other contributors
+- Upstream: [openssh-portable LICENCE](https://github.com/openssh/openssh-portable/blob/master/LICENCE)
 
 ## Rust conformance consumer (`conformance-rs`)
 

@@ -13,6 +13,8 @@ The pilot is a local CLI for inspecting the existing server, running its backup 
 - `gsc-pilot boot-status --server-id <id> --environment <environment>` reads local timing records and makes no provider API or credential call.
 - `gsc-pilot provision ...` defaults to a dry run. It requires an exact Vultr startup-script ID and SHA-256 digest. With explicit confirmation and a systemd credential, it verifies the provider script content, reserves capacity, and creates one Vultr VM with that script attached; it does not claim game readiness.
 - `gsc-pilot capacity` reports the policy limit and durable local reservations.
+- `gsc-pilot handoff ...` defaults to a dry run that reads only local state. With explicit confirmation, it verifies a new VM by its single-use SSH host key, swaps and pins that key, sends the VM's Wasabi credentials to the pinned key only, and starts the restore. See [SSH keys and the host key handoff](#ssh-keys-and-the-host-key-handoff).
+- `gsc-pilot register-ssh-key ...` defaults to a dry run. With `--execute`, it registers the controller's SSH public key with Vultr and prints its key ID.
 
 The SSH account needs non-interactive sudo permission for the pilot's `systemctl show` and `systemctl start --wait` commands.
 
@@ -52,8 +54,12 @@ gsc-pilot provision \
   --region <vultr-region-id> --plan <vultr-plan-id> --os-id <vultr-os-id> \
   --ssh-key-id <vultr-ssh-key-id> \
   --startup-script-id <id-from-gsc-bootstrap> \
-  --startup-script-sha256 <digest-from-gsc-bootstrap>
+  --startup-script-sha256 <digest-from-gsc-bootstrap> \
+  --firewall-group-id <vultr-firewall-group-id> \
+  --controller-ip <controller-public-ip>
 ```
+
+Before the create, the execute path also checks two things and sends nothing if either fails. First, exactly one ed25519 key among the `--ssh-key-id`s must be the controller's own SSH key, read from its systemd credential. Second, the Vultr firewall group must admit SSH (TCP 22) only from `--controller-ip`. Each create also gets a fresh single-use SSH host key in its cloud-init user data, as described below.
 
 Create the startup script with `gsc-bootstrap upload` first. Record its exact provider ID and SHA-256 digest from the upload result. The dry run prints those values and makes no provider call. The execute path reads the saved script by exact ID, requires its type to be `boot`, hashes the decoded script, and refuses to create a VM if the digest differs. It then includes Vultr's `script_id` in the one-shot create request. Keep the uploaded script unchanged between verification and provider processing; Vultr references the saved script by ID, and the provider API does not pin a content version.
 
@@ -164,3 +170,54 @@ The Go implementation uses configurable identities and has no deployment IPs,
 provider resource IDs, or literal credentials. Startup-script verification,
 SSH-key verification, and the legacy Fabric create flow still need to be
 integrated with the versioned bootstrap and durable provision workflow.
+
+## SSH keys and the host key handoff
+
+A new VM needs the Wasabi credentials for its restore. The controller sends them over SSH, so it must be sure it is talking to the VM it just created and not to an impostor at that address. The design is in [protocol hosting section 6.1](../protocol/adapters/hosting.md#61-verifying-a-new-instances-ssh-host-key).
+
+### One-time setup
+
+1. Create the controller's SSH key on the controller host. Run this as root; the private key is stored only as an encrypted systemd credential and never shown:
+
+   ```sh
+   controller-setup ssh-key generate --public-key-out /root/gsc-controller.pub
+   ```
+
+   To use a key you already have, run `controller-setup ssh-key import --private-key-file /path/to/id_ed25519` instead. The file must be an unencrypted ed25519 key readable only by its owner.
+2. Give the public key to Vultr. Either paste it into the Vultr web panel (Account, SSH Keys) and note the key ID, or register it from the program:
+
+   ```sh
+   gsc-pilot register-ssh-key --public-key-file /root/gsc-controller.pub --name gsc-controller --execute
+   ```
+
+3. Create a Vultr firewall group in the web panel with one inbound rule: TCP port 22 from the controller's IP address, `/32`. Add your game and voice ports as needed. Provisioning refuses a group that admits SSH from anywhere else.
+4. Store the VM's Wasabi key: a separate Wasabi access key for the VMs, limited by Wasabi policy to the backup bucket or prefix. Do not use the controller's own storage key.
+
+   ```sh
+   controller-setup credentials set --pilot --name gsc-pilot-vm-wasabi-access-key-id
+   controller-setup credentials set --pilot --name gsc-pilot-vm-wasabi-secret-access-key
+   ```
+
+   The Vultr API token can be stored the same way, as `vultr-pilot-api-token`.
+
+### What happens for each VM
+
+- **At provision:** the controller generates a brand-new ed25519 host key in memory and puts it in that VM's cloud-init user data, in the same create request. It stores only the public half. The shared startup script does not change, so there is no extra upload or delay.
+- **First connection:** `gsc-pilot handoff` connects only to the address Vultr reports for that exact VM, and accepts only that host key. The login uses a swap-only account that can run a single command: it generates a new host key on the VM, deletes the single-use key and cloud-init's copies of it, prints the new public key, and removes the account.
+- **Pinning:** the controller pins the new key and uses only it from then on. It replaces the VM's user data at Vultr, so even the expired key is gone from provider metadata.
+- **Secrets last:** only then does it send the rclone configuration, over standard input, to a connection that presented the pinned key. Next it runs the security finalizer and the rclone installer, then waits for `minecraft-restore.service` to finish. It does not start Minecraft.
+
+Any host key that is not the expected one stops the handoff, and nothing is sent. The handoff resumes where it stopped when you run it again with the same operation ID.
+
+```sh
+gsc-pilot handoff --operation-id <id-from-provision> --wasabi-region <region>
+gsc-pilot handoff --operation-id <id-from-provision> --wasabi-region <region> \
+  --execute --confirm-handoff <server-id>@<environment>/<instance-id>
+```
+
+Run it from the same systemd-managed process setup as `provision`. It reads the Vultr token, the controller SSH key, and the two VM Wasabi credentials from `$CREDENTIALS_DIRECTORY`.
+
+**If a run is interrupted during the key swap.** The VM may then already have a new key that the controller never received, and every later run stops with a host key mismatch. The swap script writes the new key's fingerprint to the VM console. Compare it in the Vultr web console. If you cannot confirm it, destroy the VM and provision a new one. Do not work around the mismatch.
+
+**Not yet verified on a live Vultr VM:** that Vultr's Debian image applies the cloud-init `ssh_keys` host key from user data when a startup script is also attached, before SSH accepts connections. If it does not, the handoff stops with a host key mismatch and sends nothing.
+

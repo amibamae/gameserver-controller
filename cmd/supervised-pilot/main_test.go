@@ -5,9 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/amibamae/gameserver-controller/internal/hosthandoff"
+	"github.com/amibamae/gameserver-controller/internal/sshkey"
 	"os"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -98,6 +101,7 @@ func provisionArgs() []string {
 		"--region", "ewr", "--plan", "vc2-1c-2gb", "--os-id", "362",
 		"--hostname", "pilot-test.example.invalid", "--ssh-key-id", "sshkey-123",
 		"--startup-script-id", "script-123", "--startup-script-sha256", hex.EncodeToString(digest[:]),
+		"--firewall-group-id", "firewall-123", "--controller-ip", "203.0.113.10",
 	}
 }
 
@@ -119,8 +123,7 @@ func TestVultrProvisionDefaultsToDryRunWithoutCredentialOrDatabase(t *testing.T)
 
 func TestVultrProvisionRequiresBootstrapIDAndDigest(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state", "pilot.db")
-	args := provisionArgs()
-	args = args[:len(args)-4]
+	args := withoutFlags(provisionArgs(), "--startup-script-id", "--startup-script-sha256")
 	output, err := runPilotWithState(t, statePath, args...)
 	if err == nil || !strings.Contains(err.Error(), "--startup-script-id") {
 		t.Fatalf("provision without an approved bootstrap was accepted: %v (%s)", err, output)
@@ -738,5 +741,101 @@ func TestBackupRejectsUnsafeSSHHostsBeforeInvokingSSH(t *testing.T) {
 
 	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
 		t.Fatalf("unsafe host input invoked SSH; log stat error = %v", err)
+	}
+}
+
+// withoutFlags removes each named flag and its value.
+func withoutFlags(args []string, names ...string) []string {
+	var kept []string
+	for i := 0; i < len(args); i++ {
+		if slices.Contains(names, args[i]) {
+			i++
+			continue
+		}
+		kept = append(kept, args[i])
+	}
+	return kept
+}
+
+func TestVultrProvisionRequiresAControllerOnlyFirewall(t *testing.T) {
+	for name, args := range map[string][]string{
+		"no firewall group":   withoutFlags(provisionArgs(), "--firewall-group-id"),
+		"no controller IP":    withoutFlags(provisionArgs(), "--controller-ip"),
+		"controller IP range": append(withoutFlags(provisionArgs(), "--controller-ip"), "--controller-ip", "203.0.113.0/24"),
+	} {
+		statePath := filepath.Join(t.TempDir(), "state", "pilot.db")
+		output, err := runPilotWithState(t, statePath, args...)
+		if err == nil || !strings.Contains(err.Error(), "--firewall-group-id") {
+			t.Errorf("%s: %v (%s)", name, err, output)
+		}
+	}
+}
+
+func preparedHandoffState(t *testing.T, withHandoff bool) string {
+	t.Helper()
+	statePath := filepath.Join(t.TempDir(), "state", "pilot.db")
+	repository, err := store.OpenBolt(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	operation := "fedcba9876543210fedcba9876543210"
+	if _, _, err := repository.ReserveCapacity(store.CapacityReservation{OperationID: operation, ServerID: "pilot-test", EnvironmentID: "staging",
+		CapacityGroup: "shared_nonproduction", Provider: "vultr", ResourceKey: "gsc-managed-test"}, 2, 1); err != nil {
+		t.Fatal(err)
+	}
+	if withHandoff {
+		public, _, _ := sshkey.Generate()
+		if _, err := repository.ClaimCapacityCreateWithHandoff(operation, hosthandoff.New(public, time.Now(), 0)); err != nil {
+			t.Fatal(err)
+		}
+	} else if _, err := repository.MarkCapacityCreateSent(operation); err != nil {
+		t.Fatal(err)
+	}
+	reservation, _ := repository.GetCapacityReservation(operation)
+	if _, err := repository.ObserveCapacity(operation, store.CapacityProviderObservation{Provider: "vultr", ResourceKey: "gsc-managed-test",
+		ProviderInstanceID: "instance-9", State: "present", ObservedAt: reservation.CreatedAt.Add(time.Second)}); err != nil {
+		t.Fatal(err)
+	}
+	return statePath
+}
+
+func TestHandoffDefaultsToADryRunAndNeedsExactConfirmation(t *testing.T) {
+	statePath := preparedHandoffState(t, true)
+	base := []string{"handoff", "--operation-id", "fedcba9876543210fedcba9876543210", "--wasabi-region", "us-east-1"}
+	output, err := runPilotWithState(t, statePath, base...)
+	if err != nil || !strings.Contains(output, "Dry run: no SSH connection") || !strings.Contains(output, "pending_rotation") ||
+		!strings.Contains(output, "--confirm-handoff pilot-test@staging/instance-9") {
+		t.Fatalf("dry run = %v\n%s", err, output)
+	}
+	_, err = runPilotWithState(t, statePath, append(base, "--execute", "--confirm-handoff", "pilot-test@staging/other")...)
+	if err == nil || !strings.Contains(err.Error(), "must exactly match") {
+		t.Fatalf("wrong confirmation: %v", err)
+	}
+	if _, err := runPilotWithState(t, filepath.Join(t.TempDir(), "missing.db"), base...); err == nil || !strings.Contains(err.Error(), "run provision first") {
+		t.Fatalf("missing database: %v", err)
+	}
+}
+
+func TestHandoffRefusesAVMWithoutAHandoffRecord(t *testing.T) {
+	statePath := preparedHandoffState(t, false)
+	_, err := runPilotWithState(t, statePath, "handoff", "--operation-id", "fedcba9876543210fedcba9876543210", "--wasabi-region", "us-east-1")
+	if err == nil || !strings.Contains(err.Error(), "manual process") {
+		t.Fatalf("legacy VM: %v", err)
+	}
+}
+
+func TestRegisterSSHKeyDryRun(t *testing.T) {
+	public, _, _ := sshkey.Generate()
+	path := filepath.Join(t.TempDir(), "gsc.pub")
+	if err := os.WriteFile(path, []byte(sshkey.AuthorizedKey(public)+" gameserver-controller\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	output, err := runPilotWithState(t, filepath.Join(t.TempDir(), "x.db"), "register-ssh-key", "--public-key-file", path, "--name", "gsc-pilot")
+	if err != nil || !strings.Contains(output, sshkey.Fingerprint(public)) || !strings.Contains(output, "Dry run") {
+		t.Fatalf("dry run = %v\n%s", err, output)
+	}
+	if _, err := runPilotWithState(t, filepath.Join(t.TempDir(), "x.db"), "register-ssh-key", "--public-key-file", "relative.pub", "--name", "gsc"); err == nil {
+		t.Fatal("relative key path accepted")
 	}
 }
