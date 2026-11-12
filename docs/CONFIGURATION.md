@@ -137,9 +137,30 @@ Shutting down includes stopping the game, backing up, verifying, and destroying 
 
 Each server may define `lifecycle.backups.schedule` and `lifecycle.backups.retention`. The defaults are every 9 hours and keep the newest five verified backups. Schedule units are `minutes`, `hours`, `days`, `weeks`, `months`, or `years`; month and year intervals use calendar units, anchored to the original schedule date. If a month lacks that day, the occurrence uses that month's last day and later occurrences return to the original day. Set `keep_last: 0` to retain backups indefinitely. The configuration validator checks this policy, but scheduled execution and retention cleanup are not wired into a controller runtime yet. Cleanup must run only after a new backup is verified and must use the normal exact-object authorization and retention checks.
 
+### One file per adapter: `adapters.d/`
+
+Adapter profiles may live in the main file's `adapters` list, or one per file in an `adapters.d` directory next to the main configuration file. Adding a file adds an adapter, and deleting it removes the adapter. The controller reads every `*.yaml` and `*.yml` file there in name order, so a numeric prefix (`10-wasabi.yaml`, `20-velocity.yaml`) sets the order. Each file holds exactly one profile, in the same shape as an `adapters` entry but without the leading `-`:
+
+```yaml
+# adapters.d/20-velocity.yaml
+id: integration.velocity
+category: integration
+implementation: velocity
+secret_refs:
+  bridge_token:
+    secret_ref: systemd-credential://velocity-staging-bridge-token
+    purpose: staging proxy bridge token
+velocity:
+  environment_id: staging
+  bridge_url: http://127.0.0.1:25580
+  proxy_instance_id: proxy-staging-1
+```
+
+The same strict rules apply as for the main file: unknown fields are rejected, and an adapter ID may appear only once across all files. For safety, each file must be a regular file (not a symlink), at most 1 MiB, and not writable by group or others. File names must use lower-case letters, digits, dots, dashes, or underscores. Other files in the directory, such as editor backups, are ignored. `controller-setup install` installs each of these profiles as its own file in the installed `adapters.d` directory.
+
 ### Adapter implementations
 
-An adapter profile may set `implementation` to tell the controller runtime to start it. Without `implementation`, the profile is declared for cross-reference checks only and the runtime does not start it.
+An adapter profile may set `implementation` to tell the controller runtime to start it. Without `implementation`, the profile is declared for cross-reference checks only and the runtime does not start it. Each implementation's settings go in a block named after it (`wasabi:`, `velocity:`, and so on), and a profile may not carry another implementation's block.
 
 - `implementation: wasabi` builds the built-in Wasabi storage adapter (category `storage` only). The `wasabi:` block holds non-secret settings, and `secret_refs` must define exactly `access_key_id` and `secret_access_key`. A server that uses this adapter must be in the same environment as `wasabi.environment_id`. See [the Wasabi adapter](WASABI_STORAGE_ADAPTER.md) for the meaning of each field.
 - `implementation: velocity` builds the built-in Velocity proxy adapter (category `integration`). The `velocity:` block names the `environment_id`, the `bridge_url` of the [proxy bridge](PROXY_BRIDGE_API.md) (`https`, or plain `http` only to a loopback address), the `proxy_instance_id` the bridge must report, and an optional request `timeout` (at most 2m). `secret_refs` must define exactly `bridge_token`. At startup the controller checks the bridge's identity: a different instance or API version stops startup; an unreachable bridge does not, but every proxy call is refused until the check passes. Backends come from the network profiles of the servers routed through this proxy. An `instance_ip` backend looks its IP up from Vultr using the `api_token` secret ref of the server's hosting profile; without one, the lookup fails and that backend cannot be registered.

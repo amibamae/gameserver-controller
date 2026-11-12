@@ -109,7 +109,24 @@ func BuildInstallBundle(value config.Config, layout Layout, controllerBinary []b
 	}
 
 	value.Controller.StateStore.Path = layout.StateDatabaseFile
-	configBytes, err := yaml.Marshal(value)
+	// Adapter profiles loaded from adapters.d stay one file per adapter on the
+	// installed host, so operators can still add or remove them by file.
+	main := value
+	main.Adapters = nil
+	var adapterFiles []InstallFile
+	adapterDir := filepath.Join(filepath.Dir(layout.ConfigFile), config.AdapterDirectoryName)
+	for _, profile := range value.Adapters {
+		if profile.Source == "" {
+			main.Adapters = append(main.Adapters, profile)
+			continue
+		}
+		content, err := yaml.Marshal(profile)
+		if err != nil {
+			return InstallBundle{}, errors.New("render validated adapter profile")
+		}
+		adapterFiles = append(adapterFiles, InstallFile{Path: filepath.Join(adapterDir, profile.Source), Mode: 0o640, Owner: "root", Group: serviceAccount, Content: content})
+	}
+	configBytes, err := yaml.Marshal(main)
 	if err != nil {
 		return InstallBundle{}, errors.New("render validated controller configuration")
 	}
@@ -120,11 +137,14 @@ func BuildInstallBundle(value config.Config, layout Layout, controllerBinary []b
 			{Path: filepath.Dir(layout.ConfigFile), Mode: 0o750, Owner: "root", Group: serviceAccount},
 			{Path: layout.StateDir, Mode: 0o750, Owner: serviceAccount, Group: serviceAccount},
 		},
-		Files: []InstallFile{
+		Files: append([]InstallFile{
 			{Path: layout.BinaryFile, Mode: 0o755, Owner: "root", Group: "root", Content: append([]byte(nil), controllerBinary...)},
 			{Path: layout.ConfigFile, Mode: 0o640, Owner: "root", Group: serviceAccount, Content: configBytes},
 			{Path: layout.ServiceFile, Mode: 0o644, Owner: "root", Group: "root", Content: []byte(unit)},
-		},
+		}, adapterFiles...),
+	}
+	if len(adapterFiles) > 0 {
+		bundle.Directories = append(bundle.Directories, InstallDirectory{Path: adapterDir, Mode: 0o750, Owner: "root", Group: serviceAccount})
 	}
 	sort.Slice(bundle.Directories, func(i, j int) bool { return bundle.Directories[i].Path < bundle.Directories[j].Path })
 	sort.Slice(bundle.Files, func(i, j int) bool { return bundle.Files[i].Path < bundle.Files[j].Path })
