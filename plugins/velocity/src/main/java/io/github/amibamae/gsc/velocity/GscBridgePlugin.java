@@ -236,7 +236,9 @@ public final class GscBridgePlugin {
         throw new IllegalArgumentException("bridge token file must be readable only by its owner");
       }
     } catch (UnsupportedOperationException e) {
-      // Non-POSIX file system; rely on the operator's access controls.
+      // Non-POSIX file system: the permissions cannot be checked here.
+      logger.warn("Cannot check the permissions of the bridge token file on this file system; "
+          + "make sure only the proxy's account can read {}", file);
     }
     byte[] token = new String(Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8).strip()
         .getBytes(java.nio.charset.StandardCharsets.UTF_8);

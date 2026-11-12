@@ -64,9 +64,18 @@ final class JoinRouter {
    * empty to let Velocity handle it.
    */
   Optional<Decision> afterKick(String kickedFrom, boolean managed) {
-    if (!fallbackOnKick || !managed || fallback == null || fallback.isEmpty() || fallback.equals(kickedFrom)) {
+    if (!kickFallbackApplies(kickedFrom, managed)) {
       return Optional.empty();
     }
     return Optional.of(new Decision(fallback, waitingCohortFor(kickedFrom)));
+  }
+
+  /**
+   * A kick is redirected only from a managed backend, when kick fallback is
+   * on, a fallback is configured, and the player was not kicked from it.
+   */
+  private boolean kickFallbackApplies(String kickedFrom, boolean managed) {
+    boolean hasFallback = fallback != null && !fallback.isEmpty();
+    return fallbackOnKick && managed && hasFallback && !fallback.equals(kickedFrom);
   }
 }

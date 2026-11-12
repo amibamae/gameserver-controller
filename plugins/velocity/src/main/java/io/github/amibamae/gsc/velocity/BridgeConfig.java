@@ -30,19 +30,8 @@ record BridgeConfig(
     if (bridge == null || routing == null) {
       throw new IllegalArgumentException("config.toml needs [bridge] and [routing] sections");
     }
-    InetAddress bind;
-    try {
-      bind = InetAddress.getByName(bridge.getString("bind", "127.0.0.1"));
-    } catch (UnknownHostException e) {
-      throw new IllegalArgumentException("bridge.bind must be an IP address");
-    }
-    if (!bind.isLoopbackAddress()) {
-      throw new IllegalArgumentException("bridge.bind must be a loopback address");
-    }
-    long port = bridge.getLong("port", 25580L);
-    if (port < 1 || port > 65535) {
-      throw new IllegalArgumentException("bridge.port is out of range");
-    }
+    InetAddress bind = loopbackBind(bridge);
+    long port = bounded(bridge, "port", 25580L, 1, 65535, "bridge.port is out of range");
     String tokenFile = bridge.getString("token-file", "");
     if (tokenFile.isEmpty()) {
       throw new IllegalArgumentException("bridge.token-file is required");
@@ -52,41 +41,64 @@ record BridgeConfig(
       throw new IllegalArgumentException("bridge.proxy-instance-id is required");
     }
     List<String> join = backendList(routing.getList("join-backends", List.of()), "routing.join-backends");
-    Map<String, List<String>> forced = new LinkedHashMap<>();
-    Toml forcedTable = routing.getTable("forced-hosts");
-    if (forcedTable != null) {
-      for (Map.Entry<String, Object> entry : forcedTable.toMap().entrySet()) {
-        // toml4j keeps the quotes around quoted keys such as "play.example.com".
-        String host = entry.getKey().replaceAll("^\"|\"$", "").toLowerCase(Locale.ROOT);
-        if (host.endsWith(".")) {
-          host = host.substring(0, host.length() - 1);
-        }
-        if (!(entry.getValue() instanceof List<?> list) || list.isEmpty()) {
-          throw new IllegalArgumentException("routing.forced-hosts values must be non-empty lists");
-        }
-        forced.put(host, backendList(list, "routing.forced-hosts." + host));
-      }
-    }
+    Map<String, List<String>> forced = forcedHosts(routing.getTable("forced-hosts"));
     String fallback = routing.getString("fallback", "");
     if (!fallback.isEmpty() && !BackendRegistry.validId(fallback)) {
       throw new IllegalArgumentException("routing.fallback must be a server name");
     }
-    long health = routing.getLong("health-check-seconds", 5L);
-    if (health < 1 || health > 300) {
-      throw new IllegalArgumentException("routing.health-check-seconds must be between 1 and 300");
-    }
-    long batch = routing.getLong("auto-move-batch", 5L);
-    if (batch < 1 || batch > 100) {
-      throw new IllegalArgumentException("routing.auto-move-batch must be between 1 and 100");
-    }
-    long interval = routing.getLong("auto-move-interval-seconds", 5L);
-    if (interval < 1 || interval > 300) {
-      throw new IllegalArgumentException("routing.auto-move-interval-seconds must be between 1 and 300");
-    }
+    long health = bounded(routing, "health-check-seconds", 5L, 1, 300, "routing.health-check-seconds must be between 1 and 300");
+    long batch = bounded(routing, "auto-move-batch", 5L, 1, 100, "routing.auto-move-batch must be between 1 and 100");
+    long interval = bounded(routing, "auto-move-interval-seconds", 5L, 1, 300, "routing.auto-move-interval-seconds must be between 1 and 300");
     AutoMover.Settings autoMove = new AutoMover.Settings(routing.getBoolean("auto-move", true), (int) batch,
         Duration.ofSeconds(interval), AutoMover.Settings.DEFAULT.retryAfter());
     return new BridgeConfig(bind, (int) port, Path.of(tokenFile), instance, join, forced, fallback,
         routing.getBoolean("fallback-on-kick", true), Duration.ofSeconds(health), autoMove);
+  }
+
+  /** The bridge listens only on a loopback IP address. */
+  private static InetAddress loopbackBind(Toml bridge) {
+    InetAddress bind;
+    try {
+      bind = InetAddress.getByName(bridge.getString("bind", "127.0.0.1"));
+    } catch (UnknownHostException e) {
+      throw new IllegalArgumentException("bridge.bind must be an IP address");
+    }
+    if (!bind.isLoopbackAddress()) {
+      throw new IllegalArgumentException("bridge.bind must be a loopback address");
+    }
+    return bind;
+  }
+
+  /** Reads an integer setting and rejects it with message outside [min, max]. */
+  private static long bounded(Toml table, String key, long fallback, long min, long max, String message) {
+    long value = table.getLong(key, fallback);
+    if (value < min || value > max) {
+      throw new IllegalArgumentException(message);
+    }
+    return value;
+  }
+
+  /**
+   * Reads {@code [routing.forced-hosts]}: lower-case host names without a
+   * trailing dot, each mapped to a non-empty list of server names.
+   */
+  private static Map<String, List<String>> forcedHosts(Toml table) {
+    Map<String, List<String>> forced = new LinkedHashMap<>();
+    if (table == null) {
+      return forced;
+    }
+    for (Map.Entry<String, Object> entry : table.toMap().entrySet()) {
+      // toml4j keeps the quotes around quoted keys such as "play.example.com".
+      String host = entry.getKey().replaceAll("^\"|\"$", "").toLowerCase(Locale.ROOT);
+      if (host.endsWith(".")) {
+        host = host.substring(0, host.length() - 1);
+      }
+      if (!(entry.getValue() instanceof List<?> list) || list.isEmpty()) {
+        throw new IllegalArgumentException("routing.forced-hosts values must be non-empty lists");
+      }
+      forced.put(host, backendList(list, "routing.forced-hosts." + host));
+    }
+    return forced;
   }
 
   private static List<String> backendList(List<?> values, String name) {
