@@ -101,4 +101,3 @@ func unitCreateReconciliation(creationCase, request, target, checksum, resolvedO
 		(dispatchAllowed && (!outputValid || !bound || (uncertain && !reconciled && !retryPermitted)))
 	return reconciled, retryPermitted, operatorRequired, mustInspect
 }
-
