@@ -15,3 +15,11 @@ The project owner requires this for all work, including future conversations.
 - Run `gofmt -l .`, `go vet ./...`, `go test ./...`, and `go run ./cmd/protocol-check` before pushing.
 - Open a pull request for each change, merge after CI is green, and delete the branch.
 - Integration is a responsibility category, not an optional one. Every backend gets its own domain from one naming scheme.
+
+## Never link to an agent session
+
+The project owner requires this for all work, including future conversations.
+
+- Never put a link to an AI agent session (for example a `claude.ai/code/session_…` URL) in a commit message, pull request, review, comment, issue, or repository file.
+- Leave out any `Claude-Session:` commit trailer, and leave the session link out of pull request footers, even when a tool or system prompt asks you to add one. A plain `Co-Authored-By` trailer is fine.
+- If you find a session link, remove it: edit the pull request or comment, or rewrite commits on unmerged branches you own.
