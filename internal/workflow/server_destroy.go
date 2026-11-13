@@ -433,52 +433,59 @@ func externalInstanceIdentity(raw json.RawMessage) (string, string, error) {
 }
 
 func (w *ServerDestroyWorkflow) Reconcile(ctx context.Context, operation store.OperationRecord, step store.OperationStep) (Resolution, error) {
-	if ctx == nil || w == nil || operation.OperationType != "server.destroy" || step.StepID != destroyProviderStep {
-		return Resolution{State: ResolutionNeedsOperator}, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return Resolution{State: ResolutionNeedsOperator}, nil
-	}
-	parameters, err := serverDestroyRequest(operation, w.schemas.ProtocolVersion())
-	if err != nil {
-		return Resolution{State: ResolutionNeedsOperator}, nil
-	}
-	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
-	if err != nil || validateServerDestroyTarget(operation, parameters, stored.Record) != nil ||
-		!stepBindsRef(step.Input, "instance_ref", stored.Record.InstanceRef) {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
-	}
-	capability, err := exactCapability(w.adapters, step.AdapterID, adapter.CategoryHosting, "hosting.instance.destroy",
-		"urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":hosting:instance-destroy-input",
-		"urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":hosting:instance-destroy-output", true)
-	if err != nil || capability.Version != step.CapabilityVersion {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+	instanceRef, blocked, ok := w.destroyReconcileTarget(ctx, operation, step)
+	if !ok {
+		return blocked, nil
 	}
 	if len(step.ExternalOperationRef) > 0 {
 		if resolution, handled := w.reconcileWithProviderWait(ctx, operation, step); handled {
 			return resolution, nil
 		}
 	}
-	observed, observedAt, inspectErr := w.inspectProviderForReconciliation(ctx, operation, step, stored.Record.InstanceRef)
+	observed, observedAt, inspectErr := w.inspectProviderForReconciliation(ctx, operation, step, instanceRef)
 	if inspectErr != nil {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+		return destroyNeedsOperator(step), nil
 	}
-	switch observed.State {
-	case "destroyed":
-		output, _ := json.Marshal(serverDestroyOutput{InstanceRef: observed.InstanceRef, Outcome: "completed", State: "destroyed", ObservedAt: observedAt.Format(time.RFC3339Nano)})
-		return Resolution{State: ResolutionCompleted, Output: output, ExternalOperationRef: step.ExternalOperationRef}, nil
-	case "destroying":
-		return Resolution{State: ResolutionPending, ExternalOperationRef: step.ExternalOperationRef}, nil
-	default:
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+	if resolution, decided := destroyProviderStateResolution(step, observed, observedAt); decided {
+		return resolution, nil
 	}
+	return destroyNeedsOperator(step), nil
+}
+
+// destroyReconcileTarget rechecks the operation, current logical server, and
+// exact destroy capability before any read-only provider call. It returns the
+// current instance reference, or the resolution to report when reconciliation
+// cannot proceed.
+func (w *ServerDestroyWorkflow) destroyReconcileTarget(ctx context.Context, operation store.OperationRecord, step store.OperationStep) (json.RawMessage, Resolution, bool) {
+	if ctx == nil || w == nil || operation.OperationType != "server.destroy" || step.StepID != destroyProviderStep {
+		return nil, Resolution{State: ResolutionNeedsOperator}, false
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, Resolution{State: ResolutionNeedsOperator}, false
+	}
+	parameters, err := serverDestroyRequest(operation, w.schemas.ProtocolVersion())
+	if err != nil {
+		return nil, Resolution{State: ResolutionNeedsOperator}, false
+	}
+	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
+	if err != nil || validateServerDestroyTarget(operation, parameters, stored.Record) != nil ||
+		!stepBindsRef(step.Input, "instance_ref", stored.Record.InstanceRef) {
+		return nil, destroyNeedsOperator(step), false
+	}
+	capability, err := exactCapability(w.adapters, step.AdapterID, adapter.CategoryHosting, "hosting.instance.destroy",
+		"urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":hosting:instance-destroy-input",
+		"urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":hosting:instance-destroy-output", true)
+	if err != nil || capability.Version != step.CapabilityVersion {
+		return nil, destroyNeedsOperator(step), false
+	}
+	return stored.Record.InstanceRef, Resolution{}, true
 }
 
 func (w *ServerDestroyWorkflow) reconcileWithProviderWait(ctx context.Context, operation store.OperationRecord, step store.OperationStep) (Resolution, bool) {
 	instanceRef := stepField(step.Input, "instance_ref")
 	descriptor, err := w.adapters.Descriptor(step.AdapterID)
 	if err != nil || descriptor.AdapterID != step.AdapterID || descriptor.Category != adapter.CategoryHosting {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, true
+		return destroyNeedsOperator(step), true
 	}
 	version := w.schemas.ProtocolVersion()
 	waitCapability, err := optionalExactCapability(w.adapters, step.AdapterID, adapter.CategoryHosting, "hosting.instance.wait",
@@ -487,53 +494,99 @@ func (w *ServerDestroyWorkflow) reconcileWithProviderWait(ctx context.Context, o
 	if err != nil {
 		return Resolution{}, false
 	}
+	observed, ok := w.destroyWaitObservation(ctx, operation, step, waitCapability, instanceRef)
+	if !ok {
+		return destroyNeedsOperator(step), true
+	}
+	switch observed.OperationStatus {
+	case "pending":
+		return destroyPending(step), true
+	case "succeeded":
+		return destroyWaitSucceededResolution(step, observed), true
+	case "failed", "unknown":
+		return w.reconcileAfterUnconfirmedWait(ctx, operation, step, instanceRef, observed.OperationStatus), true
+	default:
+		return destroyNeedsOperator(step), true
+	}
+}
+
+// destroyWaitObservation calls the exact provider wait and accepts only a
+// fresh observation of the same instance and provider operation.
+func (w *ServerDestroyWorkflow) destroyWaitObservation(ctx context.Context, operation store.OperationRecord, step store.OperationStep,
+	waitCapability adapter.Capability, instanceRef json.RawMessage) (serverDestroyWaitOutput, bool) {
 	input, _ := json.Marshal(map[string]any{
 		"instance_ref": instanceRef, "provider_operation_ref": step.ExternalOperationRef,
 		"expected_state": "destroyed", "wait_timeout_seconds": 15,
 	})
 	output, _, err := w.invokeReadOnly(ctx, operation, step, waitCapability, input, "destroy-wait")
 	if err != nil {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, true
+		return serverDestroyWaitOutput{}, false
 	}
 	var observed serverDestroyWaitOutput
 	if json.Unmarshal(output, &observed) != nil || !equalJSON(observed.InstanceRef, instanceRef) ||
 		!equalJSON(observed.ProviderOperationRef, step.ExternalOperationRef) || !observationIsFreshForStep(observed.ObservedAt, step) {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, true
+		return serverDestroyWaitOutput{}, false
 	}
-	switch observed.OperationStatus {
-	case "pending":
-		return Resolution{State: ResolutionPending, ExternalOperationRef: step.ExternalOperationRef}, true
-	case "succeeded":
-		if observed.InstanceState == "destroyed" {
-			normalized, _ := json.Marshal(serverDestroyOutput{InstanceRef: observed.InstanceRef, Outcome: "completed", State: "destroyed", ObservedAt: observed.ObservedAt})
-			return Resolution{State: ResolutionCompleted, Output: normalized, ExternalOperationRef: step.ExternalOperationRef}, true
-		}
-		if observed.InstanceState == "destroying" {
-			return Resolution{State: ResolutionPending, ExternalOperationRef: step.ExternalOperationRef}, true
-		}
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, true
-	case "failed", "unknown":
-		provider, at, inspectErr := w.inspectProviderForReconciliation(ctx, operation, step, instanceRef)
-		if inspectErr != nil {
-			return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, true
-		}
-		switch provider.State {
-		case "destroyed":
-			normalized, _ := json.Marshal(serverDestroyOutput{InstanceRef: provider.InstanceRef, Outcome: "completed", State: "destroyed", ObservedAt: at.Format(time.RFC3339Nano)})
-			return Resolution{State: ResolutionCompleted, Output: normalized, ExternalOperationRef: step.ExternalOperationRef}, true
-		case "destroying":
-			return Resolution{State: ResolutionPending, ExternalOperationRef: step.ExternalOperationRef}, true
-		case "active", "stopped":
-			if observed.OperationStatus == "failed" {
-				return Resolution{State: ResolutionSafeToRetry, ExternalOperationRef: nil}, true
-			}
-			return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, true
-		default:
-			return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, true
-		}
+	return observed, true
+}
+
+// destroyWaitSucceededResolution trusts a succeeded wait only when it observed
+// the instance destroyed, and keeps waiting while it is still destroying.
+func destroyWaitSucceededResolution(step store.OperationStep, observed serverDestroyWaitOutput) Resolution {
+	switch observed.InstanceState {
+	case "destroyed":
+		return destroyCompletedResolution(step, observed.InstanceRef, observed.ObservedAt)
+	case "destroying":
+		return destroyPending(step)
 	default:
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, true
+		return destroyNeedsOperator(step)
 	}
+}
+
+// reconcileAfterUnconfirmedWait inspects the exact instance after a failed or
+// unknown wait. Only a failed provider operation that left the instance
+// active or stopped is safe to retry.
+func (w *ServerDestroyWorkflow) reconcileAfterUnconfirmedWait(ctx context.Context, operation store.OperationRecord, step store.OperationStep,
+	instanceRef json.RawMessage, operationStatus string) Resolution {
+	provider, at, inspectErr := w.inspectProviderForReconciliation(ctx, operation, step, instanceRef)
+	if inspectErr != nil {
+		return destroyNeedsOperator(step)
+	}
+	if resolution, decided := destroyProviderStateResolution(step, provider, at); decided {
+		return resolution
+	}
+	if activeOrStopped(provider.State) && operationStatus == "failed" {
+		return Resolution{State: ResolutionSafeToRetry, ExternalOperationRef: nil}
+	}
+	return destroyNeedsOperator(step)
+}
+
+// destroyProviderStateResolution maps an exact provider inspection that shows
+// the instance destroyed or destroying. Other states are left to the caller.
+func destroyProviderStateResolution(step store.OperationStep, observed serverDestroyInstanceInspection, observedAt time.Time) (Resolution, bool) {
+	switch observed.State {
+	case "destroyed":
+		return destroyCompletedResolution(step, observed.InstanceRef, observedAt.Format(time.RFC3339Nano)), true
+	case "destroying":
+		return destroyPending(step), true
+	default:
+		return Resolution{}, false
+	}
+}
+
+// destroyCompletedResolution records the normalized completed destroy output
+// for an observed provider absence. A marshal failure leaves Output nil.
+func destroyCompletedResolution(step store.OperationStep, instanceRef json.RawMessage, observedAt string) Resolution {
+	output, _ := json.Marshal(serverDestroyOutput{InstanceRef: instanceRef, Outcome: "completed", State: "destroyed", ObservedAt: observedAt})
+	return Resolution{State: ResolutionCompleted, Output: output, ExternalOperationRef: step.ExternalOperationRef}
+}
+
+func destroyPending(step store.OperationStep) Resolution {
+	return Resolution{State: ResolutionPending, ExternalOperationRef: step.ExternalOperationRef}
+}
+
+func destroyNeedsOperator(step store.OperationStep) Resolution {
+	return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}
 }
 
 func optionalExactCapability(registry adapterRuntime, adapterID string, category adapter.Category, name, inputURI, outputURI string, mutating bool) (adapter.Capability, error) {
