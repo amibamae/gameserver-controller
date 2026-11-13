@@ -382,6 +382,34 @@ func recordCapacityLifecycleOutcomeTx(tx *bolt.Tx, operation OperationRecord, se
 	if operation.OperationType != "server.start" || operation.Status != "succeeded" || server.LifecycleState != "ready" {
 		return nil
 	}
+	return recordStartedCapacityTx(tx, operation, server)
+}
+
+// recordStartedCapacityTx records the first boot sample of a successful
+// server.start. A start without an exact readiness assertion, or one whose
+// reservation is missing, already measured, or not active, records nothing.
+func recordStartedCapacityTx(tx *bolt.Tx, operation OperationRecord, server LogicalServer) error {
+	instance, observedAt, ok := startedCapacityReadiness(operation, server)
+	if !ok {
+		return nil
+	}
+	_, err := recordCapacityReadyTx(tx, server.ServerID, server.EnvironmentID, instance.ExternalID, instance.AdapterID, observedAt)
+	if errors.Is(err, ErrCapacityNotFound) || errors.Is(err, ErrCapacityConflict) || errors.Is(err, ErrCapacityTransition) {
+		return nil
+	}
+	return err
+}
+
+// startedCapacityInstance is the provider instance a ready server runs on.
+type startedCapacityInstance struct {
+	ExternalID string `json:"external_id"`
+	AdapterID  string `json:"adapter_id"`
+}
+
+// startedCapacityReadiness returns the server's provider instance and the
+// readiness time asserted by the server.start result, and false unless the
+// assertion is for exactly this server, environment and instance.
+func startedCapacityReadiness(operation OperationRecord, server LogicalServer) (startedCapacityInstance, time.Time, bool) {
 	var result struct {
 		Data struct {
 			Assertion struct {
@@ -393,25 +421,18 @@ func recordCapacityLifecycleOutcomeTx(tx *bolt.Tx, operation OperationRecord, se
 		} `json:"operation_data"`
 	}
 	if json.Unmarshal(operation.Result, &result) != nil {
-		return nil
+		return startedCapacityInstance{}, time.Time{}, false
 	}
 	assertion := result.Data.Assertion
 	if assertion.ServerID != server.ServerID || assertion.EnvironmentID != server.EnvironmentID ||
 		!equalCanonicalJSON(assertion.InstanceRef, server.InstanceRef) || assertion.ObservedAt.IsZero() {
-		return nil
+		return startedCapacityInstance{}, time.Time{}, false
 	}
-	var instance struct {
-		ExternalID string `json:"external_id"`
-		AdapterID  string `json:"adapter_id"`
-	}
+	var instance startedCapacityInstance
 	if json.Unmarshal(server.InstanceRef, &instance) != nil || instance.ExternalID == "" || instance.AdapterID == "" {
-		return nil
+		return startedCapacityInstance{}, time.Time{}, false
 	}
-	_, err := recordCapacityReadyTx(tx, server.ServerID, server.EnvironmentID, instance.ExternalID, instance.AdapterID, assertion.ObservedAt)
-	if errors.Is(err, ErrCapacityNotFound) || errors.Is(err, ErrCapacityConflict) || errors.Is(err, ErrCapacityTransition) {
-		return nil
-	}
-	return err
+	return instance, assertion.ObservedAt, true
 }
 
 // recordDestroyedCapacityTx releases a managed VM slot in the same Bolt
