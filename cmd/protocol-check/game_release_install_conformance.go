@@ -57,50 +57,74 @@ func evaluateGameInstallContract(pkg *protocolPackage, fixture map[string]any) (
 
 	evaluations := make([]any, 0, len(arrayValue(input, "evaluations")))
 	for _, rawEvaluation := range arrayValue(input, "evaluations") {
-		evaluation := asObject(rawEvaluation)
-		request := asObject(evaluation["request"])
-		response := asObject(evaluation["response"])
-		requestValid := pkg.validateSchema(gameInstallInputSchemaID, request) == nil
-		responseValid := pkg.validateSchema(gameInstallOutputSchemaID, response) == nil
-
-		requestTarget := asObject(request["target"])
-		instanceRef := asObject(requestTarget["instance_ref"])
-		targetBound := reflect.DeepEqual(request["target"], response["target"]) &&
-			stringValue(requestTarget, "environment_id") != "" &&
-			stringValue(requestTarget, "environment_id") == stringValue(instanceRef, "environment_id")
-		releaseBound := stringValue(request, "release_id") != "" &&
-			stringValue(request, "release_id") == stringValue(response, "release_id") &&
-			stringValue(request, "release_id") == stringValue(release, "release_id")
-
-		artifactSetComplete, artifactChecksumsVerified := compareArtifactVerifications(
-			arrayValue(release, "artifacts"), arrayValue(response, "artifact_results"),
-		)
-		artifactSetComplete = artifactSetComplete && releaseArtifactSetValid
-		artifactChecksumsVerified = artifactChecksumsVerified && releaseArtifactSetValid
-		outcome := stringValue(response, "outcome")
-		verification := stringValue(response, "artifact_verification")
-		started := boolValue(response, "installation_started")
-		outcomeConsistent := outcome == "installed" && started && verification == "verified" ||
-			outcome == "already_installed" && !started && verification == "verified"
-		accepted := releaseValid && requestValid && responseValid && targetBound && releaseBound &&
-			artifactSetComplete && artifactChecksumsVerified && outcomeConsistent
-		reconciliationRequired := outcome == "outcome_unknown" ||
-			(started && !accepted) ||
-			((outcome == "installed" || outcome == "already_installed") && !accepted)
-		evaluations = append(evaluations, map[string]any{
-			"case_id":                              stringValue(evaluation, "case_id"),
-			"release_schema_valid":                 releaseValid,
-			"request_schema_valid":                 requestValid,
-			"response_schema_valid":                responseValid,
-			"target_bound":                         targetBound,
-			"release_bound":                        releaseBound,
-			"artifact_set_complete":                artifactSetComplete,
-			"artifact_checksums_verified":          artifactChecksumsVerified,
-			"installation_result_accepted":         accepted,
-			"reconciliation_required_before_retry": reconciliationRequired,
-		})
+		evaluations = append(evaluations, evaluateGameInstallCase(pkg, release, releaseValid, releaseArtifactSetValid, asObject(rawEvaluation)))
 	}
 	return map[string]any{"evaluations": evaluations}, nil
+}
+
+// evaluateGameInstallCase checks one install request and response against
+// the described release: target and release binding, every pinned artifact
+// verified, and an outcome consistent with whether installation started.
+func evaluateGameInstallCase(pkg *protocolPackage, release map[string]any, releaseValid, releaseArtifactSetValid bool, evaluation map[string]any) map[string]any {
+	request := asObject(evaluation["request"])
+	response := asObject(evaluation["response"])
+	requestValid := pkg.validateSchema(gameInstallInputSchemaID, request) == nil
+	responseValid := pkg.validateSchema(gameInstallOutputSchemaID, response) == nil
+	targetBound := gameInstallTargetBound(request, response)
+	releaseBound := stringValue(request, "release_id") != "" &&
+		stringValue(request, "release_id") == stringValue(response, "release_id") &&
+		stringValue(request, "release_id") == stringValue(release, "release_id")
+	artifactSetComplete, artifactChecksumsVerified := compareArtifactVerifications(
+		arrayValue(release, "artifacts"), arrayValue(response, "artifact_results"),
+	)
+	artifactSetComplete = artifactSetComplete && releaseArtifactSetValid
+	artifactChecksumsVerified = artifactChecksumsVerified && releaseArtifactSetValid
+	outcome := stringValue(response, "outcome")
+	started := boolValue(response, "installation_started")
+	accepted := releaseValid && requestValid && responseValid && targetBound && releaseBound &&
+		artifactSetComplete && artifactChecksumsVerified && gameInstallOutcomeConsistent(response)
+	reconciliationRequired := outcome == "outcome_unknown" ||
+		(started && !accepted) ||
+		((outcome == "installed" || outcome == "already_installed") && !accepted)
+	return map[string]any{
+		"case_id":                              stringValue(evaluation, "case_id"),
+		"release_schema_valid":                 releaseValid,
+		"request_schema_valid":                 requestValid,
+		"response_schema_valid":                responseValid,
+		"target_bound":                         targetBound,
+		"release_bound":                        releaseBound,
+		"artifact_set_complete":                artifactSetComplete,
+		"artifact_checksums_verified":          artifactChecksumsVerified,
+		"installation_result_accepted":         accepted,
+		"reconciliation_required_before_retry": reconciliationRequired,
+	}
+}
+
+// gameInstallTargetBound: the response names the request's target, whose
+// instance is in the target's environment.
+func gameInstallTargetBound(request, response map[string]any) bool {
+	requestTarget := asObject(request["target"])
+	instanceRef := asObject(requestTarget["instance_ref"])
+	return reflect.DeepEqual(request["target"], response["target"]) &&
+		stringValue(requestTarget, "environment_id") != "" &&
+		stringValue(requestTarget, "environment_id") == stringValue(instanceRef, "environment_id")
+}
+
+// gameInstallOutcomeConsistent: "installed" started an installation and
+// "already_installed" did not; both verified the artifacts.
+func gameInstallOutcomeConsistent(response map[string]any) bool {
+	if stringValue(response, "artifact_verification") != "verified" {
+		return false
+	}
+	started := boolValue(response, "installation_started")
+	switch stringValue(response, "outcome") {
+	case "installed":
+		return started
+	case "already_installed":
+		return !started
+	default:
+		return false
+	}
 }
 
 func compareArtifactVerifications(required, results []any) (bool, bool) {
