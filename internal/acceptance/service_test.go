@@ -48,6 +48,65 @@ func testPlanner() OperationPlanner {
 	})
 }
 
+// defineParameters is a complete server.define request body for serverID.
+func defineParameters(serverID string) json.RawMessage {
+	return json.RawMessage(`{"server_id":"` + serverID + `","environment_id":"staging","display_name":"Test Server","hosting_profile":"vultr-small","storage_profile":"wasabi-worlds","game":{"adapter_id":"game.paper","release_channel":"stable"},"execution":{"adapter_id":"execution.systemd","profile":"paper-default"}}`)
+}
+
+// defineOperation is a server.define request for serverID in staging.
+func defineOperation(serverID string) store.OperationRecord {
+	return store.OperationRecord{
+		OperationType:   "server.define",
+		ProtocolVersion: "0.21.0-draft",
+		Target:          store.OperationTarget{ServerID: serverID, EnvironmentID: "staging"},
+		RequestSnapshot: store.RequestSnapshot{OperationType: "server.define", Parameters: defineParameters(serverID)},
+	}
+}
+
+// defaultKeyring is a keyring with only key version v1.
+func defaultKeyring(t *testing.T) *Keyring {
+	t.Helper()
+	return testKeyring(t, "v1", map[string]byte{"v1": 1})
+}
+
+// customService seeds server-1 with the default service, then returns a
+// service over the same store with the given authorizer and planner.
+func customService(t *testing.T, operationStore *store.BoltStore, authorizer Authorizer, planner OperationPlanner) *Service {
+	t.Helper()
+	newTestService(t, operationStore, defaultKeyring(t))
+	service, err := NewService(operationStore, allowValidator{}, authorizer, LogicalServerLockPolicy{}, planner, defaultKeyring(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service
+}
+
+// advance commits one change to a stored operation and returns the result.
+func advance(t *testing.T, operationStore *store.BoltStore, current store.StoredOperation, change func(*store.OperationRecord)) store.StoredOperation {
+	t.Helper()
+	next := current.Record
+	change(&next)
+	stored, err := operationStore.UpdateOperation(current.Revision, next)
+	if err != nil {
+		t.Fatalf("update operation to %s: %v", next.Status, err)
+	}
+	return stored
+}
+
+// expectStored fails unless the store holds exactly the given numbers of
+// recoverable operations and resource locks; why names the scenario.
+func expectStored(t *testing.T, operationStore *store.BoltStore, operations, locks int, why string) {
+	t.Helper()
+	listed, err := operationStore.ListRecoverableOperations()
+	if err != nil || len(listed) != operations {
+		t.Fatalf("%s: operations=%#v err=%v, want %d", why, listed, err, operations)
+	}
+	held, err := operationStore.ListResourceLocks()
+	if err != nil || len(held) != locks {
+		t.Fatalf("%s: locks=%#v err=%v, want %d", why, held, err, locks)
+	}
+}
+
 func newTestService(t *testing.T, operationStore *store.BoltStore, ring *Keyring) *Service {
 	t.Helper()
 	service, err := NewService(operationStore, allowValidator{}, allowAuthorizer{}, LogicalServerLockPolicy{}, testPlanner(), ring)
@@ -65,31 +124,15 @@ func seedDefinedServer(t *testing.T, operationStore *store.BoltStore, service *S
 	} else if !errors.Is(err, store.ErrLogicalServerNotFound) {
 		t.Fatalf("check test logical server: %v", err)
 	}
-	definition := store.OperationRecord{
-		OperationType:   "server.define",
-		ProtocolVersion: "0.21.0-draft",
-		Target:          store.OperationTarget{ServerID: serverID, EnvironmentID: "staging"},
-		RequestSnapshot: store.RequestSnapshot{
-			OperationType: "server.define",
-			Parameters:    json.RawMessage(`{"server_id":"` + serverID + `","environment_id":"staging","display_name":"Test Server","hosting_profile":"vultr-small","storage_profile":"wasabi-worlds","game":{"adapter_id":"game.paper","release_channel":"stable"},"execution":{"adapter_id":"execution.systemd","profile":"paper-default"}}`),
-		},
-	}
-	accepted, _, err := service.Accept(context.Background(), "seed-actor", "seed-"+serverID, definition)
+	accepted, _, err := service.Accept(context.Background(), "seed-actor", "seed-"+serverID, defineOperation(serverID))
 	if err != nil {
 		t.Fatalf("accept test server definition: %v", err)
 	}
-	running := accepted.Record
-	running.Status = protocolstate.OperationRunning
-	runningStored, err := operationStore.UpdateOperation(accepted.Revision, running)
-	if err != nil {
-		t.Fatalf("start test server definition: %v", err)
-	}
-	succeeded := runningStored.Record
-	succeeded.Status = protocolstate.OperationSucceeded
-	succeeded.Result = json.RawMessage(`{}`)
-	if _, err := operationStore.UpdateOperation(runningStored.Revision, succeeded); err != nil {
-		t.Fatalf("complete test server definition: %v", err)
-	}
+	running := advance(t, operationStore, accepted, func(record *store.OperationRecord) { record.Status = protocolstate.OperationRunning })
+	advance(t, operationStore, running, func(record *store.OperationRecord) {
+		record.Status = protocolstate.OperationSucceeded
+		record.Result = json.RawMessage(`{}`)
+	})
 }
 
 func testKeyring(t *testing.T, active string, entries map[string]byte) *Keyring {
@@ -161,7 +204,7 @@ func TestRequestFingerprintUsesJCSAndRejectsDuplicateKeys(t *testing.T) {
 
 func TestAcceptReplaysCanonicalSameRequestAndBindsActor(t *testing.T) {
 	operationStore, _ := openStore(t)
-	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	service := newTestService(t, operationStore, defaultKeyring(t))
 	seedDefinedServer(t, operationStore, service, "server-2")
 	firstRequest := testOperation()
 	firstRequest.Target.InstanceRef = json.RawMessage(`{"external_id":"instance-1","resource_kind":"instance"}`)
@@ -204,16 +247,8 @@ func TestAcceptReplaysCanonicalSameRequestAndBindsActor(t *testing.T) {
 
 func TestDefineAtomicallyCreatesDurableLogicalServer(t *testing.T) {
 	operationStore, _ := openStore(t)
-	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
-	definition := store.OperationRecord{
-		OperationType:   "server.define",
-		ProtocolVersion: "0.21.0-draft",
-		Target:          store.OperationTarget{ServerID: "server-new", EnvironmentID: "staging"},
-		RequestSnapshot: store.RequestSnapshot{
-			OperationType: "server.define",
-			Parameters:    json.RawMessage(`{"server_id":"server-new","environment_id":"staging","display_name":"Test Server","hosting_profile":"vultr-small","storage_profile":"wasabi-worlds","game":{"adapter_id":"game.paper","release_channel":"stable"},"execution":{"adapter_id":"execution.systemd","profile":"paper-default"}}`),
-		},
-	}
+	service := newTestService(t, operationStore, defaultKeyring(t))
+	definition := defineOperation("server-new")
 	accepted, replayed, err := service.Accept(context.Background(), "trusted-actor", "define-key", definition)
 	if err != nil || replayed {
 		t.Fatalf("accept definition: replayed=%t err=%v", replayed, err)
@@ -241,71 +276,46 @@ func TestDefineAtomicallyCreatesDurableLogicalServer(t *testing.T) {
 	if !errors.Is(err, store.ErrLogicalServerAlreadyExists) || replayed {
 		t.Fatalf("second definition for the same server: replayed=%t err=%v", replayed, err)
 	}
-	operations, err := operationStore.ListRecoverableOperations()
-	if err != nil || len(operations) != 1 {
-		t.Fatalf("rejected duplicate definition left an operation: operations=%#v err=%v", operations, err)
-	}
+	expectStored(t, operationStore, 1, 1, "rejected duplicate definition")
 }
 
 func TestDefineRejectsCallerWorkflowStepsWithoutPartialCreate(t *testing.T) {
 	operationStore, _ := openStore(t)
-	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
-	definition := store.OperationRecord{
-		OperationType:   "server.define",
-		ProtocolVersion: "0.21.0-draft",
-		Target:          store.OperationTarget{ServerID: "server-new", EnvironmentID: "staging"},
-		RequestSnapshot: store.RequestSnapshot{
-			OperationType: "server.define",
-			Parameters:    json.RawMessage(`{"server_id":"server-new","environment_id":"staging","display_name":"Test Server","hosting_profile":"vultr-small","storage_profile":"wasabi-worlds","game":{"adapter_id":"game.paper","release_channel":"stable"},"execution":{"adapter_id":"execution.systemd","profile":"paper-default"}}`),
-		},
-		Steps: []store.OperationStep{{StepID: "untrusted", StepType: "hosting.instance.create", Status: protocolstate.StepPending}},
-	}
+	service := newTestService(t, operationStore, defaultKeyring(t))
+	definition := defineOperation("server-new")
+	definition.Steps = []store.OperationStep{{StepID: "untrusted", StepType: "hosting.instance.create", Status: protocolstate.StepPending}}
 	if _, _, err := service.Accept(context.Background(), "trusted-actor", "define-key", definition); !errors.Is(err, ErrCallerSuppliedPlan) {
 		t.Fatalf("define with caller-supplied steps: got %v, want ErrCallerSuppliedPlan", err)
 	}
 	if _, err := operationStore.GetLogicalServer("staging", "server-new"); !errors.Is(err, store.ErrLogicalServerNotFound) {
 		t.Fatalf("rejected definition created a logical server: got %v", err)
 	}
-	operations, err := operationStore.ListRecoverableOperations()
-	if err != nil || len(operations) != 0 {
-		t.Fatalf("rejected definition created an operation: operations=%#v err=%v", operations, err)
-	}
+	expectStored(t, operationStore, 0, 0, "rejected definition")
 }
 
 func TestAcceptRejectsCallerSuppliedStepsForLifecycleOperation(t *testing.T) {
 	operationStore, _ := openStore(t)
-	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	service := newTestService(t, operationStore, defaultKeyring(t))
 	request := testOperation()
 	request.Steps = []store.OperationStep{{StepID: "caller-step", StepType: "hosting.instance.destroy", Status: protocolstate.StepPending}}
 	if _, _, err := service.Accept(context.Background(), "actor", "key", request); !errors.Is(err, ErrCallerSuppliedPlan) {
 		t.Fatalf("caller-supplied lifecycle plan: got %v, want ErrCallerSuppliedPlan", err)
 	}
-	operations, err := operationStore.ListRecoverableOperations()
-	if err != nil || len(operations) != 0 {
-		t.Fatalf("rejected caller plan was persisted: operations=%#v err=%v", operations, err)
-	}
+	expectStored(t, operationStore, 0, 0, "rejected caller plan")
 }
 
 func TestAcceptRejectsMissingTrustedLifecyclePlan(t *testing.T) {
 	operationStore, _ := openStore(t)
-	newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
 	planner := OperationPlanFunc(func(context.Context, store.OperationRecord) ([]store.OperationStep, error) { return nil, nil })
-	service, err := NewService(operationStore, allowValidator{}, allowAuthorizer{}, LogicalServerLockPolicy{}, planner, testKeyring(t, "v1", map[string]byte{"v1": 1}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	service := customService(t, operationStore, allowAuthorizer{}, planner)
 	if _, _, err := service.Accept(context.Background(), "actor", "key", testOperation()); !errors.Is(err, ErrInvalidPlan) {
 		t.Fatalf("empty server.provision plan: got %v, want ErrInvalidPlan", err)
 	}
-	operations, err := operationStore.ListRecoverableOperations()
-	if err != nil || len(operations) != 0 {
-		t.Fatalf("request without a plan was persisted: operations=%#v err=%v", operations, err)
-	}
+	expectStored(t, operationStore, 0, 0, "request without a plan")
 }
 
 func TestAuthorizationReceivesTrustedPlanAndAuthenticatedActor(t *testing.T) {
 	operationStore, _ := openStore(t)
-	newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
 	planner := OperationPlanFunc(func(_ context.Context, record store.OperationRecord) ([]store.OperationStep, error) {
 		if record.ActorID != "verified-actor" || record.OperationID == "" {
 			return nil, errors.New("planner did not receive trusted operation identity")
@@ -318,10 +328,7 @@ func TestAuthorizationReceivesTrustedPlanAndAuthenticatedActor(t *testing.T) {
 		}
 		return nil
 	})
-	service, err := NewService(operationStore, allowValidator{}, authorizer, LogicalServerLockPolicy{}, planner, testKeyring(t, "v1", map[string]byte{"v1": 1}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	service := customService(t, operationStore, authorizer, planner)
 	request := testOperation()
 	request.ActorID = "spoofed-body-actor"
 	accepted, _, err := service.Accept(context.Background(), "verified-actor", "key", request)
@@ -335,7 +342,7 @@ func TestAuthorizationReceivesTrustedPlanAndAuthenticatedActor(t *testing.T) {
 
 func TestIdempotencyConflictAndResourceConflict(t *testing.T) {
 	operationStore, _ := openStore(t)
-	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	service := newTestService(t, operationStore, defaultKeyring(t))
 	if _, _, err := service.Accept(context.Background(), "actor", "key-one", testOperation()); err != nil {
 		t.Fatal(err)
 	}
@@ -372,37 +379,22 @@ func (a rejectingAuthorizer) AuthorizeOperation(context.Context, string, store.O
 
 func TestAuthorizationFailureDoesNotPersistOperationOrLock(t *testing.T) {
 	operationStore, _ := openStore(t)
-	newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
 	authorizationErr := errors.New("approval required")
-	service, err := NewService(operationStore, allowValidator{}, rejectingAuthorizer{err: authorizationErr}, LogicalServerLockPolicy{}, testPlanner(), testKeyring(t, "v1", map[string]byte{"v1": 1}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	service := customService(t, operationStore, rejectingAuthorizer{err: authorizationErr}, testPlanner())
 	if _, _, err := service.Accept(context.Background(), "actor", "key", testOperation()); !errors.Is(err, authorizationErr) {
 		t.Fatalf("authorization denial: got %v", err)
 	}
-	operations, err := operationStore.ListRecoverableOperations()
-	if err != nil || len(operations) != 0 {
-		t.Fatalf("authorization denial persisted an operation: operations=%#v err=%v", operations, err)
-	}
-	locks, err := operationStore.ListResourceLocks()
-	if err != nil || len(locks) != 0 {
-		t.Fatalf("authorization denial reserved a resource: locks=%#v err=%v", locks, err)
-	}
+	expectStored(t, operationStore, 0, 0, "authorization denial")
 }
 
 func TestTerminalCommitReleasesLockAndSuspendedWorkKeepsIt(t *testing.T) {
 	operationStore, _ := openStore(t)
-	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	service := newTestService(t, operationStore, defaultKeyring(t))
 	first, _, err := service.Accept(context.Background(), "actor", "key-one", testOperation())
 	if err != nil {
 		t.Fatal(err)
 	}
-	cancelled := first.Record
-	cancelled.Status = protocolstate.OperationCancelled
-	if _, err := operationStore.UpdateOperation(first.Revision, cancelled); err != nil {
-		t.Fatal(err)
-	}
+	advance(t, operationStore, first, func(record *store.OperationRecord) { record.Status = protocolstate.OperationCancelled })
 	if _, err := operationStore.GetResourceLock(LogicalServerLockScope("staging", "server-1")); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("terminal commit did not release lock: got %v", err)
 	}
@@ -411,27 +403,16 @@ func TestTerminalCommitReleasesLockAndSuspendedWorkKeepsIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("accept after terminal release: %v", err)
 	}
-	running := second.Record
-	running.Status = protocolstate.OperationRunning
-	running.Steps[0].Status = protocolstate.StepRunning
-	running.Steps[0].Attempt = 1
-	runningStored, err := operationStore.UpdateOperation(second.Revision, running)
-	if err != nil {
-		t.Fatal(err)
-	}
-	unknown := runningStored.Record
-	unknown.Status = protocolstate.OperationReconciling
-	unknown.Steps[0].Status = protocolstate.StepOutcomeUnknown
-	unknownStored, err := operationStore.UpdateOperation(runningStored.Revision, unknown)
-	if err != nil {
-		t.Fatal(err)
-	}
-	needsOperator := unknownStored.Record
-	needsOperator.Status = protocolstate.OperationNeedsOperator
-	needsOperatorStored, err := operationStore.UpdateOperation(unknownStored.Revision, needsOperator)
-	if err != nil {
-		t.Fatal(err)
-	}
+	running := advance(t, operationStore, second, func(record *store.OperationRecord) {
+		record.Status = protocolstate.OperationRunning
+		record.Steps[0].Status = protocolstate.StepRunning
+		record.Steps[0].Attempt = 1
+	})
+	unknown := advance(t, operationStore, running, func(record *store.OperationRecord) {
+		record.Status = protocolstate.OperationReconciling
+		record.Steps[0].Status = protocolstate.StepOutcomeUnknown
+	})
+	needsOperatorStored := advance(t, operationStore, unknown, func(record *store.OperationRecord) { record.Status = protocolstate.OperationNeedsOperator })
 	if _, err := operationStore.GetResourceLock(LogicalServerLockScope("staging", "server-1")); err != nil {
 		t.Fatalf("suspended operation lost its resource lock: %v", err)
 	}
@@ -445,7 +426,7 @@ func TestTerminalCommitReleasesLockAndSuspendedWorkKeepsIt(t *testing.T) {
 
 func TestKeyRotationReplaysOldKeysAndFailsClosedWhenVersionMissing(t *testing.T) {
 	operationStore, _ := openStore(t)
-	oldService := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	oldService := newTestService(t, operationStore, defaultKeyring(t))
 	first, _, err := oldService.Accept(context.Background(), "actor", "key-one", testOperation())
 	if err != nil {
 		t.Fatal(err)
@@ -464,7 +445,7 @@ func TestKeyRotationReplaysOldKeysAndFailsClosedWhenVersionMissing(t *testing.T)
 
 func TestConcurrentDuplicateAcceptanceReturnsOneOperation(t *testing.T) {
 	operationStore, _ := openStore(t)
-	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	service := newTestService(t, operationStore, defaultKeyring(t))
 	const callers = 8
 	results := make([]store.StoredOperation, callers)
 	replayed := make([]bool, callers)
@@ -505,7 +486,7 @@ func TestResourceLockSurvivesStoreRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := newTestService(t, operationStore, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	service := newTestService(t, operationStore, defaultKeyring(t))
 	accepted, _, err := service.Accept(context.Background(), "actor", "key-one", testOperation())
 	if err != nil {
 		t.Fatal(err)
@@ -523,7 +504,7 @@ func TestResourceLockSurvivesStoreRestart(t *testing.T) {
 	if err != nil || lock.OperationID != accepted.Record.OperationID {
 		t.Fatalf("lock did not survive restart: lock=%#v err=%v", lock, err)
 	}
-	service = newTestService(t, reopened, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	service = newTestService(t, reopened, defaultKeyring(t))
 	if _, _, err := service.Accept(context.Background(), "actor", "key-two", testOperation()); !errors.Is(err, store.ErrResourceConflict) {
 		t.Fatalf("restart allowed a conflicting operation: got %v", err)
 	}
@@ -544,7 +525,7 @@ func TestTargetDenialPreventsPlanning(t *testing.T) {
 		called = true
 		return nil, errors.New("private server state")
 	})
-	service, err := NewService(operationStore, allowValidator{}, rejectingAuthorizer{err: ErrUnauthorized}, LogicalServerLockPolicy{}, planner, testKeyring(t, "v1", map[string]byte{"v1": 1}))
+	service, err := NewService(operationStore, allowValidator{}, rejectingAuthorizer{err: ErrUnauthorized}, LogicalServerLockPolicy{}, planner, defaultKeyring(t))
 	if err != nil {
 		t.Fatal(err)
 	}
