@@ -523,34 +523,48 @@ func (s *BoltStore) updateCapacity(operationID string, transition func(CapacityR
 	}
 	var result CapacityReservation
 	err := s.db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(capacityReservationsBucket)
-		key := []byte(operationID)
-		current, err := loadCapacityReservation(bucket, key)
-		if err != nil {
-			return err
-		}
-		next, err := transition(current)
-		if err != nil {
-			return err
-		}
-		if next.OperationID != current.OperationID || next.CreatedAt != current.CreatedAt || next.ProviderAdapterID != current.ProviderAdapterID ||
-			(!current.ProvisionedAt.IsZero() && !next.ProvisionedAt.Equal(current.ProvisionedAt)) ||
-			(!current.ReadyAt.IsZero() && !next.ReadyAt.Equal(current.ReadyAt)) {
-			return fmt.Errorf("%w: immutable capacity reservation fields changed", ErrCorruptStore)
-		}
-		if capacityTrackedFieldsChanged(current, next) {
-			next.UpdatedAt = capacityUpdateTime(capacityObservedAt(next.LastObservation), next.ProvisionedAt, next.ReadyAt)
-			if err := putUpdatedCapacityReservation(bucket, key, next); err != nil {
-				return err
-			}
-		}
-		result = next
-		return nil
+		var err error
+		result, err = updateCapacityTx(tx.Bucket(capacityReservationsBucket), []byte(operationID), transition)
+		return err
 	})
 	if err != nil {
 		return CapacityReservation{}, err
 	}
 	return result, nil
+}
+
+// updateCapacityTx applies transition to the reservation stored under key
+// inside the caller's transaction. It refuses changes to immutable fields and
+// writes only when a tracked field changed, returning next either way.
+func updateCapacityTx(bucket *bolt.Bucket, key []byte, transition func(CapacityReservation) (CapacityReservation, error)) (CapacityReservation, error) {
+	current, err := loadCapacityReservation(bucket, key)
+	if err != nil {
+		return CapacityReservation{}, err
+	}
+	next, err := transition(current)
+	if err != nil {
+		return CapacityReservation{}, err
+	}
+	if capacityImmutableFieldsChanged(current, next) {
+		return CapacityReservation{}, fmt.Errorf("%w: immutable capacity reservation fields changed", ErrCorruptStore)
+	}
+	if !capacityTrackedFieldsChanged(current, next) {
+		return next, nil
+	}
+	next.UpdatedAt = capacityUpdateTime(capacityObservedAt(next.LastObservation), next.ProvisionedAt, next.ReadyAt)
+	if err := putUpdatedCapacityReservation(bucket, key, next); err != nil {
+		return CapacityReservation{}, err
+	}
+	return next, nil
+}
+
+// capacityImmutableFieldsChanged reports whether a transition changed the
+// reservation identity, its creation time, or a provision or ready time that
+// was already recorded. CreatedAt is compared with == on purpose.
+func capacityImmutableFieldsChanged(current, next CapacityReservation) bool {
+	return next.OperationID != current.OperationID || next.CreatedAt != current.CreatedAt || next.ProviderAdapterID != current.ProviderAdapterID ||
+		(!current.ProvisionedAt.IsZero() && !next.ProvisionedAt.Equal(current.ProvisionedAt)) ||
+		(!current.ReadyAt.IsZero() && !next.ReadyAt.Equal(current.ReadyAt))
 }
 
 func decodeCapacityReservation(value []byte) (CapacityReservation, error) {
