@@ -420,10 +420,15 @@ func checkInstallParents(root, path string) error {
 	return nil
 }
 
+// systemdSafeRune reports whether r is an ASCII letter, a digit, or one of
+// "_", ".", "/" and "-".
+func systemdSafeRune(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("_./-", r)
+}
+
 func systemdSafePath(path string) bool {
 	for _, character := range path {
-		if !((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
-			(character >= '0' && character <= '9') || strings.ContainsRune("_./-", character)) {
+		if !systemdSafeRune(character) {
 			return false
 		}
 	}

@@ -48,9 +48,15 @@ func (v *VelocitySettings) Validate(check config.SettingsCheck) {
 
 // validBridgeURL mirrors velocityproxy.NewHTTPBridge: https anywhere, plain
 // http only to loopback, and no user information, path, query, or fragment.
+// isBareOrigin reports whether u names a host with no credentials, query,
+// fragment or path beyond "/".
+func isBareOrigin(u *url.URL) bool {
+	return u.User == nil && u.RawQuery == "" && u.Fragment == "" && u.Hostname() != "" && (u.Path == "" || u.Path == "/")
+}
+
 func validBridgeURL(value string) bool {
 	u, err := url.Parse(value)
-	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Hostname() == "" || (u.Path != "" && u.Path != "/") {
+	if err != nil || !isBareOrigin(u) {
 		return false
 	}
 	switch u.Scheme {

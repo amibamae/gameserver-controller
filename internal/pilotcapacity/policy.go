@@ -174,12 +174,22 @@ func checkPolicyOwnership(document policyDocument) error {
 // checkPolicyCreateRules requires every create safeguard: reserve before the
 // provider call, count reservations and unresolved outcomes as occupied, and
 // release a slot only after confirmed absence or destruction.
+// createRulesEnforced reports whether every create rule is turned on.
+func createRulesEnforced(create createPolicy) bool {
+	return isTrue(create.ReserveBeforeProviderCreate) && isTrue(create.ReservationConsumesCapacity) &&
+		isTrue(create.RejectDuplicateOrOccupied) && isTrue(create.RejectOverTotalLimit) && isTrue(create.RejectUnsupportedEnvironment)
+}
+
+// occupancyRulesEnforced reports whether every occupancy rule is turned on
+// and a slot is released only after confirmed absence or destruction.
+func occupancyRulesEnforced(occupancy occupancyPolicy) bool {
+	return isTrue(occupancy.CountManagedUntilConfirmed) && isTrue(occupancy.CountUnknownCreate) &&
+		isTrue(occupancy.CountUnknownDestroy) && sameStates(occupancy.ReleaseOnlyAfter, []string{"absent", "destroyed"})
+}
+
 func checkPolicyCreateRules(document policyDocument) error {
 	create := document.CreatePolicy
-	if !isTrue(create.ReserveBeforeProviderCreate) || !isTrue(create.ReservationConsumesCapacity) ||
-		!isTrue(create.RejectDuplicateOrOccupied) || !isTrue(create.RejectOverTotalLimit) || !isTrue(create.RejectUnsupportedEnvironment) ||
-		!isTrue(create.Occupancy.CountManagedUntilConfirmed) || !isTrue(create.Occupancy.CountUnknownCreate) ||
-		!isTrue(create.Occupancy.CountUnknownDestroy) || !sameStates(create.Occupancy.ReleaseOnlyAfter, []string{"absent", "destroyed"}) {
+	if !createRulesEnforced(create) || !occupancyRulesEnforced(create.Occupancy) {
 		return fmt.Errorf("%w: create and occupancy rules are incomplete", ErrInvalidPolicy)
 	}
 	return nil
