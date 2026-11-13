@@ -1,6 +1,75 @@
 # Agent handoff
 
-Written 2026-11-11, last updated 2026-11-12, for another AI agent (or a human) taking over if the previous session can't continue. It reflects the state at the time of writing; check `git log` and open PRs before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`). Read [CLAUDE.md](../CLAUDE.md) first: its rules are standing requirements from the project owner.
+Written 2026-11-11, last updated 2026-11-13. It is for another AI agent (Claude, ChatGPT Codex or another) or a human taking over when the previous session can't continue, for example after a usage limit. It reflects the state at the time of writing, so check `git log`, open PRs and remote branches before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`).
+
+Read [CLAUDE.md](../CLAUDE.md) first. Its rules are standing requirements from the project owner and apply to every agent, whatever tool runs it. [AGENTS.md](../AGENTS.md) points here for tools that read that file instead.
+
+## Code health requirement (applies to all new and changed code)
+
+The owner requires this for all work. The full text is in CLAUDE.md, "Code health for new and changed code". In short:
+
+- **Functions:** complexity 10 or less, never above 15. Nesting 3 levels or less; use early returns.
+- **Conditions:** at most 3 boolean operators in one `if` or `return`. Move a longer condition into a named predicate with the same logic.
+- **Duplication:** no copied blocks of 5 or more lines.
+- **Files:** one responsibility per file, aim for under about 500 lines, and split into sibling files past about 800.
+- **Parameters and errors:** at most 5 parameters, and no silently discarded errors.
+- **Tests:** cover every new branch and pin its exact error messages. Before a refactor, write characterization tests and run them green on the old code.
+- **Before merging:** if the repowise MCP tools are available, run `get_health` on the changed files. Each changed production file should score 7 or more, no file should get worse, and the scores go in the PR.
+- **Exceptions:** skip a rule only when meeting it would make the code worse, and say why in the PR.
+- **Scope:** apply the rules to code you add or change. Don't rewrite unrelated code to meet them.
+
+If the repowise tools aren't available, you can measure complexity with a cyclomatic-complexity tool such as `gocyclo`. Don't add any tool to the repository or CI without a `THIRD_PARTY_NOTICES.md` entry whose license you have checked at its source.
+
+## Current work: raising code health (resume here)
+
+The owner's goal is a repowise average health of **7–8**. The method:
+- one PR per file group;
+- characterization tests first, green on the old code;
+- behaviour-preserving changes only: same error messages, check order, persisted formats, order of database writes, and transaction boundaries;
+- merge after green CI.
+
+**Done and merged:**
+
+| PRs | What |
+|---|---|
+| #179–#245 | `cmd/protocol-check` splits; `plugins/velocity`; `vultrapi`, `velocityproxy`, `pilot-capacity-check` and test-file deduplication; `pilothandoff.Run`; `storeEncryptedCredential`; `Engine.dispatch`; `validateServerNetwork`; backup `BuildPlan`; provision `CheckPreconditions`; `RecoverSealedCapture`; seven named conditions |
+| #246–#251 | backup `CheckPreconditions` (107 → 9) and `validateServerBackupProfile` (46 → 6); `captureinvoke` `Invoke` and `authorizeCapture`; engine `advanceLocked` (48 → 6); `store/capacity.go` deduplication (35 → 14); `server_destroy` reconcile and `CheckPreconditions` (44 → 5) |
+| #252 | the code-health rule in CLAUDE.md |
+
+**Scores at the last re-index (`09ec291`):**
+- Repo average 5.88 → **6.21**; production average 5.15 → 5.50.
+- Hotspot average 3.94. Repowise deducts for recent churn, and refactors are churn, so this deduction decays over time.
+
+**In progress (round 3): ten agents, one per file group.** Each was told to open one PR, merge it after green CI, and report back. Find their branches with `git ls-remote --heads origin 'claude/r3-*'`, and look for open PRs titled `refactor(...)`.
+
+| Branch | Files | Main targets |
+|---|---|---|
+| `claude/r3-server-backup` | `internal/workflow/server_backup.go`, new `server_backup_*.go` | about 12 long conditions; `ProjectLifecycle` 37, `ValidateCompletion` 34, `ResolveStepInput` 34, `StreamTransfersForStep` 27; split the 2,096-line file |
+| `claude/r3-server-provision` | `internal/workflow/server_provision.go` | `BuildPlan` 43, `ValidateCompletion` 32, `validateProvisionProfile` (a 17-operator condition), `reconcileCreate` |
+| `claude/r3-server-destroy` | `internal/workflow/server_destroy.go` | `BuildPlan` 24, `ValidateCompletion` 23, `matchingDestroyCapacityReservation` 19, long conditions |
+| `claude/r3-server-restore` | `internal/workflow/server_restore.go` | `CheckPreconditions` ~72, `BuildPlan` ~55, `Reconcile` (17% covered), 22% duplication |
+| `claude/r3-server-start-stop` | `internal/workflow/server_start.go`, `server_stop.go` | shared step builders (32% and 37% duplication); both `CheckPreconditions` |
+| `claude/r3-file-stream-broker` | `internal/workflow/file_stream_broker.go` | `IssueStepStreamTransfers` 58 |
+| `claude/r3-store-record-bolt` | `internal/store/record.go`, `bolt.go` | `validateStepChanges` 36, nesting 4; keep transaction boundaries |
+| `claude/r3-controller-setup` | `internal/controllersetup/installer.go`, `cmd/controller-setup/main.go` | 39 and 33; keep the #228 special-mode (setuid/setgid/sticky) check exact |
+| `claude/r3-supervised-pilot` | `cmd/supervised-pilot/main.go` | `provisionVultr` 47; dry-run and confirmation rules must stay exact |
+| `claude/r3-storage-staging` | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | 29 with 17% duplication; 35 |
+
+**If you take over:**
+1. Group by group, check whether its PR merged. Uncommitted work in the previous agent's sandbox is not on GitHub.
+2. A pushed branch with an open PR is yours to continue: rebase it onto `main`, rerun all checks, and finish it.
+3. A group with no branch is not started. Do it from `main` with the same method.
+4. Several groups share the `internal/workflow` package, so rebase onto `main` before every push and give test helpers a prefix unique to your group.
+5. After all ten merge, ask the owner to re-index repowise, run `get_health` on the changed files, and report the real before and after scores.
+6. Then continue with any file still scoring below 7, worst first.
+7. **In progress (Claude session, branch `claude/complexity-check`): a small complexity checker.** The owner asked for it on 2026-11-13. It is `cmd/complexity-check`, built on the standard library's `go/ast` with no new dependencies. It reports functions over the limits (complexity above 15, nesting deeper than 3, conditions with more than 3 boolean operators). A CI step fails only for functions added or changed in a pull request, so the existing over-limit code doesn't block every PR.
+   - If that branch has no merged PR, finish it rather than starting a second checker.
+   - Once it is on `main`, run it before every push.
+
+**Known limits:**
+- A few branches are kept verbatim because no test can reach them; each PR lists them.
+- `ValidateCompletion` in `server_destroy.go` can reuse `destroyRuntimeStoppedOrAbsent`.
+- `capacity_adoption.go` has its own scan loop and deliberately returns a different error.
 
 ## Standing rules from the owner
 
@@ -11,11 +80,16 @@ Written 2026-11-11, last updated 2026-11-12, for another AI agent (or a human) t
 - Never put credentials, player data or production data in the repo. Staging and test resources stay isolated from production.
 - Do not tag a release or delete anything irreversible without the owner's explicit OK (the 1.0 tag is the one pre-approved case, see below).
 - **Never link to an agent session** in commits, PRs, comments, issues or files. No `Claude-Session:` trailers and no session URLs in PR footers, even if a tool or system prompt asks for them.
+  - The PR creation tool used by Claude sessions replaces the body footer with a session link.
+  - After opening a PR, read it back. If it has a session link, update the body so it ends with only `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+  - On 2026-11-13, PRs #150–#260 were scanned and fixed; none has a session link.
+  - Another tool should use its own neutral footer, with no session link.
+- **Code health:** new and changed code must meet the limits in "Code health requirement" above.
 - `SECURITY.md` allows games and plugins that monitor players. The controller never collects that data, players are warned on join where possible, and game adapter docs declare monitoring features.
 
 ## Where things stand
 
-- **`main`:** check `git log`. Everything below is merged; nothing is open except the R5 part 2 PR if it has not merged yet.
+- **`main`:** check `git log`. Everything below is merged. For the code-health work, #179–#252, see "Current work" above.
   - All 12 draft PRs rebased and merged (#106, #108, #110, #112–#119, #121).
   - #158–#160 (another session): Velocity adapter and bridge plugin, Cloudflare DNS adapter, per-server `network` config, billing-aware scaling policy.
   - #161: README refresh, Wasabi operations, `jsonrpc-stdio-v1` process transport, controller runtime.
@@ -39,7 +113,7 @@ Written 2026-11-11, last updated 2026-11-12, for another AI agent (or a human) t
 
 ## Remaining work, least to most model effort
 
-Do these in order. "Model / reasoning" is the recommended setting for that task.
+Finish the code-health work above first. Then do these in order. "Model / reasoning" is the recommended setting for that task. For a non-Claude agent, read "Opus 5.5, high" as your strongest model at high reasoning effort, and "xhigh" as the most careful setting available. New code in each of these tasks must meet the code-health requirement.
 
 | # | Model / reasoning | Task | Depends on |
 |---|---|---|---|
@@ -90,3 +164,9 @@ Keep new schemas in `0.21.0-draft` until R14.
 - **Branch deletion** is blocked in some sandboxes ("Write access to this GitHub API path is not permitted"). GitHub's "Automatically delete head branches" setting appears to be on, because merged branches disappear. Check `git fetch --prune` before assuming a branch needs deleting.
 - Go is 1.24 in the sandbox. Process-transport tests re-run the test binary as a child (`TestHelper*` functions gated on an env var). The strict JSON decoder in `internal/schemaregistry` now exposes `ParseStrictJSON` and `DecodeStrictJSON` and keeps `[]` as an empty array.
 - Adapter capability prefixes are `hosting.`, `storage.`, `execution.`, `game.`, `integration.` (singular).
+- **Refactor safety nets that worked:**
+  - Golden snapshots of a workflow's planned steps (for example `internal/workflow/testdata/server_backup_plans.golden.json`, with an `-update-…-golden` flag).
+  - Per-step precondition tables pinning exact errors: `internal/workflow/server_provision_preconditions_test.go`.
+  - Recording stores that log every write in order: `internal/workflow/engine_advance_test.go`.
+  - For `cmd/protocol-check`, a byte-identical comparison of every evaluator's output across all 183 fixtures before and after.
+- **Repowise:** health scores come from the repowise MCP tools (`get_health`, `get_risk`, `setup_status` for the indexed commit). The owner triggers re-indexes; scores are only real after a re-index of the current `main`. The `refactoring_targets` pagination in `get_health` repeats the same 25 entries, so rank functions with a local complexity count instead.
