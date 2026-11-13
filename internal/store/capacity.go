@@ -101,28 +101,24 @@ func reserveCapacityTx(tx *bolt.Tx, reservation CapacityReservation, totalLimit,
 	}
 
 	total, groupCount := 0, 0
-	cursor := bucket.Cursor()
-	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-		existing, err := decodeCapacityReservation(value)
-		if err != nil {
-			return CapacityReservation{}, false, err
-		}
-		if string(key) != existing.OperationID {
-			return CapacityReservation{}, false, fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
-		}
+	err := forEachCapacityReservation(bucket, func(_ []byte, existing CapacityReservation) error {
 		if capacityStateReleased(existing.State) {
-			continue
+			return nil
 		}
 		if existing.ServerID == reservation.ServerID && existing.EnvironmentID == reservation.EnvironmentID {
-			return CapacityReservation{}, false, fmt.Errorf("%w: server %q in environment %q", ErrCapacityOccupied, reservation.ServerID, reservation.EnvironmentID)
+			return fmt.Errorf("%w: server %q in environment %q", ErrCapacityOccupied, reservation.ServerID, reservation.EnvironmentID)
 		}
 		if existing.Provider == reservation.Provider && existing.ResourceKey == reservation.ResourceKey {
-			return CapacityReservation{}, false, fmt.Errorf("%w: provider resource key %q is already reserved", ErrCapacityConflict, reservation.ResourceKey)
+			return fmt.Errorf("%w: provider resource key %q is already reserved", ErrCapacityConflict, reservation.ResourceKey)
 		}
 		total++
 		if existing.CapacityGroup == reservation.CapacityGroup {
 			groupCount++
 		}
+		return nil
+	})
+	if err != nil {
+		return CapacityReservation{}, false, err
 	}
 	if total >= totalLimit {
 		return CapacityReservation{}, false, ErrCapacityReached
@@ -134,11 +130,7 @@ func reserveCapacityTx(tx *bolt.Tx, reservation CapacityReservation, totalLimit,
 	reservation.State = CapacityReserved
 	reservation.CreatedAt = now
 	reservation.UpdatedAt = now
-	encoded, err := json.Marshal(reservation)
-	if err != nil {
-		return CapacityReservation{}, false, fmt.Errorf("encode capacity reservation: %w", err)
-	}
-	if err := bucket.Put([]byte(reservation.OperationID), encoded); err != nil {
+	if err := putCapacityReservation(bucket, []byte(reservation.OperationID), reservation, "capacity reservation"); err != nil {
 		return CapacityReservation{}, false, err
 	}
 	return reservation, true, nil
@@ -168,11 +160,7 @@ func (s *BoltStore) ReleaseUnsentCapacityReservation(operationID, resourceKey st
 	return s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(capacityReservationsBucket)
 		key := []byte(operationID)
-		value := bucket.Get(key)
-		if value == nil {
-			return ErrCapacityNotFound
-		}
-		current, err := decodeCapacityReservation(value)
+		current, err := loadCapacityReservation(bucket, key)
 		if err != nil {
 			return err
 		}
@@ -218,15 +206,13 @@ func validateCapacityObservation(observation CapacityProviderObservation) error 
 		observation.ObservedAt.IsZero() || observation.ObservedAt.After(time.Now().UTC().Add(5*time.Minute)) {
 		return fmt.Errorf("%w: invalid provider observation", ErrInvalidRecord)
 	}
-	switch observation.State {
-	case "present", "absent", "destroyed":
-	default:
+	if !knownCapacityObservationState(observation.State) {
 		return fmt.Errorf("%w: unsupported provider observation state", ErrInvalidRecord)
 	}
 	if observation.State == "present" && !validCapacityIdentifier(observation.ProviderInstanceID, 240) {
 		return fmt.Errorf("%w: present observation requires provider_instance_id", ErrInvalidRecord)
 	}
-	if !observation.ProvisionedAt.IsZero() && (observation.State != "present" || observation.ProvisionedAt.After(observation.ObservedAt)) {
+	if !capacityObservationProvisionOrdered(observation) {
 		return fmt.Errorf("%w: invalid provider provisioning timestamp", ErrInvalidRecord)
 	}
 	if observation.ProviderInstanceID != "" && !validCapacityIdentifier(observation.ProviderInstanceID, 240) {
@@ -236,34 +222,72 @@ func validateCapacityObservation(observation CapacityProviderObservation) error 
 }
 
 func applyCapacityObservation(current CapacityReservation, observation CapacityProviderObservation) (CapacityReservation, error) {
+	if err := checkCapacityObservationIdentity(current, observation); err != nil {
+		return CapacityReservation{}, err
+	}
+	replay, err := capacityObservationReplay(current.LastObservation, observation)
+	if err != nil {
+		return CapacityReservation{}, err
+	}
+	if replay {
+		return current, nil
+	}
+	if err := checkCapacityObservationTransition(current, observation); err != nil {
+		return CapacityReservation{}, err
+	}
+	return withCapacityObservation(current, observation), nil
+}
+
+// checkCapacityObservationIdentity rejects an observation of another provider
+// resource, or one observed or provisioned before the reservation existed.
+func checkCapacityObservationIdentity(current CapacityReservation, observation CapacityProviderObservation) error {
 	if current.Provider != observation.Provider || current.ResourceKey != observation.ResourceKey {
-		return CapacityReservation{}, ErrCapacityConflict
+		return ErrCapacityConflict
 	}
 	if observation.ObservedAt.Before(current.CreatedAt) {
-		return CapacityReservation{}, ErrCapacityConflict
+		return ErrCapacityConflict
 	}
 	if !observation.ProvisionedAt.IsZero() && observation.ProvisionedAt.Before(current.CreatedAt) {
-		return CapacityReservation{}, fmt.Errorf("%w: provider provisioning time precedes reservation", ErrInvalidRecord)
+		return fmt.Errorf("%w: provider provisioning time precedes reservation", ErrInvalidRecord)
 	}
-	if current.LastObservation != nil {
-		if observation.ObservedAt.Before(current.LastObservation.ObservedAt) {
-			return CapacityReservation{}, ErrCapacityConflict
-		}
-		if observation.ObservedAt.Equal(current.LastObservation.ObservedAt) {
-			if sameCapacityObservation(*current.LastObservation, observation) {
-				return current, nil
-			}
-			return CapacityReservation{}, ErrCapacityConflict
-		}
+	return nil
+}
+
+// capacityObservationReplay orders observation after last (nil when there is
+// none). It reports true for an exact replay of last, and ErrCapacityConflict
+// for an older observation or a different one at the same time.
+func capacityObservationReplay(last *CapacityProviderObservation, observation CapacityProviderObservation) (bool, error) {
+	if last == nil {
+		return false, nil
 	}
+	if observation.ObservedAt.Before(last.ObservedAt) {
+		return false, ErrCapacityConflict
+	}
+	if !observation.ObservedAt.Equal(last.ObservedAt) {
+		return false, nil
+	}
+	if sameCapacityObservation(*last, observation) {
+		return true, nil
+	}
+	return false, ErrCapacityConflict
+}
+
+// checkCapacityObservationTransition rejects a different provider instance,
+// and a released reservation moving to the other released state.
+func checkCapacityObservationTransition(current CapacityReservation, observation CapacityProviderObservation) error {
 	if current.ProviderInstanceID != "" && observation.ProviderInstanceID != "" && current.ProviderInstanceID != observation.ProviderInstanceID {
-		return CapacityReservation{}, ErrCapacityConflict
+		return ErrCapacityConflict
 	}
-	if current.State == CapacityAbsent || current.State == CapacityDestroyed {
-		if observation.State != "present" && observation.State != string(current.State) {
-			return CapacityReservation{}, ErrCapacityTransition
-		}
+	if capacityStateReleased(current.State) && observation.State != "present" && observation.State != string(current.State) {
+		return ErrCapacityTransition
 	}
+	return nil
+}
+
+// withCapacityObservation returns current moved to the observed state, with
+// the first known provisioning time, the observed instance ID when given, and
+// observation as its last observation.
+func withCapacityObservation(current CapacityReservation, observation CapacityProviderObservation) CapacityReservation {
 	switch observation.State {
 	case "present":
 		current.State = CapacityActive
@@ -280,7 +304,7 @@ func applyCapacityObservation(current CapacityReservation, observation CapacityP
 	}
 	copyObservation := observation
 	current.LastObservation = &copyObservation
-	return current, nil
+	return current
 }
 
 func observeCapacityTx(tx *bolt.Tx, operationID string, observation CapacityProviderObservation) error {
@@ -289,11 +313,7 @@ func observeCapacityTx(tx *bolt.Tx, operationID string, observation CapacityProv
 	}
 	key := []byte(operationID)
 	bucket := tx.Bucket(capacityReservationsBucket)
-	value := bucket.Get(key)
-	if value == nil {
-		return ErrCapacityNotFound
-	}
-	current, err := decodeCapacityReservation(value)
+	current, err := loadCapacityReservation(bucket, key)
 	if err != nil {
 		return err
 	}
@@ -301,22 +321,12 @@ func observeCapacityTx(tx *bolt.Tx, operationID string, observation CapacityProv
 	if err != nil {
 		return err
 	}
-	if next.LastObservation == current.LastObservation && next.State == current.State && next.ProviderInstanceID == current.ProviderInstanceID &&
-		next.ProvisionedAt.Equal(current.ProvisionedAt) && next.ReadyAt.Equal(current.ReadyAt) {
+	if !capacityTrackedFieldsChanged(current, next) {
 		return nil
 	}
-	next.UpdatedAt = time.Now().UTC()
-	if next.UpdatedAt.Before(observation.ObservedAt) {
-		next.UpdatedAt = observation.ObservedAt
-	}
-	if err := validatePersistedCapacityReservation(next); err != nil {
-		return fmt.Errorf("%w: invalid updated capacity reservation: %v", ErrInvalidRecord, err)
-	}
-	encoded, err := json.Marshal(next)
-	if err != nil {
-		return fmt.Errorf("encode capacity reservation: %w", err)
-	}
-	return bucket.Put(key, encoded)
+	// Unlike updateCapacity, only the observation time floors UpdatedAt here.
+	next.UpdatedAt = capacityUpdateTime(observation.ObservedAt)
+	return putUpdatedCapacityReservation(bucket, key, next)
 }
 
 // RecordCapacityReady records the first exact Paper readiness timestamp for a
@@ -337,63 +347,64 @@ func (s *BoltStore) RecordCapacityReady(serverID, environmentID, providerInstanc
 }
 
 func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanceID, adapterID string, readyAt time.Time) (CapacityReservation, error) {
-	var result CapacityReservation
-	err := func() error {
-		bucket := tx.Bucket(capacityReservationsBucket)
-		cursor := bucket.Cursor()
-		found := false
-		var matchedKey []byte
-		for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-			current, err := decodeCapacityReservation(value)
-			if err != nil {
-				return err
-			}
-			if string(key) != current.OperationID {
-				return fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
-			}
-			if current.ServerID != serverID || current.EnvironmentID != environmentID || current.ProviderInstanceID != providerInstanceID || (adapterID != "" && current.ProviderAdapterID != adapterID) {
-				continue
-			}
-			if found {
-				return ErrCapacityConflict
-			}
-			found = true
-			matchedKey = append([]byte(nil), key...)
-			result = current
+	// Once a reservation matches, it is returned alongside any later error.
+	bucket := tx.Bucket(capacityReservationsBucket)
+	key, result, err := findCapacityReservationForInstance(bucket, serverID, environmentID, providerInstanceID, adapterID)
+	if err != nil {
+		return result, err
+	}
+	if !capacityReadyAllowed(result, readyAt) {
+		return result, ErrCapacityTransition
+	}
+	if !result.ReadyAt.IsZero() {
+		if !result.ReadyAt.Equal(readyAt) {
+			return result, ErrCapacityConflict
 		}
-		if !found {
-			return ErrCapacityNotFound
-		}
-		if result.Adoption != nil || result.State != CapacityActive || result.LastObservation == nil || result.LastObservation.State != "present" {
-			return ErrCapacityTransition
-		}
-		if readyAt.Before(result.CreatedAt) || (!result.ProvisionedAt.IsZero() && readyAt.Before(result.ProvisionedAt)) {
-			return ErrCapacityTransition
-		}
-		if !result.ReadyAt.IsZero() {
-			if !result.ReadyAt.Equal(readyAt) {
-				return ErrCapacityConflict
-			}
+		return result, nil
+	}
+	result.ReadyAt = readyAt.UTC()
+	result.UpdatedAt = capacityUpdateTime(result.ReadyAt)
+	if err := validatePersistedCapacityReservation(result); err != nil {
+		return result, fmt.Errorf("%w: invalid readiness measurement: %v", ErrInvalidRecord, err)
+	}
+	return result, putCapacityReservation(bucket, key, result, "capacity readiness measurement")
+}
+
+// findCapacityReservationForInstance returns the key and value of the single
+// reservation for the provider instance on serverID in environmentID (and
+// adapterID, when given). A second match is ErrCapacityConflict and no match
+// is ErrCapacityNotFound. The first match is returned even with an error.
+func findCapacityReservationForInstance(bucket *bolt.Bucket, serverID, environmentID, providerInstanceID, adapterID string) ([]byte, CapacityReservation, error) {
+	found := false
+	var matchedKey []byte
+	var match CapacityReservation
+	err := forEachCapacityReservation(bucket, func(key []byte, current CapacityReservation) error {
+		if current.ServerID != serverID || current.EnvironmentID != environmentID || current.ProviderInstanceID != providerInstanceID ||
+			(adapterID != "" && current.ProviderAdapterID != adapterID) {
 			return nil
 		}
-		result.ReadyAt = readyAt.UTC()
-		result.UpdatedAt = time.Now().UTC()
-		if result.UpdatedAt.Before(result.ReadyAt) {
-			result.UpdatedAt = result.ReadyAt
+		if found {
+			return ErrCapacityConflict
 		}
-		if err := validatePersistedCapacityReservation(result); err != nil {
-			return fmt.Errorf("%w: invalid readiness measurement: %v", ErrInvalidRecord, err)
-		}
-		encoded, err := json.Marshal(result)
-		if err != nil {
-			return fmt.Errorf("encode capacity readiness measurement: %w", err)
-		}
-		if err := bucket.Put(matchedKey, encoded); err != nil {
-			return err
-		}
+		found = true
+		matchedKey = append([]byte(nil), key...)
+		match = current
 		return nil
-	}()
-	return result, err
+	})
+	if err == nil && !found {
+		err = ErrCapacityNotFound
+	}
+	return matchedKey, match, err
+}
+
+// capacityReadyAllowed reports whether readiness at readyAt may be recorded:
+// the reservation is a controller-created active instance last seen present,
+// and readyAt is no earlier than its creation or known provisioning time.
+func capacityReadyAllowed(r CapacityReservation, readyAt time.Time) bool {
+	if r.Adoption != nil || r.State != CapacityActive || r.LastObservation == nil || r.LastObservation.State != "present" {
+		return false
+	}
+	return !readyAt.Before(r.CreatedAt) && (r.ProvisionedAt.IsZero() || !readyAt.Before(r.ProvisionedAt))
 }
 
 // recordCapacityLifecycleOutcomeTx ties boot samples and confirmed destruction
@@ -407,6 +418,34 @@ func recordCapacityLifecycleOutcomeTx(tx *bolt.Tx, operation OperationRecord, se
 	if operation.OperationType != "server.start" || operation.Status != "succeeded" || server.LifecycleState != "ready" {
 		return nil
 	}
+	return recordStartedCapacityTx(tx, operation, server)
+}
+
+// recordStartedCapacityTx records the first boot sample of a successful
+// server.start. A start without an exact readiness assertion, or one whose
+// reservation is missing, already measured, or not active, records nothing.
+func recordStartedCapacityTx(tx *bolt.Tx, operation OperationRecord, server LogicalServer) error {
+	instance, observedAt, ok := startedCapacityReadiness(operation, server)
+	if !ok {
+		return nil
+	}
+	_, err := recordCapacityReadyTx(tx, server.ServerID, server.EnvironmentID, instance.ExternalID, instance.AdapterID, observedAt)
+	if errors.Is(err, ErrCapacityNotFound) || errors.Is(err, ErrCapacityConflict) || errors.Is(err, ErrCapacityTransition) {
+		return nil
+	}
+	return err
+}
+
+// startedCapacityInstance is the provider instance a ready server runs on.
+type startedCapacityInstance struct {
+	ExternalID string `json:"external_id"`
+	AdapterID  string `json:"adapter_id"`
+}
+
+// startedCapacityReadiness returns the server's provider instance and the
+// readiness time asserted by the server.start result, and false unless the
+// assertion is for exactly this server, environment and instance.
+func startedCapacityReadiness(operation OperationRecord, server LogicalServer) (startedCapacityInstance, time.Time, bool) {
 	var result struct {
 		Data struct {
 			Assertion struct {
@@ -418,25 +457,18 @@ func recordCapacityLifecycleOutcomeTx(tx *bolt.Tx, operation OperationRecord, se
 		} `json:"operation_data"`
 	}
 	if json.Unmarshal(operation.Result, &result) != nil {
-		return nil
+		return startedCapacityInstance{}, time.Time{}, false
 	}
 	assertion := result.Data.Assertion
 	if assertion.ServerID != server.ServerID || assertion.EnvironmentID != server.EnvironmentID ||
 		!equalCanonicalJSON(assertion.InstanceRef, server.InstanceRef) || assertion.ObservedAt.IsZero() {
-		return nil
+		return startedCapacityInstance{}, time.Time{}, false
 	}
-	var instance struct {
-		ExternalID string `json:"external_id"`
-		AdapterID  string `json:"adapter_id"`
-	}
+	var instance startedCapacityInstance
 	if json.Unmarshal(server.InstanceRef, &instance) != nil || instance.ExternalID == "" || instance.AdapterID == "" {
-		return nil
+		return startedCapacityInstance{}, time.Time{}, false
 	}
-	_, err := recordCapacityReadyTx(tx, server.ServerID, server.EnvironmentID, instance.ExternalID, instance.AdapterID, assertion.ObservedAt)
-	if errors.Is(err, ErrCapacityNotFound) || errors.Is(err, ErrCapacityConflict) || errors.Is(err, ErrCapacityTransition) {
-		return nil
-	}
-	return err
+	return instance, assertion.ObservedAt, true
 }
 
 // recordDestroyedCapacityTx releases a managed VM slot in the same Bolt
@@ -445,6 +477,56 @@ func recordCapacityLifecycleOutcomeTx(tx *bolt.Tx, operation OperationRecord, se
 // used for the capacity observation; accepted or ambiguous destroys never
 // reach this path.
 func recordDestroyedCapacityTx(tx *bolt.Tx, operation OperationRecord, server LogicalServer) error {
+	instance, observedAt, err := destroyedCapacityEvidence(operation, server)
+	if err != nil {
+		return err
+	}
+	match, err := findDestroyedCapacityReservation(tx.Bucket(capacityReservationsBucket), server, instance)
+	if err != nil || match == nil {
+		return err
+	}
+	if match.State != CapacityActive && match.State != CapacityDestroyOutcomeUnknown {
+		return fmt.Errorf("%w: cannot release managed VM capacity from state %q", ErrCapacityTransition, match.State)
+	}
+	return observeCapacityTx(tx, match.OperationID, CapacityProviderObservation{
+		Provider: match.Provider, ResourceKey: match.ResourceKey, ProviderInstanceID: instance.ExternalID,
+		State: "destroyed", ObservedAt: observedAt,
+	})
+}
+
+// destroyedCapacityInstance is the exact provider instance a successful
+// server.destroy targeted.
+type destroyedCapacityInstance struct {
+	AdapterID    string `json:"adapter_id"`
+	ResourceKind string `json:"resource_kind"`
+	ExternalID   string `json:"external_id"`
+}
+
+// destroyedCapacityEvidence checks, in order, the destroy result, the
+// provider absence step, the target instance, and the absence time bound,
+// returning the destroyed instance and when its absence was observed.
+func destroyedCapacityEvidence(operation OperationRecord, server LogicalServer) (destroyedCapacityInstance, time.Time, error) {
+	if !destroyResultHasEvidence(operation, server) {
+		return destroyedCapacityInstance{}, time.Time{}, fmt.Errorf("%w: server.destroy success lacks exact absence and backup evidence", ErrInvalidRecord)
+	}
+	observedAt, ok := destroyAbsenceObservedAt(operation)
+	if !ok {
+		return destroyedCapacityInstance{}, time.Time{}, fmt.Errorf("%w: server.destroy success lacks exact provider absence observation", ErrInvalidRecord)
+	}
+	var instance destroyedCapacityInstance
+	if json.Unmarshal(operation.Target.InstanceRef, &instance) != nil || instance.AdapterID == "" || instance.ResourceKind != "instance" || instance.ExternalID == "" {
+		return destroyedCapacityInstance{}, time.Time{}, fmt.Errorf("%w: server.destroy target is not an exact provider instance", ErrInvalidRecord)
+	}
+	if observedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return destroyedCapacityInstance{}, time.Time{}, fmt.Errorf("%w: provider absence observation is too far in the future", ErrInvalidRecord)
+	}
+	return instance, observedAt, nil
+}
+
+// destroyResultHasEvidence reports whether the server.destroy result names
+// the target instance, a verified backup of the server's data generation,
+// confirmed provider absence, and a destroyed final lifecycle state.
+func destroyResultHasEvidence(operation OperationRecord, server LogicalServer) bool {
 	var result struct {
 		OperationType string `json:"operation_type"`
 		OperationData struct {
@@ -455,54 +537,47 @@ func recordDestroyedCapacityTx(tx *bolt.Tx, operation OperationRecord, server Lo
 			FinalLifecycleState string          `json:"final_lifecycle_state"`
 		} `json:"operation_data"`
 	}
-	if json.Unmarshal(operation.Result, &result) != nil || result.OperationType != "server.destroy" ||
-		!equalCanonicalJSON(result.OperationData.InstanceRef, operation.Target.InstanceRef) ||
-		result.OperationData.VerifiedBackupID == "" || result.OperationData.DataGenerationID != server.DataGenerationID ||
-		!result.OperationData.ProviderAbsence || result.OperationData.FinalLifecycleState != "destroyed" {
-		return fmt.Errorf("%w: server.destroy success lacks exact absence and backup evidence", ErrInvalidRecord)
-	}
+	return json.Unmarshal(operation.Result, &result) == nil && result.OperationType == "server.destroy" &&
+		equalCanonicalJSON(result.OperationData.InstanceRef, operation.Target.InstanceRef) &&
+		result.OperationData.VerifiedBackupID != "" && result.OperationData.DataGenerationID == server.DataGenerationID &&
+		result.OperationData.ProviderAbsence && result.OperationData.FinalLifecycleState == "destroyed"
+}
+
+// destroyAbsenceObservedAt returns when the first verify-instance-absence
+// step observed the target instance destroyed, and false unless that step
+// succeeded with exact, timestamped evidence.
+func destroyAbsenceObservedAt(operation OperationRecord) (time.Time, bool) {
 	var absence struct {
 		InstanceRef json.RawMessage `json:"instance_ref"`
 		State       string          `json:"state"`
 		ObservedAt  time.Time       `json:"observed_at"`
 	}
-	var absenceStep *OperationStep
-	for i := range operation.Steps {
-		if operation.Steps[i].StepID == "verify-instance-absence" {
-			absenceStep = &operation.Steps[i]
-			break
-		}
-	}
-	if absenceStep == nil || absenceStep.Status != "succeeded" || json.Unmarshal(absenceStep.Output, &absence) != nil ||
+	step := firstOperationStep(operation.Steps, "verify-instance-absence")
+	if step == nil || step.Status != "succeeded" || json.Unmarshal(step.Output, &absence) != nil ||
 		!equalCanonicalJSON(absence.InstanceRef, operation.Target.InstanceRef) || absence.State != "destroyed" || absence.ObservedAt.IsZero() {
-		return fmt.Errorf("%w: server.destroy success lacks exact provider absence observation", ErrInvalidRecord)
+		return time.Time{}, false
 	}
-	var instance struct {
-		AdapterID    string `json:"adapter_id"`
-		ResourceKind string `json:"resource_kind"`
-		ExternalID   string `json:"external_id"`
+	return absence.ObservedAt, true
+}
+
+// firstOperationStep returns the first step with stepID, or nil.
+func firstOperationStep(steps []OperationStep, stepID string) *OperationStep {
+	for i := range steps {
+		if steps[i].StepID == stepID {
+			return &steps[i]
+		}
 	}
-	if json.Unmarshal(operation.Target.InstanceRef, &instance) != nil || instance.AdapterID == "" || instance.ResourceKind != "instance" || instance.ExternalID == "" {
-		return fmt.Errorf("%w: server.destroy target is not an exact provider instance", ErrInvalidRecord)
-	}
-	if absence.ObservedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
-		return fmt.Errorf("%w: provider absence observation is too far in the future", ErrInvalidRecord)
-	}
+	return nil
+}
+
+// findDestroyedCapacityReservation returns the one unreleased reservation for
+// the destroyed server, or nil when there is none. An unreleased reservation
+// for a different adapter or instance, or a second match, is a conflict.
+func findDestroyedCapacityReservation(bucket *bolt.Bucket, server LogicalServer, instance destroyedCapacityInstance) (*CapacityReservation, error) {
 	var match *CapacityReservation
-	cursor := tx.Bucket(capacityReservationsBucket).Cursor()
-	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-		reservation, err := decodeCapacityReservation(value)
-		if err != nil {
-			return err
-		}
-		if string(key) != reservation.OperationID {
-			return fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
-		}
-		if reservation.ServerID != server.ServerID || reservation.EnvironmentID != server.EnvironmentID {
-			continue
-		}
-		if reservation.State == CapacityAbsent || reservation.State == CapacityDestroyed {
-			continue
+	err := forEachCapacityReservation(bucket, func(_ []byte, reservation CapacityReservation) error {
+		if reservation.ServerID != server.ServerID || reservation.EnvironmentID != server.EnvironmentID || capacityStateReleased(reservation.State) {
+			return nil
 		}
 		if (reservation.ProviderAdapterID != "" && reservation.ProviderAdapterID != instance.AdapterID) || reservation.ProviderInstanceID != instance.ExternalID {
 			return fmt.Errorf("%w: managed VM reservation does not match the destroyed instance", ErrCapacityConflict)
@@ -512,17 +587,12 @@ func recordDestroyedCapacityTx(tx *bolt.Tx, operation OperationRecord, server Lo
 		}
 		copyReservation := reservation
 		match = &copyReservation
-	}
-	if match == nil {
 		return nil
-	}
-	if match.State != CapacityActive && match.State != CapacityDestroyOutcomeUnknown {
-		return fmt.Errorf("%w: cannot release managed VM capacity from state %q", ErrCapacityTransition, match.State)
-	}
-	return observeCapacityTx(tx, match.OperationID, CapacityProviderObservation{
-		Provider: match.Provider, ResourceKey: match.ResourceKey, ProviderInstanceID: instance.ExternalID,
-		State: "destroyed", ObservedAt: absence.ObservedAt,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return match, nil
 }
 
 func (s *BoltStore) GetCapacityReservation(operationID string) (CapacityReservation, error) {
@@ -531,12 +601,8 @@ func (s *BoltStore) GetCapacityReservation(operationID string) (CapacityReservat
 	}
 	var result CapacityReservation
 	err := s.db.View(func(tx *bolt.Tx) error {
-		value := tx.Bucket(capacityReservationsBucket).Get([]byte(operationID))
-		if value == nil {
-			return ErrCapacityNotFound
-		}
 		var err error
-		result, err = decodeCapacityReservation(value)
+		result, err = loadCapacityReservation(tx.Bucket(capacityReservationsBucket), []byte(operationID))
 		return err
 	})
 	if err != nil {
@@ -548,18 +614,10 @@ func (s *BoltStore) GetCapacityReservation(operationID string) (CapacityReservat
 func (s *BoltStore) ListCapacityReservations() ([]CapacityReservation, error) {
 	var result []CapacityReservation
 	err := s.db.View(func(tx *bolt.Tx) error {
-		cursor := tx.Bucket(capacityReservationsBucket).Cursor()
-		for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-			reservation, err := decodeCapacityReservation(value)
-			if err != nil {
-				return err
-			}
-			if string(key) != reservation.OperationID {
-				return fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
-			}
+		return forEachCapacityReservation(tx.Bucket(capacityReservationsBucket), func(_ []byte, reservation CapacityReservation) error {
 			result = append(result, reservation)
-		}
-		return nil
+			return nil
+		})
 	})
 	if err != nil {
 		return nil, err
@@ -579,55 +637,48 @@ func (s *BoltStore) updateCapacity(operationID string, transition func(CapacityR
 	}
 	var result CapacityReservation
 	err := s.db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(capacityReservationsBucket)
-		key := []byte(operationID)
-		value := bucket.Get(key)
-		if value == nil {
-			return ErrCapacityNotFound
-		}
-		current, err := decodeCapacityReservation(value)
-		if err != nil {
-			return err
-		}
-		next, err := transition(current)
-		if err != nil {
-			return err
-		}
-		if next.OperationID != current.OperationID || next.CreatedAt != current.CreatedAt || next.ProviderAdapterID != current.ProviderAdapterID ||
-			(!current.ProvisionedAt.IsZero() && !next.ProvisionedAt.Equal(current.ProvisionedAt)) ||
-			(!current.ReadyAt.IsZero() && !next.ReadyAt.Equal(current.ReadyAt)) {
-			return fmt.Errorf("%w: immutable capacity reservation fields changed", ErrCorruptStore)
-		}
-		if next.State != current.State || next.ProviderInstanceID != current.ProviderInstanceID || next.LastObservation != current.LastObservation ||
-			!next.ProvisionedAt.Equal(current.ProvisionedAt) || !next.ReadyAt.Equal(current.ReadyAt) {
-			next.UpdatedAt = time.Now().UTC()
-			if next.LastObservation != nil && next.UpdatedAt.Before(next.LastObservation.ObservedAt) {
-				next.UpdatedAt = next.LastObservation.ObservedAt
-			}
-			if next.UpdatedAt.Before(next.ProvisionedAt) {
-				next.UpdatedAt = next.ProvisionedAt
-			}
-			if next.UpdatedAt.Before(next.ReadyAt) {
-				next.UpdatedAt = next.ReadyAt
-			}
-			if err := validatePersistedCapacityReservation(next); err != nil {
-				return fmt.Errorf("%w: invalid updated capacity reservation: %v", ErrInvalidRecord, err)
-			}
-			encoded, err := json.Marshal(next)
-			if err != nil {
-				return fmt.Errorf("encode capacity reservation: %w", err)
-			}
-			if err := bucket.Put(key, encoded); err != nil {
-				return err
-			}
-		}
-		result = next
-		return nil
+		var err error
+		result, err = updateCapacityTx(tx.Bucket(capacityReservationsBucket), []byte(operationID), transition)
+		return err
 	})
 	if err != nil {
 		return CapacityReservation{}, err
 	}
 	return result, nil
+}
+
+// updateCapacityTx applies transition to the reservation stored under key
+// inside the caller's transaction. It refuses changes to immutable fields and
+// writes only when a tracked field changed, returning next either way.
+func updateCapacityTx(bucket *bolt.Bucket, key []byte, transition func(CapacityReservation) (CapacityReservation, error)) (CapacityReservation, error) {
+	current, err := loadCapacityReservation(bucket, key)
+	if err != nil {
+		return CapacityReservation{}, err
+	}
+	next, err := transition(current)
+	if err != nil {
+		return CapacityReservation{}, err
+	}
+	if capacityImmutableFieldsChanged(current, next) {
+		return CapacityReservation{}, fmt.Errorf("%w: immutable capacity reservation fields changed", ErrCorruptStore)
+	}
+	if !capacityTrackedFieldsChanged(current, next) {
+		return next, nil
+	}
+	next.UpdatedAt = capacityUpdateTime(capacityObservedAt(next.LastObservation), next.ProvisionedAt, next.ReadyAt)
+	if err := putUpdatedCapacityReservation(bucket, key, next); err != nil {
+		return CapacityReservation{}, err
+	}
+	return next, nil
+}
+
+// capacityImmutableFieldsChanged reports whether a transition changed the
+// reservation identity, its creation time, or a provision or ready time that
+// was already recorded. CreatedAt is compared with == on purpose.
+func capacityImmutableFieldsChanged(current, next CapacityReservation) bool {
+	return next.OperationID != current.OperationID || next.CreatedAt != current.CreatedAt || next.ProviderAdapterID != current.ProviderAdapterID ||
+		(!current.ProvisionedAt.IsZero() && !next.ProvisionedAt.Equal(current.ProvisionedAt)) ||
+		(!current.ReadyAt.IsZero() && !next.ReadyAt.Equal(current.ReadyAt))
 }
 
 func decodeCapacityReservation(value []byte) (CapacityReservation, error) {
@@ -641,18 +692,106 @@ func decodeCapacityReservation(value []byte) (CapacityReservation, error) {
 	return reservation, nil
 }
 
+// forEachCapacityReservation decodes every stored reservation in key order
+// and passes it to visit with its key. It stops at the first decode failure,
+// key/OperationID mismatch, or error returned by visit.
+func forEachCapacityReservation(bucket *bolt.Bucket, visit func(key []byte, reservation CapacityReservation) error) error {
+	cursor := bucket.Cursor()
+	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+		reservation, err := decodeCapacityReservation(value)
+		if err != nil {
+			return err
+		}
+		if string(key) != reservation.OperationID {
+			return fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
+		}
+		if err := visit(key, reservation); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// loadCapacityReservation reads and decodes the reservation stored under key,
+// returning ErrCapacityNotFound when there is none.
+func loadCapacityReservation(bucket *bolt.Bucket, key []byte) (CapacityReservation, error) {
+	value := bucket.Get(key)
+	if value == nil {
+		return CapacityReservation{}, ErrCapacityNotFound
+	}
+	return decodeCapacityReservation(value)
+}
+
+// putCapacityReservation encodes reservation and stores it under key; what
+// names the record in the encode error.
+func putCapacityReservation(bucket *bolt.Bucket, key []byte, reservation CapacityReservation, what string) error {
+	encoded, err := json.Marshal(reservation)
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", what, err)
+	}
+	return bucket.Put(key, encoded)
+}
+
+// putUpdatedCapacityReservation validates a transitioned reservation before
+// storing it under key.
+func putUpdatedCapacityReservation(bucket *bolt.Bucket, key []byte, reservation CapacityReservation) error {
+	if err := validatePersistedCapacityReservation(reservation); err != nil {
+		return fmt.Errorf("%w: invalid updated capacity reservation: %v", ErrInvalidRecord, err)
+	}
+	return putCapacityReservation(bucket, key, reservation, "capacity reservation")
+}
+
+// capacityTrackedFieldsChanged reports whether a transition changed any field
+// whose change must be persisted with a new UpdatedAt.
+func capacityTrackedFieldsChanged(current, next CapacityReservation) bool {
+	return next.State != current.State || next.ProviderInstanceID != current.ProviderInstanceID || next.LastObservation != current.LastObservation ||
+		!next.ProvisionedAt.Equal(current.ProvisionedAt) || !next.ReadyAt.Equal(current.ReadyAt)
+}
+
+// capacityUpdateTime returns the current UTC time, raised to the latest of
+// floors so UpdatedAt never precedes evidence recorded on the reservation.
+func capacityUpdateTime(floors ...time.Time) time.Time {
+	updated := time.Now().UTC()
+	for _, floor := range floors {
+		if updated.Before(floor) {
+			updated = floor
+		}
+	}
+	return updated
+}
+
+// capacityObservedAt returns the observation time, or the zero time when
+// there is no observation.
+func capacityObservedAt(observation *CapacityProviderObservation) time.Time {
+	if observation == nil {
+		return time.Time{}
+	}
+	return observation.ObservedAt
+}
+
 func validateCapacityReservationRequest(reservation CapacityReservation) error {
 	if reservation.ProviderAdapterID != "" && !validCapacityIdentifier(reservation.ProviderAdapterID, 160) {
 		return ErrInvalidRecord
 	}
-	if !validCapacityIdentifier(reservation.OperationID, 200) || !validCapacityIdentifier(reservation.ServerID, 200) ||
-		!validCapacityIdentifier(reservation.EnvironmentID, 200) || !validCapacityIdentifier(reservation.CapacityGroup, 100) ||
-		!validCapacityIdentifier(reservation.Provider, 100) || !validCapacityIdentifier(reservation.ResourceKey, 240) ||
-		reservation.ProviderInstanceID != "" || reservation.State != "" || !reservation.CreatedAt.IsZero() || !reservation.UpdatedAt.IsZero() ||
-		!reservation.ProvisionedAt.IsZero() || !reservation.ReadyAt.IsZero() || reservation.LastObservation != nil || reservation.Adoption != nil {
+	if !capacityIdentifiersValid(reservation) || !capacityControllerFieldsUnset(reservation) {
 		return fmt.Errorf("%w: invalid capacity reservation request", ErrInvalidRecord)
 	}
 	return nil
+}
+
+// capacityIdentifiersValid requires every required reservation identifier to
+// be present and within its length bound.
+func capacityIdentifiersValid(r CapacityReservation) bool {
+	return validCapacityIdentifier(r.OperationID, 200) && validCapacityIdentifier(r.ServerID, 200) &&
+		validCapacityIdentifier(r.EnvironmentID, 200) && validCapacityIdentifier(r.CapacityGroup, 100) &&
+		validCapacityIdentifier(r.Provider, 100) && validCapacityIdentifier(r.ResourceKey, 240)
+}
+
+// capacityControllerFieldsUnset requires a reservation request to leave every
+// field the store assigns (instance, state, times, evidence) empty.
+func capacityControllerFieldsUnset(r CapacityReservation) bool {
+	return r.ProviderInstanceID == "" && r.State == "" && r.CreatedAt.IsZero() && r.UpdatedAt.IsZero() &&
+		r.ProvisionedAt.IsZero() && r.ReadyAt.IsZero() && r.LastObservation == nil && r.Adoption == nil
 }
 
 // validatePersistedCapacityReservation rejects a stored reservation that breaks
@@ -692,10 +831,7 @@ func capacityIdentityValid(r CapacityReservation) bool {
 	if r.ProviderAdapterID != "" && !validCapacityIdentifier(r.ProviderAdapterID, 160) {
 		return false
 	}
-	return validCapacityIdentifier(r.OperationID, 200) && validCapacityIdentifier(r.ServerID, 200) &&
-		validCapacityIdentifier(r.EnvironmentID, 200) && validCapacityIdentifier(r.CapacityGroup, 100) &&
-		validCapacityIdentifier(r.Provider, 100) && validCapacityIdentifier(r.ResourceKey, 240) &&
-		!r.CreatedAt.IsZero() && !r.UpdatedAt.Before(r.CreatedAt)
+	return capacityIdentifiersValid(r) && !r.CreatedAt.IsZero() && !r.UpdatedAt.Before(r.CreatedAt)
 }
 
 // capacityStateValid requires a known state, and an active reservation to name
@@ -728,24 +864,51 @@ func capacityObservationConsistent(r CapacityReservation) bool {
 	if observation == nil {
 		return true
 	}
+	return capacityObservationMatchesReservation(r, *observation) && capacityObservationProvisionOrdered(*observation) &&
+		knownCapacityObservationState(observation.State) && capacityStateAgreesWithObservation(r.State, observation.State)
+}
+
+// capacityObservationMatchesReservation requires the observation to be for
+// the reservation's provider resource, no earlier than its creation, with a
+// valid instance ID when present and one that agrees with the reservation's.
+func capacityObservationMatchesReservation(r CapacityReservation, observation CapacityProviderObservation) bool {
 	if observation.Provider != r.Provider || observation.ResourceKey != r.ResourceKey || observation.ObservedAt.Before(r.CreatedAt) ||
 		(observation.State == "present" && !validCapacityIdentifier(observation.ProviderInstanceID, 240)) {
 		return false
 	}
-	if observation.ProviderInstanceID != "" && (!validCapacityIdentifier(observation.ProviderInstanceID, 240) ||
-		(r.ProviderInstanceID != "" && r.ProviderInstanceID != observation.ProviderInstanceID)) {
-		return false
-	}
-	if !observation.ProvisionedAt.IsZero() && (observation.State != "present" || observation.ProvisionedAt.After(observation.ObservedAt)) {
-		return false
-	}
-	switch observation.State {
+	return observation.ProviderInstanceID == "" || (validCapacityIdentifier(observation.ProviderInstanceID, 240) &&
+		(r.ProviderInstanceID == "" || r.ProviderInstanceID == observation.ProviderInstanceID))
+}
+
+// capacityObservationProvisionOrdered allows a provisioning time only on a
+// present observation, and no later than the observation itself.
+func capacityObservationProvisionOrdered(observation CapacityProviderObservation) bool {
+	return observation.ProvisionedAt.IsZero() || (observation.State == "present" && !observation.ProvisionedAt.After(observation.ObservedAt))
+}
+
+// knownCapacityObservationState reports whether state is a provider
+// observation state the store understands.
+func knownCapacityObservationState(state string) bool {
+	switch state {
 	case "present", "absent", "destroyed":
-	default:
-		return false
+		return true
 	}
-	return !((r.State == CapacityAbsent && observation.State != "absent") || (r.State == CapacityDestroyed && observation.State != "destroyed") ||
-		(r.State == CapacityActive && observation.State != "present"))
+	return false
+}
+
+// capacityStateAgreesWithObservation requires active, absent and destroyed
+// reservations to match the last observed provider state; other states may
+// carry any observation.
+func capacityStateAgreesWithObservation(state CapacityState, observed string) bool {
+	switch state {
+	case CapacityActive:
+		return observed == "present"
+	case CapacityAbsent:
+		return observed == "absent"
+	case CapacityDestroyed:
+		return observed == "destroyed"
+	}
+	return true
 }
 
 func sameCapacityRequest(existing, requested CapacityReservation) bool {
