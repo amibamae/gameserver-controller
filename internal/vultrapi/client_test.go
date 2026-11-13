@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -50,19 +51,71 @@ func testClient(t *testing.T, handler http.HandlerFunc) *Client {
 	return client
 }
 
-func TestCreateInstanceSendsOneAuthenticatedRequest(t *testing.T) {
+// countingClient is testClient with a count of requests that reached handler.
+func countingClient(t *testing.T, handler http.HandlerFunc) (*Client, *atomic.Int32) {
+	t.Helper()
 	var calls atomic.Int32
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
-		if r.Method != http.MethodPost || r.URL.Path != "/v2/instances" {
-			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		handler(w, r)
+	})
+	return client, &calls
+}
+
+// staticClient answers every request with body and a 200 status.
+func staticClient(t *testing.T, body string) *Client {
+	t.Helper()
+	return testClient(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = fmt.Fprint(w, body) })
+}
+
+// expectAuthorized reports a request that is not method path, or that lacks
+// the bearer token or the JSON Accept header.
+func expectAuthorized(t *testing.T, r *http.Request, method, path string) {
+	t.Helper()
+	if r.Method != method || r.URL.Path != path {
+		t.Errorf("unexpected request: %s %s, want %s %s", r.Method, r.URL.Path, method, path)
+	}
+	if got := r.Header.Get("Authorization"); got != "Bearer "+testToken {
+		t.Errorf("Authorization header = %q", got)
+	}
+	if got := r.Header.Get("Accept"); got != "application/json" {
+		t.Errorf("Accept header = %q", got)
+	}
+}
+
+// expectSafeError fails unless err wraps want and its text holds neither
+// the API token nor any of the given provider details.
+func expectSafeError(t *testing.T, err, want error, details ...string) {
+	t.Helper()
+	if !errors.Is(err, want) {
+		t.Fatalf("error = %v, want %v", err, want)
+	}
+	for _, detail := range append(details, testToken) {
+		if strings.Contains(err.Error(), detail) {
+			t.Fatalf("error disclosed %q: %v", detail, err)
 		}
-		if got := r.Header.Get("Authorization"); got != "Bearer "+testToken {
-			t.Errorf("Authorization header = %q", got)
-		}
-		if got := r.Header.Get("Accept"); got != "application/json" {
-			t.Errorf("Accept header = %q", got)
-		}
+	}
+}
+
+// expectCalls fails unless exactly want requests were made.
+func expectCalls(t *testing.T, calls *atomic.Int32, want int32) {
+	t.Helper()
+	if got := calls.Load(); got != want {
+		t.Fatalf("request count = %d, want %d", got, want)
+	}
+}
+
+func TestCreateInstanceSendsOneAuthenticatedRequest(t *testing.T) {
+	// The exact body proves the Vultr field names (sshkey_id, not
+	// ssh_key_ids) and that user_data is passed through as base64.
+	wantBody := map[string]any{
+		"region": "ewr", "plan": "vc2-1c-2gb", "os_id": float64(362),
+		"label": "gsc-pilot-staging-001", "hostname": "staging-001.example.invalid",
+		"sshkey_id": []any{"sshkey-123"}, "script_id": "script-123",
+		"user_data": testCreateInput().UserData, "tags": []any{"managed-by-gsc", "environment-staging"},
+	}
+	client, calls := countingClient(t, func(w http.ResponseWriter, r *http.Request) {
+		expectAuthorized(t, r, http.MethodPost, "/v2/instances")
 		if got := r.Header.Get("Content-Type"); got != "application/json" {
 			t.Errorf("Content-Type header = %q", got)
 		}
@@ -70,26 +123,8 @@ func TestCreateInstanceSendsOneAuthenticatedRequest(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Errorf("decode create body: %v", err)
 		}
-		if body["region"] != "ewr" || body["plan"] != "vc2-1c-2gb" || body["os_id"] != float64(362) {
-			t.Errorf("unexpected create fields: %#v", body)
-		}
-		if body["label"] != "gsc-pilot-staging-001" || body["hostname"] != "staging-001.example.invalid" {
-			t.Errorf("unexpected identity fields: %#v", body)
-		}
-		if body["user_data"] != testCreateInput().UserData {
-			t.Errorf("user_data was not sent as base64")
-		}
-		if _, exists := body["ssh_key_ids"]; exists {
-			t.Errorf("request used internal SSH field name instead of Vultr sshkey_id")
-		}
-		if got := body["sshkey_id"].([]any); len(got) != 1 || got[0] != "sshkey-123" {
-			t.Errorf("unexpected sshkey_id: %#v", body["sshkey_id"])
-		}
-		if body["script_id"] != "script-123" {
-			t.Errorf("unexpected startup script ID: %#v", body["script_id"])
-		}
-		if got := body["tags"].([]any); len(got) != 2 {
-			t.Errorf("unexpected tags: %#v", body["tags"])
+		if !reflect.DeepEqual(body, wantBody) {
+			t.Errorf("create body = %#v, want %#v", body, wantBody)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
@@ -103,9 +138,7 @@ func TestCreateInstanceSendsOneAuthenticatedRequest(t *testing.T) {
 	if instance.ID != "inst-123" || instance.Status != "pending" {
 		t.Fatalf("unexpected created instance: %#v", instance)
 	}
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("create request count = %d, want 1", got)
-	}
+	expectCalls(t, calls, 1)
 }
 
 func TestCreateInstanceUnknownOutcomesAreNotRetried(t *testing.T) {
@@ -121,22 +154,13 @@ func TestCreateInstanceUnknownOutcomesAreNotRetried(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var calls atomic.Int32
-			client := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
-				calls.Add(1)
+			client, calls := countingClient(t, func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tt.status)
 				_, _ = fmt.Fprint(w, tt.body)
 			})
 			_, err := client.CreateInstance(context.Background(), []byte(testToken), testCreateInput())
-			if !errors.Is(err, ErrOutcomeUnknown) {
-				t.Fatalf("error = %v, want ErrOutcomeUnknown", err)
-			}
-			if strings.Contains(err.Error(), testToken) || strings.Contains(err.Error(), "sensitive provider detail") {
-				t.Fatalf("error disclosed a secret or provider response: %v", err)
-			}
-			if got := calls.Load(); got != 1 {
-				t.Fatalf("create request count = %d, want 1", got)
-			}
+			expectSafeError(t, err, ErrOutcomeUnknown, "sensitive provider detail")
+			expectCalls(t, calls, 1)
 		})
 	}
 }
@@ -152,15 +176,8 @@ func TestCreateInstanceTransportFailureIsUnknownAndDoesNotLeakError(t *testing.T
 		t.Fatalf("NewClientAt: %v", err)
 	}
 	_, err = client.CreateInstance(context.Background(), []byte(testToken), testCreateInput())
-	if !errors.Is(err, ErrOutcomeUnknown) {
-		t.Fatalf("error = %v, want ErrOutcomeUnknown", err)
-	}
-	if strings.Contains(err.Error(), testToken) || strings.Contains(err.Error(), "transport detail") {
-		t.Fatalf("error disclosed transport detail: %v", err)
-	}
-	if got := calls.Load(); got != 1 {
-		t.Fatalf("create request count = %d, want 1", got)
-	}
+	expectSafeError(t, err, ErrOutcomeUnknown, "transport detail")
+	expectCalls(t, &calls, 1)
 }
 
 func TestCreateInstanceRejectsProvider4xxWithoutLeakingBody(t *testing.T) {
@@ -169,12 +186,7 @@ func TestCreateInstanceRejectsProvider4xxWithoutLeakingBody(t *testing.T) {
 		_, _ = fmt.Fprint(w, `{"error":"private account detail"}`)
 	})
 	_, err := client.CreateInstance(context.Background(), []byte(testToken), testCreateInput())
-	if !errors.Is(err, ErrProviderReject) {
-		t.Fatalf("error = %v, want ErrProviderReject", err)
-	}
-	if strings.Contains(err.Error(), testToken) || strings.Contains(err.Error(), "private account detail") {
-		t.Fatalf("error disclosed a secret or provider response: %v", err)
-	}
+	expectSafeError(t, err, ErrProviderReject, "private account detail")
 }
 
 func TestCreateInstanceDoesNotFollowRedirect(t *testing.T) {
@@ -204,15 +216,8 @@ func TestCreateInstanceDoesNotFollowRedirect(t *testing.T) {
 
 func TestListInstancesByLabelPaginatesAndFiltersExactly(t *testing.T) {
 	const cursor = "opaque cursor/with?reserved&chars"
-	var calls atomic.Int32
-	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		if r.Method != http.MethodGet || r.URL.Path != "/v2/instances" {
-			t.Errorf("unexpected list request: %s %s", r.Method, r.URL.Path)
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer "+testToken {
-			t.Errorf("Authorization header = %q", got)
-		}
+	client, calls := countingClient(t, func(w http.ResponseWriter, r *http.Request) {
+		expectAuthorized(t, r, http.MethodGet, "/v2/instances")
 		if got := r.URL.Query().Get("label"); got != "gsc-managed-42" {
 			t.Errorf("label query = %q", got)
 		}
@@ -237,15 +242,11 @@ func TestListInstancesByLabelPaginatesAndFiltersExactly(t *testing.T) {
 	if len(instances) != 2 || instances[0].ID != "inst-1" || instances[1].ID != "inst-2" {
 		t.Fatalf("unexpected exact-label instances: %#v", instances)
 	}
-	if got := calls.Load(); got != 2 {
-		t.Fatalf("list request count = %d, want 2", got)
-	}
+	expectCalls(t, calls, 2)
 }
 
 func TestListInstancesByLabelRejectsRepeatedCursor(t *testing.T) {
-	client := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprint(w, `{"instances":[],"meta":{"links":{"next":"same"}}}`)
-	})
+	client := staticClient(t, `{"instances":[],"meta":{"links":{"next":"same"}}}`)
 	_, err := client.ListInstancesByLabel(context.Background(), []byte(testToken), "gsc-managed-42")
 	if !errors.Is(err, ErrInvalidResponse) {
 		t.Fatalf("error = %v, want ErrInvalidResponse", err)
@@ -253,9 +254,7 @@ func TestListInstancesByLabelRejectsRepeatedCursor(t *testing.T) {
 }
 
 func TestListInstancesByLabelRequiresPaginationMetadata(t *testing.T) {
-	client := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprint(w, `{"instances":[]}`)
-	})
+	client := staticClient(t, `{"instances":[]}`)
 	_, err := client.ListInstancesByLabel(context.Background(), []byte(testToken), "gsc-managed-42")
 	if !errors.Is(err, ErrInvalidResponse) {
 		t.Fatalf("error = %v, want ErrInvalidResponse", err)
@@ -264,9 +263,7 @@ func TestListInstancesByLabelRequiresPaginationMetadata(t *testing.T) {
 
 func TestGetInstanceUsesExactIDAndValidatesResponse(t *testing.T) {
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/v2/instances/inst-123" {
-			t.Errorf("unexpected get request: %s %s", r.Method, r.URL.Path)
-		}
+		expectAuthorized(t, r, http.MethodGet, "/v2/instances/inst-123")
 		_, _ = fmt.Fprint(w, `{"instance":{"id":"inst-123","label":"gsc-managed-42","date_created":"2026-11-07T10:00:00+00:00"}}`)
 	})
 	instance, err := client.GetInstance(context.Background(), []byte(testToken), "inst-123")
@@ -276,11 +273,7 @@ func TestGetInstanceUsesExactIDAndValidatesResponse(t *testing.T) {
 }
 
 func TestInvalidCreateRequestsDoNotReachProvider(t *testing.T) {
-	var calls atomic.Int32
-	client := testClient(t, func(w http.ResponseWriter, _ *http.Request) {
-		calls.Add(1)
-		w.WriteHeader(http.StatusAccepted)
-	})
+	client, calls := countingClient(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusAccepted) })
 	cases := map[string]func(*CreateInstanceRequest){
 		"missing plan":              func(input *CreateInstanceRequest) { input.Plan = " " },
 		"invalid os id":             func(input *CreateInstanceRequest) { input.OSID = 0 },
@@ -299,9 +292,7 @@ func TestInvalidCreateRequestsDoNotReachProvider(t *testing.T) {
 			}
 		})
 	}
-	if calls.Load() != 0 {
-		t.Fatalf("provider calls = %d, want 0", calls.Load())
-	}
+	expectCalls(t, calls, 0)
 }
 
 func TestNewClientAtDoesNotMutateCallerHTTPClient(t *testing.T) {
