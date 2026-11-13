@@ -134,11 +134,7 @@ func reserveCapacityTx(tx *bolt.Tx, reservation CapacityReservation, totalLimit,
 	reservation.State = CapacityReserved
 	reservation.CreatedAt = now
 	reservation.UpdatedAt = now
-	encoded, err := json.Marshal(reservation)
-	if err != nil {
-		return CapacityReservation{}, false, fmt.Errorf("encode capacity reservation: %w", err)
-	}
-	if err := bucket.Put([]byte(reservation.OperationID), encoded); err != nil {
+	if err := putCapacityReservation(bucket, []byte(reservation.OperationID), reservation, "capacity reservation"); err != nil {
 		return CapacityReservation{}, false, err
 	}
 	return reservation, true, nil
@@ -168,11 +164,7 @@ func (s *BoltStore) ReleaseUnsentCapacityReservation(operationID, resourceKey st
 	return s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(capacityReservationsBucket)
 		key := []byte(operationID)
-		value := bucket.Get(key)
-		if value == nil {
-			return ErrCapacityNotFound
-		}
-		current, err := decodeCapacityReservation(value)
+		current, err := loadCapacityReservation(bucket, key)
 		if err != nil {
 			return err
 		}
@@ -289,11 +281,7 @@ func observeCapacityTx(tx *bolt.Tx, operationID string, observation CapacityProv
 	}
 	key := []byte(operationID)
 	bucket := tx.Bucket(capacityReservationsBucket)
-	value := bucket.Get(key)
-	if value == nil {
-		return ErrCapacityNotFound
-	}
-	current, err := decodeCapacityReservation(value)
+	current, err := loadCapacityReservation(bucket, key)
 	if err != nil {
 		return err
 	}
@@ -301,22 +289,12 @@ func observeCapacityTx(tx *bolt.Tx, operationID string, observation CapacityProv
 	if err != nil {
 		return err
 	}
-	if next.LastObservation == current.LastObservation && next.State == current.State && next.ProviderInstanceID == current.ProviderInstanceID &&
-		next.ProvisionedAt.Equal(current.ProvisionedAt) && next.ReadyAt.Equal(current.ReadyAt) {
+	if !capacityTrackedFieldsChanged(current, next) {
 		return nil
 	}
-	next.UpdatedAt = time.Now().UTC()
-	if next.UpdatedAt.Before(observation.ObservedAt) {
-		next.UpdatedAt = observation.ObservedAt
-	}
-	if err := validatePersistedCapacityReservation(next); err != nil {
-		return fmt.Errorf("%w: invalid updated capacity reservation: %v", ErrInvalidRecord, err)
-	}
-	encoded, err := json.Marshal(next)
-	if err != nil {
-		return fmt.Errorf("encode capacity reservation: %w", err)
-	}
-	return bucket.Put(key, encoded)
+	// Unlike updateCapacity, only the observation time floors UpdatedAt here.
+	next.UpdatedAt = capacityUpdateTime(observation.ObservedAt)
+	return putUpdatedCapacityReservation(bucket, key, next)
 }
 
 // RecordCapacityReady records the first exact Paper readiness timestamp for a
@@ -377,21 +355,11 @@ func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanc
 			return nil
 		}
 		result.ReadyAt = readyAt.UTC()
-		result.UpdatedAt = time.Now().UTC()
-		if result.UpdatedAt.Before(result.ReadyAt) {
-			result.UpdatedAt = result.ReadyAt
-		}
+		result.UpdatedAt = capacityUpdateTime(result.ReadyAt)
 		if err := validatePersistedCapacityReservation(result); err != nil {
 			return fmt.Errorf("%w: invalid readiness measurement: %v", ErrInvalidRecord, err)
 		}
-		encoded, err := json.Marshal(result)
-		if err != nil {
-			return fmt.Errorf("encode capacity readiness measurement: %w", err)
-		}
-		if err := bucket.Put(matchedKey, encoded); err != nil {
-			return err
-		}
-		return nil
+		return putCapacityReservation(bucket, matchedKey, result, "capacity readiness measurement")
 	}()
 	return result, err
 }
@@ -531,12 +499,8 @@ func (s *BoltStore) GetCapacityReservation(operationID string) (CapacityReservat
 	}
 	var result CapacityReservation
 	err := s.db.View(func(tx *bolt.Tx) error {
-		value := tx.Bucket(capacityReservationsBucket).Get([]byte(operationID))
-		if value == nil {
-			return ErrCapacityNotFound
-		}
 		var err error
-		result, err = decodeCapacityReservation(value)
+		result, err = loadCapacityReservation(tx.Bucket(capacityReservationsBucket), []byte(operationID))
 		return err
 	})
 	if err != nil {
@@ -581,11 +545,7 @@ func (s *BoltStore) updateCapacity(operationID string, transition func(CapacityR
 	err := s.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(capacityReservationsBucket)
 		key := []byte(operationID)
-		value := bucket.Get(key)
-		if value == nil {
-			return ErrCapacityNotFound
-		}
-		current, err := decodeCapacityReservation(value)
+		current, err := loadCapacityReservation(bucket, key)
 		if err != nil {
 			return err
 		}
@@ -598,26 +558,9 @@ func (s *BoltStore) updateCapacity(operationID string, transition func(CapacityR
 			(!current.ReadyAt.IsZero() && !next.ReadyAt.Equal(current.ReadyAt)) {
 			return fmt.Errorf("%w: immutable capacity reservation fields changed", ErrCorruptStore)
 		}
-		if next.State != current.State || next.ProviderInstanceID != current.ProviderInstanceID || next.LastObservation != current.LastObservation ||
-			!next.ProvisionedAt.Equal(current.ProvisionedAt) || !next.ReadyAt.Equal(current.ReadyAt) {
-			next.UpdatedAt = time.Now().UTC()
-			if next.LastObservation != nil && next.UpdatedAt.Before(next.LastObservation.ObservedAt) {
-				next.UpdatedAt = next.LastObservation.ObservedAt
-			}
-			if next.UpdatedAt.Before(next.ProvisionedAt) {
-				next.UpdatedAt = next.ProvisionedAt
-			}
-			if next.UpdatedAt.Before(next.ReadyAt) {
-				next.UpdatedAt = next.ReadyAt
-			}
-			if err := validatePersistedCapacityReservation(next); err != nil {
-				return fmt.Errorf("%w: invalid updated capacity reservation: %v", ErrInvalidRecord, err)
-			}
-			encoded, err := json.Marshal(next)
-			if err != nil {
-				return fmt.Errorf("encode capacity reservation: %w", err)
-			}
-			if err := bucket.Put(key, encoded); err != nil {
+		if capacityTrackedFieldsChanged(current, next) {
+			next.UpdatedAt = capacityUpdateTime(capacityObservedAt(next.LastObservation), next.ProvisionedAt, next.ReadyAt)
+			if err := putUpdatedCapacityReservation(bucket, key, next); err != nil {
 				return err
 			}
 		}
@@ -639,6 +582,63 @@ func decodeCapacityReservation(value []byte) (CapacityReservation, error) {
 		return CapacityReservation{}, fmt.Errorf("%w: invalid capacity reservation: %v", ErrCorruptStore, err)
 	}
 	return reservation, nil
+}
+
+// loadCapacityReservation reads and decodes the reservation stored under key,
+// returning ErrCapacityNotFound when there is none.
+func loadCapacityReservation(bucket *bolt.Bucket, key []byte) (CapacityReservation, error) {
+	value := bucket.Get(key)
+	if value == nil {
+		return CapacityReservation{}, ErrCapacityNotFound
+	}
+	return decodeCapacityReservation(value)
+}
+
+// putCapacityReservation encodes reservation and stores it under key; what
+// names the record in the encode error.
+func putCapacityReservation(bucket *bolt.Bucket, key []byte, reservation CapacityReservation, what string) error {
+	encoded, err := json.Marshal(reservation)
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", what, err)
+	}
+	return bucket.Put(key, encoded)
+}
+
+// putUpdatedCapacityReservation validates a transitioned reservation before
+// storing it under key.
+func putUpdatedCapacityReservation(bucket *bolt.Bucket, key []byte, reservation CapacityReservation) error {
+	if err := validatePersistedCapacityReservation(reservation); err != nil {
+		return fmt.Errorf("%w: invalid updated capacity reservation: %v", ErrInvalidRecord, err)
+	}
+	return putCapacityReservation(bucket, key, reservation, "capacity reservation")
+}
+
+// capacityTrackedFieldsChanged reports whether a transition changed any field
+// whose change must be persisted with a new UpdatedAt.
+func capacityTrackedFieldsChanged(current, next CapacityReservation) bool {
+	return next.State != current.State || next.ProviderInstanceID != current.ProviderInstanceID || next.LastObservation != current.LastObservation ||
+		!next.ProvisionedAt.Equal(current.ProvisionedAt) || !next.ReadyAt.Equal(current.ReadyAt)
+}
+
+// capacityUpdateTime returns the current UTC time, raised to the latest of
+// floors so UpdatedAt never precedes evidence recorded on the reservation.
+func capacityUpdateTime(floors ...time.Time) time.Time {
+	updated := time.Now().UTC()
+	for _, floor := range floors {
+		if updated.Before(floor) {
+			updated = floor
+		}
+	}
+	return updated
+}
+
+// capacityObservedAt returns the observation time, or the zero time when
+// there is no observation.
+func capacityObservedAt(observation *CapacityProviderObservation) time.Time {
+	if observation == nil {
+		return time.Time{}
+	}
+	return observation.ObservedAt
 }
 
 func validateCapacityReservationRequest(reservation CapacityReservation) error {
