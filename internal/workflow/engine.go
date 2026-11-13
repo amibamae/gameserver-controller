@@ -399,196 +399,246 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 	step := running.Record.Steps[stepIndex]
 	deadline := e.stepDeadline(ctx, running.Record)
 	if !deadline.After(time.Now()) {
-		failed := running.Record
-		failed.Steps[stepIndex].Status = protocolstate.StepFailed
 		errValue := protocolError("core.operation.deadline_exceeded", "timeout", "The operation deadline expired before adapter dispatch.", running.Record.OperationID, false, "inspect_operation", true)
-		failed.Steps[stepIndex].Error = errValue
-		return e.fail(ctx, running, failed, stepIndex, definition, errValue)
+		return e.failStep(ctx, running, stepIndex, definition, errValue)
 	}
-	if guard, ok := definition.(DispatchGuard); ok {
-		if err := guard.BeforeAdapterDispatch(ctx, running.Record, step); err != nil {
-			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
-				"core.workflow.dispatch_guard_failed",
-				"A controller safety check failed immediately before adapter dispatch.", "safety_blocked")
-		}
+	secretRefs, streams, refusal := prepareDispatch(ctx, running.Record, step, definition, deadline)
+	if refusal != nil {
+		return e.failBeforeDispatch(ctx, running, stepIndex, definition, refusal.code, refusal.message, "safety_blocked")
 	}
+	defer func() {
+		_ = streams.close()
+	}()
 
-	requestID := adapterRequestID(running.Record.OperationID, step.StepID, step.Attempt)
-	correlationID := running.Record.CorrelationID
-	if correlationID == "" {
-		correlationID = running.Record.OperationID
+	request := newInvokeRequest(running.Record, step, deadline, secretRefs, streams)
+	response, invokeErr := e.invokeStep(ctx, step.AdapterID, request, deadline, streams, capability.Mutating)
+	if invokeErr != nil {
+		return e.recordInvokeFailure(ctx, running, stepIndex, definition, invokeErr)
+	}
+	if code, message := e.responseProblem(response, request.ID, capability); code != "" {
+		return e.markOutcomeUnknown(running, stepIndex, protocolError(code, "internal", message, running.Record.OperationID, false, "reconcile", false))
+	}
+	return e.applyAdapterResult(ctx, running, stepIndex, definition, response)
+}
+
+// dispatchRefusal names why a step was stopped before its adapter call.
+type dispatchRefusal struct{ code, message string }
+
+var (
+	refusedByDispatchGuard = &dispatchRefusal{"core.workflow.dispatch_guard_failed", "A controller safety check failed immediately before adapter dispatch."}
+	refusedSecretRefs      = &dispatchRefusal{"core.workflow.secret_reference_failed", "The controller could not authorize the secret references required by this adapter step."}
+	refusedStreams         = &dispatchRefusal{"core.workflow.stream_transfer_failed", "The controller could not prepare the bounded stream inputs required by this adapter step."}
+)
+
+// prepareDispatch runs the definition's last safety check and collects the
+// step's secret references and validated streams, in that order.
+func prepareDispatch(ctx context.Context, record store.OperationRecord, step store.OperationStep, definition Definition, deadline time.Time) ([]adapter.SecretReference, *preparedStreams, *dispatchRefusal) {
+	if guard, ok := definition.(DispatchGuard); ok {
+		if err := guard.BeforeAdapterDispatch(ctx, record, step); err != nil {
+			return nil, nil, refusedByDispatchGuard
+		}
 	}
 	var secretRefs []adapter.SecretReference
 	if provider, ok := definition.(StepSecretReferences); ok {
-		refs, err := provider.SecretReferencesForStep(ctx, running.Record, step)
+		refs, err := provider.SecretReferencesForStep(ctx, record, step)
 		if err != nil {
-			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
-				"core.workflow.secret_reference_failed",
-				"The controller could not authorize the secret references required by this adapter step.", "safety_blocked")
+			return nil, nil, refusedSecretRefs
 		}
 		secretRefs = refs
 	}
-	var streamTransfers []adapter.StreamTransfer
+	var transfers []adapter.StreamTransfer
 	if provider, ok := definition.(StepStreamTransfers); ok {
-		transfers, err := provider.StreamTransfersForStep(ctx, running.Record, step, deadline)
+		prepared, err := provider.StreamTransfersForStep(ctx, record, step, deadline)
 		if err != nil {
-			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
-				"core.workflow.stream_transfer_failed",
-				"The controller could not prepare the bounded stream inputs required by this adapter step.", "safety_blocked")
+			return nil, nil, refusedStreams
 		}
-		streamTransfers = transfers
+		transfers = prepared
 	}
-	streamSources := make(map[string]io.ReadCloser, len(streamTransfers))
-	streamDestinations := make(map[string]io.WriteCloser, len(streamTransfers))
-	seenTransferIDs := make(map[string]struct{}, len(streamTransfers))
-	streamRefs := make([]capturestream.Reference, len(streamTransfers))
-	for index, transfer := range streamTransfers {
-		validBinding := false
-		switch transfer.Reference.Direction {
-		case "controller_to_adapter":
-			validBinding = transfer.Source != nil && transfer.Sink == nil
-		case "adapter_to_controller":
-			validBinding = transfer.Sink != nil && transfer.Source == nil
+	streams, ok := newPreparedStreams(transfers)
+	if !ok {
+		return nil, nil, refusedStreams
+	}
+	return secretRefs, streams, nil
+}
+
+// preparedStreams holds a step's validated stream transfers until the call
+// ends; close releases every end once.
+type preparedStreams struct {
+	transfers    []adapter.StreamTransfer
+	references   []capturestream.Reference
+	sources      map[string]io.ReadCloser
+	destinations map[string]io.WriteCloser
+	closed       bool
+}
+
+// newPreparedStreams indexes transfers by ID. If any transfer has the wrong
+// ends for its direction, no verifier, no ID, no byte bound, or a repeated
+// ID, it closes every end it was given and reports false.
+func newPreparedStreams(transfers []adapter.StreamTransfer) (*preparedStreams, bool) {
+	streams := &preparedStreams{
+		transfers:    transfers,
+		references:   make([]capturestream.Reference, len(transfers)),
+		sources:      make(map[string]io.ReadCloser, len(transfers)),
+		destinations: make(map[string]io.WriteCloser, len(transfers)),
+	}
+	for index, transfer := range transfers {
+		id := transfer.Reference.TransferID
+		_, duplicate := streams.sources[id]
+		if _, ok := streams.destinations[id]; ok {
+			duplicate = true
 		}
-		if !validBinding || transfer.Verify == nil || transfer.Reference.TransferID == "" || transfer.Reference.MaximumBytes < 1 {
-			for _, prepared := range streamTransfers {
-				if prepared.Source != nil {
-					_ = prepared.Source.Close()
-				}
-				if prepared.Sink != nil {
-					_ = prepared.Sink.Close()
-				}
-			}
-			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
-				"core.workflow.stream_transfer_failed",
-				"The controller could not prepare the bounded stream inputs required by this adapter step.", "safety_blocked")
+		if !wellFormedTransfer(transfer) || duplicate {
+			closeAllStreamEnds(transfers)
+			return nil, false
 		}
-		if _, duplicate := seenTransferIDs[transfer.Reference.TransferID]; duplicate {
-			for _, prepared := range streamTransfers {
-				if prepared.Source != nil {
-					_ = prepared.Source.Close()
-				}
-				if prepared.Sink != nil {
-					_ = prepared.Sink.Close()
-				}
-			}
-			return e.failBeforeDispatch(ctx, running, stepIndex, definition,
-				"core.workflow.stream_transfer_failed",
-				"The controller could not prepare the bounded stream inputs required by this adapter step.", "safety_blocked")
-		}
-		seenTransferIDs[transfer.Reference.TransferID] = struct{}{}
-		streamRefs[index] = transfer.Reference
+		streams.references[index] = transfer.Reference
 		if transfer.Source != nil {
-			streamSources[transfer.Reference.TransferID] = transfer.Source
+			streams.sources[id] = transfer.Source
 		} else {
-			streamDestinations[transfer.Reference.TransferID] = transfer.Sink
+			streams.destinations[id] = transfer.Sink
 		}
 	}
-	streamsClosed := false
-	closeStreams := func() error {
-		if streamsClosed {
-			return nil
-		}
-		streamsClosed = true
-		var closeErr error
-		for _, transfer := range streamTransfers {
-			var err error
-			if transfer.Source != nil {
-				err = transfer.Source.Close()
-			} else if transfer.Sink != nil {
-				err = transfer.Sink.Close()
-			}
-			if err != nil && closeErr == nil {
-				closeErr = err
-			}
-		}
-		return closeErr
+	return streams, true
+}
+
+// wellFormedTransfer reports whether a transfer has exactly the end its
+// direction needs, a verifier, an ID and a positive byte bound.
+func wellFormedTransfer(transfer adapter.StreamTransfer) bool {
+	validBinding := false
+	switch transfer.Reference.Direction {
+	case "controller_to_adapter":
+		validBinding = transfer.Source != nil && transfer.Sink == nil
+	case "adapter_to_controller":
+		validBinding = transfer.Sink != nil && transfer.Source == nil
 	}
-	defer func() {
-		_ = closeStreams()
-	}()
+	return validBinding && transfer.Verify != nil && transfer.Reference.TransferID != "" && transfer.Reference.MaximumBytes >= 1
+}
+
+func closeAllStreamEnds(transfers []adapter.StreamTransfer) {
+	for _, prepared := range transfers {
+		if prepared.Source != nil {
+			_ = prepared.Source.Close()
+		}
+		if prepared.Sink != nil {
+			_ = prepared.Sink.Close()
+		}
+	}
+}
+
+// close closes each transfer's end once and returns the first error.
+func (p *preparedStreams) close() error {
+	if p.closed {
+		return nil
+	}
+	p.closed = true
+	var closeErr error
+	for _, transfer := range p.transfers {
+		var err error
+		if transfer.Source != nil {
+			err = transfer.Source.Close()
+		} else if transfer.Sink != nil {
+			err = transfer.Sink.Close()
+		}
+		if err != nil && closeErr == nil {
+			closeErr = err
+		}
+	}
+	return closeErr
+}
+
+// verify returns the first transfer whose verifier rejects what passed.
+func (p *preparedStreams) verify() error {
+	for _, transfer := range p.transfers {
+		if err := transfer.Verify(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func newInvokeRequest(record store.OperationRecord, step store.OperationStep, deadline time.Time, secretRefs []adapter.SecretReference, streams *preparedStreams) adapter.InvokeRequest {
+	requestID := adapterRequestID(record.OperationID, step.StepID, step.Attempt)
+	correlationID := record.CorrelationID
+	if correlationID == "" {
+		correlationID = record.OperationID
+	}
 	request := adapter.InvokeRequest{
 		JSONRPC: "2.0",
 		ID:      requestID,
 		Method:  "adapter.invoke",
 		Params: adapter.InvokeParams{
-			ProtocolVersion: running.Record.ProtocolVersion,
+			ProtocolVersion: record.ProtocolVersion,
 			Capability:      step.CapabilityName,
 			RequestContext: adapter.RequestContext{
 				RequestID: requestID, CorrelationID: correlationID,
-				OperationID: running.Record.OperationID, StepID: step.StepID,
-				ServerID: running.Record.Target.ServerID, EnvironmentID: running.Record.Target.EnvironmentID,
-				Deadline: deadline, SecretRefs: secretRefs, StreamTransfers: streamRefs,
+				OperationID: record.OperationID, StepID: step.StepID,
+				ServerID: record.Target.ServerID, EnvironmentID: record.Target.EnvironmentID,
+				Deadline: deadline, SecretRefs: secretRefs, StreamTransfers: streams.references,
 			},
 			Input: append(json.RawMessage(nil), effectiveStepInput(step)...),
 		},
 	}
-	request.Params.RequestContext.SetStreamSources(streamSources)
-	request.Params.RequestContext.SetStreamDestinations(streamDestinations)
+	request.Params.RequestContext.SetStreamSources(streams.sources)
+	request.Params.RequestContext.SetStreamDestinations(streams.destinations)
+	return request
+}
+
+// invokeStep calls the adapter under the step deadline, then closes and
+// verifies the streams. A stream that cannot be closed or verified after a
+// successful call makes a mutating call's outcome uncertain.
+func (e *Engine) invokeStep(ctx context.Context, adapterID string, request adapter.InvokeRequest, deadline time.Time, streams *preparedStreams, mutating bool) (adapter.InvokeResponse, error) {
 	callContext, cancel := context.WithDeadline(ctx, deadline)
-	response, invokeErr := e.adapters.Invoke(callContext, step.AdapterID, request)
+	response, invokeErr := e.adapters.Invoke(callContext, adapterID, request)
 	cancel()
-	if closeErr := closeStreams(); invokeErr == nil && closeErr != nil {
-		invokeErr = &adapter.InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("controller-provided stream could not be closed cleanly")}
+	if closeErr := streams.close(); invokeErr == nil && closeErr != nil {
+		return response, &adapter.InvocationError{MayHaveSideEffects: mutating, Cause: errors.New("controller-provided stream could not be closed cleanly")}
 	}
-	if invokeErr == nil {
-		for _, transfer := range streamTransfers {
-			if err := transfer.Verify(); err != nil {
-				invokeErr = &adapter.InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("controller-provided stream was not fully and correctly consumed")}
-				break
-			}
-		}
+	if invokeErr == nil && streams.verify() != nil {
+		return response, &adapter.InvocationError{MayHaveSideEffects: mutating, Cause: errors.New("controller-provided stream was not fully and correctly consumed")}
 	}
-	if invokeErr != nil {
-		var ambiguous *adapter.InvocationError
-		if errors.As(invokeErr, &ambiguous) && ambiguous.MayHaveSideEffects {
-			unknown := running.Record
-			unknown.Status = protocolstate.OperationReconciling
-			unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
-			unknownError := protocolError("core.adapter.outcome_unknown", "internal", "The adapter call may have taken effect but returned no definitive result.", running.Record.OperationID, false, "reconcile", false)
-			unknown.Steps[stepIndex].Error = unknownError
-			unknown.Error = json.RawMessage(unknownError)
-			return e.updateOperation(running.Revision, unknown)
-		}
-		failure := protocolError("core.adapter.invocation_failed", "provider_failure", "The adapter call failed before a side effect was confirmed.", running.Record.OperationID, false, "inspect_operation", true)
-		failed := running.Record
-		failed.Steps[stepIndex].Status = protocolstate.StepFailed
-		failed.Steps[stepIndex].Error = failure
-		return e.fail(ctx, running, failed, stepIndex, definition, failure)
+	return response, invokeErr
+}
+
+// recordInvokeFailure leaves a call that may have taken effect for
+// reconciliation and fails the step for any other error.
+func (e *Engine) recordInvokeFailure(ctx context.Context, running store.StoredOperation, stepIndex int, definition Definition, invokeErr error) (store.StoredOperation, error) {
+	var ambiguous *adapter.InvocationError
+	if errors.As(invokeErr, &ambiguous) && ambiguous.MayHaveSideEffects {
+		return e.markOutcomeUnknown(running, stepIndex, protocolError("core.adapter.outcome_unknown", "internal", "The adapter call may have taken effect but returned no definitive result.", running.Record.OperationID, false, "reconcile", false))
 	}
+	failure := protocolError("core.adapter.invocation_failed", "provider_failure", "The adapter call failed before a side effect was confirmed.", running.Record.OperationID, false, "inspect_operation", true)
+	return e.failStep(ctx, running, stepIndex, definition, failure)
+}
+
+// responseProblem returns the error code and message for a response that is
+// malformed, mismatched or carries an unsupported outcome, or "" when the
+// response can be applied.
+func (e *Engine) responseProblem(response adapter.InvokeResponse, requestID string, capability adapter.Capability) (string, string) {
 	encodedResponse, encodeErr := json.Marshal(response)
 	responseSchemaID := "urn:gameserver-controller:" + e.schemas.ProtocolVersion() + ":rpc:adapter-invoke-result"
 	if encodeErr != nil || response.JSONRPC != "2.0" || response.ID != requestID || response.Result.ObservedAt.IsZero() ||
 		e.schemas.ValidateJSON(responseSchemaID, encodedResponse) != nil ||
 		e.schemas.ValidateJSON(capability.OutputSchemaURI, response.Result.Output) != nil {
-		unknown := running.Record
-		unknown.Status = protocolstate.OperationReconciling
-		unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
-		unknown.Steps[stepIndex].Error = protocolError("core.adapter.invalid_response", "internal", "The adapter returned a malformed response after dispatch.", running.Record.OperationID, false, "reconcile", false)
-		unknown.Error = json.RawMessage(unknown.Steps[stepIndex].Error)
-		return e.updateOperation(running.Revision, unknown)
+		return "core.adapter.invalid_response", "The adapter returned a malformed response after dispatch."
 	}
-	if response.Result.Outcome != adapter.OutcomeCompleted && response.Result.Outcome != adapter.OutcomeAccepted && response.Result.Outcome != adapter.OutcomeUnknown {
-		unknown := running.Record
-		unknown.Status = protocolstate.OperationReconciling
-		unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
-		unknown.Steps[stepIndex].Error = protocolError("core.adapter.invalid_outcome", "internal", "The adapter returned an unsupported outcome after dispatch.", running.Record.OperationID, false, "reconcile", false)
-		unknown.Error = json.RawMessage(unknown.Steps[stepIndex].Error)
-		return e.updateOperation(running.Revision, unknown)
+	switch response.Result.Outcome {
+	case adapter.OutcomeCompleted, adapter.OutcomeAccepted, adapter.OutcomeUnknown:
+		return "", ""
 	}
+	return "core.adapter.invalid_outcome", "The adapter returned an unsupported outcome after dispatch."
+}
 
+// applyAdapterResult records a valid response: the step's external
+// reference, then its completion, wait or unknown outcome.
+func (e *Engine) applyAdapterResult(ctx context.Context, running store.StoredOperation, stepIndex int, definition Definition, response adapter.InvokeResponse) (store.StoredOperation, error) {
 	updated := running.Record
 	updated.Error = nil
 	updated.CurrentStepID = nil
 	updated.Steps[stepIndex].Error = nil
 	if len(response.Result.ExternalOperationRef) > 0 {
-		if len(updated.Steps[stepIndex].ExternalOperationRef) > 0 && !equalJSON(updated.Steps[stepIndex].ExternalOperationRef, response.Result.ExternalOperationRef) {
-			unknown := running.Record
-			unknown.Status = protocolstate.OperationReconciling
-			unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
-			unknown.Steps[stepIndex].Error = protocolError("core.adapter.external_reference_changed", "internal", "The adapter returned a different external operation reference for a recorded step.", running.Record.OperationID, false, "reconcile", false)
-			unknown.Error = json.RawMessage(unknown.Steps[stepIndex].Error)
-			return e.updateOperation(running.Revision, unknown)
+		recorded := updated.Steps[stepIndex].ExternalOperationRef
+		if len(recorded) > 0 && !equalJSON(recorded, response.Result.ExternalOperationRef) {
+			return e.markOutcomeUnknown(running, stepIndex, protocolError("core.adapter.external_reference_changed", "internal", "The adapter returned a different external operation reference for a recorded step.", running.Record.OperationID, false, "reconcile", false))
 		}
 		updated.Steps[stepIndex].ExternalOperationRef = append(json.RawMessage(nil), response.Result.ExternalOperationRef...)
 	}
@@ -603,7 +653,7 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 		return e.updateOperation(running.Revision, updated)
 	case adapter.OutcomeUnknown:
 		updated.Status = protocolstate.OperationReconciling
-		updated.CurrentStepID = stringPointer(step.StepID)
+		updated.CurrentStepID = stringPointer(updated.Steps[stepIndex].StepID)
 		updated.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
 		unknownError := protocolError("core.adapter.outcome_unknown", "internal", "The adapter reported that the external outcome is unknown.", running.Record.OperationID, false, "reconcile", false)
 		updated.Steps[stepIndex].Error = unknownError
@@ -611,11 +661,27 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 		return e.updateOperation(running.Revision, updated)
 	default:
 		failure := protocolError("core.adapter.invalid_outcome", "internal", "The adapter returned an unsupported outcome value.", running.Record.OperationID, false, "inspect_operation", true)
-		failed := running.Record
-		failed.Steps[stepIndex].Status = protocolstate.StepFailed
-		failed.Steps[stepIndex].Error = failure
-		return e.fail(ctx, running, failed, stepIndex, definition, failure)
+		return e.failStep(ctx, running, stepIndex, definition, failure)
 	}
+}
+
+// markOutcomeUnknown moves the operation to reconciliation with the step's
+// outcome unknown, recording errValue on both.
+func (e *Engine) markOutcomeUnknown(running store.StoredOperation, stepIndex int, errValue json.RawMessage) (store.StoredOperation, error) {
+	unknown := running.Record
+	unknown.Status = protocolstate.OperationReconciling
+	unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
+	unknown.Steps[stepIndex].Error = errValue
+	unknown.Error = json.RawMessage(errValue)
+	return e.updateOperation(running.Revision, unknown)
+}
+
+// failStep fails the step with errValue and finishes the operation.
+func (e *Engine) failStep(ctx context.Context, running store.StoredOperation, stepIndex int, definition Definition, errValue json.RawMessage) (store.StoredOperation, error) {
+	failed := running.Record
+	failed.Steps[stepIndex].Status = protocolstate.StepFailed
+	failed.Steps[stepIndex].Error = errValue
+	return e.fail(ctx, running, failed, stepIndex, definition, errValue)
 }
 
 func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, stepIndex int, definition Definition) (store.StoredOperation, error) {
