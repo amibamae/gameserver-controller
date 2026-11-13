@@ -39,7 +39,6 @@ func referenceEd25519Key(line string) bool {
 func evaluateHostKeyHandoff(_ *protocolPackage, fixture map[string]any) (map[string]any, error) {
 	input := asObject(fixture["input"])
 	handoff := asObject(input["handoff"])
-	oneTime := stringValue(handoff, "one_time_host_key")
 	expires, err := time.Parse(time.RFC3339, stringValue(handoff, "expires_at"))
 	if err != nil {
 		return nil, fmt.Errorf("handoff expires_at: %w", err)
@@ -47,77 +46,123 @@ func evaluateHostKeyHandoff(_ *protocolPackage, fixture map[string]any) (map[str
 	evaluations := []any{}
 	for _, raw := range arrayValue(input, "evaluations") {
 		evaluation := asObject(raw)
-		state, pinned, session, replaced := "pending_rotation", "", "", false
+		m := handoffMachine{oneTime: stringValue(handoff, "one_time_host_key"), expires: expires, state: "pending_rotation"}
 		steps := []any{}
 		for _, rawStep := range arrayValue(evaluation, "steps") {
 			step := asObject(rawStep)
-			var result string
-			switch kind := stringValue(step, "step"); kind {
-			case "connect_one_time":
-				at, err := time.Parse(time.RFC3339, stringValue(step, "at"))
-				if err != nil {
-					return nil, fmt.Errorf("step at: %w", err)
-				}
-				switch {
-				case state != "pending_rotation":
-					result = "not_pending"
-				case !at.Before(expires):
-					result = "expired"
-				case stringValue(step, "presented_host_key") != oneTime:
-					result = "host_key_mismatch"
-				default:
-					result = "permitted"
-				}
-				session = map[bool]string{true: "one_time"}[result == "permitted"]
-			case "rotate":
-				output := strings.TrimSuffix(stringValue(step, "output"), "\n")
-				switch {
-				case session != "one_time":
-					result = "not_verified"
-				case strings.ContainsAny(output, "\r\n") || !referenceEd25519Key(output):
-					result = "invalid_output"
-				case output == oneTime:
-					result = "reused_one_time_key"
-				default:
-					result, state, pinned = "pinned", "rotated", output
-				}
-				session = ""
-			case "replace_user_data":
-				switch {
-				case state != "rotated":
-					result = "not_rotated"
-				case boolValue(step, "succeeded"):
-					result, replaced = "replaced", true
-				default:
-					result = "not_replaced"
-				}
-			case "connect_pinned":
-				switch {
-				case state != "rotated":
-					result = "not_rotated"
-				case stringValue(step, "presented_host_key") != pinned:
-					result = "host_key_mismatch"
-				default:
-					result = "permitted"
-				}
-				session = map[bool]string{true: "pinned"}[result == "permitted"]
-			case "send_secret":
-				result = map[bool]string{true: "permitted", false: "refused"}[session == "pinned"]
-			default:
-				return nil, fmt.Errorf("unknown handoff step %q", kind)
+			result, err := m.apply(step)
+			if err != nil {
+				return nil, err
 			}
 			steps = append(steps, map[string]any{"step": stringValue(step, "step"), "result": result})
 		}
 		var pinnedValue any
-		if pinned != "" {
-			pinnedValue = pinned
+		if m.pinned != "" {
+			pinnedValue = m.pinned
 		}
 		evaluations = append(evaluations, map[string]any{
-			"case_id": stringValue(evaluation, "case_id"), "steps": steps, "final_state": state,
-			"pinned_host_key": pinnedValue, "user_data_replaced": replaced,
+			"case_id": stringValue(evaluation, "case_id"), "steps": steps, "final_state": m.state,
+			"pinned_host_key": pinnedValue, "user_data_replaced": m.replaced,
 		})
 	}
 	return map[string]any{"evaluations": evaluations}, nil
+}
+
+// handoffMachine is the controller's side of the single-use host key
+// handoff (hosting section 6.1). state is pending_rotation until a rotation
+// pins a new key, then rotated. session is the verified SSH session, if
+// any: "one_time" or "pinned".
+type handoffMachine struct {
+	oneTime       string
+	expires       time.Time
+	state, pinned string
+	session       string
+	replaced      bool
+}
+
+// apply runs one step and returns its result.
+func (m *handoffMachine) apply(step map[string]any) (string, error) {
+	switch kind := stringValue(step, "step"); kind {
+	case "connect_one_time":
+		return m.connectOneTime(step)
+	case "rotate":
+		return m.rotate(step), nil
+	case "replace_user_data":
+		return m.replaceUserData(step), nil
+	case "connect_pinned":
+		return m.connectPinned(step), nil
+	case "send_secret":
+		return map[bool]string{true: "permitted", false: "refused"}[m.session == "pinned"], nil
+	default:
+		return "", fmt.Errorf("unknown handoff step %q", kind)
+	}
+}
+
+// connectOneTime: before rotation and expiry, only the exact one-time key
+// opens a verified session.
+func (m *handoffMachine) connectOneTime(step map[string]any) (string, error) {
+	at, err := time.Parse(time.RFC3339, stringValue(step, "at"))
+	if err != nil {
+		return "", fmt.Errorf("step at: %w", err)
+	}
+	result := "permitted"
+	switch {
+	case m.state != "pending_rotation":
+		result = "not_pending"
+	case !at.Before(m.expires):
+		result = "expired"
+	case stringValue(step, "presented_host_key") != m.oneTime:
+		result = "host_key_mismatch"
+	}
+	m.session = map[bool]string{true: "one_time"}[result == "permitted"]
+	return result, nil
+}
+
+// rotate: over a verified one-time session, the output must be one new
+// ed25519 key, which is then pinned. The session ends either way.
+func (m *handoffMachine) rotate(step map[string]any) string {
+	output := strings.TrimSuffix(stringValue(step, "output"), "\n")
+	result := "pinned"
+	switch {
+	case m.session != "one_time":
+		result = "not_verified"
+	case strings.ContainsAny(output, "\r\n") || !referenceEd25519Key(output):
+		result = "invalid_output"
+	case output == m.oneTime:
+		result = "reused_one_time_key"
+	default:
+		m.state, m.pinned = "rotated", output
+	}
+	m.session = ""
+	return result
+}
+
+// replaceUserData: the provider copy of the one-time key is replaced only
+// after rotation.
+func (m *handoffMachine) replaceUserData(step map[string]any) string {
+	switch {
+	case m.state != "rotated":
+		return "not_rotated"
+	case boolValue(step, "succeeded"):
+		m.replaced = true
+		return "replaced"
+	default:
+		return "not_replaced"
+	}
+}
+
+// connectPinned: after rotation, only the pinned key opens a verified
+// session.
+func (m *handoffMachine) connectPinned(step map[string]any) string {
+	result := "permitted"
+	switch {
+	case m.state != "rotated":
+		result = "not_rotated"
+	case stringValue(step, "presented_host_key") != m.pinned:
+		result = "host_key_mismatch"
+	}
+	m.session = map[bool]string{true: "pinned"}[result == "permitted"]
+	return result
 }
 
 func init() {
