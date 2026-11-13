@@ -222,92 +222,170 @@ func (r *Runtime) Invoke(ctx context.Context, adapterID string, request adapter.
 	if err != nil {
 		return adapter.InvokeResponse{}, err
 	}
-	c, input, scope := request.Params.RequestContext, dispatch.input, dispatch.scope
-	var mirror io.Writer
-	stage, err := r.staging.Open(ctx, scope)
-	if errors.Is(err, ErrStagingNeedsReconciliation) {
-		return adapter.InvokeResponse{}, uncertain()
-	}
-	if err != nil || stage == nil {
-		return adapter.InvokeResponse{}, errors.New("capture staging is unavailable")
-	}
-	if len(c.StreamTransfers) == 1 {
-		mirror, err = c.CreateStream(c.StreamTransfers[0].TransferID)
-		if err != nil {
-			if stage.Discard() != nil {
-				return adapter.InvokeResponse{}, errors.New("capture staging cleanup failed before dispatch")
-			}
-			return adapter.InvokeResponse{}, errors.New("capture destination could not be claimed")
-		}
-	}
-	counted := &countingSink{sink: stage, mirror: mirror}
-	expiry := time.Now().Add(5 * time.Minute)
-	if c.Deadline.Before(expiry) {
-		expiry = c.Deadline
-	}
-	ref, ticket, err := r.broker.IssueTracked(scope, r.maximum, expiry, c.Deadline, counted)
+	c := request.Params.RequestContext
+	stream, err := r.openCaptureStream(ctx, c, dispatch.scope)
 	if err != nil {
-		if stage.Discard() != nil {
-			return adapter.InvokeResponse{}, errors.New("capture staging cleanup failed before dispatch")
-		}
-		return adapter.InvokeResponse{}, errors.New("capture stream could not be issued")
+		return adapter.InvokeResponse{}, err
 	}
-	sealed := false
 	defer func() {
-		ticket.Abort()
-		if !sealed {
-			if stage.Discard() != nil {
-				returned = adapter.InvokeResponse{}
-				returnedErr = uncertain()
-			}
+		if !stream.release() {
+			returned = adapter.InvokeResponse{}
+			returnedErr = uncertain()
 		}
 	}()
-	request.Params.RequestContext.StreamTransfers = []capturestream.Reference{ref}
+	request.Params.RequestContext.StreamTransfers = []capturestream.Reference{stream.ref}
 	response, err := r.adapters.Invoke(ctx, adapterID, request)
 	if err != nil {
 		return adapter.InvokeResponse{}, err
 	}
+	return r.checkCaptureResult(ctx, adapterID, c.EnvironmentID, dispatch, stream, response)
+}
+
+// captureStream is the private stage and the issued broker stream for one
+// dispatched capture. counted measures the bytes written to the stage.
+type captureStream struct {
+	stage   Stage
+	counted *countingSink
+	ref     capturestream.Reference
+	ticket  *capturestream.Ticket
+	sealed  bool
+}
+
+// openCaptureStream opens the stage, claims the external destination when the
+// request names one, and issues the broker stream that writes to both. Every
+// failure after the stage opens discards it.
+func (r *Runtime) openCaptureStream(ctx context.Context, c adapter.RequestContext, scope capturestream.Scope) (*captureStream, error) {
+	stage, err := r.staging.Open(ctx, scope)
+	if errors.Is(err, ErrStagingNeedsReconciliation) {
+		return nil, uncertain()
+	}
+	if err != nil || stage == nil {
+		return nil, errors.New("capture staging is unavailable")
+	}
+	mirror, err := claimCaptureDestination(c)
+	if err != nil {
+		return nil, discardBeforeDispatch(stage, "capture destination could not be claimed")
+	}
+	counted := &countingSink{sink: stage, mirror: mirror}
+	ref, ticket, err := r.broker.IssueTracked(scope, r.maximum, captureStreamExpiry(c.Deadline), c.Deadline, counted)
+	if err != nil {
+		return nil, discardBeforeDispatch(stage, "capture stream could not be issued")
+	}
+	return &captureStream{stage: stage, counted: counted, ref: ref, ticket: ticket}, nil
+}
+
+// claimCaptureDestination claims the request's one external stream
+// destination, if it names one; otherwise it returns no writer.
+func claimCaptureDestination(c adapter.RequestContext) (io.Writer, error) {
+	if len(c.StreamTransfers) != 1 {
+		return nil, nil
+	}
+	return c.CreateStream(c.StreamTransfers[0].TransferID)
+}
+
+// captureStreamExpiry is five minutes from now, or the invocation deadline
+// when that is sooner.
+func captureStreamExpiry(deadline time.Time) time.Time {
+	expiry := time.Now().Add(5 * time.Minute)
+	if deadline.Before(expiry) {
+		expiry = deadline
+	}
+	return expiry
+}
+
+// discardBeforeDispatch discards stage after a setup failure and returns the
+// failure, or a cleanup error when the discard fails.
+func discardBeforeDispatch(stage Stage, message string) error {
+	if stage.Discard() != nil {
+		return errors.New("capture staging cleanup failed before dispatch")
+	}
+	return errors.New(message)
+}
+
+// release aborts the stream ticket and discards the stage unless it was
+// sealed. It reports false when the discard failed.
+func (s *captureStream) release() bool {
+	s.ticket.Abort()
+	return s.sealed || s.stage.Discard() == nil
+}
+
+// checkCaptureResult accepts the adapter response only when it names exactly
+// the requested capture and is either a reconcilable unknown outcome, a
+// rejection that wrote no bytes, or a capture whose measured stream matches
+// it and is sealed. Anything else is uncertain.
+func (r *Runtime) checkCaptureResult(ctx context.Context, adapterID, environmentID string, dispatch captureDispatch, stream *captureStream, response adapter.InvokeResponse) (adapter.InvokeResponse, error) {
 	var output result
 	if r.schemas.ValidateJSON(r.captureSchema("output"), response.Result.Output) != nil || json.Unmarshal(response.Result.Output, &output) != nil {
 		return adapter.InvokeResponse{}, uncertain()
 	}
-	if !sameCapture(input, output.capture) {
+	if !sameCapture(dispatch.input, output.capture) {
 		return adapter.InvokeResponse{}, uncertain()
 	}
 	if output.Outcome == "outcome_unknown" {
-		var reference struct {
-			AdapterID     string `json:"adapter_id"`
-			EnvironmentID string `json:"environment_id"`
-		}
-		if json.Unmarshal(output.ReconciliationRef, &reference) != nil || reference.AdapterID != adapterID || reference.EnvironmentID != c.EnvironmentID {
-			return adapter.InvokeResponse{}, uncertain()
-		}
-		if len(response.Result.ExternalOperationRef) > 0 && !sameJSON(response.Result.ExternalOperationRef, output.ReconciliationRef) {
-			return adapter.InvokeResponse{}, uncertain()
-		}
-		response.Result.Outcome = adapter.OutcomeUnknown
-		response.Result.ExternalOperationRef = append(json.RawMessage(nil), output.ReconciliationRef...)
-		return response, nil
+		return unknownCaptureOutcome(adapterID, environmentID, response, output)
 	}
 	if response.Result.Outcome != adapter.OutcomeCompleted {
 		return adapter.InvokeResponse{}, uncertain()
 	}
 	if output.Outcome == "rejected" {
-		ticket.Abort()
-		if counted.size.Load() != 0 {
-			return adapter.InvokeResponse{}, uncertain()
-		}
-		return response, nil
+		return stream.rejected(response)
 	}
-	receipt, err := ticket.Evidence()
-	if err != nil || receipt.Scope != scope || !output.StreamCompleted || receipt.SizeBytes != output.Size || output.Checksum.Algorithm != "sha256" || receipt.SHA256 != output.Checksum.Digest {
+	return stream.seal(ctx, dispatch.scope, output, response)
+}
+
+// unknownCaptureOutcome reports the response as an unknown outcome to
+// reconcile through output's reconciliation reference, which must name this
+// adapter and environment and match any external reference the adapter gave.
+func unknownCaptureOutcome(adapterID, environmentID string, response adapter.InvokeResponse, output result) (adapter.InvokeResponse, error) {
+	if !reconciliationRefNames(output.ReconciliationRef, adapterID, environmentID) {
 		return adapter.InvokeResponse{}, uncertain()
 	}
-	if ctx.Err() != nil || stage.Seal(ctx, receipt, response.Result.Output) != nil {
+	if len(response.Result.ExternalOperationRef) > 0 && !sameJSON(response.Result.ExternalOperationRef, output.ReconciliationRef) {
 		return adapter.InvokeResponse{}, uncertain()
 	}
-	sealed = true
+	response.Result.Outcome = adapter.OutcomeUnknown
+	response.Result.ExternalOperationRef = append(json.RawMessage(nil), output.ReconciliationRef...)
 	return response, nil
+}
+
+// reconciliationRefNames reports whether ref decodes and names adapterID in
+// environmentID.
+func reconciliationRefNames(ref json.RawMessage, adapterID, environmentID string) bool {
+	var reference struct {
+		AdapterID     string `json:"adapter_id"`
+		EnvironmentID string `json:"environment_id"`
+	}
+	return json.Unmarshal(ref, &reference) == nil && reference.AdapterID == adapterID && reference.EnvironmentID == environmentID
+}
+
+// rejected accepts a definitive rejection only when no byte reached the stage.
+func (s *captureStream) rejected(response adapter.InvokeResponse) (adapter.InvokeResponse, error) {
+	s.ticket.Abort()
+	if s.counted.size.Load() != 0 {
+		return adapter.InvokeResponse{}, uncertain()
+	}
+	return response, nil
+}
+
+// seal durably seals the stage with the validated response when the
+// completed stream's measured evidence matches the reported capture.
+func (s *captureStream) seal(ctx context.Context, scope capturestream.Scope, output result, response adapter.InvokeResponse) (adapter.InvokeResponse, error) {
+	receipt, err := s.ticket.Evidence()
+	if err != nil || !streamEvidenceMatches(receipt, scope, output) {
+		return adapter.InvokeResponse{}, uncertain()
+	}
+	if ctx.Err() != nil || s.stage.Seal(ctx, receipt, response.Result.Output) != nil {
+		return adapter.InvokeResponse{}, uncertain()
+	}
+	s.sealed = true
+	return response, nil
+}
+
+// streamEvidenceMatches reports whether the measured stream receipt is for
+// scope and matches the completed stream's reported size and sha256 digest.
+func streamEvidenceMatches(receipt capturestream.Receipt, scope capturestream.Scope, output result) bool {
+	return receipt.Scope == scope && output.StreamCompleted && receipt.SizeBytes == output.Size &&
+		output.Checksum.Algorithm == "sha256" && receipt.SHA256 == output.Checksum.Digest
 }
 
 type countingSink struct {
