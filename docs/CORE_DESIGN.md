@@ -111,6 +111,24 @@ The policy lives in `internal/scalingpolicy` and is configured per server under 
 
 The load signals and thresholds are not designed yet. Until this is built, change a server's plan by hand.
 
+### Manual scaling (planned)
+
+**Status: planned, not implemented.** An operator can schedule a move to a larger or smaller plan by hand, whether or not auto-scaling is on. A manual request names the target plan: any plan the provider offers in the server's region, not only a rung of the ladder. It also names when the move happens:
+
+| Timing | When it happens | How |
+|---|---|---|
+| `immediate` | As soon as possible, whatever the billing period. | A live migration starts now, outside the decision window. |
+| `end_of_billing_period` | When the server's paid hour ends. | The live migration starts inside the server's decision window (minutes 58–59 by default), so the old server is destroyed before the next hour is billed. |
+| `next_start` | The next time players start the server. | No migration. The running server is left alone until it stops normally, which is the idle shutdown once everyone has left. The next boot from a lobby join provisions the new plan and restores the newest verified backup. If the server is already stopped, the new plan applies at its next start. |
+
+`immediate` and `end_of_billing_period` use the live migration described above. A migration target on the new plan is provisioned and passes readiness. Players are handed over through the proxy, and the old server's final backup is verified before the exact old server is destroyed. Failure before the handover destroys the migration target, and the live server keeps serving. The usual limits apply: if `migration_targets.enabled` is `false`, or `max_servers` is reached, the request stays pending and shows the reason.
+
+- **One pending change per server.** It can be listed and cancelled before it starts. Replacing it needs an explicit replace. A manual move is a `server.migrate` operation with `trigger: manual`, so it is durable, idempotent and audited like any other operation.
+- **With auto-scaling on**, a manual request takes precedence. Auto-scaling pauses for that server until the manual change is complete. For `next_start`, that is when the next start applies the new plan. Auto-scaling then resumes. The operator is told this in the response, in the controller log, and through the configured notifiers (a new `scaling.auto_paused` / `scaling.auto_resumed` event pair). The message also says how to turn auto-scaling off.
+- **Turning auto-scaling off or on.** A per-server command overrides `scaling.vertical.enabled` without editing the configuration. The override is stored durably in the controller state and wins until it is cleared, after which the configured value applies again. It will be a management API route (`PUT /v1/servers/{server_id}/scaling` with `auto: enabled`, `disabled` or `config`, needing a new `server.scaling.manage` permission) with a command-line wrapper.
+
+The protocol pieces are not published yet. They come with the `server.migrate` schema: the `trigger`, `target_plan` and `timing` fields, the scaling override resource, the permission, the two notification event types, and a conformance vector for timing selection, auto-pause precedence and pending-change replacement.
+
 ### Restore and stage
 
 Restore one identified backup. Check its integrity and version compatibility; require approval when replacing data or crossing a major-version boundary. Reject archive traversal and unsafe symlinks.
