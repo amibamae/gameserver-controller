@@ -160,17 +160,25 @@ func New(config Config, protocolVersion string, bridge Bridge, addresses Address
 }
 
 func newAdapter(config Config, protocolVersion string, bridge Bridge, addresses AddressResolver, now func() time.Time) (*Adapter, error) {
-	if !adapterIDPattern.MatchString(config.AdapterID) || config.EnvironmentID == "" || len(config.EnvironmentID) > 200 {
-		return nil, errors.New("an integration adapter ID and environment are required")
-	}
-	ref := config.ProxyInstanceRef
-	if ref.AdapterID != config.AdapterID || ref.EnvironmentID != config.EnvironmentID || ref.ResourceKind != proxyInstanceKind || ref.ExternalID == "" || len(ref.ExternalID) > 1024 {
-		return nil, errors.New("proxy instance reference must name this adapter, its environment, and a proxy-instance ID")
+	if err := validateConfig(config); err != nil {
+		return nil, err
 	}
 	if protocolVersion == "" || bridge == nil || addresses == nil || now == nil {
 		return nil, errors.New("protocol version, proxy bridge, and backend address resolver are required")
 	}
 	return &Adapter{config: config, protocolVersion: protocolVersion, bridge: bridge, addresses: addresses, now: now}, nil
+}
+
+func validateConfig(config Config) error {
+	if !adapterIDPattern.MatchString(config.AdapterID) || config.EnvironmentID == "" || len(config.EnvironmentID) > 200 {
+		return errors.New("an integration adapter ID and environment are required")
+	}
+	ref := config.ProxyInstanceRef
+	ownsRef := ref.AdapterID == config.AdapterID && ref.EnvironmentID == config.EnvironmentID && ref.ResourceKind == proxyInstanceKind
+	if !ownsRef || ref.ExternalID == "" || len(ref.ExternalID) > 1024 {
+		return errors.New("proxy instance reference must name this adapter, its environment, and a proxy-instance ID")
+	}
+	return nil
 }
 
 // Descriptor advertises the proxy backend lifecycle, session inspection, and
@@ -220,32 +228,11 @@ func (a *Adapter) Invoke(ctx context.Context, request adapter.InvokeRequest) (ad
 	if ctx == nil || a == nil {
 		return adapter.InvokeResponse{}, errors.New("Velocity adapter and invocation context are required")
 	}
-	var (
-		output  any
-		outcome adapter.Outcome
-		err     error
-	)
-	input := request.Params.Input
-	switch request.Params.Capability {
-	case "integration.proxy.backend.inspect":
-		output, outcome, err = a.inspectBackend(ctx, input)
-	case "integration.proxy.backend.register":
-		output, outcome, err = a.registerBackend(ctx, input)
-	case "integration.proxy.backend.drain":
-		output, outcome, err = a.changeBackend(ctx, input, a.bridge.DrainBackend, Draining)
-	case "integration.proxy.backend.unregister":
-		output, outcome, err = a.changeBackend(ctx, input, a.bridge.UnregisterBackend, Unregistered)
-	case "integration.proxy.backend.players.inspect":
-		output, outcome, err = a.inspectPlayers(ctx, input)
-	case "integration.proxy.session.inspect":
-		output, outcome, err = a.inspectSession(ctx, input)
-	case "integration.proxy.cohort.inspect":
-		output, outcome, err = a.inspectCohort(ctx, input)
-	case "integration.velocity.players.transfer":
-		output, outcome, err = a.transferPlayers(ctx, input)
-	default:
+	handler, ok := a.handlers()[request.Params.Capability]
+	if !ok {
 		return adapter.InvokeResponse{}, errors.New("unsupported Velocity capability")
 	}
+	output, outcome, err := handler(ctx, request.Params.Input)
 	if err != nil {
 		return adapter.InvokeResponse{}, err
 	}
@@ -256,6 +243,26 @@ func (a *Adapter) Invoke(ctx context.Context, request adapter.InvokeRequest) (ad
 	return adapter.InvokeResponse{JSONRPC: "2.0", ID: request.ID, Result: adapter.InvokeResult{
 		Outcome: outcome, Output: encoded, ObservedAt: a.now().UTC(),
 	}}, nil
+}
+
+// capabilityHandler runs one capability on its raw, schema-validated input.
+type capabilityHandler func(context.Context, json.RawMessage) (any, adapter.Outcome, error)
+
+func (a *Adapter) handlers() map[string]capabilityHandler {
+	return map[string]capabilityHandler{
+		"integration.proxy.backend.inspect":  a.inspectBackend,
+		"integration.proxy.backend.register": a.registerBackend,
+		"integration.proxy.backend.drain": func(ctx context.Context, raw json.RawMessage) (any, adapter.Outcome, error) {
+			return a.changeBackend(ctx, raw, a.bridge.DrainBackend, Draining)
+		},
+		"integration.proxy.backend.unregister": func(ctx context.Context, raw json.RawMessage) (any, adapter.Outcome, error) {
+			return a.changeBackend(ctx, raw, a.bridge.UnregisterBackend, Unregistered)
+		},
+		"integration.proxy.backend.players.inspect": a.inspectPlayers,
+		"integration.proxy.session.inspect":         a.inspectSession,
+		"integration.proxy.cohort.inspect":          a.inspectCohort,
+		"integration.velocity.players.transfer":     a.transferPlayers,
+	}
 }
 
 type backendInput struct {
@@ -294,6 +301,34 @@ type playersOutput struct {
 	ObservationState   string        `json:"observation_state"`
 	ActiveSessionCount *int64        `json:"active_session_count,omitempty"`
 	ObservedAt         *time.Time    `json:"observed_at,omitempty"`
+}
+
+func (input backendInput) backendTarget() BackendTarget  { return input.Target }
+func (input registerInput) backendTarget() BackendTarget { return input.Target }
+func (input playersInput) backendTarget() BackendTarget  { return input.Target }
+
+// decodeTargeted decodes a backend capability input and rejects a target
+// outside this adapter's environment.
+func decodeTargeted[T interface{ backendTarget() BackendTarget }](a *Adapter, raw json.RawMessage) (T, error) {
+	var input T
+	if err := decode(raw, &input); err != nil {
+		return input, err
+	}
+	return input, a.checkTarget(input.backendTarget())
+}
+
+// decodeForProxy decodes a session or cohort input and rejects one that names
+// a proxy instance other than this adapter's; what names the inspection in
+// that error.
+func decodeForProxy[T interface{ proxyRef() ResourceRef }](a *Adapter, raw json.RawMessage, what string) (T, error) {
+	var input T
+	if err := decode(raw, &input); err != nil {
+		return input, err
+	}
+	if input.proxyRef() != a.config.ProxyInstanceRef {
+		return input, errors.New(what + " inspection targets a different proxy instance")
+	}
+	return input, nil
 }
 
 func decode(input json.RawMessage, target any) error {
@@ -352,11 +387,8 @@ func (a *Adapter) observedAt(observed time.Time) time.Time {
 }
 
 func (a *Adapter) inspectBackend(ctx context.Context, raw json.RawMessage) (any, adapter.Outcome, error) {
-	var input backendInput
-	if err := decode(raw, &input); err != nil {
-		return nil, "", err
-	}
-	if err := a.checkTarget(input.Target); err != nil {
+	input, err := decodeTargeted[backendInput](a, raw)
+	if err != nil {
 		return nil, "", err
 	}
 	observed, err := a.bridge.InspectBackend(ctx, input.Target.BackendID)
@@ -392,11 +424,8 @@ func (a *Adapter) readinessProblem(assertion ReadinessAssertion, serverID, envir
 }
 
 func (a *Adapter) registerBackend(ctx context.Context, raw json.RawMessage) (any, adapter.Outcome, error) {
-	var input registerInput
-	if err := decode(raw, &input); err != nil {
-		return nil, "", err
-	}
-	if err := a.checkTarget(input.Target); err != nil {
+	input, err := decodeTargeted[registerInput](a, raw)
+	if err != nil {
 		return nil, "", err
 	}
 	if reason := a.readinessProblem(input.ReadinessAssertion, input.Target.ServerID, input.Target.EnvironmentID, input.Target.InstanceRef); reason != "" {
@@ -413,11 +442,8 @@ func (a *Adapter) registerBackend(ctx context.Context, raw json.RawMessage) (any
 }
 
 func (a *Adapter) changeBackend(ctx context.Context, raw json.RawMessage, action func(context.Context, BackendTarget) error, want RegistrationState) (any, adapter.Outcome, error) {
-	var input backendInput
-	if err := decode(raw, &input); err != nil {
-		return nil, "", err
-	}
-	if err := a.checkTarget(input.Target); err != nil {
+	input, err := decodeTargeted[backendInput](a, raw)
+	if err != nil {
 		return nil, "", err
 	}
 	return a.applyAndConfirm(ctx, input.Target, action, want)
@@ -426,12 +452,18 @@ func (a *Adapter) changeBackend(ctx context.Context, raw json.RawMessage, action
 // rejected reports a refused request together with the currently observed
 // state, or unknown state when the proxy cannot be inspected.
 func (a *Adapter) rejected(ctx context.Context, target BackendTarget, reason string) backendActionOutput {
-	output := backendActionOutput{Target: target, RequestOutcome: "rejected", RegistrationState: string(Unknown), Routability: "unknown", ObservedAt: a.now().UTC(), ReasonCode: reason}
+	output := a.unobservedAction(target, "rejected", reason)
 	if observed, err := a.bridge.InspectBackend(ctx, target.BackendID); err == nil {
 		state, routability := a.boundState(ctx, target, observed)
 		output.RegistrationState, output.Routability, output.ObservedAt = string(state), routability, a.observedAt(observed.ObservedAt)
 	}
 	return output
+}
+
+// unobservedAction reports a request outcome with unknown backend state,
+// stamped with the adapter's clock.
+func (a *Adapter) unobservedAction(target BackendTarget, outcome, reason string) backendActionOutput {
+	return backendActionOutput{Target: target, RequestOutcome: outcome, RegistrationState: string(Unknown), Routability: "unknown", ObservedAt: a.now().UTC(), ReasonCode: reason}
 }
 
 // applyAndConfirm performs one mutating backend action, then confirms it
@@ -441,11 +473,11 @@ func (a *Adapter) applyAndConfirm(ctx context.Context, target BackendTarget, act
 		if errors.Is(err, ErrNotAttempted) {
 			return a.rejected(ctx, target, "proxy_action_not_attempted"), adapter.OutcomeCompleted, nil
 		}
-		return backendActionOutput{Target: target, RequestOutcome: "outcome_unknown", RegistrationState: string(Unknown), Routability: "unknown", ObservedAt: a.now().UTC(), ReasonCode: "proxy_action_outcome_unknown"}, adapter.OutcomeUnknown, nil
+		return a.unobservedAction(target, "outcome_unknown", "proxy_action_outcome_unknown"), adapter.OutcomeUnknown, nil
 	}
 	observed, err := a.bridge.InspectBackend(ctx, target.BackendID)
 	if err != nil {
-		return backendActionOutput{Target: target, RequestOutcome: "accepted", RegistrationState: string(Unknown), Routability: "unknown", ObservedAt: a.now().UTC(), ReasonCode: "confirmation_unavailable"}, adapter.OutcomeAccepted, nil
+		return a.unobservedAction(target, "accepted", "confirmation_unavailable"), adapter.OutcomeAccepted, nil
 	}
 	state, routability := a.boundState(ctx, target, observed)
 	output := backendActionOutput{Target: target, RegistrationState: string(state), Routability: routability, ObservedAt: a.observedAt(observed.ObservedAt)}
@@ -465,11 +497,8 @@ func (a *Adapter) applyAndConfirm(ctx context.Context, target BackendTarget, act
 }
 
 func (a *Adapter) inspectPlayers(ctx context.Context, raw json.RawMessage) (any, adapter.Outcome, error) {
-	var input playersInput
-	if err := decode(raw, &input); err != nil {
-		return nil, "", err
-	}
-	if err := a.checkTarget(input.Target); err != nil {
+	input, err := decodeTargeted[playersInput](a, raw)
+	if err != nil {
 		return nil, "", err
 	}
 	unknown := playersOutput{Target: input.Target, ObservationState: "unknown"}
@@ -500,6 +529,8 @@ type sessionInput struct {
 	MaximumObservationAgeSeconds int         `json:"maximum_observation_age_seconds"`
 }
 
+func (input sessionInput) proxyRef() ResourceRef { return input.ProxyInstanceRef }
+
 type sessionOutput struct {
 	ProxyInstanceRef ResourceRef `json:"proxy_instance_ref"`
 	ProxySessionID   string      `json:"proxy_session_id"`
@@ -509,12 +540,9 @@ type sessionOutput struct {
 }
 
 func (a *Adapter) inspectSession(ctx context.Context, raw json.RawMessage) (any, adapter.Outcome, error) {
-	var input sessionInput
-	if err := decode(raw, &input); err != nil {
+	input, err := decodeForProxy[sessionInput](a, raw, "session")
+	if err != nil {
 		return nil, "", err
-	}
-	if input.ProxyInstanceRef != a.config.ProxyInstanceRef {
-		return nil, "", errors.New("session inspection targets a different proxy instance")
 	}
 	output := sessionOutput{ProxyInstanceRef: input.ProxyInstanceRef, ProxySessionID: input.ProxySessionID, ConnectionState: "unknown", ObservedAt: a.now().UTC()}
 	observed, err := a.bridge.InspectSession(ctx, input.ProxySessionID)
@@ -555,6 +583,8 @@ type cohortInput struct {
 	MaximumObservationAgeSeconds int         `json:"maximum_observation_age_seconds"`
 }
 
+func (input cohortInput) proxyRef() ResourceRef { return input.ProxyInstanceRef }
+
 type cohortOutput struct {
 	ProxyInstanceRef ResourceRef `json:"proxy_instance_ref"`
 	WaitingCohortID  string      `json:"waiting_cohort_id"`
@@ -566,24 +596,17 @@ type cohortOutput struct {
 }
 
 func (a *Adapter) inspectCohort(ctx context.Context, raw json.RawMessage) (any, adapter.Outcome, error) {
-	var input cohortInput
-	if err := decode(raw, &input); err != nil {
+	input, err := decodeForProxy[cohortInput](a, raw, "cohort")
+	if err != nil {
 		return nil, "", err
-	}
-	if input.ProxyInstanceRef != a.config.ProxyInstanceRef {
-		return nil, "", errors.New("cohort inspection targets a different proxy instance")
 	}
 	unknown := cohortOutput{ProxyInstanceRef: input.ProxyInstanceRef, WaitingCohortID: input.WaitingCohortID, ObservationState: "unknown"}
 	ids, observedAt, err := a.bridge.WaitingCohort(ctx, input.WaitingCohortID)
 	if err != nil || !a.fresh(observedAt, input.MaximumObservationAgeSeconds) || input.MaximumSessions < 1 {
 		return unknown, adapter.OutcomeCompleted, nil
 	}
-	seen := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		if id == "" || len(id) > 200 || seen[id] {
-			return unknown, adapter.OutcomeCompleted, nil
-		}
-		seen[id] = true
+	if !uniqueSessionIDs(ids) {
+		return unknown, adapter.OutcomeCompleted, nil
 	}
 	count := len(ids)
 	listed := ids
@@ -596,4 +619,17 @@ func (a *Adapter) inspectCohort(ctx context.Context, raw json.RawMessage) (any, 
 	output := cohortOutput{ProxyInstanceRef: input.ProxyInstanceRef, WaitingCohortID: input.WaitingCohortID, ObservationState: "observed",
 		SessionCount: &count, PlayerSessionIDs: &listedCopy, Truncated: &truncated, ObservedAt: &at}
 	return output, adapter.OutcomeCompleted, nil
+}
+
+// uniqueSessionIDs reports whether every ID is non-empty, at most 200 bytes,
+// and listed once.
+func uniqueSessionIDs(ids []string) bool {
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id == "" || len(id) > 200 || seen[id] {
+			return false
+		}
+		seen[id] = true
+	}
+	return true
 }
