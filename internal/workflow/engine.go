@@ -807,46 +807,23 @@ func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, s
 		}
 		step = current.Record.Steps[stepIndex]
 	}
+	return e.applyResolution(ctx, current, stepIndex, step, definition, capability, resolution)
+}
+
+// applyResolution records what reconciliation determined about the step.
+func (e *Engine) applyResolution(ctx context.Context, current store.StoredOperation, stepIndex int, step store.OperationStep, definition Definition, capability adapter.Capability, resolution Resolution) (store.StoredOperation, error) {
 	next := current.Record
 	next.Error = nil
 	switch resolution.State {
 	case ResolutionCompleted:
-		if !isObject(resolution.Output) {
-			return e.suspend(current, "core.reconciliation.invalid_result", "Reconciliation did not provide a valid completed output.")
-		}
-		if err := e.schemas.ValidateJSON(capability.OutputSchemaURI, resolution.Output); err != nil {
-			return e.suspend(current, "core.reconciliation.invalid_result", "Reconciled output failed the recorded capability schema.")
-		}
-		if current.Record.Status != protocolstate.OperationRunning {
-			next.Status = protocolstate.OperationRunning
-		}
-		next.Steps[stepIndex].Status = protocolstate.StepSucceeded
-		next.Steps[stepIndex].Output = append(json.RawMessage(nil), resolution.Output...)
-		next.Steps[stepIndex].Error = nil
-		next.CurrentStepID = nil
-		return e.updateOperation(current.Revision, next)
+		return e.completeReconciledStep(current, next, stepIndex, capability, resolution)
 	case ResolutionPending:
 		next.Status = protocolstate.OperationWaiting
 		next.Steps[stepIndex].Status = protocolstate.StepWaiting
 		next.Steps[stepIndex].Error = nil
 		return e.updateOperation(current.Revision, next)
 	case ResolutionSafeToRetry:
-		if step.Attempt >= e.maxStepAttempts {
-			return e.suspend(current, "core.operation.retry_limit", "The safe retry limit for this step has been reached.")
-		}
-		if err := definition.CheckPreconditions(ctx, current.Record, step); err != nil {
-			return e.handlePreconditionFailure(ctx, current, step, definition, err, true)
-		}
-		next.Status = protocolstate.OperationRunning
-		next.Steps[stepIndex].Status = protocolstate.StepRunning
-		next.Steps[stepIndex].Attempt++
-		next.Steps[stepIndex].Error = nil
-		next.CurrentStepID = stringPointer(step.StepID)
-		running, err := e.updateOperation(current.Revision, next)
-		if err != nil {
-			return store.StoredOperation{}, err
-		}
-		return e.dispatch(ctx, running, stepIndex, definition, capability)
+		return e.retryReconciledStep(ctx, current, next, stepIndex, step, definition, capability)
 	case ResolutionDefinitiveError:
 		if !validProtocolError(e.schemas, resolution.Error) {
 			return e.suspend(current, "core.reconciliation.invalid_result", "Reconciliation returned an invalid error record.")
@@ -862,6 +839,46 @@ func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, s
 	default:
 		return e.suspend(current, "core.reconciliation.invalid_result", "Reconciliation returned an unsupported resolution state.")
 	}
+}
+
+// completeReconciledStep records a reconciled output that matches the
+// recorded capability as the step's success.
+func (e *Engine) completeReconciledStep(current store.StoredOperation, next store.OperationRecord, stepIndex int, capability adapter.Capability, resolution Resolution) (store.StoredOperation, error) {
+	if !isObject(resolution.Output) {
+		return e.suspend(current, "core.reconciliation.invalid_result", "Reconciliation did not provide a valid completed output.")
+	}
+	if err := e.schemas.ValidateJSON(capability.OutputSchemaURI, resolution.Output); err != nil {
+		return e.suspend(current, "core.reconciliation.invalid_result", "Reconciled output failed the recorded capability schema.")
+	}
+	if current.Record.Status != protocolstate.OperationRunning {
+		next.Status = protocolstate.OperationRunning
+	}
+	next.Steps[stepIndex].Status = protocolstate.StepSucceeded
+	next.Steps[stepIndex].Output = append(json.RawMessage(nil), resolution.Output...)
+	next.Steps[stepIndex].Error = nil
+	next.CurrentStepID = nil
+	return e.updateOperation(current.Revision, next)
+}
+
+// retryReconciledStep durably claims a step that reconciliation reported
+// safe to retry, within the attempt limit, and dispatches it again.
+func (e *Engine) retryReconciledStep(ctx context.Context, current store.StoredOperation, next store.OperationRecord, stepIndex int, step store.OperationStep, definition Definition, capability adapter.Capability) (store.StoredOperation, error) {
+	if step.Attempt >= e.maxStepAttempts {
+		return e.suspend(current, "core.operation.retry_limit", "The safe retry limit for this step has been reached.")
+	}
+	if err := definition.CheckPreconditions(ctx, current.Record, step); err != nil {
+		return e.handlePreconditionFailure(ctx, current, step, definition, err, true)
+	}
+	next.Status = protocolstate.OperationRunning
+	next.Steps[stepIndex].Status = protocolstate.StepRunning
+	next.Steps[stepIndex].Attempt++
+	next.Steps[stepIndex].Error = nil
+	next.CurrentStepID = stringPointer(step.StepID)
+	running, err := e.updateOperation(current.Revision, next)
+	if err != nil {
+		return store.StoredOperation{}, err
+	}
+	return e.dispatch(ctx, running, stepIndex, definition, capability)
 }
 
 func (e *Engine) finishSuccess(ctx context.Context, current store.StoredOperation, definition Definition) (store.StoredOperation, error) {
