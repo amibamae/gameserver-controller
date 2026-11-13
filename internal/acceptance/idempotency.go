@@ -115,12 +115,18 @@ func writeLengthPrefixed(mac interface{ Write([]byte) (int, error) }, value []by
 	_, _ = mac.Write(value)
 }
 
+// isKeyVersionRune reports whether r is an ASCII letter, a digit, or one of
+// ".", "_" and "-".
+func isKeyVersionRune(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || strings.ContainsRune("._-", r)
+}
+
 func validKeyVersion(version string) bool {
 	if version == "" || len(version) > 64 {
 		return false
 	}
 	for _, r := range version {
-		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && !strings.ContainsRune("._-", r) {
+		if !isKeyVersionRune(r) {
 			return false
 		}
 	}
