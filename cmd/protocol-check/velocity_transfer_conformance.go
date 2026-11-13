@@ -6,127 +6,19 @@ import (
 	"time"
 )
 
-// Register the proxy and Velocity integration evaluators defined in this file.
+// Register the Velocity transfer evaluators defined in this file.
 func init() {
-	registerEvaluator(evaluateIntegrationProxyRegisterExpiredReadinessRejected, "integration.proxy.register.expired-readiness-rejected")
-	registerEvaluator(evaluateIntegrationProxyRegisterAcceptedIsNotRoutable, "integration.proxy.register.accepted-is-not-routable")
-	registerEvaluator(evaluateIntegrationProxyUnknownDrainAndUnregisterRequireInspection, "integration.proxy.unknown-drain-and-unregister-require-inspection")
 	registerEvaluator(evaluateReadinessBeforeTransfer,
 		"readiness-required-before-transfer",
 		"readiness-target-mismatch-before-transfer",
 		"readiness-server-mismatch-before-transfer")
-	registerEvaluator(evaluateVelocityTransferUnknownReconciliation, "velocity-transfer-outcome-unknown-reconciliation")
 	registerEvaluator(evaluateVelocityTransferResults,
 		"velocity-transfer-partial-results",
 		"velocity-transfer-count-mismatch",
 		"velocity-transfer-context-mismatch",
 		"velocity-transfer-duplicate-session-result",
 		"velocity-transfer-target-mismatch")
-}
-
-// evaluateIntegrationProxyRegisterExpiredReadinessRejected evaluates the integration.proxy.register.expired-readiness-rejected conformance fixture.
-func evaluateIntegrationProxyRegisterExpiredReadinessRejected(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
-	input := asObject(fixture["input"])
-	registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
-	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
-		return nil, fmt.Errorf("register input does not match schema: %w", err)
-	}
-	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
-		return nil, fmt.Errorf("register output does not match schema: %w", err)
-	}
-	requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
-	targetInstance := asObject(requestTarget["instance_ref"])
-	assertedInstance := asObject(assertion["instance_ref"])
-	bound := reflect.DeepEqual(requestTarget, registerOutput["target"]) &&
-		stringValue(requestTarget, "server_id") == stringValue(assertion, "server_id") &&
-		stringValue(requestTarget, "environment_id") == stringValue(assertion, "environment_id") &&
-		stringValue(requestTarget, "environment_id") == stringValue(targetInstance, "environment_id") &&
-		stringValue(assertion, "environment_id") == stringValue(assertedInstance, "environment_id") &&
-		reflect.DeepEqual(requestTarget["instance_ref"], assertion["instance_ref"])
-	current, err := parseTime(stringValue(input, "validation_time"))
-	if err != nil {
-		return nil, err
-	}
-	expires, err := parseTime(stringValue(assertion, "expires_at"))
-	if err != nil {
-		return nil, err
-	}
-	readinessCurrent := bound && current.Before(expires)
-	rejected := stringValue(registerOutput, "request_outcome") == "rejected" &&
-		stringValue(registerOutput, "registration_state") == "unregistered" &&
-		stringValue(registerOutput, "routability") == "not_routable"
-	return map[string]any{
-		"schemas_valid": true, "target_bound": bound, "readiness_current": readinessCurrent,
-		"registration_rejected": rejected, "routing_permitted": readinessCurrent && stringValue(registerOutput, "routability") == "routable",
-	}, nil
-}
-
-// evaluateIntegrationProxyRegisterAcceptedIsNotRoutable evaluates the integration.proxy.register.accepted-is-not-routable conformance fixture.
-func evaluateIntegrationProxyRegisterAcceptedIsNotRoutable(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
-	input := asObject(fixture["input"])
-	registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
-	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
-		return nil, fmt.Errorf("register input does not match schema: %w", err)
-	}
-	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
-		return nil, fmt.Errorf("register output does not match schema: %w", err)
-	}
-	requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
-	targetInstance := asObject(requestTarget["instance_ref"])
-	assertedInstance := asObject(assertion["instance_ref"])
-	bound := reflect.DeepEqual(requestTarget, registerOutput["target"]) &&
-		stringValue(requestTarget, "server_id") == stringValue(assertion, "server_id") &&
-		stringValue(requestTarget, "environment_id") == stringValue(assertion, "environment_id") &&
-		stringValue(requestTarget, "environment_id") == stringValue(targetInstance, "environment_id") &&
-		stringValue(assertion, "environment_id") == stringValue(assertedInstance, "environment_id") &&
-		reflect.DeepEqual(requestTarget["instance_ref"], assertion["instance_ref"])
-	current, err := parseTime(stringValue(input, "validation_time"))
-	if err != nil {
-		return nil, err
-	}
-	expires, err := parseTime(stringValue(assertion, "expires_at"))
-	if err != nil {
-		return nil, err
-	}
-	readinessCurrent := bound && current.Before(expires)
-	confirmed := stringValue(registerOutput, "request_outcome") == "confirmed"
-	routingPermitted := readinessCurrent && confirmed &&
-		stringValue(registerOutput, "registration_state") == "registered" &&
-		stringValue(registerOutput, "routability") == "routable"
-	return map[string]any{
-		"schemas_valid": true, "target_bound": bound, "readiness_current": readinessCurrent,
-		"registration_confirmed": confirmed, "accepted_not_routable": stringValue(registerOutput, "request_outcome") != "accepted" || stringValue(registerOutput, "routability") != "routable", "routing_permitted": routingPermitted,
-	}, nil
-}
-
-// evaluateIntegrationProxyUnknownDrainAndUnregisterRequireInspection evaluates the integration.proxy.unknown-drain-and-unregister-require-inspection conformance fixture.
-func evaluateIntegrationProxyUnknownDrainAndUnregisterRequireInspection(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
-	input := asObject(fixture["input"])
-	drainInput, drainOutput := asObject(input["drain_input"]), asObject(input["drain_output"])
-	unregisterInput, unregisterOutput := asObject(input["unregister_input"]), asObject(input["unregister_output"])
-	for schemaID, message := range map[string]struct {
-		value map[string]any
-		name  string
-	}{
-		"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-drain-input":       {drainInput, "drain input"},
-		"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-drain-output":      {drainOutput, "drain output"},
-		"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-input":  {unregisterInput, "unregister input"},
-		"urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-unregister-output": {unregisterOutput, "unregister output"},
-	} {
-		if err := pkg.validateSchema(schemaID, message.value); err != nil {
-			return nil, fmt.Errorf("%s does not match schema: %w", message.name, err)
-		}
-	}
-	drainUnknown := stringValue(drainOutput, "request_outcome") == "outcome_unknown" &&
-		stringValue(drainOutput, "registration_state") == "unknown" && stringValue(drainOutput, "routability") == "unknown"
-	unregisterUnknown := stringValue(unregisterOutput, "request_outcome") == "outcome_unknown" &&
-		stringValue(unregisterOutput, "registration_state") == "unknown" && stringValue(unregisterOutput, "routability") == "unknown"
-	bound := reflect.DeepEqual(drainInput["target"], drainOutput["target"]) &&
-		reflect.DeepEqual(unregisterInput["target"], unregisterOutput["target"])
-	return map[string]any{
-		"schemas_valid": true, "drain_requires_inspection": drainUnknown,
-		"unregister_requires_inspection": unregisterUnknown, "retry_without_inspection": !drainUnknown || !unregisterUnknown || !bound,
-	}, nil
+	registerEvaluator(evaluateVelocityTransferUnknownReconciliation, "velocity-transfer-outcome-unknown-reconciliation")
 }
 
 // evaluateReadinessBeforeTransfer evaluates the conformance fixtures
@@ -140,12 +32,7 @@ func evaluateReadinessBeforeTransfer(pkg *protocolPackage, fixture map[string]an
 	}
 	assertion := asObject(request["readiness_assertion"])
 	requestTarget := asObject(request["expected_instance_ref"])
-	assertedTarget := asObject(assertion["instance_ref"])
-	bound := stringValue(request, "server_id") == stringValue(assertion, "server_id") &&
-		stringValue(request, "environment_id") == stringValue(assertion, "environment_id") &&
-		stringValue(request, "environment_id") == stringValue(requestTarget, "environment_id") &&
-		stringValue(assertion, "environment_id") == stringValue(assertedTarget, "environment_id") &&
-		reflect.DeepEqual(requestTarget, assertedTarget)
+	bound := assertionNamesTarget(request, requestTarget, assertion, asObject(assertion["instance_ref"]))
 	current, err := parseTime(stringValue(input, "validation_time"))
 	if err != nil {
 		return nil, err
@@ -242,12 +129,7 @@ func evaluateVelocityTransferResults(pkg *protocolPackage, fixture map[string]an
 func transferReadinessCurrent(request map[string]any, validationTime string) (bool, error) {
 	requestTarget := asObject(request["expected_instance_ref"])
 	assertion := asObject(request["readiness_assertion"])
-	assertedTarget := asObject(assertion["instance_ref"])
-	bound := stringValue(request, "server_id") == stringValue(assertion, "server_id") &&
-		stringValue(request, "environment_id") == stringValue(assertion, "environment_id") &&
-		stringValue(request, "environment_id") == stringValue(requestTarget, "environment_id") &&
-		stringValue(assertion, "environment_id") == stringValue(assertedTarget, "environment_id") &&
-		reflect.DeepEqual(requestTarget, assertedTarget)
+	bound := assertionNamesTarget(request, requestTarget, assertion, asObject(assertion["instance_ref"]))
 	current, err := parseTime(validationTime)
 	if err != nil {
 		return false, err
