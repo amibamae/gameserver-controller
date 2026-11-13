@@ -149,22 +149,10 @@ func equalCanonicalJSON(left, right json.RawMessage) bool {
 }
 
 func validatePersistedLogicalServer(record LogicalServer) error {
-	if !validIdentifier(record.ServerID, 200) || !validIdentifier(record.EnvironmentID, 200) ||
-		!validIdentifier(record.DisplayName, 200) || !validIdentifier(record.HostingProfile, 200) ||
-		!validIdentifier(record.StorageProfile, 200) || !validIdentifier(record.GameAdapterID, 160) ||
-		!validIdentifier(record.ReleaseChannel, 100) || !validIdentifier(record.ExecutionAdapterID, 160) ||
-		!validIdentifier(record.ExecutionProfile, 200) || len(record.NetworkProfile) > 200 ||
-		!isJSONObject(record.Definition) || !validIdentifier(record.LastOperationID, 200) ||
-		record.CreatedAt.IsZero() || record.UpdatedAt.Before(record.CreatedAt) {
+	if !logicalServerFieldsValid(record) {
 		return fmt.Errorf("%w: invalid logical server record", ErrInvalidRecord)
 	}
-	switch record.LifecycleState {
-	case protocolstate.ServerUnprovisioned, protocolstate.ServerProvisioning, protocolstate.ServerPreparing,
-		protocolstate.ServerRestoring, protocolstate.ServerStarting, protocolstate.ServerValidating,
-		protocolstate.ServerReady, protocolstate.ServerDegraded, protocolstate.ServerDraining,
-		protocolstate.ServerStopping, protocolstate.ServerBackingUp, protocolstate.ServerStopped,
-		protocolstate.ServerDestroying, protocolstate.ServerDestroyed, protocolstate.ServerFailed:
-	default:
+	if !knownServerState(record.LifecycleState) {
 		return fmt.Errorf("%w: invalid logical server lifecycle state", ErrInvalidRecord)
 	}
 	if record.DesiredState != "" && record.DesiredState != "running" && record.DesiredState != "stopped" && record.DesiredState != "destroyed" {
@@ -179,10 +167,42 @@ func validatePersistedLogicalServer(record LogicalServer) error {
 	if len(record.InstanceRef) != 0 && !isJSONObject(record.InstanceRef) {
 		return fmt.Errorf("%w: invalid logical server instance reference", ErrInvalidRecord)
 	}
-	if err := validateLogicalServerStateEvents(record); err != nil {
-		return err
+	return validateLogicalServerStateEvents(record)
+}
+
+// logicalServerFieldsValid requires every identity and profile field to be a
+// bounded identifier, the network profile name to be bounded, the definition
+// to be a JSON object, and the record to be created no later than updated.
+func logicalServerFieldsValid(record LogicalServer) bool {
+	for _, field := range []struct {
+		value   string
+		maximum int
+	}{
+		{record.ServerID, 200}, {record.EnvironmentID, 200}, {record.DisplayName, 200},
+		{record.HostingProfile, 200}, {record.StorageProfile, 200}, {record.GameAdapterID, 160},
+		{record.ReleaseChannel, 100}, {record.ExecutionAdapterID, 160}, {record.ExecutionProfile, 200},
+		{record.LastOperationID, 200},
+	} {
+		if !validIdentifier(field.value, field.maximum) {
+			return false
+		}
 	}
-	return nil
+	return len(record.NetworkProfile) <= 200 && isJSONObject(record.Definition) &&
+		!record.CreatedAt.IsZero() && !record.UpdatedAt.Before(record.CreatedAt)
+}
+
+// knownServerState reports whether state is one of the protocol's server
+// lifecycle states.
+func knownServerState(state protocolstate.ServerState) bool {
+	switch state {
+	case protocolstate.ServerUnprovisioned, protocolstate.ServerProvisioning, protocolstate.ServerPreparing,
+		protocolstate.ServerRestoring, protocolstate.ServerStarting, protocolstate.ServerValidating,
+		protocolstate.ServerReady, protocolstate.ServerDegraded, protocolstate.ServerDraining,
+		protocolstate.ServerStopping, protocolstate.ServerBackingUp, protocolstate.ServerStopped,
+		protocolstate.ServerDestroying, protocolstate.ServerDestroyed, protocolstate.ServerFailed:
+		return true
+	}
+	return false
 }
 
 func validateLogicalServerStateEvents(record LogicalServer) error {
