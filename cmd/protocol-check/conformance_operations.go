@@ -312,26 +312,11 @@ func evaluateTypedDefineStartStopResults(pkg *protocolPackage, fixture map[strin
 			return nil, fmt.Errorf("%s operation does not match schema: %w", operation.name, err)
 		}
 	}
-	defineResult := asObject(defineOperation["result"])
-	startResult := asObject(startOperation["result"])
-	stopResult := asObject(stopOperation["result"])
-	defineData := asObject(defineResult["operation_data"])
-	startData := asObject(startResult["operation_data"])
-	stopData := asObject(stopResult["operation_data"])
+	defineData, startData, stopData := operationData(defineOperation), operationData(startOperation), operationData(stopOperation)
 	defineTarget := asObject(defineOperation["target"])
-	startTarget, stopTarget := asObject(startOperation["target"]), asObject(stopOperation["target"])
-	startAssertion := asObject(startData["readiness_assertion"])
-	startInstance := asObject(startTarget["instance_ref"])
-	assertedInstance := asObject(startAssertion["instance_ref"])
-	startReadinessAtCompletion, err := readinessAssertionBindsAtCompletion(
-		startAssertion,
-		stringValue(startOperation, "completed_at"),
-		stringValue(startTarget, "server_id"),
-		stringValue(startTarget, "environment_id"),
-		startTarget["instance_ref"],
-	)
+	startReadinessCurrent, err := typedStartReadinessCurrent(startOperation)
 	if err != nil {
-		return nil, fmt.Errorf("start readiness assertion: %w", err)
+		return nil, err
 	}
 	defineResultBound := stringValue(defineData, "server_id") == stringValue(defineTarget, "server_id") &&
 		stringValue(defineData, "environment_id") == stringValue(defineTarget, "environment_id")
@@ -339,38 +324,58 @@ func evaluateTypedDefineStartStopResults(pkg *protocolPackage, fixture map[strin
 		stringValue(startData, "server_id") == stringValue(stopData, "server_id") &&
 		stringValue(defineData, "environment_id") == stringValue(startData, "environment_id") &&
 		stringValue(startData, "environment_id") == stringValue(stopData, "environment_id")
-	startReadinessBound := stringValue(startData, "server_id") == stringValue(startAssertion, "server_id") &&
-		stringValue(startData, "environment_id") == stringValue(startAssertion, "environment_id") &&
-		stringValue(startData, "server_id") == stringValue(startTarget, "server_id") &&
-		stringValue(startData, "environment_id") == stringValue(startTarget, "environment_id") &&
-		reflect.DeepEqual(startData["instance_ref"], startTarget["instance_ref"]) &&
-		reflect.DeepEqual(startTarget["instance_ref"], startAssertion["instance_ref"]) &&
-		stringValue(startInstance, "environment_id") == stringValue(startData, "environment_id") &&
-		stringValue(assertedInstance, "environment_id") == stringValue(startAssertion, "environment_id")
-	startReadinessCurrent := startReadinessBound && startReadinessAtCompletion &&
-		stringValue(startData, "lifecycle_state") == "ready"
 	defineNoInfrastructure := stringValue(defineData, "lifecycle_state") == "unprovisioned" &&
-		len(arrayValue(defineResult, "affected_resources")) == 0
-	gameSave, execution, proxyDrain := asObject(stopData["game_save"]), asObject(stopData["execution"]), asObject(stopData["proxy_drain"])
-	stopParameters := asObject(asObject(stopOperation["request_snapshot"])["parameters"])
-	drainRequested := boolValue(stopParameters, "drain")
-	drainOutcome := stringValue(proxyDrain, "outcome")
-	drainSatisfied := drainOutcome == "drained" || drainOutcome == "not_configured" ||
-		(drainOutcome == "not_requested" && !drainRequested)
-	stopBound := stringValue(stopData, "server_id") == stringValue(stopTarget, "server_id") &&
-		stringValue(stopData, "environment_id") == stringValue(stopTarget, "environment_id") &&
-		reflect.DeepEqual(stopData["instance_ref"], stopTarget["instance_ref"])
-	stopPostconditions := stopBound && stringValue(stopData, "lifecycle_state") == "stopped" &&
-		stringValue(gameSave, "outcome") == "confirmed" && stringValue(execution, "outcome") == "stopped" &&
-		drainSatisfied
+		len(arrayValue(asObject(defineOperation["result"]), "affected_resources")) == 0
 	return map[string]any{
 		"schemas_valid":                     true,
 		"server_identity_consistent":        serverIdentityConsistent,
 		"define_result_bound":               defineResultBound,
 		"define_has_no_infrastructure":      defineNoInfrastructure,
 		"start_readiness_bound_and_current": startReadinessCurrent,
-		"stop_postconditions_confirmed":     stopPostconditions,
+		"stop_postconditions_confirmed":     typedStopPostconditions(stopOperation),
 	}, nil
+}
+
+// typedStartReadinessCurrent: a start result reports the target ready, and
+// its readiness assertion names the same server, environment and instance
+// and was current when the operation completed.
+func typedStartReadinessCurrent(operation map[string]any) (bool, error) {
+	data := operationData(operation)
+	target := asObject(operation["target"])
+	assertion := asObject(data["readiness_assertion"])
+	atCompletion, err := readinessAssertionBindsAtCompletion(assertion, stringValue(operation, "completed_at"),
+		stringValue(target, "server_id"), stringValue(target, "environment_id"), target["instance_ref"])
+	if err != nil {
+		return false, fmt.Errorf("start readiness assertion: %w", err)
+	}
+	bound := stringValue(data, "server_id") == stringValue(assertion, "server_id") &&
+		stringValue(data, "environment_id") == stringValue(assertion, "environment_id") &&
+		stringValue(data, "server_id") == stringValue(target, "server_id") &&
+		stringValue(data, "environment_id") == stringValue(target, "environment_id") &&
+		reflect.DeepEqual(data["instance_ref"], target["instance_ref"]) &&
+		reflect.DeepEqual(target["instance_ref"], assertion["instance_ref"]) &&
+		stringValue(asObject(target["instance_ref"]), "environment_id") == stringValue(data, "environment_id") &&
+		stringValue(asObject(assertion["instance_ref"]), "environment_id") == stringValue(assertion, "environment_id")
+	return bound && atCompletion && stringValue(data, "lifecycle_state") == "ready", nil
+}
+
+// typedStopPostconditions: a stop result names its target, reports it
+// stopped with a confirmed game save and a stopped unit, and drained the
+// proxy when draining was requested and configured.
+func typedStopPostconditions(operation map[string]any) bool {
+	data := operationData(operation)
+	target := asObject(operation["target"])
+	drainRequested := boolValue(operationParameters(operation), "drain")
+	drainOutcome := stringValue(asObject(data["proxy_drain"]), "outcome")
+	drainSatisfied := drainOutcome == "drained" || drainOutcome == "not_configured" ||
+		(drainOutcome == "not_requested" && !drainRequested)
+	return stringValue(data, "server_id") == stringValue(target, "server_id") &&
+		stringValue(data, "environment_id") == stringValue(target, "environment_id") &&
+		reflect.DeepEqual(data["instance_ref"], target["instance_ref"]) &&
+		stringValue(data, "lifecycle_state") == "stopped" &&
+		stringValue(asObject(data["game_save"]), "outcome") == "confirmed" &&
+		stringValue(asObject(data["execution"]), "outcome") == "stopped" &&
+		drainSatisfied
 }
 
 // evaluateOperationsIdempotencySameKeySameRequest evaluates the operations.idempotency.same-key-same-request conformance fixture.
