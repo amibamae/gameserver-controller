@@ -2,7 +2,7 @@
 
 **Status:** Draft, protocol version 0.21.0-draft.
 
-This catalog defines the initial standard management operations. An implementation MUST use the operation names and semantics here when it advertises them. Vendor/game-specific operations may be namespaced extensions and MUST NOT redefine a standard operation.
+This catalog defines the initial standard management operations. An implementation MUST use the operation names and semantics here when it advertises them. Vendor/game-specific operations MAY be namespaced extensions and MUST NOT redefine a standard operation.
 
 ## 1. Common rules
 
@@ -46,11 +46,11 @@ The request MUST identify the hosting adapter, region, plan, OS offering, bootst
 
 ### 3.3 `server.start`
 
-Starts the current recorded execution unit on the current recorded instance. The operation MUST verify the exact instance reference before dispatch. Success requires runtime start postconditions and game readiness validation. Repeated start requests may return success without starting a duplicate process only when inspection confirms the runtime is already ready.
+Starts the current recorded execution unit on the current recorded instance. The operation MUST verify the exact instance reference before dispatch. Success requires runtime start postconditions and game readiness validation. Repeated start requests MAY return success without starting a duplicate process only when inspection confirms the runtime is already ready.
 
 ### 3.4 `server.stop`
 
-Default behavior is `drain=true` and `force=false` when omitted. It drains new player routing when the configured proxy integration supports it, requests game-native save/flush, gracefully stops the execution unit, and confirms termination. Force stop is not a default behavior. If force stop is supported, it requires a separate capability, permission, explicit `force=true` parameter, and a valid `approval_id`; the parameter schema rejects `force=true` without an approval reference. Environment policy may impose additional approval requirements.
+Default behavior is `drain=true` and `force=false` when omitted. It drains new player routing when the configured proxy integration supports it, requests game-native save/flush, gracefully stops the execution unit, and confirms termination. Force stop is not a default behavior. If force stop is supported, it requires a separate capability, permission, explicit `force=true` parameter, and a valid `approval_id`; the parameter schema rejects `force=true` without an approval reference. Environment policy MAY impose additional approval requirements.
 
 A successful stop leaves the logical server `stopped`; it does not destroy the VM or delete data.
 
@@ -62,7 +62,7 @@ The core MUST preserve whether `resume_after_backup` was omitted in the immutabl
 
 ### 3.6 `server.restore`
 
-Restores the immutable backup identified by `backup_id`. Its manifest `server_id` and `environment_id` MUST match the logical restore target. The physical `target_instance_ref` may differ from the source instance when replacing a host. Integrity, environment ownership, data format, and game compatibility MUST pass before data is made available to the game runtime. A successful restore assigns a new target data generation that differs from the source backup generation. Importing data under a different logical server ID requires a separate, explicitly authorized workflow. Replacing existing data requires `replace_existing_data=true` plus explicit approval where policy requires it. Default final state is `stopped`; `start_after_restore` defaults to `false` and when set to `true` triggers startup and validation. `replace_existing_data` defaults to `false`.
+Restores the immutable backup identified by `backup_id`. Its manifest `server_id` and `environment_id` MUST match the logical restore target. The physical `target_instance_ref` MAY differ from the source instance when replacing a host. Integrity, environment ownership, data format, and game compatibility MUST pass before data is made available to the game runtime. A successful restore assigns a new target data generation that differs from the source backup generation. Importing data under a different logical server ID requires a separate, explicitly authorized workflow. Replacing existing data requires `replace_existing_data=true` plus explicit approval where policy requires it. Default final state is `stopped`; `start_after_restore` defaults to `false` and when set to `true` triggers startup and validation. `replace_existing_data` defaults to `false`.
 
 ### 3.7 `server.destroy`
 

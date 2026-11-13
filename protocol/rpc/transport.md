@@ -6,7 +6,7 @@
 
 [methods.md](methods.md) defines adapter method behavior. This document defines the first optional process transport, `jsonrpc-stdio-v1`.
 
-An adapter may instead run in-process if it implements the same contracts and passes the same conformance tests. The protocol does not require a network transport or Kubernetes.
+An adapter MAY instead run in-process if it implements the same contracts and passes the same conformance tests. The protocol does not require a network transport or Kubernetes.
 
 ## 2. Process profile
 
@@ -19,11 +19,11 @@ The process binding uses:
 - Standard output for adapter-to-controller messages.
 - Standard error for diagnostics only.
 
-A newline ends the frame; it is not part of the JSON object. JSON serializers must escape newlines inside strings. Receivers must accept LF and may accept CRLF. Blank lines and unescaped literal line breaks are invalid.
+A newline ends the frame; it is not part of the JSON object. JSON serializers MUST escape newlines inside strings. Receivers MUST accept LF and MAY accept CRLF. Blank lines and unescaped literal line breaks are invalid.
 
 ## 3. Start and stop the adapter
 
-The controller starts the adapter with an explicit executable and argument vector. Never build a shell command string from untrusted configuration. Minimize inherited environment variables and file descriptors. Deployment policy should restrict the working directory, executable, user, filesystem permissions, resource use, and network access.
+The controller starts the adapter with an explicit executable and argument vector. Never build a shell command string from untrusted configuration. Minimize inherited environment variables and file descriptors. Deployment policy SHOULD restrict the working directory, executable, user, filesystem permissions, resource use, and network access.
 
 After startup, the controller verifies the adapter identity and descriptor before enabling capability calls. A configured executable is not automatically trusted.
 
@@ -41,9 +41,9 @@ When stdin reaches EOF, the adapter stops accepting calls, finishes or safely ab
 
 ## 5. Ordering and concurrency
 
-Do not send requests until initialization succeeds. Correlate responses by string ID. Responses may arrive out of order only if the adapter descriptor declares concurrent handling; otherwise, serialize calls.
+Do not send requests until initialization succeeds. Correlate responses by string ID. Responses MAY arrive out of order only if the adapter descriptor declares concurrent handling; otherwise, serialize calls.
 
-Mutating operations must return a response, or the controller treats the result as uncertain and reconciles it. Do not use notifications for mutations.
+Mutating operations MUST return a response, or the controller treats the result as uncertain and reconciles it. Do not use notifications for mutations.
 
 ## 6. stdout and stderr
 
@@ -57,17 +57,17 @@ To request graceful shutdown, close stdin after scheduling no more calls. Killin
 
 ## 8. Future transports
 
-Remote adapter authentication and transport are outside the initial 1.0 profile, which uses in-process adapters and optional local stdio. A future binding may use HTTPS, mutual TLS, or another authenticated transport. It must preserve capability semantics, request context, deadlines, structured errors, idempotency, reconciliation, and authorization boundaries, and it needs its own versioned specification and conformance tests.
+Remote adapter authentication and transport are outside the initial 1.0 profile, which uses in-process adapters and optional local stdio. A future binding may use HTTPS, mutual TLS, or another authenticated transport. It MUST preserve capability semantics, request context, deadlines, structured errors, idempotency, reconciliation, and authorization boundaries, and it needs its own versioned specification and conformance tests.
 
 ## 9. Bounded local stream profile
 
-The optional `local-unix-stream-v1` profile pairs with `jsonrpc-stdio-v1`. JSON-RPC remains the control channel; object bytes use one local Unix-domain stream socket. The controller may omit this offer when the platform or deployment cannot support it.
+The optional `local-unix-stream-v1` profile pairs with `jsonrpc-stdio-v1`. JSON-RPC remains the control channel; object bytes use one local Unix-domain stream socket. The controller MAY omit this offer when the platform or deployment cannot support it.
 
-Before starting the adapter, the controller creates a private runtime directory owned by the controller user with mode `0700`, then listens on one absolute socket path no longer than 100 ASCII bytes. It should set the socket file to `0600` where supported. Because pathname-socket permissions vary by OS, the private directory is the primary access control.
+Before starting the adapter, the controller creates a private runtime directory owned by the controller user with mode `0700`, then listens on one absolute socket path no longer than 100 ASCII bytes. It SHOULD set the socket file to `0600` where supported. Because pathname-socket permissions vary by OS, the private directory is the primary access control.
 
-Use a unique directory for each adapter session. Reject an existing socket path, and remove the socket and directory when the session ends. The adapter learns the path only through the optional `stream_transport` member of `adapter.initialize`. It selects the profile by returning `selected_stream_transport`; omission means the profile was not selected. The controller must have offered any profile the adapter selects.
+Use a unique directory for each adapter session. Reject an existing socket path, and remove the socket and directory when the session ends. The adapter learns the path only through the optional `stream_transport` member of `adapter.initialize`. It selects the profile by returning `selected_stream_transport`; omission means the profile was not selected. The controller MUST have offered any profile the adapter selects.
 
-A descriptor that advertises `storage.object.put` or `storage.object.get` must list `local-unix-stream-v1` in `stream_transport_profiles`, and initialization must select it. Otherwise, reject those capabilities before invocation.
+A descriptor that advertises `storage.object.put` or `storage.object.get` MUST list `local-unix-stream-v1` in `stream_transport_profiles`, and initialization MUST select it. Otherwise, reject those capabilities before invocation.
 
 For each transfer, the adapter opens one connection and writes the 64-character lowercase-hex `transfer_id`, followed by LF. That is the whole handshake. The ID is an unguessable 256-bit bearer capability. The controller binds it to one adapter session, operation, step, environment, direction, byte limit, and expiry, then atomically consumes it on the first connection attempt. Reject unknown, expired, reused, or out-of-scope IDs before accepting payload bytes.
 

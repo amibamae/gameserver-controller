@@ -21,7 +21,7 @@ Game Server Controller uses language-neutral contracts so the core, adapters, CL
 11. **Privacy by default:** Separate required operations from optional telemetry. Optional telemetry starts disabled; identifiable player telemetry requires separate informed consent from the server owner and each affected player.
 12. **Transport independence:** Keep message meaning and schemas independent of framing and delivery wherever practical. A binding can define authentication, connection life, and delivery without redefining operations.
 
-The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY carry their usual standards meaning.
+The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", and "MAY" in the protocol documents are to be interpreted as described in BCP 14 ([RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)) when, and only when, they appear in all capitals, as shown here. Lowercase "must", "should", and "may" are ordinary English.
 
 ## Protocol areas
 
@@ -41,7 +41,7 @@ The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY carry their usual standard
 
 This connects the core to hosting, storage, execution, game, and integration implementations. Adapters follow core policy and receive only the permissions and secret references required for their capabilities.
 
-The first optional process binding is `jsonrpc-stdio-v1`, described in [rpc/transport.md](rpc/transport.md). In-process adapters may implement the same logical contracts without a wire transport, as long as they pass the same conformance requirements.
+The first optional process binding is `jsonrpc-stdio-v1`, described in [rpc/transport.md](rpc/transport.md). In-process adapters MAY implement the same logical contracts without a wire transport, as long as they pass the same conformance requirements.
 
 ### Management API
 
@@ -63,7 +63,7 @@ These language-neutral selections are recorded in [ADR 0004](../docs/decisions/0
 | Optional process binding | `jsonrpc-stdio-v1` | UTF-8 newline-delimited JSON on stdin/stdout |
 | Management API | [OpenAPI 3.2.1](https://spec.openapis.org/oas/v3.2.1) | HTTP/JSON client API |
 
-JSON Schema's `format` keyword is only an annotation unless assertion is enabled. Implementations must validate required protocol formats such as RFC 3339 timestamps and URIs through format assertion or equivalent checks.
+JSON Schema's `format` keyword is only an annotation unless assertion is enabled. Implementations MUST validate required protocol formats such as RFC 3339 timestamps and URIs through format assertion or equivalent checks.
 
 Protocol integers stay within the exact interoperable JSON range, ±9,007,199,254,740,991. Represent larger counters, provider IDs, and byte quantities as decimal strings.
 
@@ -73,7 +73,7 @@ The adapter contract works in-process. The optional stdio profile does not requi
 
 Request and security-sensitive command objects are closed. Reject unknown fields unless the object defines an explicit namespaced `extensions` map. Extensions cannot change standard fields.
 
-Read-only responses may add optional fields in a compatible minor revision. Clients ignore unknown optional response fields and fail safely on unknown enum/state values that affect a decision. Schemas state which objects are closed or extensible. A minor release cannot change an existing field's meaning, type, or security effect.
+Read-only responses MAY add optional fields in a compatible minor revision. Clients ignore unknown optional response fields and fail safely on unknown enum/state values that affect a decision. Schemas state which objects are closed or extensible. A minor release cannot change an existing field's meaning, type, or security effect.
 
 ## Conformance and compatibility
 
@@ -154,7 +154,7 @@ The tree describes the draft package. [schemas/index.json](schemas/index.json) l
 9. Publish and validate schemas, examples, and conformance fixtures.
 10. Validate the initial Go implementation against those schemas and fixtures; welcome other-language implementations.
 
-The current untagged branch carries version `0.21.0-draft` and has completed the Phase 1 package review. It is development source, not an immutable compatibility target. A published snapshot must be immutable and increment the pre-1.0 minor version.
+The current untagged branch carries version `0.21.0-draft` and has completed the Phase 1 package review. It is development source, not an immutable compatibility target. A published snapshot MUST be immutable and increment the pre-1.0 minor version.
 
 The protocol remains a draft. Phase 1 completion means the specification and Go validator/conformance suite are reviewed; it does not mean the full controller is ready. Stable protocol 1.0 remains gated on the Go controller and fake-adapter implementation passing the behavioral suite. Other-language implementations are welcome, but they are not required for release.
 

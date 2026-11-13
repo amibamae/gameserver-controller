@@ -33,7 +33,7 @@ Here is a representative protocol error:
 }
 ```
 
-Every error includes `code`, `category`, `message`, and `retryable`. Optional fields may be absent. Absence differs from explicit `null` unless the schema says otherwise. The `details` object contains only documented, safe fields.
+Every error includes `code`, `category`, `message`, and `retryable`. Optional fields MAY be absent. Absence differs from explicit `null` unless the schema says otherwise. The `details` object contains only documented, safe fields.
 
 ## 3. Categories
 
@@ -55,7 +55,7 @@ Every error includes `code`, `category`, `message`, and `retryable`. Optional fi
 
 ## 4. Stable codes
 
-Codes are stable, namespaced identifiers. The protocol reserves `core.*`; adapters and domains must use their own documented namespaces and must not emit another owner's codes.
+Codes are stable, namespaced identifiers. The protocol reserves `core.*`; adapters and domains MUST use their own documented namespaces and MUST NOT emit another owner's codes.
 
 Initial codes include:
 

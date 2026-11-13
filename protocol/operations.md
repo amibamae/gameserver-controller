@@ -94,7 +94,7 @@ The proposed operation statuses are:
 
 Only `succeeded`, `failed`, and `cancelled` are terminal. `needs_operator` is suspended, not successful or failed; a documented, authorized operator action MAY resume it or explicitly end it. Implementations MUST NOT silently resume a suspended operation.
 
-An implementation MUST NOT report `succeeded` merely because an adapter accepted a request. It must verify the required postconditions for the operation type.
+An implementation MUST NOT report `succeeded` merely because an adapter accepted a request. It MUST verify the required postconditions for the operation type.
 
 An operation MUST NOT transition from a terminal state back to an active state. Further work requires a new operation linked to the prior operation when relevant.
 
@@ -138,7 +138,7 @@ For management HTTP operation-acceptance requests, the caller MUST supply the `I
 
 The controller MUST bind the actor and key to the operation type, target, environment, and RFC 8785 JCS fingerprint of the canonical validated request parameters. It MUST reject a same-actor reuse with different bound request data using `core.operation.idempotency_conflict`. The same actor, key, and request MUST identify the original operation while its full record is retained.
 
-The actor/key association MUST be durable. It MUST remain associated for the entire non-terminal operation lifetime and MUST be retained with the complete operation record for at least 90 days after the operation becomes terminal. After that period, the controller MAY discard the full operation and request mapping, but MUST retain a privacy-minimized tombstone for the actor/key pair for the lifetime of the active controller installation, including restart, storage migration, and recovery from backup. A tombstone MUST retain only an opaque verifier and any metadata required to evaluate it; it MUST NOT retain request parameters, actor display data, or the full operation record. Implementations MUST restrict verifier access to idempotency lookup and recovery. A matching request after full-record expiry MUST be rejected with `core.operation.idempotency_key_expired`; it MUST NOT replay the old operation or create or dispatch a new one. Tombstones may be removed only when the controller installation is permanently retired and cannot be resumed from its durable state or recovery backups.
+The actor/key association MUST be durable. It MUST remain associated for the entire non-terminal operation lifetime and MUST be retained with the complete operation record for at least 90 days after the operation becomes terminal. After that period, the controller MAY discard the full operation and request mapping, but MUST retain a privacy-minimized tombstone for the actor/key pair for the lifetime of the active controller installation, including restart, storage migration, and recovery from backup. A tombstone MUST retain only an opaque verifier and any metadata required to evaluate it; it MUST NOT retain request parameters, actor display data, or the full operation record. Implementations MUST restrict verifier access to idempotency lookup and recovery. A matching request after full-record expiry MUST be rejected with `core.operation.idempotency_key_expired`; it MUST NOT replay the old operation or create or dispatch a new one. Tombstones MAY be removed only when the controller installation is permanently retired and cannot be resumed from its durable state or recovery backups.
 
 An HMAC-SHA-256 verifier over an unambiguous length-prefixed encoding of the authenticated actor ID and key is a RECOMMENDED implementation. An HMAC-based tombstone MUST include a key-version identifier, and the protected verification keyring MUST be preserved through migration and recovery backups. Key rotation MUST retain old verification keys for as long as any tombstone uses them. If a required verification key is lost, the controller MUST fail closed and MUST NOT accept or dispatch mutating requests whose idempotency state cannot be checked; it MUST restore the keyring or permanently retire the installation. This keyed verifier avoids retaining raw keys and resists offline guessing; other designs MAY be used if they provide equivalent privacy minimization and durable lookup semantics.
 
@@ -151,7 +151,7 @@ The protocol MUST NOT claim exactly-once execution. If a call may have reached a
 The protocol distinguishes:
 - **Request timeout:** how long a caller waits for an immediate response.
 - **Step timeout:** how long the controller waits for a specific local/adapter interaction.
-- **Operation deadline:** the absolute time by which the controller should stop initiating ordinary work and move to a defined expiry/recovery path.
+- **Operation deadline:** the absolute time by which the controller SHOULD stop initiating ordinary work and move to a defined expiry/recovery path.
 - **Provider deadline:** a provider-side expiry or timeout, if the provider supports one.
 
 A timeout describes the controller's wait, not necessarily the external action. An operation timeout MUST NOT be interpreted as proof that a provider-side action was cancelled, failed, or reversed.
@@ -172,7 +172,7 @@ Cancellation is a request to stop future work where safe; it is not a rollback.
 
 The controller MUST determine whether cancellation is safe for the current operation and step:
 - Before any side effect, the operation can generally be cancelled.
-- During a cancellable wait, the controller may stop polling or waiting while recording any provider-side action still in progress.
+- During a cancellable wait, the controller MAY stop polling or waiting while recording any provider-side action still in progress.
 - During a mutating external call, cancellation may be unavailable or ambiguous.
 - After an irreversible action or defined point of no return, cancellation may be rejected.
 - A partially completed workflow may require a separate, explicitly authorized compensating operation.
@@ -242,7 +242,7 @@ The canonical [operation.schema.json](schemas/operations/operation.schema.json) 
 
 An adapter step MAY include immutable `input_bindings` when its complete input depends on output from an earlier step. Each binding names a target JSON Pointer in the step's input template, a prior `source_step_id`, and a source JSON Pointer in that step's schema-validated output. Sources MUST be earlier steps in the same operation and MUST have succeeded. Target fields MUST be absent from the template, and target paths MUST NOT overlap. Before dispatch, the controller MUST resolve every binding, validate the fully materialized input against the exact recorded capability input schema, and persist that input as `resolved_input`. This persistence MUST happen before the step enters `running` or any adapter call. The resolved input MUST remain immutable across retries, reconciliation, and restart recovery. If resolution or schema validation fails, the controller MUST NOT dispatch the step and MUST suspend the operation for safe handling.
 
-For `failed` or `needs_operator` operations, the record MUST preserve known side effects and partial completion. For example, if provisioning created a VM but game preparation failed, the operation record must retain the VM reference and its observed state.
+For `failed` or `needs_operator` operations, the record MUST preserve known side effects and partial completion. For example, if provisioning created a VM but game preparation failed, the operation record MUST retain the VM reference and its observed state.
 
 The controller MUST NOT assume that failure automatically reverses earlier steps. Compensation or cleanup is a separate workflow unless the operation contract explicitly defines a safe, authorized compensation step. A compensation step is itself recorded and subject to authorization, idempotency, and recovery rules.
 
@@ -352,7 +352,7 @@ This is the required pattern for any mutating external call whose result may be 
 
 - **Standard operation catalog:** The initial standard catalog contains `server.define`, `server.provision`, `server.start`, `server.stop`, `server.backup`, `server.restore`, and `server.destroy`. Their request/result schemas and postconditions are the standard catalog for the initial 1.0 profile. New standard core operations require documented schemas and conformance cases. An `upgrade` operation is not part of this initial catalog.
 - **Record representation and retention:** The schemas define the logical operation and step records; physical storage and database choice are implementation-specific. Implementations MUST retain accepted non-terminal operations and recovery-critical data, document terminal-record retention, and never discard a record while its external outcome or lock ownership remains unresolved.
-- **State and events:** The durable operation snapshot is authoritative for reads and recovery. The controller MAY keep a separate event log and MAY expose an event stream. Emitted events are persisted before visibility and may be delivered at least once; event retention and gap recovery are implementation-documented.
+- **State and events:** The durable operation snapshot is authoritative for reads and recovery. The controller MAY keep a separate event log and MAY expose an event stream. Emitted events are persisted before visibility and MAY be delivered at least once; event retention and gap recovery are implementation-documented.
 - **Idempotency:** Management operation acceptance uses the required case-sensitive 1–128 visible-ASCII `Idempotency-Key` header. The actor/key association survives the full non-terminal lifetime, the complete operation record is retained for at least 90 days after terminal status, and a privacy-minimized tombstone remains for the active controller installation lifetime; HMAC-based deployments preserve the versioned keyring while any matching tombstone remains. Reuse after full-record expiry returns `core.operation.idempotency_key_expired` without replay, new operation, or dispatch.
 - **Timeouts and retries:** There are no universal numeric timeout, retry, or backoff defaults. Implementations and adapter profiles document bounded policies. If no safe retry policy is declared, a mutating adapter call receives zero automatic retries; an unknown outcome is reconciled before any retry.
 - **Events and progress:** Progress is advisory and events supplement the authoritative operation resource. Consumers handle duplicate delivery and sequence gaps by reading the operation resource. Retention and replay behavior are documented by each implementation.

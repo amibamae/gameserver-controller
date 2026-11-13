@@ -2,7 +2,7 @@
 
 **Status:** Draft protocol contracts, version 0.21.0-draft.
 
-Adapters connect the controller core to infrastructure and other services. The contracts work across programming languages. An adapter may run in-process or as a separate process under the optional RPC binding.
+Adapters connect the controller core to infrastructure and other services. The contracts work across programming languages. An adapter MAY run in-process or as a separate process under the optional RPC binding.
 
 ## Five adapter categories
 

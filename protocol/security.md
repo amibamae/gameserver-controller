@@ -19,9 +19,9 @@ Treat adapters, plugins, game files, archives, provider responses, and user conf
 
 ## 2. Authentication and actor identity
 
-The controller establishes the caller's identity at the client boundary. A client must not assert its own role or permission scope in an ordinary request.
+The controller establishes the caller's identity at the client boundary. A client MUST NOT assert its own role or permission scope in an ordinary request.
 
-Deployments choose the authentication mechanism. A local controller may use OS identity and local access controls. A remote management API must use an authenticated channel and document its method and token/session lifecycle. A public network deployment must use TLS.
+Deployments choose the authentication mechanism. A local controller MAY use OS identity and local access controls. A remote management API MUST use an authenticated channel and document its method and token/session lifecycle. A public network deployment MUST use TLS.
 
 The controller identifies an adapter process using its configured executable, OS identity, configuration, and validated descriptor. A descriptor describes an adapter; it does not authorize it.
 
@@ -53,7 +53,7 @@ An adapter capability describes what that adapter can do. It does not grant the 
 
 Bind each approval to the exact action, logical server, environment, provider/adapter, concrete instance/resource, plan fingerprint, expiry, and approver. Immediately before each sensitive or destructive step, check that binding and expiry against the exact request. Any material change invalidates approval.
 
-Before destroying an instance with persistent game data, the core must confirm:
+Before destroying an instance with persistent game data, the core MUST confirm:
 
 - A verified backup for the current data generation.
 - The exact target identity, rechecked immediately before destruction.
@@ -67,7 +67,7 @@ If a precondition fails or remains unclear, fail closed. A generic force/yes fla
 
 Ordinary protocol messages carry secret references, never secret values. A reference does not itself grant permission to resolve a secret.
 
-The controller must:
+The controller MUST:
 
 - Resolve secrets only for the component and step that need them.
 - Use least-privilege scopes and separate production/staging credentials.
@@ -76,19 +76,19 @@ The controller must:
 - Reject literal values where a secret reference is required.
 - Allow credential rotation without changing protocol object identity.
 
-Never put raw credentials in bootstrap source, command-line arguments, provider user-data, release archives, source control, or logs. An implementation may define a separate protected channel for short-lived credential delivery.
+Never put raw credentials in bootstrap source, command-line arguments, provider user-data, release archives, source control, or logs. An implementation MAY define a separate protected channel for short-lived credential delivery.
 
 ## 6. Environment isolation and data protection
 
 Every resource and operation belongs to an environment. Deny cross-environment actions by default.
 
-Production backup credentials must not let staging write or delete. Staging may get narrow read access to selected production objects, and writes only to staging-owned destinations. Even if a staging actor mistakenly receives production write/delete credentials, enforce the boundary in policy: backup writes and deletes require both an exact environment match and the action-specific scope.
+Production backup credentials MUST NOT let staging write or delete. Staging MAY get narrow read access to selected production objects, and writes only to staging-owned destinations. Even if a staging actor mistakenly receives production write/delete credentials, enforce the boundary in policy: backup writes and deletes require both an exact environment match and the action-specific scope.
 
-Restore must reject path traversal, absolute paths, unsafe symbolic links, hard-link escapes, device nodes, and archive entries outside the approved data root. Extraction must not follow attacker-controlled links.
+Restore MUST reject path traversal, absolute paths, unsafe symbolic links, hard-link escapes, device nodes, and archive entries outside the approved data root. Extraction MUST NOT follow attacker-controlled links.
 
 ## 7. Adapter isolation and supply chain
 
-Adapters are executable code. Review and version them, and install them from trusted sources. The controller should isolate adapters by OS user, filesystem, network policy, resource limits, and narrowly scoped credentials. A compromised adapter must not inherit every controller or provider secret.
+Adapters are executable code. Review and version them, and install them from trusted sources. The controller SHOULD isolate adapters by OS user, filesystem, network policy, resource limits, and narrowly scoped credentials. A compromised adapter MUST NOT inherit every controller or provider secret.
 
 Bootstrap scripts are privileged code. Record the exact source revision and digest, non-secret inputs, execution identity, and validation result. Review and test changes on fresh, isolated instances before production.
 
@@ -96,7 +96,7 @@ Bootstrap scripts are privileged code. Record the exact source revision and dige
 
 For each security-relevant action, audit the actor, action, target, environment, authorization/approval decision, operation ID, timestamp, and result. Restrict access to audit records and protect them from unauthorized changes.
 
-Minimize player identifiers and telemetry. Identifiable optional telemetry starts disabled and requires separate informed consent from the server owner and each affected player. Routine health checks must not silently become gameplay profiling.
+Minimize player identifiers and telemetry. Identifiable optional telemetry starts disabled and requires separate informed consent from the server owner and each affected player. Routine health checks MUST NOT silently become gameplay profiling.
 
 Operator notifications (integrations section 7) leave the controller for third-party destinations such as Discord, Slack, an email provider, or an ntfy server. They carry only the notification-event fields: the event type and severity, environment, adapter and proxy instance IDs, times, failure count, and a fixed-template summary. They never carry player data, session IDs, addresses, raw errors, URLs, or credentials. Destination secrets (webhook URLs, SMTP passwords, ntfy tokens) are systemd credentials, are passed to the notifier only as authorized secret references, and never appear in logs or events.
 

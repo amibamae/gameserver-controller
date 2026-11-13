@@ -80,13 +80,13 @@ The serialized representation MUST use RFC 3339 with an explicit UTC offset. Pro
 - A timestamp MUST include timezone/offset information.
 - Local timestamps without an offset MUST be rejected for protocol instants.
 - Implementations MUST NOT compare timestamps as localized display strings.
-- Clock source and clock-skew assumptions must be documented for security-sensitive approval and expiry checks.
+- Clock source and clock-skew assumptions MUST be documented for security-sensitive approval and expiry checks.
 
 ### 3.2 Duration and deadlines
 
 Durations are elapsed time intervals, not timestamps. Durations in JSON MUST be non-negative integer milliseconds unless a field explicitly defines another unit. Field names MUST include the unit. The value MUST remain within the interoperable JSON integer range. A deadline is an absolute RFC 3339 timestamp; elapsed-time measurement MUST use a monotonic clock locally.
 
-A deadline is an absolute timestamp by which an operation or request should stop waiting or initiating further work. A deadline does not prove that an external provider operation has been cancelled or reversed.
+A deadline is an absolute timestamp by which an operation or request SHOULD stop waiting or initiating further work. A deadline does not prove that an external provider operation has been cancelled or reversed.
 
 ## 4. Versions
 
@@ -131,7 +131,7 @@ Required conceptual fields:
 | `capabilities` | Explicit list of supported capabilities |
 | `required_permissions` | Permission scopes needed to perform declared capabilities |
 
-Optional fields may include vendor, documentation reference, configuration schema reference, platform constraints, supported resource kinds, and diagnostic information.
+Optional fields MAY include vendor, documentation reference, configuration schema reference, platform constraints, supported resource kinds, and diagnostic information.
 
 A descriptor is descriptive, not an authorization grant. Core policy decides whether the adapter may be used and which permissions are actually provided.
 
@@ -159,7 +159,7 @@ A capability declaration SHOULD include:
 
 The presence of a capability does not authorize its use. The core MUST separately validate actor permissions, environment policy, approvals, and operation preconditions.
 
-Capabilities MUST NOT be inferred from adapter identity or vendor name. Optional features must be explicitly declared. If a requested capability is absent, the result is a structured unsupported-capability error.
+Capabilities MUST NOT be inferred from adapter identity or vendor name. Optional features MUST be explicitly declared. If a requested capability is absent, the result is a structured unsupported-capability error.
 
 ## 7. Structured errors
 
@@ -194,7 +194,7 @@ Error messages and details MUST NOT contain credentials, secret values, private 
 | `cancelled` | Operation was cancelled according to its defined cancellation semantics |
 | `internal` | Unexpected controller/adapter failure |
 
-Stable error codes SHOULD be namespaced by protocol area, for example `core.validation.invalid_request` or `hosting.instance.not_found`. Human-readable messages may change; clients MUST branch on stable codes, not message text.
+Stable error codes SHOULD be namespaced by protocol area, for example `core.validation.invalid_request` or `hosting.instance.not_found`. Human-readable messages MAY change; clients MUST branch on stable codes, not message text.
 
 A timeout on a mutating external call MUST be treated as an uncertain outcome until the adapter reconciles the provider state. It MUST NOT be blindly retried if doing so could duplicate or broaden a destructive effect.
 
@@ -202,7 +202,7 @@ A timeout on a mutating external call MUST be treated as an uncertain outcome un
 
 The common request context is the shared metadata used to correlate work. Exact wire placement is deferred.
 
-It may include:
+It MAY include:
 - `request_id`: one request/response exchange.
 - `correlation_id`: end-to-end workflow correlation.
 - `operation_id`: durable lifecycle operation, when the request belongs to one.
@@ -211,7 +211,7 @@ It may include:
 - `idempotency_key`: deduplication key for a supported mutating operation.
 - Actor/authorization context supplied by the trusted core, not self-asserted by an untrusted adapter or client.
 
-A key supplied by a management client to deduplicate durable operation acceptance is scoped to the authenticated caller, operation type, and target; its format and retention are defined in [operations](operations.md). Reusing that key with different parameters MUST be rejected as a conflict. This client key MUST NOT be presumed to make a provider call idempotent. An adapter-call idempotency token is provider-specific and may be used only when the capability contract declares its semantics.
+A key supplied by a management client to deduplicate durable operation acceptance is scoped to the authenticated caller, operation type, and target; its format and retention are defined in [operations](operations.md). Reusing that key with different parameters MUST be rejected as a conflict. This client key MUST NOT be presumed to make a provider call idempotent. An adapter-call idempotency token is provider-specific and MAY be used only when the capability contract declares its semantics.
 
 ## 9. Secret references
 

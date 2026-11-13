@@ -32,7 +32,7 @@ A [storage container reference](../schemas/storage/storage-container-reference.s
 
 Credentials are never part of a storage reference. A manifest object's environment MUST match the manifest environment. The core MUST check adapter, profile, environment, and object ownership before reads, copies, writes, or deletion.
 
-Production and staging MUST use separate authorization scopes. Staging may read only explicitly selected production backup objects and MUST write to staging-owned storage. A staging credential MUST NOT overwrite or delete production objects.
+Production and staging MUST use separate authorization scopes. Staging MAY read only explicitly selected production backup objects and MUST write to staging-owned storage. A staging credential MUST NOT overwrite or delete production objects.
 
 Object keys are opaque strings under the adapter's documented key rules. Implementations MUST prevent path confusion when mapping object keys to local files. Continuation tokens MUST remain bound to the authorized container, prefix, and caller context.
 

@@ -10,7 +10,7 @@ It does not install a game, decide whether a backup is safe, route players, or o
 
 ## 2. Capability names
 
-An adapter may declare any subset of these capabilities:
+An adapter MAY declare any subset of these capabilities:
 
 | Capability | Meaning |
 |---|---|
@@ -60,9 +60,9 @@ A request MUST NOT contain raw API tokens, passwords, private keys, storage cred
 
 - **Create:** Return a provider-operation reference and, when available, an instance reference. Do not report the instance active until you observe that postcondition.
 - **Inspect:** Report the exact target identity, normalized state, available region/plan/OS facts, network observations, and observation time. Bind the result to the requested instance. `unknown` does not mean `active` or `destroyed`.
-- **Start, stop, reboot:** Use exact-instance schemas. A completed start or reboot confirms `active`; a completed stop confirms `stopped`. An `accepted` result needs a provider-operation reference and does not prove completion. If the result is unknown, inspect the exact instance before retrying. A completed reboot does not prove game readiness. Before a normal reboot of an instance with persistent data, or unknown data status, the core must obtain a confirmed game save or clean stop bound to that instance. Bypassing this requires separate emergency approval bound to `hosting.instance.reboot.emergency` and the exact instance; unsaved changes may be lost. If a result names the wrong instance, treat it as untrusted and inspect before retrying or starting dependent work.
+- **Start, stop, reboot:** Use exact-instance schemas. A completed start or reboot confirms `active`; a completed stop confirms `stopped`. An `accepted` result needs a provider-operation reference and does not prove completion. If the result is unknown, inspect the exact instance before retrying. A completed reboot does not prove game readiness. Before a normal reboot of an instance with persistent data, or unknown data status, the core MUST obtain a confirmed game save or clean stop bound to that instance. Bypassing this requires separate emergency approval bound to `hosting.instance.reboot.emergency` and the exact instance; unsaved changes may be lost. If a result names the wrong instance, treat it as untrusted and inspect before retrying or starting dependent work.
 - **Destroy:** Use an exact-instance input and typed result. Before dispatch, the core confirms authorization, stopped state, a verified backup for the current data generation, and the destruction plan. Any required approval binds the exact destroy action, logical server, environment, adapter, instance, plan fingerprint, approver, and expiry. An expired or mismatched approval blocks the provider call. `accepted` requires a provider-operation reference and is not confirmation; `unknown` requires exact-instance inspection before retry.
-- **Wait:** Bind the request to one exact instance and expected state. Include a provider-operation reference when available; otherwise poll the exact instance until the expected state or a terminal result is observed. Any returned provider-operation reference must belong to that instance's adapter and environment. The bounded timeout does not cancel provider work. `pending` stays pending; `succeeded` confirms the action only when the exact expected state is observed. `unknown`, terminal `failed`, or mismatched references require inspection before retry.
+- **Wait:** Bind the request to one exact instance and expected state. Include a provider-operation reference when available; otherwise poll the exact instance until the expected state or a terminal result is observed. Any returned provider-operation reference MUST belong to that instance's adapter and environment. The bounded timeout does not cancel provider work. `pending` stays pending; `succeeded` confirms the action only when the exact expected state is observed. `unknown`, terminal `failed`, or mismatched references require inspection before retry.
 
 The adapter MUST support lookup/inspection sufficient to reconcile create and destroy results. If it cannot, the core suspends uncertain operations for operator action.
 
@@ -78,7 +78,7 @@ A hosting adapter for a provider that bills instances in fixed increments SHOULD
 
 ## 6. Bootstrap
 
-The initial preferred path uses a provider-supported standard OS image and a reviewed, versioned bootstrap. The adapter may deliver a protected script reference or start a separate bootstrap runner. A repeated delivery with the same instance, revision, digest, and operation step MUST be idempotent or return the exact existing execution reference; it MUST NOT launch an untracked duplicate run. The controller reconciles an accepted or uncertain execution by inspecting that exact reference rather than resubmitting blindly.
+The initial preferred path uses a provider-supported standard OS image and a reviewed, versioned bootstrap. The adapter MAY deliver a protected script reference or start a separate bootstrap runner. A repeated delivery with the same instance, revision, digest, and operation step MUST be idempotent or return the exact existing execution reference; it MUST NOT launch an untracked duplicate run. The controller reconciles an accepted or uncertain execution by inspecting that exact reference rather than resubmitting blindly.
 
 Report how bootstrap started, its immutable revision/digest, execution reference, exit status, timestamps, and validation evidence. A successful script exit does not prove the game is installed or ready. The controller MUST perform separate host and game readiness checks before transitioning the logical server to `ready`. Uploading a script or submitting a remote command does not prove the host is prepared.
 
@@ -86,7 +86,7 @@ Report how bootstrap started, its immutable revision/digest, execution reference
 
 Before the controller sends any secret to a new instance over SSH, such as storage credentials for a restore, it MUST verify the instance's SSH host key against a key the controller chose. Trusting the first key an address presents is not enough: until the controller has a verified key, anyone answering at that address could receive the secret.
 
-To make that possible, the create request MAY carry exactly one **single-use ed25519 SSH host key** in cloud-init user data. This is the only secret a create request may carry, and only when every condition below holds:
+To make that possible, the create request MAY carry exactly one **single-use ed25519 SSH host key** in cloud-init user data. This is the only secret a create request MAY carry, and only when every condition below holds:
 
 1. **Fresh and unstored.** The key is generated for that one create and never reused. The controller does not store the private half. It stores the public half durably, in the same transaction that claims the create for dispatch, so the stored key is always the one actually sent.
 2. **Exact target only.** The controller connects only to the address the provider reports for that exact instance. It accepts only the stored single-use key with the `ssh-ed25519` algorithm, and only before the handoff expires (24 hours after creation unless configured otherwise).
