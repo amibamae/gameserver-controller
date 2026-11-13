@@ -130,139 +130,173 @@ func readJSON(path string, destination any) error {
 	return nil
 }
 
+// validation collects error messages in the order the checks run and counts
+// the structural policy problems that make case decisions meaningless.
+type validation struct {
+	errors             []string
+	staticPolicyErrors int
+}
+
+// require records message unless condition holds.
+func (v *validation) require(condition bool, message string) {
+	if !condition {
+		v.errors = append(v.errors, message)
+	}
+}
+
+// requireTrue records that field must be true unless value is set and true.
+func (v *validation) requireTrue(value *bool, field string) {
+	v.require(isTrue(value), field+" must be true")
+}
+
+// structural records a missing or malformed policy section, which also
+// suppresses the per-case decision comparison.
+func (v *validation) structural(message string) {
+	v.errors = append(v.errors, message)
+	v.staticPolicyErrors++
+}
+
+func isTrue(value *bool) bool { return value != nil && *value }
+
+// expectedGroups is the only capacity-group layout the pilot accepts.
+var expectedGroups = map[string]capacityGroup{
+	"production": {
+		MaxInstances:         1,
+		AcceptedEnvironments: []string{"production"},
+	},
+	"shared_nonproduction": {
+		MaxInstances:         1,
+		AcceptedEnvironments: []string{"staging", "testing"},
+	},
+}
+
 func validateDocuments(policy policyDocument, cases casesDocument) []string {
-	var errors []string
-	add := func(condition bool, message string) {
-		if !condition {
-			errors = append(errors, message)
-		}
-	}
+	v := &validation{}
+	v.require(policy.PolicyID == "supervised-pilot-vm-capacity", "policy_id must be supervised-pilot-vm-capacity")
+	v.require(policy.PolicyVersion >= 2, "policy_version must be at least 2")
+	v.require(policy.MaxInstancesTotal > 0, "max_instances_total must be greater than zero")
+	v.checkEnforcement(policy.Enforcement)
+	v.checkOwnership(policy.OwnershipScope)
+	v.checkCapacityGroups(policy)
+	v.checkCreatePolicy(policy.CreatePolicy)
+	v.require(cases.PolicyID == policy.PolicyID, "cases.policy_id must match policy.policy_id")
+	v.require(len(cases.Cases) > 0, "at least one capacity case is required")
 
-	add(policy.PolicyID == "supervised-pilot-vm-capacity", "policy_id must be supervised-pilot-vm-capacity")
-	add(policy.PolicyVersion >= 2, "policy_version must be at least 2")
-	add(policy.MaxInstancesTotal > 0, "max_instances_total must be greater than zero")
-
-	staticPolicyErrors := 0
-	if policy.Enforcement == nil {
-		errors = append(errors, "enforcement must be an object")
-		staticPolicyErrors++
-	} else {
-		add(policy.Enforcement.Mode == "runtime", "enforcement.mode must be runtime")
-		add(policy.Enforcement.RuntimeEnforced != nil && *policy.Enforcement.RuntimeEnforced, "enforcement.runtime_enforced must be true")
-		add(strings.Contains(policy.Enforcement.Reason, "gsc-pilot provision"), "enforcement.reason must identify the runtime provision command")
-	}
-	if policy.OwnershipScope == nil {
-		errors = append(errors, "ownership_scope must be an object")
-		staticPolicyErrors++
-	} else {
-		ownership := policy.OwnershipScope
-		add(ownership.CapacityCountsOnlyControllerOwnedInstances != nil && *ownership.CapacityCountsOnlyControllerOwnedInstances, "ownership_scope.capacity_counts_only_controller_owned_instances must be true")
-		add(ownership.UnmanagedProductionMayRemainLive != nil && *ownership.UnmanagedProductionMayRemainLive, "ownership_scope.unmanaged_production_may_remain_live must be true")
-		add(ownership.ProductionAdoptionIsOptional != nil && *ownership.ProductionAdoptionIsOptional, "ownership_scope.production_adoption_is_optional must be true")
-		add(ownership.ProviderCreatedInstancesAreControllerManaged != nil && *ownership.ProviderCreatedInstancesAreControllerManaged, "ownership_scope.provider_created_instances_are_controller_managed must be true")
-	}
-	expectedGroups := map[string]capacityGroup{
-		"production": {
-			MaxInstances:         1,
-			AcceptedEnvironments: []string{"production"},
-		},
-		"shared_nonproduction": {
-			MaxInstances:         1,
-			AcceptedEnvironments: []string{"staging", "testing"},
-		},
-	}
-	if !reflect.DeepEqual(policy.CapacityGroups, expectedGroups) {
-		errors = append(errors, "capacity_groups must define one production slot and one shared staging/testing slot")
-		staticPolicyErrors++
-	} else {
-		total := 0
-		environments := make([]string, 0, 3)
-		for _, group := range policy.CapacityGroups {
-			total += group.MaxInstances
-			environments = append(environments, group.AcceptedEnvironments...)
-		}
-		sort.Strings(environments)
-		add(policy.MaxInstancesTotal <= total, "max_instances_total cannot exceed the sum of capacity-group slots")
-		add(reflect.DeepEqual(environments, []string{"production", "staging", "testing"}), "capacity groups must assign production, staging, and testing exactly once")
-	}
-	if policy.CreatePolicy == nil {
-		errors = append(errors, "create_policy must be an object")
-		staticPolicyErrors++
-	} else {
-		create := policy.CreatePolicy
-		checkTrue := func(value *bool, field string) {
-			add(value != nil && *value, field+" must be true")
-		}
-		checkTrue(create.ReserveSlotAtomicallyBeforeProviderCreate, "create_policy.reserve_slot_atomically_before_provider_create")
-		checkTrue(create.ReservationCountsAsCapacity, "create_policy.reservation_counts_as_capacity")
-		checkTrue(create.RejectDuplicateOrOccupiedSlot, "create_policy.reject_duplicate_or_occupied_slot")
-		checkTrue(create.RejectIfTotalWouldExceedLimit, "create_policy.reject_if_total_would_exceed_limit")
-		checkTrue(create.RejectUnsupportedEnvironment, "create_policy.reject_unsupported_environment")
-		if create.Occupancy == nil {
-			errors = append(errors, "create_policy.occupancy must be an object")
-			staticPolicyErrors++
-		} else {
-			occupancy := create.Occupancy
-			checkTrue(occupancy.CountEveryManagedInstanceWithoutProviderConfirmedAbsenceOrDestruction, "create_policy.occupancy.count_every_managed_instance_without_provider_confirmed_absence_or_destruction")
-			checkTrue(occupancy.CountUnresolvedCreateOutcome, "create_policy.occupancy.count_unresolved_create_outcome")
-			checkTrue(occupancy.CountUnresolvedDestroyOutcome, "create_policy.occupancy.count_unresolved_destroy_outcome")
-			add(reflect.DeepEqual(occupancy.ReleaseOnlyAfterProviderConfirmation, []string{"absent", "destroyed"}), "create_policy.occupancy.release_only_after_provider_confirmation must be [absent, destroyed]")
-		}
-	}
-	if cases.PolicyID != policy.PolicyID {
-		errors = append(errors, "cases.policy_id must match policy.policy_id")
-	}
-	if len(cases.Cases) == 0 {
-		errors = append(errors, "at least one capacity case is required")
-	}
-
+	decisionsComparable := v.staticPolicyErrors == 0 && policy.Enforcement != nil && policy.CreatePolicy != nil && policy.CreatePolicy.Occupancy != nil
 	seen := make(map[string]bool, len(cases.Cases))
 	for index, testCase := range cases.Cases {
-		label := fmt.Sprintf("cases[%d]", index)
-		if testCase.ID == "" {
-			errors = append(errors, label+".id must be a non-empty string")
+		if problem := caseProblem(index, testCase, seen); problem != "" {
+			v.errors = append(v.errors, problem)
 			continue
 		}
-		if seen[testCase.ID] {
-			errors = append(errors, "duplicate case id: "+testCase.ID)
-			continue
-		}
-		seen[testCase.ID] = true
-		if testCase.RequestEnvironment == "" {
-			errors = append(errors, testCase.ID+".request_environment must be a non-empty string")
-			continue
-		}
-		if testCase.RequestAction != "create" && testCase.RequestAction != "adopt" {
-			errors = append(errors, testCase.ID+".request_action must be create or adopt")
-			continue
-		}
-		if testCase.ExistingInstances == nil {
-			errors = append(errors, testCase.ID+".existing_instances must be an array")
-			continue
-		}
-		invalidInstance := false
-		for _, instance := range testCase.ExistingInstances {
-			if instance.Environment == "" || instance.ProviderState == "" || instance.Managed == nil {
-				invalidInstance = true
-				break
-			}
-		}
-		if invalidInstance {
-			errors = append(errors, testCase.ID+".existing_instances entries need environment and provider_state strings")
-			continue
-		}
-		if testCase.Expected == nil || testCase.Expected.Allowed == nil || testCase.Expected.Reason == "" {
-			errors = append(errors, testCase.ID+".expected must include allowed and reason")
-			continue
-		}
-		if staticPolicyErrors == 0 && policy.Enforcement != nil && policy.CreatePolicy != nil && policy.CreatePolicy.Occupancy != nil {
-			actual := decide(policy, testCase.RequestEnvironment, testCase.ExistingInstances)
-			if actual.Allowed != *testCase.Expected.Allowed || !matchesExpectedReason(actual.Reason, testCase.Expected.Reason) {
-				errors = append(errors, fmt.Sprintf("%s: expected {allowed:%t reason:%q}, got {allowed:%t reason:%q}", testCase.ID, *testCase.Expected.Allowed, testCase.Expected.Reason, actual.Allowed, actual.Reason))
-			}
+		if decisionsComparable {
+			v.checkDecision(policy, testCase)
 		}
 	}
-	return errors
+	return v.errors
+}
+
+func (v *validation) checkEnforcement(enforcement *enforcementPolicy) {
+	if enforcement == nil {
+		v.structural("enforcement must be an object")
+		return
+	}
+	v.require(enforcement.Mode == "runtime", "enforcement.mode must be runtime")
+	v.require(isTrue(enforcement.RuntimeEnforced), "enforcement.runtime_enforced must be true")
+	v.require(strings.Contains(enforcement.Reason, "gsc-pilot provision"), "enforcement.reason must identify the runtime provision command")
+}
+
+func (v *validation) checkOwnership(ownership *ownershipScope) {
+	if ownership == nil {
+		v.structural("ownership_scope must be an object")
+		return
+	}
+	v.requireTrue(ownership.CapacityCountsOnlyControllerOwnedInstances, "ownership_scope.capacity_counts_only_controller_owned_instances")
+	v.requireTrue(ownership.UnmanagedProductionMayRemainLive, "ownership_scope.unmanaged_production_may_remain_live")
+	v.requireTrue(ownership.ProductionAdoptionIsOptional, "ownership_scope.production_adoption_is_optional")
+	v.requireTrue(ownership.ProviderCreatedInstancesAreControllerManaged, "ownership_scope.provider_created_instances_are_controller_managed")
+}
+
+func (v *validation) checkCapacityGroups(policy policyDocument) {
+	if !reflect.DeepEqual(policy.CapacityGroups, expectedGroups) {
+		v.structural("capacity_groups must define one production slot and one shared staging/testing slot")
+		return
+	}
+	total := 0
+	environments := make([]string, 0, 3)
+	for _, group := range policy.CapacityGroups {
+		total += group.MaxInstances
+		environments = append(environments, group.AcceptedEnvironments...)
+	}
+	sort.Strings(environments)
+	v.require(policy.MaxInstancesTotal <= total, "max_instances_total cannot exceed the sum of capacity-group slots")
+	v.require(reflect.DeepEqual(environments, []string{"production", "staging", "testing"}), "capacity groups must assign production, staging, and testing exactly once")
+}
+
+func (v *validation) checkCreatePolicy(create *createPolicy) {
+	if create == nil {
+		v.structural("create_policy must be an object")
+		return
+	}
+	v.requireTrue(create.ReserveSlotAtomicallyBeforeProviderCreate, "create_policy.reserve_slot_atomically_before_provider_create")
+	v.requireTrue(create.ReservationCountsAsCapacity, "create_policy.reservation_counts_as_capacity")
+	v.requireTrue(create.RejectDuplicateOrOccupiedSlot, "create_policy.reject_duplicate_or_occupied_slot")
+	v.requireTrue(create.RejectIfTotalWouldExceedLimit, "create_policy.reject_if_total_would_exceed_limit")
+	v.requireTrue(create.RejectUnsupportedEnvironment, "create_policy.reject_unsupported_environment")
+	occupancy := create.Occupancy
+	if occupancy == nil {
+		v.structural("create_policy.occupancy must be an object")
+		return
+	}
+	v.requireTrue(occupancy.CountEveryManagedInstanceWithoutProviderConfirmedAbsenceOrDestruction, "create_policy.occupancy.count_every_managed_instance_without_provider_confirmed_absence_or_destruction")
+	v.requireTrue(occupancy.CountUnresolvedCreateOutcome, "create_policy.occupancy.count_unresolved_create_outcome")
+	v.requireTrue(occupancy.CountUnresolvedDestroyOutcome, "create_policy.occupancy.count_unresolved_destroy_outcome")
+	v.require(reflect.DeepEqual(occupancy.ReleaseOnlyAfterProviderConfirmation, []string{"absent", "destroyed"}), "create_policy.occupancy.release_only_after_provider_confirmation must be [absent, destroyed]")
+}
+
+// caseProblem returns the first structural problem with a case, or "" when
+// the case is well formed. It records the case ID in seen once the ID is known
+// to be new.
+func caseProblem(index int, testCase policyCase, seen map[string]bool) string {
+	switch {
+	case testCase.ID == "":
+		return fmt.Sprintf("cases[%d].id must be a non-empty string", index)
+	case seen[testCase.ID]:
+		return "duplicate case id: " + testCase.ID
+	}
+	seen[testCase.ID] = true
+	switch {
+	case testCase.RequestEnvironment == "":
+		return testCase.ID + ".request_environment must be a non-empty string"
+	case testCase.RequestAction != "create" && testCase.RequestAction != "adopt":
+		return testCase.ID + ".request_action must be create or adopt"
+	case testCase.ExistingInstances == nil:
+		return testCase.ID + ".existing_instances must be an array"
+	case !instancesWellFormed(testCase.ExistingInstances):
+		return testCase.ID + ".existing_instances entries need environment and provider_state strings"
+	case testCase.Expected == nil || testCase.Expected.Allowed == nil || testCase.Expected.Reason == "":
+		return testCase.ID + ".expected must include allowed and reason"
+	}
+	return ""
+}
+
+func instancesWellFormed(instances []existingInstance) bool {
+	for _, instance := range instances {
+		if instance.Environment == "" || instance.ProviderState == "" || instance.Managed == nil {
+			return false
+		}
+	}
+	return true
+}
+
+// checkDecision compares the policy's decision for a well-formed case with
+// the case's expected result.
+func (v *validation) checkDecision(policy policyDocument, testCase policyCase) {
+	actual := decide(policy, testCase.RequestEnvironment, testCase.ExistingInstances)
+	expected := testCase.Expected
+	if actual.Allowed != *expected.Allowed || !matchesExpectedReason(actual.Reason, expected.Reason) {
+		v.errors = append(v.errors, fmt.Sprintf("%s: expected {allowed:%t reason:%q}, got {allowed:%t reason:%q}", testCase.ID, *expected.Allowed, expected.Reason, actual.Allowed, actual.Reason))
+	}
 }
 
 func matchesExpectedReason(actual, expected string) bool {
