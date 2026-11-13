@@ -449,29 +449,71 @@ func (p *backupPlanner) finishSteps(shouldResume bool) error {
 }
 
 func validateServerBackupProfile(server store.LogicalServer, requestedID string, profile ServerBackupProfile) error {
-	if profile.ProfileID != requestedID || profile.ProfileID == "" || profile.GameReleaseID == "" ||
-		len(profile.GameReleaseID) > 500 || profile.GameName == "" || len(profile.GameName) > 200 ||
-		profile.GameVersion == "" || len(profile.GameVersion) > 200 || profile.WorldFormat != "" && len(profile.WorldFormat) > 200 ||
-		profile.ConsistencyMode != "offline" || len(profile.DataSets) == 0 || len(profile.DataSets) > 128 ||
-		len(profile.ValidationChecks) == 0 || len(profile.ValidationChecks) > 64 ||
-		profile.StorageAdapterID == "" || profile.StorageProfileID != server.StorageProfile || profile.StorageContainer == "" || len(profile.StorageContainer) > 500 {
+	if !backupProfileReleaseBound(requestedID, profile) || !backupProfileSetsBounded(profile) || !backupProfileStorageBound(server, profile) {
 		return errors.New("trusted backup profile must bind a release, offline consistency, bounded data sets/checks, and the server storage profile")
 	}
+	if !backupProfileUnitBound(server, profile.UnitRef) {
+		return errors.New("trusted backup profile unit reference does not bind the configured execution adapter and environment")
+	}
+	if err := validateBackupProfileDataSets(profile); err != nil {
+		return err
+	}
+	return validateBackupProfileChecks(profile.ValidationChecks)
+}
+
+// backupProfileReleaseBound reports whether the profile is the requested one
+// and names a bounded game release, name, version and optional world format.
+func backupProfileReleaseBound(requestedID string, profile ServerBackupProfile) bool {
+	if profile.ProfileID != requestedID || profile.ProfileID == "" {
+		return false
+	}
+	return backupBoundedText(profile.GameReleaseID, 500) && backupBoundedText(profile.GameName, 200) &&
+		backupBoundedText(profile.GameVersion, 200) && len(profile.WorldFormat) <= 200
+}
+
+// backupProfileSetsBounded reports whether the profile selects offline
+// consistency with 1-128 data sets and 1-64 validation checks.
+func backupProfileSetsBounded(profile ServerBackupProfile) bool {
+	return profile.ConsistencyMode == "offline" &&
+		len(profile.DataSets) > 0 && len(profile.DataSets) <= 128 &&
+		len(profile.ValidationChecks) > 0 && len(profile.ValidationChecks) <= 64
+}
+
+// backupProfileStorageBound reports whether the profile names a storage
+// adapter, the server's storage profile and a bounded container.
+func backupProfileStorageBound(server store.LogicalServer, profile ServerBackupProfile) bool {
+	return profile.StorageAdapterID != "" && profile.StorageProfileID == server.StorageProfile &&
+		backupBoundedText(profile.StorageContainer, 500)
+}
+
+// backupBoundedText reports whether value is non-empty and at most limit bytes.
+func backupBoundedText(value string, limit int) bool {
+	return value != "" && len(value) <= limit
+}
+
+// backupProfileUnitBound reports whether the profile's unit reference is a
+// systemd unit of the server's execution adapter and environment.
+func backupProfileUnitBound(server store.LogicalServer, raw json.RawMessage) bool {
 	var unitRef struct {
 		AdapterID     string `json:"adapter_id"`
 		EnvironmentID string `json:"environment_id"`
 		ResourceKind  string `json:"resource_kind"`
 		ExternalID    string `json:"external_id"`
 	}
-	if err := json.Unmarshal(profile.UnitRef, &unitRef); err != nil || !isObject(profile.UnitRef) ||
-		unitRef.AdapterID != server.ExecutionAdapterID || unitRef.EnvironmentID != server.EnvironmentID ||
-		unitRef.ResourceKind != "systemd-unit" || unitRef.ExternalID == "" {
-		return errors.New("trusted backup profile unit reference does not bind the configured execution adapter and environment")
+	if err := json.Unmarshal(raw, &unitRef); err != nil || !isObject(raw) {
+		return false
 	}
+	return unitRef.AdapterID == server.ExecutionAdapterID && unitRef.EnvironmentID == server.EnvironmentID &&
+		unitRef.ResourceKind == "systemd-unit" && unitRef.ExternalID != ""
+}
+
+// validateBackupProfileDataSets checks each data set in order: a complete
+// declaration, a unique ID, the selected consistency mode exactly once, then
+// safe unique paths.
+func validateBackupProfileDataSets(profile ServerBackupProfile) error {
 	seenDataSets := make(map[string]struct{}, len(profile.DataSets))
 	for _, dataSet := range profile.DataSets {
-		if dataSet.DataSetID == "" || len(dataSet.DataSetID) > 200 || dataSet.MaximumBytes < 1 || dataSet.MaximumBytes > 9007199254740991 ||
-			len(dataSet.RelativePaths) == 0 || len(dataSet.RelativePaths) > 128 || len(dataSet.SupportedConsistencyModes) == 0 {
+		if !backupDataSetDeclarationComplete(dataSet) {
 			return fmt.Errorf("trusted backup profile contains an incomplete data-set declaration %q", dataSet.DataSetID)
 		}
 		if _, duplicate := seenDataSets[dataSet.DataSetID]; duplicate {
@@ -481,20 +523,43 @@ func validateServerBackupProfile(server store.LogicalServer, requestedID string,
 		if !containsString(dataSet.SupportedConsistencyModes, profile.ConsistencyMode) || !uniqueBackupStrings(dataSet.SupportedConsistencyModes) {
 			return fmt.Errorf("trusted data set %q does not declare the selected consistency mode exactly once", dataSet.DataSetID)
 		}
-		paths := make(map[string]struct{}, len(dataSet.RelativePaths))
-		for _, relative := range dataSet.RelativePaths {
-			if !validBackupRelativePath(relative) {
-				return fmt.Errorf("trusted data set %q contains an unsafe relative path", dataSet.DataSetID)
-			}
-			if _, duplicate := paths[relative]; duplicate {
-				return fmt.Errorf("trusted data set %q repeats a path", dataSet.DataSetID)
-			}
-			paths[relative] = struct{}{}
+		if err := validateBackupDataSetPaths(dataSet); err != nil {
+			return err
 		}
 	}
-	seenChecks := make(map[string]struct{}, len(profile.ValidationChecks))
-	for _, check := range profile.ValidationChecks {
-		if check.CheckID == "" || len(check.CheckID) > 160 || check.CheckVersion == "" || len(check.CheckVersion) > 40 {
+	return nil
+}
+
+// backupDataSetDeclarationComplete reports whether a data set has a bounded
+// ID, a size limit within JSON's safe integer range, 1-128 relative paths and
+// at least one consistency mode.
+func backupDataSetDeclarationComplete(dataSet ServerBackupDataSet) bool {
+	return backupBoundedText(dataSet.DataSetID, 200) &&
+		dataSet.MaximumBytes >= 1 && dataSet.MaximumBytes <= 9007199254740991 &&
+		len(dataSet.RelativePaths) > 0 && len(dataSet.RelativePaths) <= 128 &&
+		len(dataSet.SupportedConsistencyModes) > 0
+}
+
+func validateBackupDataSetPaths(dataSet ServerBackupDataSet) error {
+	paths := make(map[string]struct{}, len(dataSet.RelativePaths))
+	for _, relative := range dataSet.RelativePaths {
+		if !validBackupRelativePath(relative) {
+			return fmt.Errorf("trusted data set %q contains an unsafe relative path", dataSet.DataSetID)
+		}
+		if _, duplicate := paths[relative]; duplicate {
+			return fmt.Errorf("trusted data set %q repeats a path", dataSet.DataSetID)
+		}
+		paths[relative] = struct{}{}
+	}
+	return nil
+}
+
+// validateBackupProfileChecks checks each validation check in order for a
+// bounded ID and version, then a unique ID.
+func validateBackupProfileChecks(checks []ReadinessRequirement) error {
+	seenChecks := make(map[string]struct{}, len(checks))
+	for _, check := range checks {
+		if !backupBoundedText(check.CheckID, 160) || !backupBoundedText(check.CheckVersion, 40) {
 			return errors.New("trusted backup validation checks require bounded IDs and versions")
 		}
 		if _, duplicate := seenChecks[check.CheckID]; duplicate {
