@@ -101,28 +101,24 @@ func reserveCapacityTx(tx *bolt.Tx, reservation CapacityReservation, totalLimit,
 	}
 
 	total, groupCount := 0, 0
-	cursor := bucket.Cursor()
-	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-		existing, err := decodeCapacityReservation(value)
-		if err != nil {
-			return CapacityReservation{}, false, err
-		}
-		if string(key) != existing.OperationID {
-			return CapacityReservation{}, false, fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
-		}
+	err := forEachCapacityReservation(bucket, func(_ []byte, existing CapacityReservation) error {
 		if capacityStateReleased(existing.State) {
-			continue
+			return nil
 		}
 		if existing.ServerID == reservation.ServerID && existing.EnvironmentID == reservation.EnvironmentID {
-			return CapacityReservation{}, false, fmt.Errorf("%w: server %q in environment %q", ErrCapacityOccupied, reservation.ServerID, reservation.EnvironmentID)
+			return fmt.Errorf("%w: server %q in environment %q", ErrCapacityOccupied, reservation.ServerID, reservation.EnvironmentID)
 		}
 		if existing.Provider == reservation.Provider && existing.ResourceKey == reservation.ResourceKey {
-			return CapacityReservation{}, false, fmt.Errorf("%w: provider resource key %q is already reserved", ErrCapacityConflict, reservation.ResourceKey)
+			return fmt.Errorf("%w: provider resource key %q is already reserved", ErrCapacityConflict, reservation.ResourceKey)
 		}
 		total++
 		if existing.CapacityGroup == reservation.CapacityGroup {
 			groupCount++
 		}
+		return nil
+	})
+	if err != nil {
+		return CapacityReservation{}, false, err
 	}
 	if total >= totalLimit {
 		return CapacityReservation{}, false, ErrCapacityReached
@@ -318,19 +314,11 @@ func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanc
 	var result CapacityReservation
 	err := func() error {
 		bucket := tx.Bucket(capacityReservationsBucket)
-		cursor := bucket.Cursor()
 		found := false
 		var matchedKey []byte
-		for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-			current, err := decodeCapacityReservation(value)
-			if err != nil {
-				return err
-			}
-			if string(key) != current.OperationID {
-				return fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
-			}
+		err := forEachCapacityReservation(bucket, func(key []byte, current CapacityReservation) error {
 			if current.ServerID != serverID || current.EnvironmentID != environmentID || current.ProviderInstanceID != providerInstanceID || (adapterID != "" && current.ProviderAdapterID != adapterID) {
-				continue
+				return nil
 			}
 			if found {
 				return ErrCapacityConflict
@@ -338,6 +326,10 @@ func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanc
 			found = true
 			matchedKey = append([]byte(nil), key...)
 			result = current
+			return nil
+		})
+		if err != nil {
+			return err
 		}
 		if !found {
 			return ErrCapacityNotFound
@@ -457,20 +449,12 @@ func recordDestroyedCapacityTx(tx *bolt.Tx, operation OperationRecord, server Lo
 		return fmt.Errorf("%w: provider absence observation is too far in the future", ErrInvalidRecord)
 	}
 	var match *CapacityReservation
-	cursor := tx.Bucket(capacityReservationsBucket).Cursor()
-	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-		reservation, err := decodeCapacityReservation(value)
-		if err != nil {
-			return err
-		}
-		if string(key) != reservation.OperationID {
-			return fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
-		}
+	err := forEachCapacityReservation(tx.Bucket(capacityReservationsBucket), func(_ []byte, reservation CapacityReservation) error {
 		if reservation.ServerID != server.ServerID || reservation.EnvironmentID != server.EnvironmentID {
-			continue
+			return nil
 		}
-		if reservation.State == CapacityAbsent || reservation.State == CapacityDestroyed {
-			continue
+		if capacityStateReleased(reservation.State) {
+			return nil
 		}
 		if (reservation.ProviderAdapterID != "" && reservation.ProviderAdapterID != instance.AdapterID) || reservation.ProviderInstanceID != instance.ExternalID {
 			return fmt.Errorf("%w: managed VM reservation does not match the destroyed instance", ErrCapacityConflict)
@@ -480,6 +464,10 @@ func recordDestroyedCapacityTx(tx *bolt.Tx, operation OperationRecord, server Lo
 		}
 		copyReservation := reservation
 		match = &copyReservation
+		return nil
+	})
+	if err != nil {
+		return err
 	}
 	if match == nil {
 		return nil
@@ -512,18 +500,10 @@ func (s *BoltStore) GetCapacityReservation(operationID string) (CapacityReservat
 func (s *BoltStore) ListCapacityReservations() ([]CapacityReservation, error) {
 	var result []CapacityReservation
 	err := s.db.View(func(tx *bolt.Tx) error {
-		cursor := tx.Bucket(capacityReservationsBucket).Cursor()
-		for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
-			reservation, err := decodeCapacityReservation(value)
-			if err != nil {
-				return err
-			}
-			if string(key) != reservation.OperationID {
-				return fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
-			}
+		return forEachCapacityReservation(tx.Bucket(capacityReservationsBucket), func(_ []byte, reservation CapacityReservation) error {
 			result = append(result, reservation)
-		}
-		return nil
+			return nil
+		})
 	})
 	if err != nil {
 		return nil, err
@@ -582,6 +562,26 @@ func decodeCapacityReservation(value []byte) (CapacityReservation, error) {
 		return CapacityReservation{}, fmt.Errorf("%w: invalid capacity reservation: %v", ErrCorruptStore, err)
 	}
 	return reservation, nil
+}
+
+// forEachCapacityReservation decodes every stored reservation in key order
+// and passes it to visit with its key. It stops at the first decode failure,
+// key/OperationID mismatch, or error returned by visit.
+func forEachCapacityReservation(bucket *bolt.Bucket, visit func(key []byte, reservation CapacityReservation) error) error {
+	cursor := bucket.Cursor()
+	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
+		reservation, err := decodeCapacityReservation(value)
+		if err != nil {
+			return err
+		}
+		if string(key) != reservation.OperationID {
+			return fmt.Errorf("%w: capacity reservation key mismatch", ErrCorruptStore)
+		}
+		if err := visit(key, reservation); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // loadCapacityReservation reads and decodes the reservation stored under key,
