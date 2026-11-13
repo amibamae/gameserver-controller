@@ -25,9 +25,15 @@ func (n Ntfy) DisplayName() string { return "ntfy push notifier" }
 
 // ValidNtfyServer accepts https, or http to a loopback address, with no path
 // beyond "/", query, fragment, or user information.
+// isBareServerURL reports whether u names a host with no credentials,
+// query, fragment or path beyond "/".
+func isBareServerURL(u *url.URL) bool {
+	return u.Host != "" && u.User == nil && u.RawQuery == "" && u.Fragment == "" && (u.Path == "" || u.Path == "/")
+}
+
 func ValidNtfyServer(value string) bool {
 	u, err := url.Parse(value)
-	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
+	if err != nil || !isBareServerURL(u) {
 		return false
 	}
 	return u.Scheme == "https" || (u.Scheme == "http" && isLoopback(u.Hostname()))
