@@ -215,8 +215,11 @@ func TestServerDestroyNeverCallsProviderWhileRuntimeIsRunning(t *testing.T) {
 	}
 }
 
-func TestServerDestroyReconcilesAcceptedProviderOperationByExactWait(t *testing.T) {
-	fixture := newServerDestroyFixture(t)
+// scriptAcceptedDestroy scripts a destroy that the provider accepts and later
+// confirms through an exact wait, so a first run leaves the operation waiting
+// with the server destroying.
+func scriptAcceptedDestroy(t *testing.T, fixture serverDestroyFixture) {
+	t.Helper()
 	baseTime := time.Now().UTC().Add(time.Minute)
 	providerBefore := instanceInspectionOutput(json.RawMessage(startTestInstance), "active", baseTime)
 	providerAfter := instanceInspectionOutput(json.RawMessage(startTestInstance), "destroyed", baseTime.Add(3*time.Second))
@@ -244,6 +247,11 @@ func TestServerDestroyReconcilesAcceptedProviderOperationByExactWait(t *testing.
 		t.Fatal(err)
 	}
 
+}
+
+func TestServerDestroyReconcilesAcceptedProviderOperationByExactWait(t *testing.T) {
+	fixture := newServerDestroyFixture(t)
+	scriptAcceptedDestroy(t, fixture)
 	waiting, err := fixture.engine.Run(context.Background(), fixture.operation.Record.OperationID)
 	if err != nil {
 		t.Fatal(err)
