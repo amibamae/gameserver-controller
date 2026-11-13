@@ -161,79 +161,132 @@ func validSingleLineSecret(plaintext []byte) bool {
 // storeEncryptedCredential atomically creates or replaces one encrypted
 // credential file. Callers validate the name and plaintext first.
 func storeEncryptedCredential(ctx context.Context, name, directory string, plaintext []byte, replace bool, encryptor Encryptor) (err error) {
+	if err := validateCredentialRequest(name, directory, plaintext); err != nil {
+		return err
+	}
+	if err := ensureCredentialDirectory(directory); err != nil {
+		return err
+	}
+	finalPath := filepath.Join(directory, name)
+	if err := checkCredentialTarget(finalPath, replace); err != nil {
+		return err
+	}
+	temporaryPath, err := reserveTemporaryPath(directory)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = os.Remove(temporaryPath)
+	}()
+	if err := sealCredential(ctx, encryptor, name, temporaryPath, plaintext); err != nil {
+		return err
+	}
+	if err := installCredential(temporaryPath, finalPath, replace); err != nil {
+		return err
+	}
+	return syncCredentialDirectory(directory)
+}
+
+func validateCredentialRequest(name, directory string, plaintext []byte) error {
 	if !credentialNamePattern.MatchString(name) || len(plaintext) == 0 || len(plaintext) > maxProviderSecret {
 		return errors.New("credential input is empty or invalid")
 	}
 	if !filepath.IsAbs(directory) || strings.ContainsRune(directory, '\x00') {
 		return errors.New("credential directory must be an absolute path")
 	}
-	if err := ensureCredentialDirectory(directory); err != nil {
-		return err
-	}
-	finalPath := filepath.Join(directory, name)
-	if info, statErr := os.Lstat(finalPath); statErr == nil {
-		if !info.Mode().IsRegular() {
-			return errors.New("existing credential target is not a regular file")
-		}
-		if !replace {
-			return errors.New("credential already exists; explicit replacement is required")
-		}
-	} else if !errors.Is(statErr, os.ErrNotExist) {
+	return nil
+}
+
+// checkCredentialTarget allows a missing target, or an existing regular file
+// when replace is set.
+func checkCredentialTarget(finalPath string, replace bool) error {
+	info, err := os.Lstat(finalPath)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return nil
+	case err != nil:
 		return errors.New("inspect credential target failed")
+	case !info.Mode().IsRegular():
+		return errors.New("existing credential target is not a regular file")
+	case !replace:
+		return errors.New("credential already exists; explicit replacement is required")
 	}
+	return nil
+}
+
+// reserveTemporaryPath picks an unused, private name in directory for the
+// encryptor to write, and leaves nothing at that path.
+func reserveTemporaryPath(directory string) (string, error) {
+	prepareFailed := errors.New("prepare encrypted credential failed")
 	temporary, err := os.CreateTemp(directory, ".controller-credential-*")
 	if err != nil {
-		return errors.New("prepare encrypted credential failed")
+		return "", prepareFailed
 	}
 	temporaryPath := temporary.Name()
-	defer func() {
-		_ = os.Remove(temporaryPath)
-	}()
 	if err := temporary.Chmod(0o600); err != nil {
 		_ = temporary.Close()
-		return errors.New("prepare encrypted credential failed")
+		_ = os.Remove(temporaryPath)
+		return "", prepareFailed
 	}
 	if err := temporary.Close(); err != nil {
-		return errors.New("prepare encrypted credential failed")
+		_ = os.Remove(temporaryPath)
+		return "", prepareFailed
 	}
 	if err := os.Remove(temporaryPath); err != nil {
-		return errors.New("prepare encrypted credential failed")
+		return "", prepareFailed
 	}
-	if err := encryptor.Encrypt(ctx, name, temporaryPath, plaintext); err != nil {
+	return temporaryPath, nil
+}
+
+// sealCredential has the encryptor write path, then checks the output is a
+// non-empty regular file, restricts it to the owner and flushes it.
+func sealCredential(ctx context.Context, encryptor Encryptor, name, path string, plaintext []byte) error {
+	if err := encryptor.Encrypt(ctx, name, path, plaintext); err != nil {
 		return errors.New("encrypt provider credential failed")
 	}
-	info, err := os.Lstat(temporaryPath)
+	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Size() == 0 {
 		return errors.New("encrypted credential output is missing or invalid")
 	}
-	if err := os.Chmod(temporaryPath, 0o600); err != nil {
+	if err := os.Chmod(path, 0o600); err != nil {
 		return errors.New("restrict encrypted credential permissions failed")
 	}
-	if err := syncFile(temporaryPath); err != nil {
+	if err := syncFile(path); err != nil {
 		return errors.New("flush encrypted credential failed")
 	}
+	return nil
+}
+
+// installCredential moves the sealed file into place: a rename when
+// replacing, otherwise a hard link that fails if the name appeared meanwhile.
+func installCredential(temporaryPath, finalPath string, replace bool) error {
 	if replace {
 		if err := os.Rename(temporaryPath, finalPath); err != nil {
 			return errors.New("replace encrypted credential failed")
 		}
-	} else {
-		if err := os.Link(temporaryPath, finalPath); err != nil {
-			if errors.Is(err, os.ErrExist) {
-				return errors.New("credential appeared during setup; no replacement was made")
-			}
-			return errors.New("install encrypted credential failed")
-		}
+		return nil
 	}
+	if err := os.Link(temporaryPath, finalPath); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return errors.New("credential appeared during setup; no replacement was made")
+		}
+		return errors.New("install encrypted credential failed")
+	}
+	return nil
+}
+
+func syncCredentialDirectory(directory string) error {
+	unconfirmed := errors.New("credential was installed but directory durability could not be confirmed")
 	directoryFile, err := os.Open(directory)
 	if err != nil {
-		return errors.New("credential was installed but directory durability could not be confirmed")
+		return unconfirmed
 	}
 	if err := directoryFile.Sync(); err != nil {
 		_ = directoryFile.Close()
-		return errors.New("credential was installed but directory durability could not be confirmed")
+		return unconfirmed
 	}
 	if err := directoryFile.Close(); err != nil {
-		return errors.New("credential was installed but directory durability could not be confirmed")
+		return unconfirmed
 	}
 	return nil
 }
