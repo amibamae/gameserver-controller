@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -21,36 +20,11 @@ import (
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/authkey"
-	"github.com/amibamae/gameserver-controller/internal/config"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
 func TestServeRunsOnlyConfiguredAuthenticatedHTTPSListener(t *testing.T) {
-	configPath := filepath.Join("..", "..", "configs", "controller.example.yaml")
-	value, err := config.Load(configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if value.Controller.ManagementAPI.Enabled {
-		t.Fatal("example configuration unexpectedly enables a listener")
-	}
-	value.Controller.StateStore.Path = filepath.Join(t.TempDir(), "controller.db")
-	value.Controller.ManagementAPI = config.ManagementAPI{
-		Enabled: true, ListenAddress: freeAddress(t), Audience: "controller-test",
-		TLSCertificate: filepath.Join(t.TempDir(), "tls.crt"),
-		TLSPrivateKey:  filepath.Join(t.TempDir(), "tls.key"),
-	}
-	credentials := t.TempDir()
-	if err := os.WriteFile(filepath.Join(credentials, "controller-idempotency-key-v1"), bytes.Repeat([]byte{9}, 32), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("CREDENTIALS_DIRECTORY", credentials)
-	value.Controller.IdempotencyKeys = config.IdempotencyKeys{Active: "v1", Versions: map[string]string{"v1": "systemd-credential://controller-idempotency-key-v1"}}
-	writeServerCertificate(t, value.Controller.ManagementAPI.TLSCertificate, value.Controller.ManagementAPI.TLSPrivateKey)
-	if err := config.Validate(value); err != nil {
-		t.Fatalf("validate test configuration: %v", err)
-	}
-
+	value, configPath := servingConfig(t)
 	issued := issueTestKey(t, value.Controller.StateStore.Path)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)

@@ -86,12 +86,7 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 		return err
 	}
 	defer runtime.Close()
-	keyManager, err := authkey.NewManager(runtime.Store)
-	if err != nil {
-		return err
-	}
-	handler, err := managementapi.NewAPIHandler(managementapi.Config{Store: runtime.Store, Controller: runtime, Authenticator: keyManager,
-		Audience: management.Audience, ProtocolVersion: runtime.Schemas.ProtocolVersion()})
+	handler, err := managementHandler(runtime, management)
 	if err != nil {
 		return err
 	}
@@ -99,15 +94,7 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 	if err != nil {
 		return fmt.Errorf("listen for management API: %w", err)
 	}
-	server := &http.Server{
-		Addr:              management.ListenAddress,
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		MaxHeaderBytes:    1 << 20,
-	}
+	server := newManagementServer(management.ListenAddress, handler)
 	// Start background work before serving: handlers read the runner to
 	// queue accepted operations, so it must exist before the first request.
 	runtime.StartMonitoring(ctx, controllerLog(stdout))
@@ -116,15 +103,61 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 	go func() {
 		serveResult <- server.Serve(tls.NewListener(listener, tlsConfig))
 	}()
-	if stdout != nil {
-		if adapters := runtime.AdapterIDs(); len(adapters) > 0 {
-			_, _ = fmt.Fprintf(stdout, "Registered adapters: %s\n", strings.Join(adapters, ", "))
-		}
-		if monitored := runtime.MonitoredIntegrations(); len(monitored) > 0 {
-			_, _ = fmt.Fprintf(stdout, "Monitoring proxies: %s; notifiers: %s\n", strings.Join(monitored, ", "), strings.Join(runtime.Notifiers(), ", "))
-		}
-		_, _ = fmt.Fprintf(stdout, "Management HTTPS listener ready at %s\n", management.ListenAddress)
+	reportStartup(stdout, runtime, management.ListenAddress)
+	return awaitServerExit(ctx, server, serveResult)
+}
+
+// managementHandler builds the management API over the runtime's store,
+// authenticating requests with the store's API keys.
+func managementHandler(runtime *controllerruntime.Runtime, management config.ManagementAPI) (http.Handler, error) {
+	keyManager, err := authkey.NewManager(runtime.Store)
+	if err != nil {
+		return nil, err
 	}
+	return managementapi.NewAPIHandler(managementapi.Config{Store: runtime.Store, Controller: runtime, Authenticator: keyManager,
+		Audience: management.Audience, ProtocolVersion: runtime.Schemas.ProtocolVersion()})
+}
+
+// newManagementServer bounds every phase of a request so a slow or idle
+// client cannot hold a connection open indefinitely.
+func newManagementServer(address string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              address,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+}
+
+// startupInventory is what the startup report lists from the runtime.
+type startupInventory interface {
+	AdapterIDs() []string
+	MonitoredIntegrations() []string
+	Notifiers() []string
+}
+
+// reportStartup lists the registered adapters and monitored proxies, when
+// there are any, and then announces the listener.
+func reportStartup(stdout io.Writer, inventory startupInventory, address string) {
+	if stdout == nil {
+		return
+	}
+	if adapters := inventory.AdapterIDs(); len(adapters) > 0 {
+		_, _ = fmt.Fprintf(stdout, "Registered adapters: %s\n", strings.Join(adapters, ", "))
+	}
+	if monitored := inventory.MonitoredIntegrations(); len(monitored) > 0 {
+		_, _ = fmt.Fprintf(stdout, "Monitoring proxies: %s; notifiers: %s\n", strings.Join(monitored, ", "), strings.Join(inventory.Notifiers(), ", "))
+	}
+	_, _ = fmt.Fprintf(stdout, "Management HTTPS listener ready at %s\n", address)
+}
+
+// awaitServerExit returns when the server stops by itself or, after ctx
+// ends, once a graceful shutdown of up to ten seconds completes. A server
+// that does not shut down in time is closed.
+func awaitServerExit(ctx context.Context, server *http.Server, serveResult <-chan error) error {
 	select {
 	case err := <-serveResult:
 		if errors.Is(err, http.ErrServerClosed) {
