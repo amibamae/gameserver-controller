@@ -77,100 +77,165 @@ func validDNSHostname(value string) bool {
 
 // validateServerNetwork checks a server's network profile and that every
 // integration adapter it requires is configured.
+
+// validateServerNetwork checks a server's network profile and that every
+// integration adapter it requires is configured.
 func validateServerNetwork(problems *[]string, label string, server ServerProfile, adapters map[string]AdapterProfile) {
-	network := server.Network
-	if network == nil {
+	if server.Network == nil {
 		return
 	}
-	label += ".network"
-	add := func(ok bool, problem string) {
-		if !ok {
-			*problems = append(*problems, label+problem)
+	check := networkCheck{problems: problems, label: label + ".network", server: server, network: *server.Network, adapters: adapters}
+	check.template()
+	if !check.joinMode() {
+		return
+	}
+	check.integrationUse()
+	check.adapterEnvironments()
+	check.zoneMembership()
+	check.backends()
+}
+
+// networkCheck collects one server's network problems under its label.
+type networkCheck struct {
+	problems *[]string
+	label    string
+	server   ServerProfile
+	network  ServerNetwork
+	adapters map[string]AdapterProfile
+}
+
+// add records label+problem unless ok.
+func (c networkCheck) add(ok bool, problem string) {
+	if !ok {
+		*c.problems = append(*c.problems, c.label+problem)
+	}
+}
+
+// usesHostname reports whether any backend is reached by a managed name.
+func (c networkCheck) usesHostname() bool {
+	for _, backend := range c.network.Backends {
+		if backend.effectiveAddressMode(c.network) == "hostname" {
+			return true
 		}
 	}
-	usesHostname := false
-	for _, backend := range network.Backends {
-		usesHostname = usesHostname || backend.effectiveAddressMode(*network) == "hostname"
+	return false
+}
+
+func (c networkCheck) template() {
+	template := c.network.BackendHostnameTemplate
+	if template == "" {
+		return
 	}
-	if template := network.BackendHostnameTemplate; template != "" {
-		placeholdersOK := strings.Contains(template, "{backend}")
-		for _, placeholder := range templatePlaceholder.FindAllString(template, -1) {
-			placeholdersOK = placeholdersOK && (placeholder == "{backend}" || placeholder == "{server}" || placeholder == "{environment}")
-		}
-		add(placeholdersOK, ".backend_hostname_template must contain {backend} and may only use {backend}, {server}, and {environment}")
-		add(network.JoinMode == "proxy", ".backend_hostname_template is only used with join_mode proxy")
+	placeholdersOK := strings.Contains(template, "{backend}")
+	for _, placeholder := range templatePlaceholder.FindAllString(template, -1) {
+		placeholdersOK = placeholdersOK && (placeholder == "{backend}" || placeholder == "{server}" || placeholder == "{environment}")
 	}
+	c.add(placeholdersOK, ".backend_hostname_template must contain {backend} and may only use {backend}, {server}, and {environment}")
+	c.add(c.network.JoinMode == "proxy", ".backend_hostname_template is only used with join_mode proxy")
+}
+
+// joinMode checks the fields each join mode needs or forbids. It reports
+// false when the remaining checks do not apply (join mode none or unknown).
+func (c networkCheck) joinMode() bool {
+	network := c.network
 	switch network.JoinMode {
 	case "proxy":
-		checkServerAdapter(problems, label+".proxy", network.Proxy, "integration", adapters, true)
-		add(len(network.Backends) > 0, ".backends must list at least one backend for join_mode proxy")
-		add(network.JoinHostname == "", ".join_hostname is only used with join_mode direct_dns")
-		if legacy := server.Adapters.Integration; legacy != "" {
-			add(legacy == network.Proxy, ".proxy must match adapters.integration when both are set")
+		checkServerAdapter(c.problems, c.label+".proxy", network.Proxy, "integration", c.adapters, true)
+		c.add(len(network.Backends) > 0, ".backends must list at least one backend for join_mode proxy")
+		c.add(network.JoinHostname == "", ".join_hostname is only used with join_mode direct_dns")
+		if legacy := c.server.Adapters.Integration; legacy != "" {
+			c.add(legacy == network.Proxy, ".proxy must match adapters.integration when both are set")
 		}
+		return true
 	case "direct_dns":
-		add(network.Proxy == "", ".proxy is only used with join_mode proxy")
-		add(len(network.Backends) == 0, ".backends are only used with join_mode proxy")
-		add(validDNSHostname(network.JoinHostname), ".join_hostname must be a lower-case DNS hostname")
-		validateFallbackRecords(problems, label, network.FallbackRecords)
+		c.add(network.Proxy == "", ".proxy is only used with join_mode proxy")
+		c.add(len(network.Backends) == 0, ".backends are only used with join_mode proxy")
+		c.add(validDNSHostname(network.JoinHostname), ".join_hostname must be a lower-case DNS hostname")
+		validateFallbackRecords(c.problems, c.label, network.FallbackRecords)
+		return true
 	case "none":
-		add(network.Proxy == "" && network.DNS == "" && network.JoinHostname == "" && len(network.Backends) == 0,
+		c.add(network.Proxy == "" && network.DNS == "" && network.JoinHostname == "" && len(network.Backends) == 0,
 			" with join_mode none must not set proxy, dns, join_hostname, or backends")
-		return
 	default:
-		add(false, ".join_mode must be proxy, direct_dns, or none")
-		return
+		c.add(false, ".join_mode must be proxy, direct_dns, or none")
 	}
-	checkServerAdapter(problems, label+".dns", network.DNS, "integration", adapters, network.JoinMode == "direct_dns" || usesHostname)
+	return false
+}
+
+// integrationUse checks the DNS adapter and fallback records against what
+// the join mode and backends use.
+func (c networkCheck) integrationUse() {
+	network := c.network
+	usesHostname := c.usesHostname()
+	checkServerAdapter(c.problems, c.label+".dns", network.DNS, "integration", c.adapters, network.JoinMode == "direct_dns" || usesHostname)
 	if network.JoinMode == "proxy" && !usesHostname {
-		add(network.DNS == "", ".dns is only used with join_mode direct_dns or hostname backends")
+		c.add(network.DNS == "", ".dns is only used with join_mode direct_dns or hostname backends")
 	}
 	if network.JoinMode != "direct_dns" {
-		add(len(network.FallbackRecords) == 0, ".fallback_records are only used with join_mode direct_dns")
+		c.add(len(network.FallbackRecords) == 0, ".fallback_records are only used with join_mode direct_dns")
 	}
-	// Built-in integration adapters are bound to one environment; a server
-	// must not route through another environment's proxy or DNS zone.
-	for field, id := range map[string]string{".proxy": network.Proxy, ".dns": network.DNS} {
-		if environment := BoundEnvironment(adapters[id]); id != "" && environment != "" {
-			add(environment == server.EnvironmentID, field+" adapter "+id+" belongs to environment "+environment+", not "+server.EnvironmentID)
-		}
-	}
-	if owner, ok := adapters[network.DNS].Settings.(DNSZoneOwner); ok {
-		zone := owner.DNSZone()
-		names := []string{}
-		if network.JoinMode == "direct_dns" {
-			names = append(names, network.JoinHostname)
-		}
-		for _, backend := range network.Backends {
-			if name, ok := network.BackendHostname(server.ID, server.EnvironmentID, backend); ok && name != "" {
-				names = append(names, name)
-			}
-		}
-		for _, name := range names {
-			add(inZone(name, zone), " hostname "+name+" is outside the DNS zone "+zone)
+}
+
+// adapterEnvironments checks that built-in integration adapters, which are
+// bound to one environment, are the server's: a server must not route
+// through another environment's proxy or DNS zone.
+func (c networkCheck) adapterEnvironments() {
+	for field, id := range map[string]string{".proxy": c.network.Proxy, ".dns": c.network.DNS} {
+		if environment := BoundEnvironment(c.adapters[id]); id != "" && environment != "" {
+			c.add(environment == c.server.EnvironmentID, field+" adapter "+id+" belongs to environment "+environment+", not "+c.server.EnvironmentID)
 		}
 	}
-	seen := make(map[string]bool, len(network.Backends))
-	for i, backend := range network.Backends {
+}
+
+// zoneMembership checks that every managed name lies in the DNS adapter's
+// zone, when the adapter owns one.
+func (c networkCheck) zoneMembership() {
+	owner, ok := c.adapters[c.network.DNS].Settings.(DNSZoneOwner)
+	if !ok {
+		return
+	}
+	zone := owner.DNSZone()
+	names := []string{}
+	if c.network.JoinMode == "direct_dns" {
+		names = append(names, c.network.JoinHostname)
+	}
+	for _, backend := range c.network.Backends {
+		if name, ok := c.network.BackendHostname(c.server.ID, c.server.EnvironmentID, backend); ok && name != "" {
+			names = append(names, name)
+		}
+	}
+	for _, name := range names {
+		c.add(inZone(name, zone), " hostname "+name+" is outside the DNS zone "+zone)
+	}
+}
+
+func (c networkCheck) backends() {
+	seen := make(map[string]bool, len(c.network.Backends))
+	for i, backend := range c.network.Backends {
 		entry := fmt.Sprintf(".backends[%d]", i)
-		add(backendIDPattern.MatchString(backend.ID), entry+".id must be a proxy server name")
-		add(!seen[backend.ID], entry+".id is a duplicate")
+		c.add(backendIDPattern.MatchString(backend.ID), entry+".id must be a proxy server name")
+		c.add(!seen[backend.ID], entry+".id is a duplicate")
 		seen[backend.ID] = true
-		add(backend.Port >= 1 && backend.Port <= 65535, entry+".port must be between 1 and 65535")
-		switch backend.effectiveAddressMode(*network) {
-		case "instance_ip":
-			add(backend.Hostname == "", entry+".hostname is only used with address_mode hostname")
-		case "hostname":
-			if network.BackendHostnameTemplate != "" {
-				add(backend.Hostname == "", entry+".hostname must not be set when backend_hostname_template is set")
-				name, _ := network.BackendHostname(server.ID, server.EnvironmentID, backend)
-				add(validDNSHostname(name), entry+" hostname from backend_hostname_template is not a valid lower-case DNS hostname")
-			} else {
-				add(validDNSHostname(backend.Hostname), entry+".hostname must be a lower-case DNS hostname")
-			}
-		default:
-			add(false, entry+".address_mode must be instance_ip or hostname")
+		c.add(backend.Port >= 1 && backend.Port <= 65535, entry+".port must be between 1 and 65535")
+		c.backendAddress(entry, backend)
+	}
+}
+
+// backendAddress checks one backend's address fields for its mode.
+func (c networkCheck) backendAddress(entry string, backend NetworkBackend) {
+	switch backend.effectiveAddressMode(c.network) {
+	case "instance_ip":
+		c.add(backend.Hostname == "", entry+".hostname is only used with address_mode hostname")
+	case "hostname":
+		if c.network.BackendHostnameTemplate == "" {
+			c.add(validDNSHostname(backend.Hostname), entry+".hostname must be a lower-case DNS hostname")
+			return
 		}
+		c.add(backend.Hostname == "", entry+".hostname must not be set when backend_hostname_template is set")
+		name, _ := c.network.BackendHostname(c.server.ID, c.server.EnvironmentID, backend)
+		c.add(validDNSHostname(name), entry+" hostname from backend_hostname_template is not a valid lower-case DNS hostname")
+	default:
+		c.add(false, entry+".address_mode must be instance_ip or hostname")
 	}
 }
 
