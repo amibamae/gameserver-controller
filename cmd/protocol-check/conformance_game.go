@@ -143,15 +143,21 @@ func (m migrationCase) backupBound() bool {
 // compatibilityBound: the compatibility result was computed for this
 // backup's game and data and for the target release.
 func (m migrationCase) compatibilityBound() bool {
-	sourceGame := asObject(m.manifest["game"])
-	return stringValue(m.compatibility, "backup_id") == stringValue(m.backupData, "backup_id") &&
-		stringValue(m.compatibility, "environment_id") == stringValue(m.backupData, "environment_id") &&
-		stringValue(m.compatibility, "data_generation_id") == stringValue(m.backupData, "data_generation_id") &&
-		stringValue(m.compatibility, "source_game_adapter_id") == stringValue(sourceGame, "adapter_id") &&
-		stringValue(m.compatibility, "source_game_version") == stringValue(sourceGame, "version") &&
-		stringValue(m.compatibility, "target_game_adapter_id") == stringValue(m.targetRelease, "game_adapter_id") &&
-		stringValue(m.compatibility, "target_release_id") == stringValue(m.targetRelease, "release_id") &&
-		stringValue(m.compatibility, "target_game_version") == stringValue(m.targetRelease, "game_version")
+	return compatibilityNames(m.compatibility, m.backupData, asObject(m.manifest["game"]), m.targetRelease)
+}
+
+// compatibilityNames: a compatibility result names the backup (its ID,
+// environment and data generation, read from backup), the source game
+// adapter and version, and the target release.
+func compatibilityNames(compatibility, backup, sourceGame, targetRelease map[string]any) bool {
+	return stringValue(compatibility, "backup_id") == stringValue(backup, "backup_id") &&
+		stringValue(compatibility, "environment_id") == stringValue(backup, "environment_id") &&
+		stringValue(compatibility, "data_generation_id") == stringValue(backup, "data_generation_id") &&
+		stringValue(compatibility, "source_game_adapter_id") == stringValue(sourceGame, "adapter_id") &&
+		stringValue(compatibility, "source_game_version") == stringValue(sourceGame, "version") &&
+		stringValue(compatibility, "target_game_adapter_id") == stringValue(targetRelease, "game_adapter_id") &&
+		stringValue(compatibility, "target_release_id") == stringValue(targetRelease, "release_id") &&
+		stringValue(compatibility, "target_game_version") == stringValue(targetRelease, "game_version")
 }
 
 // migrationStreamsMatchManifest: the object streams are exactly the
@@ -288,22 +294,30 @@ func evaluateGameCompatibilityCheck(pkg *protocolPackage, fixture map[string]any
 		return nil, fmt.Errorf("compatibility output does not match schema: %w", err)
 	}
 	manifest := asObject(compatibilityInput["source_manifest"])
-	sourceGame := asObject(manifest["game"])
-	targetRelease := asObject(compatibilityInput["target_release"])
-	targetBound := stringValue(compatibilityOutput, "backup_id") == stringValue(manifest, "backup_id") &&
-		stringValue(compatibilityOutput, "environment_id") == stringValue(manifest, "environment_id") &&
-		stringValue(compatibilityOutput, "data_generation_id") == stringValue(manifest, "data_generation_id") &&
-		stringValue(compatibilityOutput, "source_game_adapter_id") == stringValue(sourceGame, "adapter_id") &&
-		stringValue(compatibilityOutput, "source_game_version") == stringValue(sourceGame, "version") &&
-		stringValue(compatibilityOutput, "target_game_adapter_id") == stringValue(targetRelease, "game_adapter_id") &&
-		stringValue(compatibilityOutput, "target_release_id") == stringValue(targetRelease, "release_id") &&
-		stringValue(compatibilityOutput, "target_game_version") == stringValue(targetRelease, "game_version")
+	targetBound := compatibilityNames(compatibilityOutput, manifest, asObject(manifest["game"]), asObject(compatibilityInput["target_release"]))
+	complete, derived := deriveCompatibility(arrayValue(compatibilityInput, "required_check_ids"), arrayValue(compatibilityOutput, "check_results"))
+	reportedMatches := stringValue(compatibilityOutput, "compatibility_status") == derived
+	return map[string]any{
+		"schemas_valid":                  true,
+		"target_bound":                   targetBound,
+		"check_set_complete":             complete,
+		"derived_compatibility_status":   derived,
+		"reported_compatibility_matches": reportedMatches,
+		"compatibility_result_accepted":  targetBound && complete && reportedMatches && derived == "compatible",
+	}, nil
+}
+
+// deriveCompatibility: the check set is complete when there is exactly one
+// known result for every required check and nothing else. Any incompatible
+// check makes the result incompatible; otherwise an unknown or missing
+// result makes it unknown; otherwise any migration_required check makes it
+// migration_required.
+func deriveCompatibility(required, results []any) (bool, string) {
 	requested := make(map[string]bool)
-	for _, rawID := range arrayValue(compatibilityInput, "required_check_ids") {
+	for _, rawID := range required {
 		requested[rawID.(string)] = true
 	}
 	observed := make(map[string]string)
-	results := arrayValue(compatibilityOutput, "check_results")
 	complete := len(results) == len(requested)
 	for _, rawResult := range results {
 		result := asObject(rawResult)
@@ -334,23 +348,16 @@ func evaluateGameCompatibilityCheck(pkg *protocolPackage, fixture map[string]any
 			complete = false
 		}
 	}
-	derived := "compatible"
-	if hasIncompatible {
-		derived = "incompatible"
-	} else if hasUnknown || !complete {
-		derived = "unknown"
-	} else if hasMigration {
-		derived = "migration_required"
+	switch {
+	case hasIncompatible:
+		return complete, "incompatible"
+	case hasUnknown || !complete:
+		return complete, "unknown"
+	case hasMigration:
+		return complete, "migration_required"
+	default:
+		return complete, "compatible"
 	}
-	reportedMatches := stringValue(compatibilityOutput, "compatibility_status") == derived
-	return map[string]any{
-		"schemas_valid":                  true,
-		"target_bound":                   targetBound,
-		"check_set_complete":             complete,
-		"derived_compatibility_status":   derived,
-		"reported_compatibility_matches": reportedMatches,
-		"compatibility_result_accepted":  targetBound && complete && reportedMatches && derived == "compatible",
-	}, nil
 }
 
 // evaluateGameHealthCheckUnknownNotHealthy evaluates the game.health.check.unknown-not-healthy conformance fixture.
