@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	defaultBaseURL      = "https://api.vultr.com/v2"
+	defaultAPIHost      = "api.vultr.com"
 	maximumResponseSize = 4 << 20
 	maximumPages        = 1000
 )
@@ -107,35 +107,52 @@ type instanceListLinks struct {
 // NewClient creates a client for the production Vultr API. It accepts an
 // optional caller-owned HTTP client for transport policy and tests.
 func NewClient(httpClient *http.Client) *Client {
-	client, _ := NewClientAt(defaultBaseURL, httpClient)
-	return client
+	production := url.URL{Scheme: "https", Host: defaultAPIHost, Path: "/v2"}
+	return &Client{baseURL: &production, http: boundedHTTPClient(httpClient)}
 }
 
 // NewClientAt is intended for transport tests and controlled API-compatible
 // endpoints. The URL must be HTTPS and must not contain credentials or a query.
 func NewClientAt(baseURL string, httpClient *http.Client) (*Client, error) {
+	parsed, err := parseBaseURL(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{baseURL: parsed, http: boundedHTTPClient(httpClient)}, nil
+}
+
+// parseBaseURL accepts only an HTTPS origin whose path is empty, "/" or "/v2",
+// with no credentials, query or fragment, and returns it with the /v2 path.
+func parseBaseURL(baseURL string) (*url.URL, error) {
 	parsed, err := url.Parse(baseURL)
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
 		return nil, fmt.Errorf("%w: API base URL must be an HTTPS origin", ErrInvalidRequest)
 	}
-	if parsed.Path == "" || parsed.Path == "/" {
+	switch parsed.Path {
+	case "", "/":
 		parsed.Path = "/v2"
-	} else if parsed.Path != "/v2" {
+	case "/v2":
+	default:
 		return nil, fmt.Errorf("%w: API base URL path must be /v2", ErrInvalidRequest)
 	}
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
-	} else {
-		copyClient := *httpClient
-		if copyClient.Timeout == 0 {
-			copyClient.Timeout = 30 * time.Second
-		}
-		httpClient = &copyClient
+	return parsed, nil
+}
+
+// boundedHTTPClient copies the caller's client, or makes one, so that it has
+// a timeout (30 seconds unless the caller set one) and never follows
+// redirects. The caller's client is not modified.
+func boundedHTTPClient(httpClient *http.Client) *http.Client {
+	bounded := &http.Client{}
+	if httpClient != nil {
+		*bounded = *httpClient
 	}
-	httpClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+	if bounded.Timeout == 0 {
+		bounded.Timeout = 30 * time.Second
+	}
+	bounded.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
-	return &Client{baseURL: parsed, http: httpClient}, nil
+	return bounded
 }
 
 // CreateInstance sends one POST to the create endpoint and never retries it.
@@ -192,45 +209,88 @@ func (c *Client) ListInstancesByLabel(ctx context.Context, token []byte, label s
 	seenCursors := make(map[string]bool)
 	cursor := ""
 	for page := 0; page < maximumPages; page++ {
-		query := url.Values{"label": {label}, "per_page": {"100"}}
-		if cursor != "" {
-			query.Set("cursor", cursor)
-		}
-		response, err := c.request(ctx, token, http.MethodGet, "instances", query, nil, false)
+		matches, next, err := c.labelPage(ctx, token, label, cursor)
 		if err != nil {
 			return nil, err
 		}
-		var envelope instanceListEnvelope
-		if err := decodeJSON(response, &envelope); err != nil {
-			return nil, ErrInvalidResponse
-		}
-		if envelope.Meta == nil || envelope.Meta.Links == nil || envelope.Meta.Links.Next == nil {
-			return nil, ErrInvalidResponse
-		}
-		for _, instance := range envelope.Instances {
-			if instance.Label == label {
-				if !validResourceID(instance.ID) {
-					return nil, ErrInvalidResponse
-				}
-				instances = append(instances, instance)
-			}
-		}
-		cursor = *envelope.Meta.Links.Next
-		if cursor == "" {
+		instances = append(instances, matches...)
+		if next == "" {
 			return instances, nil
 		}
-		if len(cursor) > 2048 || seenCursors[cursor] {
+		if len(next) > 2048 || seenCursors[next] {
 			return nil, ErrInvalidResponse
 		}
-		seenCursors[cursor] = true
+		seenCursors[next] = true
+		cursor = next
 	}
 	return nil, ErrInvalidResponse
 }
 
+// labelPage fetches one page of the label listing and returns the instances
+// whose label matches exactly, plus the next cursor ("" on the last page). A
+// page without pagination metadata, or a matching instance with an invalid
+// ID, is an invalid response.
+func (c *Client) labelPage(ctx context.Context, token []byte, label, cursor string) ([]Instance, string, error) {
+	query := url.Values{"label": {label}, "per_page": {"100"}}
+	if cursor != "" {
+		query.Set("cursor", cursor)
+	}
+	response, err := c.request(ctx, token, http.MethodGet, "instances", query, nil, false)
+	if err != nil {
+		return nil, "", err
+	}
+	var envelope instanceListEnvelope
+	if err := decodeJSON(response, &envelope); err != nil {
+		return nil, "", ErrInvalidResponse
+	}
+	if envelope.Meta == nil || envelope.Meta.Links == nil || envelope.Meta.Links.Next == nil {
+		return nil, "", ErrInvalidResponse
+	}
+	var matches []Instance
+	for _, instance := range envelope.Instances {
+		if instance.Label != label {
+			continue
+		}
+		if !validResourceID(instance.ID) {
+			return nil, "", ErrInvalidResponse
+		}
+		matches = append(matches, instance)
+	}
+	return matches, *envelope.Meta.Links.Next, nil
+}
+
+// request sends one call to the API and returns the bounded response body.
+// A mutation whose result cannot be known (transport failure, timeout,
+// non-4xx failure status or unreadable body) returns ErrOutcomeUnknown so the
+// caller reconciles instead of retrying.
 func (c *Client) request(ctx context.Context, token []byte, method, path string, query url.Values, body []byte, mutation bool) ([]byte, error) {
-	if c == nil || c.baseURL == nil || c.http == nil || ctx == nil || ctx.Err() != nil || !validToken(token) {
+	if !c.usable(ctx, token) {
 		return nil, fmt.Errorf("%w: context, client, and API credential are required", ErrInvalidRequest)
 	}
+	request, err := c.newRequest(ctx, token, method, path, query, body)
+	if err != nil {
+		return nil, err
+	}
+	response, err := c.http.Do(request)
+	if err != nil {
+		return nil, failure(mutation, ErrRequestFailed)
+	}
+	defer response.Body.Close()
+	if err := statusError(response.StatusCode, mutation); err != nil {
+		return nil, err
+	}
+	value, err := io.ReadAll(io.LimitReader(response.Body, maximumResponseSize+1))
+	if err != nil || len(value) > maximumResponseSize {
+		return nil, failure(mutation, ErrInvalidResponse)
+	}
+	return value, nil
+}
+
+func (c *Client) usable(ctx context.Context, token []byte) bool {
+	return c != nil && c.baseURL != nil && c.http != nil && ctx != nil && ctx.Err() == nil && validToken(token)
+}
+
+func (c *Client) newRequest(ctx context.Context, token []byte, method, path string, query url.Values, body []byte) (*http.Request, error) {
 	endpoint := *c.baseURL
 	endpoint.Path = strings.TrimSuffix(endpoint.Path, "/") + "/" + path
 	endpoint.RawQuery = query.Encode()
@@ -247,49 +307,67 @@ func (c *Client) request(ctx context.Context, token []byte, method, path string,
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
 	}
-	response, err := c.http.Do(request)
-	if err != nil {
-		if mutation {
-			return nil, ErrOutcomeUnknown
-		}
-		return nil, ErrRequestFailed
+	return request, nil
+}
+
+// statusError classifies a non-2xx status. A 4xx is a provider rejection,
+// except that a 408 on a mutation leaves the outcome unknown. Any other
+// status fails a read and leaves a mutation's outcome unknown.
+func statusError(status int, mutation bool) error {
+	switch {
+	case status >= 200 && status < 300:
+		return nil
+	case status == http.StatusRequestTimeout && mutation:
+		return ErrOutcomeUnknown
+	case status >= 400 && status < 500:
+		return fmt.Errorf("%w: HTTP %d", ErrProviderReject, status)
+	case mutation:
+		return ErrOutcomeUnknown
+	default:
+		return fmt.Errorf("%w: HTTP %d", ErrRequestFailed, status)
 	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		if response.StatusCode >= 400 && response.StatusCode < 500 {
-			if response.StatusCode == http.StatusRequestTimeout && mutation {
-				return nil, ErrOutcomeUnknown
-			}
-			return nil, fmt.Errorf("%w: HTTP %d", ErrProviderReject, response.StatusCode)
-		}
-		if mutation {
-			return nil, ErrOutcomeUnknown
-		}
-		return nil, fmt.Errorf("%w: HTTP %d", ErrRequestFailed, response.StatusCode)
+}
+
+// failure returns ErrOutcomeUnknown for a mutation and readErr for a read.
+func failure(mutation bool, readErr error) error {
+	if mutation {
+		return ErrOutcomeUnknown
 	}
-	value, err := io.ReadAll(io.LimitReader(response.Body, maximumResponseSize+1))
-	if err != nil || len(value) > maximumResponseSize {
-		if mutation {
-			return nil, ErrOutcomeUnknown
-		}
-		return nil, ErrInvalidResponse
-	}
-	return value, nil
+	return readErr
 }
 
 // ValidateCreateInstanceRequest checks the provider fields before a caller
 // claims a durable create-dispatch marker. It performs no network request.
 func ValidateCreateInstanceRequest(input CreateInstanceRequest) error {
-	if !validShortField(input.Region, 200) || !validShortField(input.Plan, 200) || input.OSID <= 0 ||
-		!validLabel(input.Label) || (input.Hostname != "" && !validHostname(input.Hostname)) {
+	for _, check := range []func(CreateInstanceRequest) error{
+		validateInstanceIdentity, validateOptionalResourceIDs, validateSSHKeyIDs, validateUserData, validateTags,
+	} {
+		if err := check(input); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateInstanceIdentity(input CreateInstanceRequest) error {
+	hostnameOK := input.Hostname == "" || validHostname(input.Hostname)
+	if !validShortField(input.Region, 200) || !validShortField(input.Plan, 200) || input.OSID <= 0 || !validLabel(input.Label) || !hostnameOK {
 		return fmt.Errorf("%w: region, plan, os_id, label, or hostname is invalid", ErrInvalidRequest)
 	}
+	return nil
+}
+
+func validateOptionalResourceIDs(input CreateInstanceRequest) error {
 	if input.StartupScriptID != "" && !validResourceID(input.StartupScriptID) {
 		return fmt.Errorf("%w: invalid startup script ID", ErrInvalidRequest)
 	}
 	if input.FirewallGroupID != "" && !validResourceID(input.FirewallGroupID) {
 		return fmt.Errorf("%w: invalid firewall group ID", ErrInvalidRequest)
 	}
+	return nil
+}
+
+func validateSSHKeyIDs(input CreateInstanceRequest) error {
 	if len(input.SSHKeyIDs) > 100 {
 		return fmt.Errorf("%w: too many SSH key IDs", ErrInvalidRequest)
 	}
@@ -298,12 +376,21 @@ func ValidateCreateInstanceRequest(input CreateInstanceRequest) error {
 			return fmt.Errorf("%w: invalid SSH key ID", ErrInvalidRequest)
 		}
 	}
-	if input.UserData != "" {
-		decoded, err := base64.StdEncoding.DecodeString(input.UserData)
-		if err != nil || len(decoded) > 64<<10 {
-			return fmt.Errorf("%w: user_data must be base64-encoded and at most 64 KiB", ErrInvalidRequest)
-		}
+	return nil
+}
+
+func validateUserData(input CreateInstanceRequest) error {
+	if input.UserData == "" {
+		return nil
 	}
+	decoded, err := base64.StdEncoding.DecodeString(input.UserData)
+	if err != nil || len(decoded) > 64<<10 {
+		return fmt.Errorf("%w: user_data must be base64-encoded and at most 64 KiB", ErrInvalidRequest)
+	}
+	return nil
+}
+
+func validateTags(input CreateInstanceRequest) error {
 	if len(input.Tags) > 100 {
 		return fmt.Errorf("%w: too many tags", ErrInvalidRequest)
 	}
