@@ -775,14 +775,25 @@ func validateCapacityReservationRequest(reservation CapacityReservation) error {
 	if reservation.ProviderAdapterID != "" && !validCapacityIdentifier(reservation.ProviderAdapterID, 160) {
 		return ErrInvalidRecord
 	}
-	if !validCapacityIdentifier(reservation.OperationID, 200) || !validCapacityIdentifier(reservation.ServerID, 200) ||
-		!validCapacityIdentifier(reservation.EnvironmentID, 200) || !validCapacityIdentifier(reservation.CapacityGroup, 100) ||
-		!validCapacityIdentifier(reservation.Provider, 100) || !validCapacityIdentifier(reservation.ResourceKey, 240) ||
-		reservation.ProviderInstanceID != "" || reservation.State != "" || !reservation.CreatedAt.IsZero() || !reservation.UpdatedAt.IsZero() ||
-		!reservation.ProvisionedAt.IsZero() || !reservation.ReadyAt.IsZero() || reservation.LastObservation != nil || reservation.Adoption != nil {
+	if !capacityIdentifiersValid(reservation) || !capacityControllerFieldsUnset(reservation) {
 		return fmt.Errorf("%w: invalid capacity reservation request", ErrInvalidRecord)
 	}
 	return nil
+}
+
+// capacityIdentifiersValid requires every required reservation identifier to
+// be present and within its length bound.
+func capacityIdentifiersValid(r CapacityReservation) bool {
+	return validCapacityIdentifier(r.OperationID, 200) && validCapacityIdentifier(r.ServerID, 200) &&
+		validCapacityIdentifier(r.EnvironmentID, 200) && validCapacityIdentifier(r.CapacityGroup, 100) &&
+		validCapacityIdentifier(r.Provider, 100) && validCapacityIdentifier(r.ResourceKey, 240)
+}
+
+// capacityControllerFieldsUnset requires a reservation request to leave every
+// field the store assigns (instance, state, times, evidence) empty.
+func capacityControllerFieldsUnset(r CapacityReservation) bool {
+	return r.ProviderInstanceID == "" && r.State == "" && r.CreatedAt.IsZero() && r.UpdatedAt.IsZero() &&
+		r.ProvisionedAt.IsZero() && r.ReadyAt.IsZero() && r.LastObservation == nil && r.Adoption == nil
 }
 
 // validatePersistedCapacityReservation rejects a stored reservation that breaks
@@ -822,10 +833,7 @@ func capacityIdentityValid(r CapacityReservation) bool {
 	if r.ProviderAdapterID != "" && !validCapacityIdentifier(r.ProviderAdapterID, 160) {
 		return false
 	}
-	return validCapacityIdentifier(r.OperationID, 200) && validCapacityIdentifier(r.ServerID, 200) &&
-		validCapacityIdentifier(r.EnvironmentID, 200) && validCapacityIdentifier(r.CapacityGroup, 100) &&
-		validCapacityIdentifier(r.Provider, 100) && validCapacityIdentifier(r.ResourceKey, 240) &&
-		!r.CreatedAt.IsZero() && !r.UpdatedAt.Before(r.CreatedAt)
+	return capacityIdentifiersValid(r) && !r.CreatedAt.IsZero() && !r.UpdatedAt.Before(r.CreatedAt)
 }
 
 // capacityStateValid requires a known state, and an active reservation to name
