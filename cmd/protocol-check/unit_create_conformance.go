@@ -108,25 +108,7 @@ func evaluateUnitCreateCase(pkg *protocolPackage, creationCase map[string]any) m
 	checks := u.dispatchChecks(pkg, stringValue(creationCase, "artifact_bytes"))
 	dispatchAllowed := checks.allowed()
 
-	operationBound := u.operationBound()
-	bound := u.resultBound(operationBound)
-	outcome := stringValue(u.output, "outcome")
-	confirmed := dispatchAllowed && outputValid && bound && (outcome == "created" || outcome == "unchanged")
-	uncertain := outcome == "accepted" || outcome == "outcome_unknown"
-	inspectionBound := reflect.DeepEqual(u.request["unit_ref"], u.inspection["unit_ref"]) && reflect.DeepEqual(u.target, u.inspection["target"])
-	inspectionState := stringValue(u.inspection, "state")
-	installedDefinitionMatches := u.inspection["release_id"] == u.request["release_id"] && reflect.DeepEqual(u.inspection["definition_checksum"], u.checksum)
-	// Each outcome below needs a dispatched, valid, bound, uncertain result
-	// whose follow-up inspection names this unit.
-	inspectable := dispatchAllowed && outputValid && bound && uncertain && inspectionBound
-	reconciled := inspectable && installedDefinitionMatches &&
-		stringValue(u.resolved, "state") == "completed" && installedState(inspectionState)
-	retryPermitted := inspectable && inspectionState == "absent" &&
-		stringValue(u.resolved, "state") == "no_effect"
-	operatorRequired := dispatchAllowed && uncertain && (!operationBound || (len(u.inspection) > 0 &&
-		(!inspectionBound || inspectionState == "unknown" || (installedState(inspectionState) && !installedDefinitionMatches))))
-	mustInspect := stringValue(u.existing, "state") == "unknown" ||
-		(dispatchAllowed && (!outputValid || !bound || (uncertain && !reconciled && !retryPermitted)))
+	o := u.outcomeChecks(dispatchAllowed, outputValid)
 	return map[string]any{
 		"case_id":                   stringValue(creationCase, "case_id"),
 		"request_schema_valid":      checks.requestValid,
@@ -138,14 +120,71 @@ func evaluateUnitCreateCase(pkg *protocolPackage, creationCase map[string]any) m
 		"target_consistent":         checks.targetConsistent,
 		"existing_unit_compatible":  checks.existingCompatible,
 		"dispatch_allowed":          dispatchAllowed,
-		"result_bound":              bound,
-		"definition_confirmed":      confirmed || reconciled,
-		"must_inspect_before_retry": mustInspect,
-		"reconciliation_confirmed":  reconciled,
-		"retry_permitted":           retryPermitted,
-		"operator_required":         operatorRequired,
+		"result_bound":              o.bound,
+		"definition_confirmed":      o.confirmed || o.reconciled,
+		"must_inspect_before_retry": o.mustInspect,
+		"reconciliation_confirmed":  o.reconciled,
+		"retry_permitted":           o.retryPermitted,
+		"operator_required":         o.operatorRequired,
 		"readiness_established":     false,
 	}
+}
+
+// createOutcome is what the create result, and any follow-up inspection,
+// proves.
+type createOutcome struct {
+	bound, confirmed, reconciled, retryPermitted, operatorRequired, mustInspect bool
+}
+
+// outcomeChecks: a valid, bound "created" or "unchanged" result confirms
+// the definition. An accepted or unknown result is reconciled by an
+// inspection showing this exact definition installed, may be retried only
+// when the inspection shows no unit and the operation had no effect, and
+// otherwise needs an operator.
+func (u createCase) outcomeChecks(dispatchAllowed, outputValid bool) createOutcome {
+	operationBound := u.operationBound()
+	o := createOutcome{bound: u.resultBound(operationBound)}
+	outcome := stringValue(u.output, "outcome")
+	o.confirmed = dispatchAllowed && outputValid && o.bound && (outcome == "created" || outcome == "unchanged")
+	uncertain := outcome == "accepted" || outcome == "outcome_unknown"
+	inspection := u.inspectionFacts()
+	// Reconciliation and retry need a dispatched, valid, bound, uncertain
+	// result whose follow-up inspection names this unit.
+	inspectable := dispatchAllowed && outputValid && o.bound && uncertain && inspection.bound
+	resolvedState := stringValue(u.resolved, "state")
+	o.reconciled = inspectable && inspection.showsDefinitionInstalled() && resolvedState == "completed"
+	o.retryPermitted = inspectable && inspection.state == "absent" && resolvedState == "no_effect"
+	o.operatorRequired = dispatchAllowed && uncertain && (!operationBound || inspection.unresolved())
+	o.mustInspect = stringValue(u.existing, "state") == "unknown" ||
+		(dispatchAllowed && (!outputValid || !o.bound || (uncertain && !o.reconciled && !o.retryPermitted)))
+	return o
+}
+
+// createInspection is what a follow-up unit inspection shows.
+type createInspection struct {
+	present, bound, definitionMatches bool
+	state                             string
+}
+
+func (u createCase) inspectionFacts() createInspection {
+	return createInspection{
+		present:           len(u.inspection) > 0,
+		bound:             reflect.DeepEqual(u.request["unit_ref"], u.inspection["unit_ref"]) && reflect.DeepEqual(u.target, u.inspection["target"]),
+		definitionMatches: u.inspection["release_id"] == u.request["release_id"] && reflect.DeepEqual(u.inspection["definition_checksum"], u.checksum),
+		state:             stringValue(u.inspection, "state"),
+	}
+}
+
+// showsDefinitionInstalled: the unit exists (stopped or running) with this
+// release's exact definition.
+func (i createInspection) showsDefinitionInstalled() bool {
+	return i.definitionMatches && installedState(i.state)
+}
+
+// unresolved: an inspection was made but names another unit, reports an
+// unknown state, or shows a different definition installed.
+func (i createInspection) unresolved() bool {
+	return i.present && (!i.bound || i.state == "unknown" || (installedState(i.state) && !i.definitionMatches))
 }
 
 func init() {
