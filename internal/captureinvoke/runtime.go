@@ -92,13 +92,7 @@ func (r *Runtime) RecoverSealedCapture(ctx context.Context, operationID, stepID 
 	if op.OperationID != operationID || op.OperationType != "server.backup" || op.Status != protocolstate.OperationReconciling || op.BackupInitialLifecycleState == "" || op.CurrentStepID == nil || *op.CurrentStepID != stepID || op.ProtocolVersion != r.schemas.ProtocolVersion() {
 		return failed, errors.New("capture operation is not at the exact recoverable step")
 	}
-	var step *store.OperationStep
-	for i := range op.Steps {
-		if op.Steps[i].StepID == stepID {
-			step = &op.Steps[i]
-			break
-		}
-	}
+	step := findStep(op, stepID)
 	if step == nil || step.Status != protocolstate.StepOutcomeUnknown || step.Attempt < 1 || step.CapabilityName != "game.backup.capture" || step.Output != nil {
 		return failed, errors.New("capture step is not unresolved")
 	}
@@ -106,34 +100,21 @@ func (r *Runtime) RecoverSealedCapture(ctx context.Context, operationID, stepID 
 	if err != nil {
 		return failed, errors.New("capture adapter is unavailable")
 	}
-	matched := false
-	for _, capability := range descriptor.Capabilities {
-		if capability.Name == step.CapabilityName && capability.Version == step.CapabilityVersion && capability.InputSchemaURI == "urn:gameserver-controller:"+r.schemas.ProtocolVersion()+":game:backup-capture-input" && capability.OutputSchemaURI == "urn:gameserver-controller:"+r.schemas.ProtocolVersion()+":game:backup-capture-output" {
-			matched = true
-			break
-		}
-	}
-	if !matched || r.schemas.ValidateJSON("urn:gameserver-controller:"+r.schemas.ProtocolVersion()+":game:backup-capture-input", step.Input) != nil {
+	if !r.advertisesCapture(descriptor, *step) || r.schemas.ValidateJSON(r.captureSchema("input"), step.Input) != nil {
 		return failed, errors.New("recorded capture capability or input is incompatible")
 	}
 	var input capture
 	if json.Unmarshal(step.Input, &input) != nil || input.Target.ServerID != op.Target.ServerID || input.Target.EnvironmentID != op.Target.EnvironmentID || !sameJSON(input.Target.InstanceRef, op.Target.InstanceRef) {
 		return failed, errors.New("recorded capture target differs from its operation")
 	}
-	var instance struct {
-		AdapterID     string `json:"adapter_id"`
-		EnvironmentID string `json:"environment_id"`
-		Kind          string `json:"resource_kind"`
-		ID            string `json:"external_id"`
-	}
-	if json.Unmarshal(input.Target.InstanceRef, &instance) != nil || instance.EnvironmentID != op.Target.EnvironmentID || instance.Kind != "instance" {
+	instance, ok := captureInstance(input.Target.InstanceRef, op.Target.EnvironmentID)
+	if !ok {
 		return failed, errors.New("recorded capture instance is invalid")
 	}
-	lock, err := r.records.GetResourceLock(store.LogicalServerLockScope(op.Target.EnvironmentID, op.Target.ServerID))
-	if err != nil || lock.OperationID != operationID || lock.Scope != store.LogicalServerLockScope(op.Target.EnvironmentID, op.Target.ServerID) {
+	if !r.holdsServerLock(operationID, op.Target.EnvironmentID, op.Target.ServerID) {
 		return failed, errors.New("capture recovery requires the exact durable server lock")
 	}
-	scope := capturestream.Scope{OperationID: operationID, StepID: stepID, AdapterID: step.AdapterID, ServerID: op.Target.ServerID, EnvironmentID: op.Target.EnvironmentID, InstanceAdapterID: instance.AdapterID, InstanceID: instance.ID, DataGenerationID: input.GenerationID, DataSetID: input.DataSetID, CaptureID: input.CaptureID}
+	scope := captureScope(operationID, stepID, step.AdapterID, op.Target.ServerID, op.Target.EnvironmentID, instance, input)
 	data, receipt, encoded, err := staging.OpenVerifiedCapture(ctx, scope)
 	if err != nil || data == nil {
 		return failed, errors.New("sealed capture evidence is unavailable or invalid")
@@ -144,16 +125,14 @@ func (r *Runtime) RecoverSealedCapture(ctx context.Context, operationID, stepID 
 			_ = data.Close()
 		}
 	}()
-	if ctx.Err() != nil || receipt.Scope != scope || len(encoded) == 0 || r.schemas.ValidateJSON("urn:gameserver-controller:"+r.schemas.ProtocolVersion()+":game:backup-capture-output", encoded) != nil {
+	if ctx.Err() != nil || receipt.Scope != scope || len(encoded) == 0 || r.schemas.ValidateJSON(r.captureSchema("output"), encoded) != nil {
 		return failed, errors.New("sealed capture response is missing or invalid")
 	}
 	var output result
 	if json.Unmarshal(encoded, &output) != nil || output.Outcome != "captured" || !output.StreamCompleted || output.Size != receipt.SizeBytes || output.Checksum.Algorithm != "sha256" || output.Checksum.Digest != receipt.SHA256 {
 		return failed, errors.New("sealed capture response does not match measured stream evidence")
 	}
-	in, _ := json.Marshal(input)
-	out, _ := json.Marshal(output.capture)
-	if !sameJSON(in, out) {
+	if !sameCapture(input, output.capture) {
 		return failed, errors.New("sealed capture response does not match the exact durable request")
 	}
 	closeOnError = false
@@ -200,73 +179,12 @@ func (r *Runtime) Invoke(ctx context.Context, adapterID string, request adapter.
 	if request.Params.Capability != "game.backup.capture" {
 		return r.adapters.Invoke(ctx, adapterID, request)
 	}
-	if ctx == nil || ctx.Err() != nil || len(request.Params.RequestContext.StreamTransfers) > 1 {
-		return adapter.InvokeResponse{}, errors.New("invalid capture dispatch context")
-	}
-	c := request.Params.RequestContext
-	saved, err := r.records.GetOperation(c.OperationID)
+	dispatch, err := r.authorizeCapture(ctx, adapterID, request)
 	if err != nil {
-		return adapter.InvokeResponse{}, errors.New("capture operation is unavailable")
+		return adapter.InvokeResponse{}, err
 	}
-	op := saved.Record
-	if op.OperationType != "server.backup" || op.Status != protocolstate.OperationRunning || op.BackupInitialLifecycleState == "" || op.CurrentStepID == nil || *op.CurrentStepID != c.StepID || op.Target.ServerID != c.ServerID || op.Target.EnvironmentID != c.EnvironmentID || op.ProtocolVersion != request.Params.ProtocolVersion {
-		return adapter.InvokeResponse{}, errors.New("capture requires its running durable backup step")
-	}
-	var step *store.OperationStep
-	for i := range op.Steps {
-		if op.Steps[i].StepID == c.StepID {
-			step = &op.Steps[i]
-			break
-		}
-	}
-	if step == nil || step.Status != protocolstate.StepRunning || step.Attempt < 1 || step.AdapterID != adapterID || step.CapabilityName != "game.backup.capture" || !sameJSON(step.Input, request.Params.Input) {
-		return adapter.InvokeResponse{}, errors.New("capture request does not match durable step")
-	}
-	descriptor, err := r.adapters.Descriptor(adapterID)
-	if err != nil {
-		return adapter.InvokeResponse{}, errors.New("capture adapter is unavailable")
-	}
-	matched := false
-	for _, capability := range descriptor.Capabilities {
-		if capability.Name == step.CapabilityName && capability.Version == step.CapabilityVersion && capability.InputSchemaURI == "urn:gameserver-controller:"+r.schemas.ProtocolVersion()+":game:backup-capture-input" && capability.OutputSchemaURI == "urn:gameserver-controller:"+r.schemas.ProtocolVersion()+":game:backup-capture-output" {
-			matched = true
-		}
-	}
-	if !matched || (op.Deadline != nil && c.Deadline.After(*op.Deadline)) {
-		return adapter.InvokeResponse{}, errors.New("capture capability or deadline differs from durable plan")
-	}
-	lock, err := r.records.GetResourceLock(store.LogicalServerLockScope(c.EnvironmentID, c.ServerID))
-	if err != nil || lock.OperationID != c.OperationID || lock.Scope != store.LogicalServerLockScope(c.EnvironmentID, c.ServerID) {
-		return adapter.InvokeResponse{}, errors.New("capture requires the durable server lock")
-	}
-	version := r.schemas.ProtocolVersion()
-	if err := r.schemas.ValidateJSON("urn:gameserver-controller:"+version+":game:backup-capture-input", request.Params.Input); err != nil {
-		return adapter.InvokeResponse{}, errors.New("invalid capture input")
-	}
-	var input capture
-	if json.Unmarshal(request.Params.Input, &input) != nil || input.Target.ServerID != c.ServerID || input.Target.EnvironmentID != c.EnvironmentID || !sameJSON(input.Target.InstanceRef, op.Target.InstanceRef) {
-		return adapter.InvokeResponse{}, errors.New("capture target does not match durable operation")
-	}
+	c, input, scope := request.Params.RequestContext, dispatch.input, dispatch.scope
 	var mirror io.Writer
-	if len(c.StreamTransfers) == 1 {
-		external := c.StreamTransfers[0]
-		now := time.Now()
-		if external.TransferID == "" || external.Direction != "adapter_to_controller" || external.MaximumBytes < 1 || external.MaximumBytes > r.maximum ||
-			!external.ExpiresAt.After(now) || external.ExpiresAt.After(c.Deadline) || external.ExpiresAt.After(now.Add(5*time.Minute)) ||
-			!c.HasStreamDestination(external.TransferID) {
-			return adapter.InvokeResponse{}, errors.New("capture destination is not a valid controller-bound stream")
-		}
-	}
-	var instance struct {
-		AdapterID     string `json:"adapter_id"`
-		EnvironmentID string `json:"environment_id"`
-		Kind          string `json:"resource_kind"`
-		ID            string `json:"external_id"`
-	}
-	if json.Unmarshal(input.Target.InstanceRef, &instance) != nil || instance.EnvironmentID != c.EnvironmentID || instance.Kind != "instance" {
-		return adapter.InvokeResponse{}, errors.New("invalid capture instance")
-	}
-	scope := capturestream.Scope{OperationID: c.OperationID, StepID: c.StepID, AdapterID: adapterID, ServerID: c.ServerID, EnvironmentID: c.EnvironmentID, InstanceAdapterID: instance.AdapterID, InstanceID: instance.ID, DataGenerationID: input.GenerationID, DataSetID: input.DataSetID, CaptureID: input.CaptureID}
 	stage, err := r.staging.Open(ctx, scope)
 	if errors.Is(err, ErrStagingNeedsReconciliation) {
 		return adapter.InvokeResponse{}, uncertain()
@@ -311,12 +229,10 @@ func (r *Runtime) Invoke(ctx context.Context, adapterID string, request adapter.
 		return adapter.InvokeResponse{}, err
 	}
 	var output result
-	if r.schemas.ValidateJSON("urn:gameserver-controller:"+version+":game:backup-capture-output", response.Result.Output) != nil || json.Unmarshal(response.Result.Output, &output) != nil {
+	if r.schemas.ValidateJSON(r.captureSchema("output"), response.Result.Output) != nil || json.Unmarshal(response.Result.Output, &output) != nil {
 		return adapter.InvokeResponse{}, uncertain()
 	}
-	a, _ := json.Marshal(input)
-	b, _ := json.Marshal(output.capture)
-	if !sameJSON(a, b) {
+	if !sameCapture(input, output.capture) {
 		return adapter.InvokeResponse{}, uncertain()
 	}
 	if output.Outcome == "outcome_unknown" {
@@ -377,4 +293,136 @@ func (w *countingSink) Write(p []byte) (int, error) {
 		w.size.Add(int64(n))
 	}
 	return n, err
+}
+
+// captureDispatch is a capture request that matched its durable backup step:
+// the exact capture input and the stream scope it may write to.
+type captureDispatch struct {
+	input capture
+	scope capturestream.Scope
+}
+
+// authorizeCapture checks, before any staging or dispatch, that the request is
+// the running step of a running server.backup: same adapter, capability,
+// version, input, deadline, server lock, target instance, and (when given) a
+// short-lived controller-bound stream destination.
+func (r *Runtime) authorizeCapture(ctx context.Context, adapterID string, request adapter.InvokeRequest) (captureDispatch, error) {
+	if ctx == nil || ctx.Err() != nil || len(request.Params.RequestContext.StreamTransfers) > 1 {
+		return captureDispatch{}, errors.New("invalid capture dispatch context")
+	}
+	c := request.Params.RequestContext
+	saved, err := r.records.GetOperation(c.OperationID)
+	if err != nil {
+		return captureDispatch{}, errors.New("capture operation is unavailable")
+	}
+	op := saved.Record
+	if op.OperationType != "server.backup" || op.Status != protocolstate.OperationRunning || op.BackupInitialLifecycleState == "" || op.CurrentStepID == nil || *op.CurrentStepID != c.StepID || op.Target.ServerID != c.ServerID || op.Target.EnvironmentID != c.EnvironmentID || op.ProtocolVersion != request.Params.ProtocolVersion {
+		return captureDispatch{}, errors.New("capture requires its running durable backup step")
+	}
+	step := findStep(op, c.StepID)
+	if step == nil || step.Status != protocolstate.StepRunning || step.Attempt < 1 || step.AdapterID != adapterID || step.CapabilityName != "game.backup.capture" || !sameJSON(step.Input, request.Params.Input) {
+		return captureDispatch{}, errors.New("capture request does not match durable step")
+	}
+	descriptor, err := r.adapters.Descriptor(adapterID)
+	if err != nil {
+		return captureDispatch{}, errors.New("capture adapter is unavailable")
+	}
+	if !r.advertisesCapture(descriptor, *step) || (op.Deadline != nil && c.Deadline.After(*op.Deadline)) {
+		return captureDispatch{}, errors.New("capture capability or deadline differs from durable plan")
+	}
+	if !r.holdsServerLock(c.OperationID, c.EnvironmentID, c.ServerID) {
+		return captureDispatch{}, errors.New("capture requires the durable server lock")
+	}
+	if err := r.schemas.ValidateJSON(r.captureSchema("input"), request.Params.Input); err != nil {
+		return captureDispatch{}, errors.New("invalid capture input")
+	}
+	var input capture
+	if json.Unmarshal(request.Params.Input, &input) != nil || input.Target.ServerID != c.ServerID || input.Target.EnvironmentID != c.EnvironmentID || !sameJSON(input.Target.InstanceRef, op.Target.InstanceRef) {
+		return captureDispatch{}, errors.New("capture target does not match durable operation")
+	}
+	if len(c.StreamTransfers) == 1 && !r.validCaptureDestination(c) {
+		return captureDispatch{}, errors.New("capture destination is not a valid controller-bound stream")
+	}
+	instance, ok := captureInstance(input.Target.InstanceRef, c.EnvironmentID)
+	if !ok {
+		return captureDispatch{}, errors.New("invalid capture instance")
+	}
+	return captureDispatch{input: input, scope: captureScope(c.OperationID, c.StepID, adapterID, c.ServerID, c.EnvironmentID, instance, input)}, nil
+}
+
+// validCaptureDestination reports whether the one external stream transfer is
+// an attached, adapter-to-controller destination within the stream size limit
+// that expires within five minutes and before the invocation deadline.
+func (r *Runtime) validCaptureDestination(c adapter.RequestContext) bool {
+	external := c.StreamTransfers[0]
+	now := time.Now()
+	return external.TransferID != "" && external.Direction == "adapter_to_controller" && external.MaximumBytes >= 1 && external.MaximumBytes <= r.maximum &&
+		external.ExpiresAt.After(now) && !external.ExpiresAt.After(c.Deadline) && !external.ExpiresAt.After(now.Add(5*time.Minute)) &&
+		c.HasStreamDestination(external.TransferID)
+}
+
+// captureSchema returns the loaded protocol's backup-capture schema ID for
+// "input" or "output".
+func (r *Runtime) captureSchema(kind string) string {
+	return "urn:gameserver-controller:" + r.schemas.ProtocolVersion() + ":game:backup-capture-" + kind
+}
+
+// advertisesCapture reports whether the adapter still advertises the step's
+// capability name and version with the loaded protocol's capture schemas.
+func (r *Runtime) advertisesCapture(descriptor adapter.Descriptor, step store.OperationStep) bool {
+	for _, capability := range descriptor.Capabilities {
+		if capability.Name == step.CapabilityName && capability.Version == step.CapabilityVersion &&
+			capability.InputSchemaURI == r.captureSchema("input") && capability.OutputSchemaURI == r.captureSchema("output") {
+			return true
+		}
+	}
+	return false
+}
+
+// holdsServerLock reports whether operationID holds the logical-server lock.
+func (r *Runtime) holdsServerLock(operationID, environmentID, serverID string) bool {
+	scope := store.LogicalServerLockScope(environmentID, serverID)
+	lock, err := r.records.GetResourceLock(scope)
+	return err == nil && lock.OperationID == operationID && lock.Scope == scope
+}
+
+func findStep(op store.OperationRecord, stepID string) *store.OperationStep {
+	for i := range op.Steps {
+		if op.Steps[i].StepID == stepID {
+			return &op.Steps[i]
+		}
+	}
+	return nil
+}
+
+// captureInstanceRef is the hosting instance a capture reads from.
+type captureInstanceRef struct {
+	AdapterID     string `json:"adapter_id"`
+	EnvironmentID string `json:"environment_id"`
+	Kind          string `json:"resource_kind"`
+	ID            string `json:"external_id"`
+}
+
+// captureInstance decodes the capture target's instance reference and requires
+// an instance in the given environment.
+func captureInstance(ref json.RawMessage, environmentID string) (captureInstanceRef, bool) {
+	var instance captureInstanceRef
+	if json.Unmarshal(ref, &instance) != nil || instance.EnvironmentID != environmentID || instance.Kind != "instance" {
+		return captureInstanceRef{}, false
+	}
+	return instance, true
+}
+
+// captureScope is the stream scope that binds one capture to its operation,
+// step, adapter, target instance, data generation, data set, and capture ID.
+func captureScope(operationID, stepID, adapterID, serverID, environmentID string, instance captureInstanceRef, input capture) capturestream.Scope {
+	return capturestream.Scope{OperationID: operationID, StepID: stepID, AdapterID: adapterID, ServerID: serverID, EnvironmentID: environmentID,
+		InstanceAdapterID: instance.AdapterID, InstanceID: instance.ID, DataGenerationID: input.GenerationID, DataSetID: input.DataSetID, CaptureID: input.CaptureID}
+}
+
+// sameCapture reports whether a result names exactly the requested capture.
+func sameCapture(requested, reported capture) bool {
+	a, _ := json.Marshal(requested)
+	b, _ := json.Marshal(reported)
+	return sameJSON(a, b)
 }
