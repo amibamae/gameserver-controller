@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"os"
@@ -218,13 +219,25 @@ func TestControllerLog(t *testing.T) {
 
 	var out bytes.Buffer
 	log := controllerLog(&out)
-	log("proxy recovered", map[string]any{"integration": "proxy.velocity", "message": "overridden"})
+	log("proxy recovered", map[string]any{"integration": "proxy.velocity", "message": "overridden", "time": "spoofed"})
 	log("not encodable", map[string]any{"value": make(chan int)})
 	lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
 	if len(lines) != 1 {
 		t.Fatalf("log lines = %q, want only the encodable event", out.String())
 	}
-	if !strings.Contains(lines[0], `"integration":"proxy.velocity"`) || !strings.Contains(lines[0], `"message":"overridden"`) || !strings.Contains(lines[0], `"time":"`) {
-		t.Fatalf("log line = %s", lines[0])
+	var line map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &line); err != nil {
+		t.Fatalf("log line is not JSON: %s", lines[0])
+	}
+	if line["integration"] != "proxy.velocity" {
+		t.Fatalf("caller field was dropped: %s", lines[0])
+	}
+	// The reserved fields win over caller fields with the same names.
+	if line["message"] != "proxy recovered" {
+		t.Fatalf("message = %v, want the event message", line["message"])
+	}
+	stamp, _ := line["time"].(string)
+	if _, err := time.Parse(time.RFC3339, stamp); err != nil {
+		t.Fatalf("time = %v, want the controller's RFC 3339 timestamp", line["time"])
 	}
 }

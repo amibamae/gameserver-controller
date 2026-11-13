@@ -181,17 +181,21 @@ func awaitServerExit(ctx context.Context, server *http.Server, serveResult <-cha
 
 // controllerLog writes monitor events as one JSON object per line, which
 // journald keeps with the controller's other output. Fields hold only event
-// data and delivery status, never credentials or player data.
+// data and delivery status, never credentials or player data. "time" and
+// "message" are reserved: they are set after the caller's fields are copied,
+// so a caller field with either name is ignored.
 func controllerLog(out io.Writer) func(string, map[string]any) {
 	var mu sync.Mutex
 	return func(message string, fields map[string]any) {
 		if out == nil {
 			return
 		}
-		line := map[string]any{"time": time.Now().UTC().Format(time.RFC3339), "message": message}
+		line := make(map[string]any, len(fields)+2)
 		for name, value := range fields {
 			line[name] = value
 		}
+		line["time"] = time.Now().UTC().Format(time.RFC3339)
+		line["message"] = message
 		encoded, err := json.Marshal(line)
 		if err != nil {
 			return
