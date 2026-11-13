@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+// runConformance checks every published fixture and reports all failures
+// together, one line per fixture file, in file-name order.
 func (pkg *protocolPackage) runConformance() error {
 	paths, err := filepath.Glob(filepath.Join(pkg.root, "protocol", "conformance", "test-vectors", "*.json"))
 	if err != nil {
@@ -17,23 +19,7 @@ func (pkg *protocolPackage) runConformance() error {
 	sort.Strings(paths)
 	var failures []string
 	for _, path := range paths {
-		fixture, err := parseJSONFile(path)
-		if err == nil {
-			var actual map[string]any
-			actual, err = evaluate(pkg, asObject(fixture))
-			if err == nil {
-				var encoded []byte
-				encoded, err = json.Marshal(actual)
-				if err == nil {
-					var normalized any
-					normalized, err = parseJSON(encoded, filepath.Base(path)+" result")
-					if err == nil {
-						err = compareExpected(normalized, asObject(asObject(fixture)["expected"]), "$")
-					}
-				}
-			}
-		}
-		if err != nil {
+		if err := pkg.checkFixture(path); err != nil {
 			failures = append(failures, filepath.Base(path)+": "+err.Error())
 		}
 	}
@@ -41,6 +27,28 @@ func (pkg *protocolPackage) runConformance() error {
 		return fmt.Errorf("conformance failed:\n - %s", strings.Join(failures, "\n - "))
 	}
 	return nil
+}
+
+// checkFixture evaluates one fixture file and compares the result, after a
+// JSON round trip, with the fixture's expected section.
+func (pkg *protocolPackage) checkFixture(path string) error {
+	fixture, err := parseJSONFile(path)
+	if err != nil {
+		return err
+	}
+	actual, err := evaluate(pkg, asObject(fixture))
+	if err != nil {
+		return err
+	}
+	encoded, err := json.Marshal(actual)
+	if err != nil {
+		return err
+	}
+	normalized, err := parseJSON(encoded, filepath.Base(path)+" result")
+	if err != nil {
+		return err
+	}
+	return compareExpected(normalized, asObject(asObject(fixture)["expected"]), "$")
 }
 
 func evaluate(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
