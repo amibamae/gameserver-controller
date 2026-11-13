@@ -115,79 +115,164 @@ type Runner struct {
 // finished, on a hard stop, or when ctx ends.
 func (r Runner) Run(ctx context.Context, config Config) (Report, error) {
 	config = withDefaults(config)
+	record, instanceID, ip, err := r.start(ctx, config)
+	if err != nil {
+		return Report{}, err
+	}
+	report := Report{InstanceID: instanceID, Address: ip}
+	h := handoffRun{Runner: r, ctx: ctx, config: config, record: record, handoff: record.Handoff}
+
+	if err := h.pinHostKey(ip); err != nil {
+		return report, err
+	}
+	report.PinnedFingerprint = fingerprint(h.handoff.PinnedHostKey)
+	config.Progress("Pinned host key " + report.PinnedFingerprint)
+
+	if err := h.replaceUserData(instanceID); err != nil {
+		return report, err
+	}
+	report.UserDataReplaced = h.record.UserDataReplaced
+
+	admin := config.Target(ip, config.Remote.AdminUser)
+	for _, step := range []func(Target) error{h.awaitBootstrap, h.deliverCredentials, h.finalizeSecurity, h.startRestore, h.awaitRestore} {
+		if err := step(admin); err != nil {
+			return report, err
+		}
+	}
+	report.RestoreComplete = true
+	return report, nil
+}
+
+// start checks the request and the stored state, resolves the instance's
+// address, and binds the handoff record to the instance on first use.
+func (r Runner) start(ctx context.Context, config Config) (store.HostHandoffRecord, string, netip.Addr, error) {
 	if !regionPattern.MatchString(config.WasabiRegion) {
-		return Report{}, errors.New("--wasabi-region must be a Wasabi region such as us-east-1")
+		return store.HostHandoffRecord{}, "", netip.Addr{}, errors.New("--wasabi-region must be a Wasabi region such as us-east-1")
 	}
-	reservation, err := r.Store.GetCapacityReservation(config.OperationID)
+	reservation, record, err := r.loadState(config.OperationID)
 	if err != nil {
-		return Report{}, err
-	}
-	if reservation.State != store.CapacityActive || reservation.ProviderInstanceID == "" {
-		return Report{}, ErrNotActive
-	}
-	record, err := r.Store.GetHostHandoff(config.OperationID)
-	if errors.Is(err, store.ErrHostHandoffNotFound) {
-		return Report{}, ErrNoHandoff
-	}
-	if err != nil {
-		return Report{}, err
+		return store.HostHandoffRecord{}, "", netip.Addr{}, err
 	}
 	instanceID := reservation.ProviderInstanceID
 	if record.InstanceID != "" && record.InstanceID != instanceID {
-		return Report{}, errors.New("the handoff record names a different instance")
+		return store.HostHandoffRecord{}, "", netip.Addr{}, errors.New("the handoff record names a different instance")
 	}
 	ip, err := r.instanceAddress(ctx, config, instanceID, reservation.ResourceKey)
 	if err != nil {
-		return Report{}, err
+		return store.HostHandoffRecord{}, "", netip.Addr{}, err
 	}
 	if record.InstanceID == "" {
 		if record, err = r.Store.UpdateHostHandoff(config.OperationID, func(h *store.HostHandoffRecord) error {
 			h.InstanceID = instanceID
 			return nil
 		}); err != nil {
-			return Report{}, err
+			return store.HostHandoffRecord{}, "", netip.Addr{}, err
 		}
 	}
-	report := Report{InstanceID: instanceID, Address: ip}
-	handoff := record.Handoff
+	return record, instanceID, ip, nil
+}
 
-	if handoff.State == hosthandoff.PendingRotation {
-		if err := r.rotate(ctx, config, ip, &handoff); err != nil {
-			return report, err
-		}
-		if record, err = r.Store.UpdateHostHandoff(config.OperationID, func(h *store.HostHandoffRecord) error {
-			h.State, h.PinnedHostKey = handoff.State, handoff.PinnedHostKey
-			return nil
-		}); err != nil {
-			return report, fmt.Errorf("the host key was swapped but pinning it failed; the new key is %s: %w", handoff.PinnedHostKey, err)
-		}
+// loadState reads the active reservation and its handoff record.
+func (r Runner) loadState(operationID string) (store.CapacityReservation, store.HostHandoffRecord, error) {
+	reservation, err := r.Store.GetCapacityReservation(operationID)
+	if err != nil {
+		return store.CapacityReservation{}, store.HostHandoffRecord{}, err
 	}
-	report.PinnedFingerprint = fingerprint(handoff.PinnedHostKey)
-	config.Progress("Pinned host key " + report.PinnedFingerprint)
-
-	if !record.UserDataReplaced {
-		replaceErr := r.withToken(config, func(token []byte) error {
-			return r.Provider.ReplaceInstanceUserData(ctx, token, instanceID, []byte("#cloud-config\n{}\n"))
-		})
-		if handoff.ReplaceUserData(replaceErr == nil) == hosthandoff.Replaced {
-			if record, err = r.Store.UpdateHostHandoff(config.OperationID, func(h *store.HostHandoffRecord) error {
-				h.UserDataReplaced = true
-				return nil
-			}); err != nil {
-				return report, err
-			}
-			config.Progress("Replaced the VM's user data at Vultr; the expired single-use key is gone from provider metadata.")
-		} else {
-			config.Progress("Warning: could not confirm that Vultr's copy of the user data was replaced; the expired single-use key may remain in provider metadata. The next run tries again.")
-		}
+	if reservation.State != store.CapacityActive || reservation.ProviderInstanceID == "" {
+		return store.CapacityReservation{}, store.HostHandoffRecord{}, ErrNotActive
 	}
-	report.UserDataReplaced = record.UserDataReplaced
+	record, err := r.Store.GetHostHandoff(operationID)
+	if errors.Is(err, store.ErrHostHandoffNotFound) {
+		return store.CapacityReservation{}, store.HostHandoffRecord{}, ErrNoHandoff
+	}
+	if err != nil {
+		return store.CapacityReservation{}, store.HostHandoffRecord{}, err
+	}
+	return reservation, record, nil
+}
 
-	admin := config.Target(ip, config.Remote.AdminUser)
-	if !record.BootstrapReady {
-		config.Progress("Waiting for the bootstrap to finish...")
-		if err := r.until(ctx, config, func() (bool, error) {
-			result, err := r.runPinned(ctx, admin, &handoff, config.Remote.BootstrapReady, nil)
+// handoffRun carries one run's state between its resumable steps. Each step
+// is skipped when the stored record shows it already finished.
+type handoffRun struct {
+	Runner
+	ctx     context.Context
+	config  Config
+	record  store.HostHandoffRecord
+	handoff hosthandoff.Handoff
+}
+
+// pinHostKey verifies the VM by its single-use key, swaps it, and stores the
+// new key, unless that already happened.
+func (h *handoffRun) pinHostKey(ip netip.Addr) error {
+	if h.handoff.State != hosthandoff.PendingRotation {
+		return nil
+	}
+	if err := h.rotate(h.ctx, h.config, ip, &h.handoff); err != nil {
+		return err
+	}
+	record, err := h.Store.UpdateHostHandoff(h.config.OperationID, func(stored *store.HostHandoffRecord) error {
+		stored.State, stored.PinnedHostKey = h.handoff.State, h.handoff.PinnedHostKey
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("the host key was swapped but pinning it failed; the new key is %s: %w", h.handoff.PinnedHostKey, err)
+	}
+	h.record = record
+	return nil
+}
+
+// replaceUserData asks Vultr to drop the single-use key from the instance's
+// user data. A failure is reported as a warning and retried on the next run.
+func (h *handoffRun) replaceUserData(instanceID string) error {
+	if h.record.UserDataReplaced {
+		return nil
+	}
+	replaceErr := h.withToken(h.config, func(token []byte) error {
+		return h.Provider.ReplaceInstanceUserData(h.ctx, token, instanceID, []byte("#cloud-config\n{}\n"))
+	})
+	if h.handoff.ReplaceUserData(replaceErr == nil) != hosthandoff.Replaced {
+		h.config.Progress("Warning: could not confirm that Vultr's copy of the user data was replaced; the expired single-use key may remain in provider metadata. The next run tries again.")
+		return nil
+	}
+	record, err := h.Store.UpdateHostHandoff(h.config.OperationID, func(stored *store.HostHandoffRecord) error {
+		stored.UserDataReplaced = true
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	h.record = record
+	h.config.Progress("Replaced the VM's user data at Vultr; the expired single-use key is gone from provider metadata.")
+	return nil
+}
+
+// complete runs action unless done, then records the step with set.
+func (h *handoffRun) complete(done bool, action func() error, set func(*store.HostHandoffRecord), progress string) error {
+	if done {
+		return nil
+	}
+	if err := action(); err != nil {
+		return err
+	}
+	record, err := h.mark(h.config, set)
+	if err != nil {
+		return err
+	}
+	h.record = record
+	if progress != "" {
+		h.config.Progress(progress)
+	}
+	return nil
+}
+
+func (h *handoffRun) awaitBootstrap(admin Target) error {
+	if h.record.BootstrapReady {
+		return nil
+	}
+	h.config.Progress("Waiting for the bootstrap to finish...")
+	return h.complete(false, func() error {
+		return h.until(h.ctx, h.config, func() (bool, error) {
+			result, err := h.runPinned(h.ctx, admin, &h.handoff, h.config.Remote.BootstrapReady, nil)
 			if err != nil {
 				return false, err
 			}
@@ -198,53 +283,41 @@ func (r Runner) Run(ctx context.Context, config Config) (Report, error) {
 				return false, nil
 			}
 			return false, fmt.Errorf("bootstrap check failed: %s", firstLine(result.Stderr))
-		}); err != nil {
-			return report, err
-		}
-		if record, err = r.mark(config, func(h *store.HostHandoffRecord) { h.BootstrapReady = true }); err != nil {
-			return report, err
-		}
-	}
+		})
+	}, func(stored *store.HostHandoffRecord) { stored.BootstrapReady = true }, "")
+}
 
-	if !record.CredentialsSent {
-		if err := r.sendCredentials(ctx, config, admin, &handoff); err != nil {
-			return report, err
-		}
-		if record, err = r.mark(config, func(h *store.HostHandoffRecord) { h.CredentialsSent = true }); err != nil {
-			return report, err
-		}
-		config.Progress("Sent the Wasabi restore credentials to the pinned host.")
-	}
+func (h *handoffRun) deliverCredentials(admin Target) error {
+	return h.complete(h.record.CredentialsSent, func() error {
+		return h.sendCredentials(h.ctx, h.config, admin, &h.handoff)
+	}, func(stored *store.HostHandoffRecord) { stored.CredentialsSent = true }, "Sent the Wasabi restore credentials to the pinned host.")
+}
 
-	if !record.SecurityFinalized {
-		if err := r.mustRun(ctx, admin, &handoff, config.Remote.Finalize, "security finalizer"); err != nil {
-			return report, err
-		}
-		if record, err = r.mark(config, func(h *store.HostHandoffRecord) { h.SecurityFinalized = true }); err != nil {
-			return report, err
-		}
-		config.Progress("Finalized SSH and firewall security on the VM.")
-	}
+func (h *handoffRun) finalizeSecurity(admin Target) error {
+	return h.complete(h.record.SecurityFinalized, func() error {
+		return h.mustRun(h.ctx, admin, &h.handoff, h.config.Remote.Finalize, "security finalizer")
+	}, func(stored *store.HostHandoffRecord) { stored.SecurityFinalized = true }, "Finalized SSH and firewall security on the VM.")
+}
 
-	if !record.RestoreStarted {
-		state, err := r.restoreState(ctx, admin, &handoff, config)
+// startRestore runs the installer unless the restore unit is already
+// running, which a previous interrupted run may have left it.
+func (h *handoffRun) startRestore(admin Target) error {
+	return h.complete(h.record.RestoreStarted, func() error {
+		state, err := h.restoreState(h.ctx, admin, &h.handoff, h.config)
 		if err != nil {
-			return report, err
+			return err
 		}
-		if state != "active" && state != "activating" {
-			if err := r.mustRun(ctx, admin, &handoff, config.Remote.Install, "rclone installer"); err != nil {
-				return report, err
-			}
+		if state == "active" || state == "activating" {
+			return nil
 		}
-		if record, err = r.mark(config, func(h *store.HostHandoffRecord) { h.RestoreStarted = true }); err != nil {
-			return report, err
-		}
-		config.Progress("Started the Wasabi restore.")
-	}
+		return h.mustRun(h.ctx, admin, &h.handoff, h.config.Remote.Install, "rclone installer")
+	}, func(stored *store.HostHandoffRecord) { stored.RestoreStarted = true }, "Started the Wasabi restore.")
+}
 
-	config.Progress("Waiting for the restore to finish...")
-	err = r.until(ctx, config, func() (bool, error) {
-		state, err := r.restoreState(ctx, admin, &handoff, config)
+func (h *handoffRun) awaitRestore(admin Target) error {
+	h.config.Progress("Waiting for the restore to finish...")
+	return h.until(h.ctx, h.config, func() (bool, error) {
+		state, err := h.restoreState(h.ctx, admin, &h.handoff, h.config)
 		switch {
 		case err != nil:
 			return false, err
@@ -255,11 +328,6 @@ func (r Runner) Run(ctx context.Context, config Config) (Report, error) {
 		}
 		return false, nil
 	})
-	if err != nil {
-		return report, err
-	}
-	report.RestoreComplete = true
-	return report, nil
 }
 
 // rotate verifies the VM by its single-use key and swaps it.
