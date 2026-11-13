@@ -268,78 +268,140 @@ func (w *ServerDestroyWorkflow) verifiedBackup(ctx context.Context, server store
 // step and revalidates backup integrity and approval immediately before provider
 // destruction.
 func (w *ServerDestroyWorkflow) CheckPreconditions(ctx context.Context, operation store.OperationRecord, step store.OperationStep) error {
-	if ctx == nil || w == nil || operation.OperationType != "server.destroy" || operation.ProtocolVersion != w.schemas.ProtocolVersion() {
-		return errors.New("server.destroy operation and context are required")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	parameters, err := serverDestroyRequest(operation, w.schemas.ProtocolVersion())
+	parameters, server, err := w.destroyPreconditionTarget(ctx, operation)
 	if err != nil {
 		return err
-	}
-	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
-	if err != nil {
-		return err
-	}
-	server := stored.Record
-	if err := validateServerDestroyTarget(operation, parameters, server); err != nil {
-		return err
-	}
-	if !stepBindsRef(operationStep(operation, destroyInspectInstanceStep).Input, "instance_ref", server.InstanceRef) ||
-		!stepBindsRef(operationStep(operation, destroyProviderStep).Input, "instance_ref", server.InstanceRef) ||
-		!stepBindsRef(operationStep(operation, destroyVerifyInstanceStep).Input, "instance_ref", server.InstanceRef) {
-		return errors.New("server.destroy plan is not bound to the current managed instance")
 	}
 	backup, err := w.verifiedBackup(ctx, server, parameters)
 	if err != nil {
 		return err
 	}
+	if err := destroyProviderInspectionPrecondition(operation, step, server); err != nil {
+		return err
+	}
+	rule, ok := destroyStepPreconditions[step.StepID]
+	if !ok {
+		return fmt.Errorf("unsupported server.destroy step %q", step.StepID)
+	}
+	return rule(w, ctx, destroyPreconditionState{operation: operation, step: step, parameters: parameters, server: server, backup: backup})
+}
+
+// destroyPreconditionState is the evidence a step rule checks once the shared
+// target, plan, backup, and provider-inspection stages have passed.
+type destroyPreconditionState struct {
+	operation  store.OperationRecord
+	step       store.OperationStep
+	parameters serverDestroyParameters
+	server     store.LogicalServer
+	backup     VerifiedServerBackup
+}
+
+// destroyStepPreconditions is the rule for each planned server.destroy step.
+var destroyStepPreconditions = map[string]func(*ServerDestroyWorkflow, context.Context, destroyPreconditionState) error{
+	destroyInspectInstanceStep: (*ServerDestroyWorkflow).checkDestroyInspectInstance,
+	destroyInspectRuntimeStep:  (*ServerDestroyWorkflow).checkDestroyInspectRuntime,
+	destroyProviderStep:        (*ServerDestroyWorkflow).checkDestroyProvider,
+	destroyVerifyInstanceStep:  (*ServerDestroyWorkflow).checkDestroyVerifyInstance,
+}
+
+// destroyPreconditionTarget loads the current logical server and checks that
+// the operation and every instance-bound step still target it exactly.
+func (w *ServerDestroyWorkflow) destroyPreconditionTarget(ctx context.Context, operation store.OperationRecord) (serverDestroyParameters, store.LogicalServer, error) {
+	if ctx == nil || w == nil || operation.OperationType != "server.destroy" || operation.ProtocolVersion != w.schemas.ProtocolVersion() {
+		return serverDestroyParameters{}, store.LogicalServer{}, errors.New("server.destroy operation and context are required")
+	}
+	if err := ctx.Err(); err != nil {
+		return serverDestroyParameters{}, store.LogicalServer{}, err
+	}
+	parameters, err := serverDestroyRequest(operation, w.schemas.ProtocolVersion())
+	if err != nil {
+		return serverDestroyParameters{}, store.LogicalServer{}, err
+	}
+	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
+	if err != nil {
+		return serverDestroyParameters{}, store.LogicalServer{}, err
+	}
+	server := stored.Record
+	if err := validateServerDestroyTarget(operation, parameters, server); err != nil {
+		return serverDestroyParameters{}, store.LogicalServer{}, err
+	}
+	if !destroyPlanBindsInstance(operation, server.InstanceRef) {
+		return serverDestroyParameters{}, store.LogicalServer{}, errors.New("server.destroy plan is not bound to the current managed instance")
+	}
+	return parameters, server, nil
+}
+
+func destroyPlanBindsInstance(operation store.OperationRecord, instanceRef json.RawMessage) bool {
+	for _, stepID := range []string{destroyInspectInstanceStep, destroyProviderStep, destroyVerifyInstanceStep} {
+		if !stepBindsRef(operationStep(operation, stepID).Input, "instance_ref", instanceRef) {
+			return false
+		}
+	}
+	return true
+}
+
+// destroyProviderInspectionPrecondition requires every step after the initial
+// inspection to follow a fresh exact-provider inspection in active or stopped state.
+func destroyProviderInspectionPrecondition(operation store.OperationRecord, step store.OperationStep, server store.LogicalServer) error {
 	provider, err := destroyInstanceStepOutput(operation, destroyInspectInstanceStep, protocolstate.StepSucceeded)
 	if step.StepID != destroyInspectInstanceStep && (err != nil || !equalJSON(provider.InstanceRef, server.InstanceRef) || !activeOrStopped(provider.State)) {
 		return errors.New("server.destroy requires a successful exact-provider inspection in active or stopped state")
 	}
-	switch step.StepID {
-	case destroyInspectInstanceStep:
-		if !stoppedOrFailedLifecycle(server.LifecycleState) || step.Status != protocolstate.StepPending ||
-			!stepBindsRef(step.Input, "instance_ref", server.InstanceRef) {
-			return errors.New("server.destroy requires a stopped or failed server and exact initial provider inspection")
-		}
-	case destroyInspectRuntimeStep:
-		if !stoppedOrFailedLifecycle(server.LifecycleState) || !stepSucceeded(operation, destroyInspectInstanceStep) {
-			return errors.New("runtime inspection requires a stopped or failed server and successful provider inspection")
-		}
-	case destroyProviderStep:
-		if !stoppedOrFailedLifecycle(server.LifecycleState) && server.LifecycleState != protocolstate.ServerDestroying {
-			return errors.New("provider destruction requires a stopped, failed, or already-destroying server")
-		}
-		if !stepSucceeded(operation, destroyInspectRuntimeStep) || !stepBindsRef(step.Input, "instance_ref", server.InstanceRef) {
-			return errors.New("provider destruction requires successful exact-instance and runtime inspections")
-		}
-		runtime, err := destroyRuntimeStepOutput(operation)
-		if err != nil || !equalJSON(runtime.UnitRef, stepField(operationStep(operation, destroyInspectRuntimeStep).Input, "unit_ref")) ||
-			(runtime.State != "stopped" && runtime.State != "absent") {
-			return errors.New("provider destruction requires the exact execution unit to be stopped or absent")
-		}
-		if server.LifecycleState == protocolstate.ServerDestroying && step.Attempt == 0 {
-			return errors.New("new destroy dispatch cannot start from an unexplained destroying state")
-		}
-		if err := w.authorizer.AuthorizeServerDestroy(ctx, operation.ActorID, parameters.ApprovalID, operation, server, backup); err != nil {
-			return fmt.Errorf("revalidate exact server.destroy approval before provider call: %w", err)
-		}
-		if err := w.markCapacityDestroySent(server); err != nil {
-			return err
-		}
-	case destroyVerifyInstanceStep:
-		if server.LifecycleState != protocolstate.ServerDestroying || !stepSucceeded(operation, destroyProviderStep) {
-			return errors.New("provider absence verification requires a dispatched destroy and destroying lifecycle state")
-		}
-		result, err := destroyProviderOutput(operation)
-		if err != nil || result.Outcome != "completed" || result.State != "destroyed" || !equalJSON(result.InstanceRef, server.InstanceRef) {
-			return errors.New("provider absence verification requires the exact completed destroy output")
-		}
-	default:
-		return fmt.Errorf("unsupported server.destroy step %q", step.StepID)
+	return nil
+}
+
+func (w *ServerDestroyWorkflow) checkDestroyInspectInstance(_ context.Context, check destroyPreconditionState) error {
+	if !stoppedOrFailedLifecycle(check.server.LifecycleState) || check.step.Status != protocolstate.StepPending ||
+		!stepBindsRef(check.step.Input, "instance_ref", check.server.InstanceRef) {
+		return errors.New("server.destroy requires a stopped or failed server and exact initial provider inspection")
+	}
+	return nil
+}
+
+func (w *ServerDestroyWorkflow) checkDestroyInspectRuntime(_ context.Context, check destroyPreconditionState) error {
+	if !stoppedOrFailedLifecycle(check.server.LifecycleState) || !stepSucceeded(check.operation, destroyInspectInstanceStep) {
+		return errors.New("runtime inspection requires a stopped or failed server and successful provider inspection")
+	}
+	return nil
+}
+
+// checkDestroyProvider guards the only mutating step: it requires a stopped
+// runtime, revalidates the exact approval, and claims capacity last.
+func (w *ServerDestroyWorkflow) checkDestroyProvider(ctx context.Context, check destroyPreconditionState) error {
+	server := check.server
+	if !stoppedOrFailedLifecycle(server.LifecycleState) && server.LifecycleState != protocolstate.ServerDestroying {
+		return errors.New("provider destruction requires a stopped, failed, or already-destroying server")
+	}
+	if !stepSucceeded(check.operation, destroyInspectRuntimeStep) || !stepBindsRef(check.step.Input, "instance_ref", server.InstanceRef) {
+		return errors.New("provider destruction requires successful exact-instance and runtime inspections")
+	}
+	if !destroyRuntimeStoppedOrAbsent(check.operation) {
+		return errors.New("provider destruction requires the exact execution unit to be stopped or absent")
+	}
+	if server.LifecycleState == protocolstate.ServerDestroying && check.step.Attempt == 0 {
+		return errors.New("new destroy dispatch cannot start from an unexplained destroying state")
+	}
+	if err := w.authorizer.AuthorizeServerDestroy(ctx, check.operation.ActorID, check.parameters.ApprovalID, check.operation, server, check.backup); err != nil {
+		return fmt.Errorf("revalidate exact server.destroy approval before provider call: %w", err)
+	}
+	return w.markCapacityDestroySent(server)
+}
+
+// destroyRuntimeStoppedOrAbsent reports whether the recorded runtime
+// inspection observed the planned execution unit stopped or absent.
+func destroyRuntimeStoppedOrAbsent(operation store.OperationRecord) bool {
+	runtime, err := destroyRuntimeStepOutput(operation)
+	return err == nil && equalJSON(runtime.UnitRef, stepField(operationStep(operation, destroyInspectRuntimeStep).Input, "unit_ref")) &&
+		(runtime.State == "stopped" || runtime.State == "absent")
+}
+
+func (w *ServerDestroyWorkflow) checkDestroyVerifyInstance(_ context.Context, check destroyPreconditionState) error {
+	if check.server.LifecycleState != protocolstate.ServerDestroying || !stepSucceeded(check.operation, destroyProviderStep) {
+		return errors.New("provider absence verification requires a dispatched destroy and destroying lifecycle state")
+	}
+	result, err := destroyProviderOutput(check.operation)
+	if err != nil || result.Outcome != "completed" || result.State != "destroyed" || !equalJSON(result.InstanceRef, check.server.InstanceRef) {
+		return errors.New("provider absence verification requires the exact completed destroy output")
 	}
 	return nil
 }
