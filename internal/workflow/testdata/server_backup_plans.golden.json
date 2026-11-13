@@ -1,0 +1,1902 @@
+{
+  "degraded default": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "describe-data",
+      "step_type": "game.data.describe",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.data.describe",
+      "capability_version": "1",
+      "input": {
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "save-game-data",
+      "step_type": "game.save.request",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.save.request",
+      "capability_version": "1",
+      "input": {
+        "reason": "backup",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "stop-runtime",
+      "step_type": "execution.unit.graceful_stop",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.graceful_stop",
+      "capability_version": "1",
+      "input": {
+        "grace_period_seconds": 120,
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "prepare-backup",
+      "step_type": "game.backup.prepare",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.prepare",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_ids": [
+          "world"
+        ],
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "capture-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "game.backup.capture",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.capture",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "capture_id": "capture-02839b709883817f58b76db0806f9c9ca675fa207a0f16b9d72c8e0ec7f44db3",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_id": "world",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "upload-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.put",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.put",
+      "capability_version": "1",
+      "input": {
+        "target": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-false/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "readback-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.get",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.get",
+      "capability_version": "1",
+      "input": {
+        "object_ref": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-false/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "validate-backup",
+      "step_type": "game.backup.validate",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.validate",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "environment_id": "staging",
+        "manifest": {
+          "backup_id": "backup-plan-false",
+          "consistency": {
+            "mode": "offline"
+          },
+          "created_at": "2026-11-07T09:00:00Z",
+          "data_generation_id": "generation-1",
+          "environment_id": "staging",
+          "game": {
+            "adapter_id": "game.fake",
+            "name": "Paper",
+            "version": "1.21",
+            "world_format": ""
+          },
+          "manifest_version": "2",
+          "objects": [
+            {
+              "data_set_id": "world",
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "container": "backups",
+                "environment_id": "staging",
+                "key": "server-1/backup-plan-false/world",
+                "storage_profile_id": "storage-profile"
+              }
+            }
+          ],
+          "server_id": "server-1",
+          "source_instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "source_operation_id": "backup-plan-false"
+        },
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "container": "backups",
+              "environment_id": "staging",
+              "key": "server-1/backup-plan-false/world",
+              "storage_profile_id": "storage-profile"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "paper.backup.archive"
+        ]
+      }
+    },
+    {
+      "step_id": "verify-stopped",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    }
+  ],
+  "degraded explicit resume": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "describe-data",
+      "step_type": "game.data.describe",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.data.describe",
+      "capability_version": "1",
+      "input": {
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "save-game-data",
+      "step_type": "game.save.request",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.save.request",
+      "capability_version": "1",
+      "input": {
+        "reason": "backup",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "stop-runtime",
+      "step_type": "execution.unit.graceful_stop",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.graceful_stop",
+      "capability_version": "1",
+      "input": {
+        "grace_period_seconds": 120,
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "prepare-backup",
+      "step_type": "game.backup.prepare",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.prepare",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-true",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_ids": [
+          "world"
+        ],
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "capture-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "game.backup.capture",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.capture",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-true",
+        "capture_id": "capture-e532d1a94534e2bc3786bf6d67c7d1aff54083e28ec2b7d82c3168019a648dc8",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_id": "world",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "upload-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.put",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.put",
+      "capability_version": "1",
+      "input": {
+        "target": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-true/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "readback-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.get",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.get",
+      "capability_version": "1",
+      "input": {
+        "object_ref": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-true/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "validate-backup",
+      "step_type": "game.backup.validate",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.validate",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-true",
+        "environment_id": "staging",
+        "manifest": {
+          "backup_id": "backup-plan-true",
+          "consistency": {
+            "mode": "offline"
+          },
+          "created_at": "2026-11-07T09:00:00Z",
+          "data_generation_id": "generation-1",
+          "environment_id": "staging",
+          "game": {
+            "adapter_id": "game.fake",
+            "name": "Paper",
+            "version": "1.21",
+            "world_format": ""
+          },
+          "manifest_version": "2",
+          "objects": [
+            {
+              "data_set_id": "world",
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "container": "backups",
+                "environment_id": "staging",
+                "key": "server-1/backup-plan-true/world",
+                "storage_profile_id": "storage-profile"
+              }
+            }
+          ],
+          "server_id": "server-1",
+          "source_instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "source_operation_id": "backup-plan-true"
+        },
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "container": "backups",
+              "environment_id": "staging",
+              "key": "server-1/backup-plan-true/world",
+              "storage_profile_id": "storage-profile"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "paper.backup.archive"
+        ]
+      }
+    },
+    {
+      "step_id": "start-runtime",
+      "step_type": "execution.unit.start",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.start",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "verify-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "check-readiness",
+      "step_type": "game.readiness.check",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.readiness.check",
+      "capability_version": "1",
+      "input": {
+        "environment_id": "staging",
+        "game_release_id": "paper-release",
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        },
+        "readiness_check_set_id": "paper:paper-release:checks-v1",
+        "required_checks": [
+          {
+            "check_id": "paper.started",
+            "check_version": "1"
+          }
+        ],
+        "server_id": "server-1"
+      }
+    }
+  ],
+  "expected instance matches": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "describe-data",
+      "step_type": "game.data.describe",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.data.describe",
+      "capability_version": "1",
+      "input": {
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "save-game-data",
+      "step_type": "game.save.request",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.save.request",
+      "capability_version": "1",
+      "input": {
+        "reason": "backup",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "stop-runtime",
+      "step_type": "execution.unit.graceful_stop",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.graceful_stop",
+      "capability_version": "1",
+      "input": {
+        "grace_period_seconds": 120,
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "prepare-backup",
+      "step_type": "game.backup.prepare",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.prepare",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_ids": [
+          "world"
+        ],
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "capture-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "game.backup.capture",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.capture",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "capture_id": "capture-02839b709883817f58b76db0806f9c9ca675fa207a0f16b9d72c8e0ec7f44db3",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_id": "world",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "upload-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.put",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.put",
+      "capability_version": "1",
+      "input": {
+        "target": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-false/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "readback-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.get",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.get",
+      "capability_version": "1",
+      "input": {
+        "object_ref": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-false/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "validate-backup",
+      "step_type": "game.backup.validate",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.validate",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "environment_id": "staging",
+        "manifest": {
+          "backup_id": "backup-plan-false",
+          "consistency": {
+            "mode": "offline"
+          },
+          "created_at": "2026-11-07T09:00:00Z",
+          "data_generation_id": "generation-1",
+          "environment_id": "staging",
+          "game": {
+            "adapter_id": "game.fake",
+            "name": "Paper",
+            "version": "1.21",
+            "world_format": ""
+          },
+          "manifest_version": "2",
+          "objects": [
+            {
+              "data_set_id": "world",
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "container": "backups",
+                "environment_id": "staging",
+                "key": "server-1/backup-plan-false/world",
+                "storage_profile_id": "storage-profile"
+              }
+            }
+          ],
+          "server_id": "server-1",
+          "source_instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "source_operation_id": "backup-plan-false"
+        },
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "container": "backups",
+              "environment_id": "staging",
+              "key": "server-1/backup-plan-false/world",
+              "storage_profile_id": "storage-profile"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "paper.backup.archive"
+        ]
+      }
+    },
+    {
+      "step_id": "verify-stopped",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    }
+  ],
+  "ready no resume": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "describe-data",
+      "step_type": "game.data.describe",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.data.describe",
+      "capability_version": "1",
+      "input": {
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "save-game-data",
+      "step_type": "game.save.request",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.save.request",
+      "capability_version": "1",
+      "input": {
+        "reason": "backup",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "stop-runtime",
+      "step_type": "execution.unit.graceful_stop",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.graceful_stop",
+      "capability_version": "1",
+      "input": {
+        "grace_period_seconds": 120,
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "prepare-backup",
+      "step_type": "game.backup.prepare",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.prepare",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_ids": [
+          "world"
+        ],
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "capture-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "game.backup.capture",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.capture",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "capture_id": "capture-02839b709883817f58b76db0806f9c9ca675fa207a0f16b9d72c8e0ec7f44db3",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_id": "world",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "upload-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.put",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.put",
+      "capability_version": "1",
+      "input": {
+        "target": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-false/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "readback-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.get",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.get",
+      "capability_version": "1",
+      "input": {
+        "object_ref": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-false/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "validate-backup",
+      "step_type": "game.backup.validate",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.validate",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "environment_id": "staging",
+        "manifest": {
+          "backup_id": "backup-plan-false",
+          "consistency": {
+            "mode": "offline"
+          },
+          "created_at": "2026-11-07T09:00:00Z",
+          "data_generation_id": "generation-1",
+          "environment_id": "staging",
+          "game": {
+            "adapter_id": "game.fake",
+            "name": "Paper",
+            "version": "1.21",
+            "world_format": ""
+          },
+          "manifest_version": "2",
+          "objects": [
+            {
+              "data_set_id": "world",
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "container": "backups",
+                "environment_id": "staging",
+                "key": "server-1/backup-plan-false/world",
+                "storage_profile_id": "storage-profile"
+              }
+            }
+          ],
+          "server_id": "server-1",
+          "source_instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "source_operation_id": "backup-plan-false"
+        },
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "container": "backups",
+              "environment_id": "staging",
+              "key": "server-1/backup-plan-false/world",
+              "storage_profile_id": "storage-profile"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "paper.backup.archive"
+        ]
+      }
+    },
+    {
+      "step_id": "verify-stopped",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    }
+  ],
+  "ready resume": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "describe-data",
+      "step_type": "game.data.describe",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.data.describe",
+      "capability_version": "1",
+      "input": {
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "save-game-data",
+      "step_type": "game.save.request",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.save.request",
+      "capability_version": "1",
+      "input": {
+        "reason": "backup",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "stop-runtime",
+      "step_type": "execution.unit.graceful_stop",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.graceful_stop",
+      "capability_version": "1",
+      "input": {
+        "grace_period_seconds": 120,
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "prepare-backup",
+      "step_type": "game.backup.prepare",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.prepare",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-true",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_ids": [
+          "world"
+        ],
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "capture-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "game.backup.capture",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.capture",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-true",
+        "capture_id": "capture-e532d1a94534e2bc3786bf6d67c7d1aff54083e28ec2b7d82c3168019a648dc8",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_id": "world",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "upload-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.put",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.put",
+      "capability_version": "1",
+      "input": {
+        "target": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-true/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "readback-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.get",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.get",
+      "capability_version": "1",
+      "input": {
+        "object_ref": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-true/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "validate-backup",
+      "step_type": "game.backup.validate",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.validate",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-true",
+        "environment_id": "staging",
+        "manifest": {
+          "backup_id": "backup-plan-true",
+          "consistency": {
+            "mode": "offline"
+          },
+          "created_at": "2026-11-07T09:00:00Z",
+          "data_generation_id": "generation-1",
+          "environment_id": "staging",
+          "game": {
+            "adapter_id": "game.fake",
+            "name": "Paper",
+            "version": "1.21",
+            "world_format": ""
+          },
+          "manifest_version": "2",
+          "objects": [
+            {
+              "data_set_id": "world",
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "container": "backups",
+                "environment_id": "staging",
+                "key": "server-1/backup-plan-true/world",
+                "storage_profile_id": "storage-profile"
+              }
+            }
+          ],
+          "server_id": "server-1",
+          "source_instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "source_operation_id": "backup-plan-true"
+        },
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "container": "backups",
+              "environment_id": "staging",
+              "key": "server-1/backup-plan-true/world",
+              "storage_profile_id": "storage-profile"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "paper.backup.archive"
+        ]
+      }
+    },
+    {
+      "step_id": "start-runtime",
+      "step_type": "execution.unit.start",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.start",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "verify-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "check-readiness",
+      "step_type": "game.readiness.check",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.readiness.check",
+      "capability_version": "1",
+      "input": {
+        "environment_id": "staging",
+        "game_release_id": "paper-release",
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        },
+        "readiness_check_set_id": "paper:paper-release:checks-v1",
+        "required_checks": [
+          {
+            "check_id": "paper.started",
+            "check_version": "1"
+          }
+        ],
+        "server_id": "server-1"
+      }
+    }
+  ],
+  "ready resume by default": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "describe-data",
+      "step_type": "game.data.describe",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.data.describe",
+      "capability_version": "1",
+      "input": {
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "save-game-data",
+      "step_type": "game.save.request",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.save.request",
+      "capability_version": "1",
+      "input": {
+        "reason": "backup",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "stop-runtime",
+      "step_type": "execution.unit.graceful_stop",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.graceful_stop",
+      "capability_version": "1",
+      "input": {
+        "grace_period_seconds": 120,
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "prepare-backup",
+      "step_type": "game.backup.prepare",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.prepare",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_ids": [
+          "world"
+        ],
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "capture-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "game.backup.capture",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.capture",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "capture_id": "capture-02839b709883817f58b76db0806f9c9ca675fa207a0f16b9d72c8e0ec7f44db3",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_id": "world",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "upload-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.put",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.put",
+      "capability_version": "1",
+      "input": {
+        "target": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-false/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "readback-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.get",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.get",
+      "capability_version": "1",
+      "input": {
+        "object_ref": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-false/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "validate-backup",
+      "step_type": "game.backup.validate",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.validate",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-false",
+        "environment_id": "staging",
+        "manifest": {
+          "backup_id": "backup-plan-false",
+          "consistency": {
+            "mode": "offline"
+          },
+          "created_at": "2026-11-07T09:00:00Z",
+          "data_generation_id": "generation-1",
+          "environment_id": "staging",
+          "game": {
+            "adapter_id": "game.fake",
+            "name": "Paper",
+            "version": "1.21",
+            "world_format": ""
+          },
+          "manifest_version": "2",
+          "objects": [
+            {
+              "data_set_id": "world",
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "container": "backups",
+                "environment_id": "staging",
+                "key": "server-1/backup-plan-false/world",
+                "storage_profile_id": "storage-profile"
+              }
+            }
+          ],
+          "server_id": "server-1",
+          "source_instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "source_operation_id": "backup-plan-false"
+        },
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "container": "backups",
+              "environment_id": "staging",
+              "key": "server-1/backup-plan-false/world",
+              "storage_profile_id": "storage-profile"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "paper.backup.archive"
+        ]
+      }
+    },
+    {
+      "step_id": "start-runtime",
+      "step_type": "execution.unit.start",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.start",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "verify-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "check-readiness",
+      "step_type": "game.readiness.check",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.readiness.check",
+      "capability_version": "1",
+      "input": {
+        "environment_id": "staging",
+        "game_release_id": "paper-release",
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        },
+        "readiness_check_set_id": "paper:paper-release:checks-v1",
+        "required_checks": [
+          {
+            "check_id": "paper.started",
+            "check_version": "1"
+          }
+        ],
+        "server_id": "server-1"
+      }
+    }
+  ],
+  "stopped asked to resume": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    },
+    {
+      "step_id": "describe-data",
+      "step_type": "game.data.describe",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.data.describe",
+      "capability_version": "1",
+      "input": {
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "prepare-backup",
+      "step_type": "game.backup.prepare",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.prepare",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-true",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_ids": [
+          "world"
+        ],
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "capture-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "game.backup.capture",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.capture",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-true",
+        "capture_id": "capture-e532d1a94534e2bc3786bf6d67c7d1aff54083e28ec2b7d82c3168019a648dc8",
+        "consistency_mode": "offline",
+        "data_generation_id": "generation-1",
+        "data_set_id": "world",
+        "release_id": "paper-release",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        }
+      }
+    },
+    {
+      "step_id": "upload-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.put",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.put",
+      "capability_version": "1",
+      "input": {
+        "target": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-true/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "readback-486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+      "step_type": "storage.object.get",
+      "status": "pending",
+      "adapter_id": "storage.fake",
+      "capability_name": "storage.object.get",
+      "capability_version": "1",
+      "input": {
+        "object_ref": {
+          "adapter_id": "storage.fake",
+          "container": "backups",
+          "environment_id": "staging",
+          "key": "server-1/backup-plan-true/world",
+          "storage_profile_id": "storage-profile"
+        }
+      }
+    },
+    {
+      "step_id": "validate-backup",
+      "step_type": "game.backup.validate",
+      "status": "pending",
+      "adapter_id": "game.fake",
+      "capability_name": "game.backup.validate",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-plan-true",
+        "environment_id": "staging",
+        "manifest": {
+          "backup_id": "backup-plan-true",
+          "consistency": {
+            "mode": "offline"
+          },
+          "created_at": "2026-11-07T09:00:00Z",
+          "data_generation_id": "generation-1",
+          "environment_id": "staging",
+          "game": {
+            "adapter_id": "game.fake",
+            "name": "Paper",
+            "version": "1.21",
+            "world_format": ""
+          },
+          "manifest_version": "2",
+          "objects": [
+            {
+              "data_set_id": "world",
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "container": "backups",
+                "environment_id": "staging",
+                "key": "server-1/backup-plan-true/world",
+                "storage_profile_id": "storage-profile"
+              }
+            }
+          ],
+          "server_id": "server-1",
+          "source_instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "source_operation_id": "backup-plan-true"
+        },
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "container": "backups",
+              "environment_id": "staging",
+              "key": "server-1/backup-plan-true/world",
+              "storage_profile_id": "storage-profile"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "paper.backup.archive"
+        ]
+      }
+    },
+    {
+      "step_id": "verify-stopped",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "unit-1"
+        }
+      }
+    }
+  ]
+}
