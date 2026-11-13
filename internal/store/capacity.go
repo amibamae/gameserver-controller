@@ -311,49 +311,64 @@ func (s *BoltStore) RecordCapacityReady(serverID, environmentID, providerInstanc
 }
 
 func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanceID, adapterID string, readyAt time.Time) (CapacityReservation, error) {
-	var result CapacityReservation
-	err := func() error {
-		bucket := tx.Bucket(capacityReservationsBucket)
-		found := false
-		var matchedKey []byte
-		err := forEachCapacityReservation(bucket, func(key []byte, current CapacityReservation) error {
-			if current.ServerID != serverID || current.EnvironmentID != environmentID || current.ProviderInstanceID != providerInstanceID || (adapterID != "" && current.ProviderAdapterID != adapterID) {
-				return nil
-			}
-			if found {
-				return ErrCapacityConflict
-			}
-			found = true
-			matchedKey = append([]byte(nil), key...)
-			result = current
+	// Once a reservation matches, it is returned alongside any later error.
+	bucket := tx.Bucket(capacityReservationsBucket)
+	key, result, err := findCapacityReservationForInstance(bucket, serverID, environmentID, providerInstanceID, adapterID)
+	if err != nil {
+		return result, err
+	}
+	if !capacityReadyAllowed(result, readyAt) {
+		return result, ErrCapacityTransition
+	}
+	if !result.ReadyAt.IsZero() {
+		if !result.ReadyAt.Equal(readyAt) {
+			return result, ErrCapacityConflict
+		}
+		return result, nil
+	}
+	result.ReadyAt = readyAt.UTC()
+	result.UpdatedAt = capacityUpdateTime(result.ReadyAt)
+	if err := validatePersistedCapacityReservation(result); err != nil {
+		return result, fmt.Errorf("%w: invalid readiness measurement: %v", ErrInvalidRecord, err)
+	}
+	return result, putCapacityReservation(bucket, key, result, "capacity readiness measurement")
+}
+
+// findCapacityReservationForInstance returns the key and value of the single
+// reservation for the provider instance on serverID in environmentID (and
+// adapterID, when given). A second match is ErrCapacityConflict and no match
+// is ErrCapacityNotFound. The first match is returned even with an error.
+func findCapacityReservationForInstance(bucket *bolt.Bucket, serverID, environmentID, providerInstanceID, adapterID string) ([]byte, CapacityReservation, error) {
+	found := false
+	var matchedKey []byte
+	var match CapacityReservation
+	err := forEachCapacityReservation(bucket, func(key []byte, current CapacityReservation) error {
+		if current.ServerID != serverID || current.EnvironmentID != environmentID || current.ProviderInstanceID != providerInstanceID ||
+			(adapterID != "" && current.ProviderAdapterID != adapterID) {
 			return nil
-		})
-		if err != nil {
-			return err
 		}
-		if !found {
-			return ErrCapacityNotFound
+		if found {
+			return ErrCapacityConflict
 		}
-		if result.Adoption != nil || result.State != CapacityActive || result.LastObservation == nil || result.LastObservation.State != "present" {
-			return ErrCapacityTransition
-		}
-		if readyAt.Before(result.CreatedAt) || (!result.ProvisionedAt.IsZero() && readyAt.Before(result.ProvisionedAt)) {
-			return ErrCapacityTransition
-		}
-		if !result.ReadyAt.IsZero() {
-			if !result.ReadyAt.Equal(readyAt) {
-				return ErrCapacityConflict
-			}
-			return nil
-		}
-		result.ReadyAt = readyAt.UTC()
-		result.UpdatedAt = capacityUpdateTime(result.ReadyAt)
-		if err := validatePersistedCapacityReservation(result); err != nil {
-			return fmt.Errorf("%w: invalid readiness measurement: %v", ErrInvalidRecord, err)
-		}
-		return putCapacityReservation(bucket, matchedKey, result, "capacity readiness measurement")
-	}()
-	return result, err
+		found = true
+		matchedKey = append([]byte(nil), key...)
+		match = current
+		return nil
+	})
+	if err == nil && !found {
+		err = ErrCapacityNotFound
+	}
+	return matchedKey, match, err
+}
+
+// capacityReadyAllowed reports whether readiness at readyAt may be recorded:
+// the reservation is a controller-created active instance last seen present,
+// and readyAt is no earlier than its creation or known provisioning time.
+func capacityReadyAllowed(r CapacityReservation, readyAt time.Time) bool {
+	if r.Adoption != nil || r.State != CapacityActive || r.LastObservation == nil || r.LastObservation.State != "present" {
+		return false
+	}
+	return !readyAt.Before(r.CreatedAt) && (r.ProvisionedAt.IsZero() || !readyAt.Before(r.ProvisionedAt))
 }
 
 // recordCapacityLifecycleOutcomeTx ties boot samples and confirmed destruction
