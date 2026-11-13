@@ -146,11 +146,7 @@ func testPolicy() pilotcapacity.Policy {
 
 func newTestProvisioner(t *testing.T, provider *scriptedProvider) (*Provisioner, *store.BoltStore, *testCredentials) {
 	t.Helper()
-	repository, err := store.OpenBolt(t.TempDir() + "/pilot.db")
-	if err != nil {
-		t.Fatalf("OpenBolt: %v", err)
-	}
-	t.Cleanup(func() { _ = repository.Close() })
+	repository := openRepository(t)
 	credentials := &testCredentials{reference: "systemd-credential://vultr-token", token: []byte("fake-provider-token")}
 	provisioner, err := NewProvisioner(repository, testPolicy(), provider, credentials, credentials.reference)
 	if err != nil {
@@ -179,6 +175,76 @@ func successfulProvider() *scriptedProvider {
 	return provider
 }
 
+// defaultOperationID is the operation most tests provision.
+const defaultOperationID = "0123456789abcdef0123456789abcdef"
+
+// defaultRequest is a valid staging create for defaultOperationID.
+func defaultRequest() CreateRequest {
+	return request(defaultOperationID, "pilot-server", "staging")
+}
+
+// olderBuildRequest is defaultRequest as an older build recorded it.
+func olderBuildRequest(withoutBootstrap bool) CreateRequest {
+	legacy := defaultRequest()
+	legacy.FirewallGroupID = ""
+	if withoutBootstrap {
+		legacy.StartupScriptID, legacy.StartupScriptSHA256 = "", ""
+	}
+	return legacy
+}
+
+// createOutcomeUnknown makes every create report a lost response.
+func (p *scriptedProvider) createOutcomeUnknown() {
+	p.create = func(context.Context, []byte, vultrapi.CreateInstanceRequest) (vultrapi.Instance, error) {
+		return vultrapi.Instance{}, vultrapi.ErrOutcomeUnknown
+	}
+}
+
+// seedReservation stores the reservation the provisioner would make for
+// input, marked as create-sent when sent is true, as a previous run left it.
+func seedReservation(t *testing.T, provisioner *Provisioner, repository *store.BoltStore, input CreateRequest, sent bool) store.CapacityReservation {
+	t.Helper()
+	_, reservation, err := provisioner.prepare(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := repository.ReserveCapacity(reservation, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if sent {
+		if _, err := repository.MarkCapacityCreateSent(reservation.OperationID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return reservation
+}
+
+// expectUntouched fails if the provider was asked to create, get or list an
+// instance, or if any capacity was reserved; why names the scenario.
+func expectUntouched(t *testing.T, provider *scriptedProvider, repository *store.BoltStore, why string) {
+	t.Helper()
+	if created, fetched, listed := provider.counts(); created != 0 || fetched != 0 || listed != 0 {
+		t.Fatalf("%s reached the provider: create/get/list=%d/%d/%d", why, created, fetched, listed)
+	}
+	if repository == nil {
+		return
+	}
+	if reservations, err := repository.ListCapacityReservations(); err != nil || len(reservations) != 0 {
+		t.Fatalf("%s reserved capacity: reservations=%+v err=%v", why, reservations, err)
+	}
+}
+
+// openRepository opens a fresh pilot store that closes with the test.
+func openRepository(t *testing.T) *store.BoltStore {
+	t.Helper()
+	repository, err := store.OpenBolt(t.TempDir() + "/pilot.db")
+	if err != nil {
+		t.Fatalf("OpenBolt: %v", err)
+	}
+	t.Cleanup(func() { _ = repository.Close() })
+	return repository
+}
+
 // testControllerKey is the RFC 8032 test 1 public key.
 const testControllerKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINdamAGCsQq31Uv+08lkBzoO4XLz2qYjJa8CGmj3B1Ea"
 
@@ -197,7 +263,7 @@ func request(operationID, serverID, environment string) CreateRequest {
 func TestProvisionReservesBeforeCreateAndIsIdempotent(t *testing.T) {
 	provider := successfulProvider()
 	provisioner, repository, credentials := newTestProvisioner(t, provider)
-	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	input := defaultRequest()
 
 	reservation, err := provisioner.Provision(context.Background(), input)
 	if err != nil {
@@ -250,54 +316,30 @@ func TestProvisionReservesBeforeCreateAndIsIdempotent(t *testing.T) {
 func TestProvisionRejectsUnverifiedStartupScriptBeforeCapacityOrCreate(t *testing.T) {
 	provider := successfulProvider()
 	provisioner, repository, _ := newTestProvisioner(t, provider)
-	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	input := defaultRequest()
 	input.StartupScriptSHA256 = strings.Repeat("0", 64)
 	if _, err := provisioner.Provision(context.Background(), input); !errors.Is(err, ErrBootstrapScript) {
 		t.Fatalf("mismatched startup script digest returned %v", err)
 	}
-	created, _, _ := provider.counts()
-	if created != 0 {
-		t.Fatalf("unverified bootstrap sent %d VM create requests", created)
-	}
-	reservations, err := repository.ListCapacityReservations()
-	if err != nil || len(reservations) != 0 {
-		t.Fatalf("unverified bootstrap reserved capacity: reservations=%+v err=%v", reservations, err)
-	}
+	expectUntouched(t, provider, repository, "unverified bootstrap")
 }
 
 func TestProvisionRejectsWrongStartupScriptIDBeforeCapacityOrCreate(t *testing.T) {
 	provider := successfulProvider()
 	provisioner, repository, _ := newTestProvisioner(t, provider)
-	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	input := defaultRequest()
 	input.StartupScriptID = "script-other"
 	if _, err := provisioner.Provision(context.Background(), input); !errors.Is(err, ErrBootstrapScript) {
 		t.Fatalf("wrong startup script ID returned %v", err)
 	}
-	created, _, _ := provider.counts()
-	reservations, storeErr := repository.ListCapacityReservations()
-	if created != 0 || storeErr != nil || len(reservations) != 0 {
-		t.Fatalf("wrong startup script was used: create=%d reservations=%+v storeErr=%v", created, reservations, storeErr)
-	}
+	expectUntouched(t, provider, repository, "wrong startup script")
 }
 
 func TestProvisionReconcilesLegacyUnknownCreateWithoutRecreatingIt(t *testing.T) {
 	provider := successfulProvider()
-	provider.list = func(context.Context, []byte, string) ([]vultrapi.Instance, error) { return nil, nil }
 	provisioner, repository, _ := newTestProvisioner(t, provider)
-	legacy := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
-	legacy.StartupScriptID, legacy.StartupScriptSHA256, legacy.FirewallGroupID = "", "", ""
-	_, reservation, err := provisioner.prepare(legacy)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := repository.ReserveCapacity(reservation, 1, 1); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repository.MarkCapacityCreateSent(reservation.OperationID); err != nil {
-		t.Fatal(err)
-	}
-	current := request(legacy.OperationID, legacy.ServerID, legacy.Environment)
-	result, err := provisioner.Provision(context.Background(), current)
+	seedReservation(t, provisioner, repository, olderBuildRequest(true), true)
+	result, err := provisioner.Provision(context.Background(), defaultRequest())
 	if !errors.Is(err, ErrOutcomeUnknown) || result.State != store.CapacityCreateOutcomeUnknown {
 		t.Fatalf("legacy create reconciliation = %+v, %v", result, err)
 	}
@@ -310,17 +352,8 @@ func TestProvisionReconcilesLegacyUnknownCreateWithoutRecreatingIt(t *testing.T)
 func TestProvisionReleasesLegacyReservedOperationBeforeBootstrappedCreate(t *testing.T) {
 	provider := successfulProvider()
 	provisioner, repository, _ := newTestProvisioner(t, provider)
-	legacy := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
-	legacy.StartupScriptID, legacy.StartupScriptSHA256, legacy.FirewallGroupID = "", "", ""
-	_, reservation, err := provisioner.prepare(legacy)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := repository.ReserveCapacity(reservation, 1, 1); err != nil {
-		t.Fatal(err)
-	}
-	current := request(legacy.OperationID, legacy.ServerID, legacy.Environment)
-	result, err := provisioner.Provision(context.Background(), current)
+	reservation := seedReservation(t, provisioner, repository, olderBuildRequest(true), false)
+	result, err := provisioner.Provision(context.Background(), defaultRequest())
 	if err != nil || result.State != store.CapacityActive {
 		t.Fatalf("bootstrapped create after releasing legacy reservation = %+v, %v", result, err)
 	}
@@ -335,14 +368,8 @@ func TestProvisionReleasesUnsentReservationWhenBootstrapDigestFails(t *testing.T
 		return vultrapi.StartupScript{ID: id, Type: "boot", Script: base64.StdEncoding.EncodeToString([]byte("changed"))}, nil
 	}
 	provisioner, repository, _ := newTestProvisioner(t, provider)
-	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
-	_, reservation, err := provisioner.prepare(input)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := repository.ReserveCapacity(reservation, 1, 1); err != nil {
-		t.Fatal(err)
-	}
+	input := defaultRequest()
+	seedReservation(t, provisioner, repository, input, false)
 	if _, err := provisioner.Provision(context.Background(), input); !errors.Is(err, ErrBootstrapScript) {
 		t.Fatalf("mismatched script returned %v", err)
 	}
@@ -396,12 +423,9 @@ func TestProvisionLeavesUnknownWhenProviderCreationTimestampIsInvalid(t *testing
 
 func TestUnknownCreateIsReconciledWithoutRetry(t *testing.T) {
 	provider := successfulProvider()
-	provider.create = func(context.Context, []byte, vultrapi.CreateInstanceRequest) (vultrapi.Instance, error) {
-		return vultrapi.Instance{}, vultrapi.ErrOutcomeUnknown
-	}
-	provider.list = func(context.Context, []byte, string) ([]vultrapi.Instance, error) { return nil, nil }
+	provider.createOutcomeUnknown()
 	provisioner, repository, _ := newTestProvisioner(t, provider)
-	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	input := defaultRequest()
 
 	reservation, err := provisioner.Provision(context.Background(), input)
 	if !errors.Is(err, ErrOutcomeUnknown) || reservation.State != store.CapacityCreateOutcomeUnknown {
@@ -422,12 +446,9 @@ func TestUnknownCreateIsReconciledWithoutRetry(t *testing.T) {
 
 func TestConcurrentProvisionCallsSendAtMostOneCreate(t *testing.T) {
 	provider := successfulProvider()
-	provider.create = func(context.Context, []byte, vultrapi.CreateInstanceRequest) (vultrapi.Instance, error) {
-		return vultrapi.Instance{}, vultrapi.ErrOutcomeUnknown
-	}
-	provider.list = func(context.Context, []byte, string) ([]vultrapi.Instance, error) { return nil, nil }
+	provider.createOutcomeUnknown()
 	provisioner, repository, _ := newTestProvisioner(t, provider)
-	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	input := defaultRequest()
 	const callers = 2
 	start := make(chan struct{})
 	results := make(chan error, callers)
@@ -462,9 +483,7 @@ func TestConcurrentProvisionCallsSendAtMostOneCreate(t *testing.T) {
 func TestUnknownCreateCanReconcileExactInstance(t *testing.T) {
 	provider := successfulProvider()
 	expectedLabel := ""
-	provider.create = func(context.Context, []byte, vultrapi.CreateInstanceRequest) (vultrapi.Instance, error) {
-		return vultrapi.Instance{}, vultrapi.ErrOutcomeUnknown
-	}
+	provider.createOutcomeUnknown()
 	provider.list = func(_ context.Context, _ []byte, requestedLabel string) ([]vultrapi.Instance, error) {
 		expectedLabel = requestedLabel
 		return []vultrapi.Instance{{ID: "instance-1", Label: requestedLabel}}, nil
@@ -473,7 +492,7 @@ func TestUnknownCreateCanReconcileExactInstance(t *testing.T) {
 		return vultrapi.Instance{ID: id, Label: expectedLabel, Status: "pending"}, nil
 	}
 	provisioner, _, _ := newTestProvisioner(t, provider)
-	reservation, err := provisioner.Provision(context.Background(), request("0123456789abcdef0123456789abcdef", "pilot-server", "staging"))
+	reservation, err := provisioner.Provision(context.Background(), defaultRequest())
 	if err != nil || reservation.State != store.CapacityActive || reservation.ProviderInstanceID != "instance-1" {
 		t.Fatalf("reconciled provision = %+v, %v", reservation, err)
 	}
@@ -485,14 +504,12 @@ func TestUnknownCreateCanReconcileExactInstance(t *testing.T) {
 
 func TestMultipleLabelMatchesRemainUnknown(t *testing.T) {
 	provider := successfulProvider()
-	provider.create = func(context.Context, []byte, vultrapi.CreateInstanceRequest) (vultrapi.Instance, error) {
-		return vultrapi.Instance{}, vultrapi.ErrOutcomeUnknown
-	}
+	provider.createOutcomeUnknown()
 	provider.list = func(_ context.Context, _ []byte, label string) ([]vultrapi.Instance, error) {
 		return []vultrapi.Instance{{ID: "instance-1", Label: label}, {ID: "instance-2", Label: label}}, nil
 	}
 	provisioner, _, _ := newTestProvisioner(t, provider)
-	reservation, err := provisioner.Provision(context.Background(), request("0123456789abcdef0123456789abcdef", "pilot-server", "staging"))
+	reservation, err := provisioner.Provision(context.Background(), defaultRequest())
 	if !errors.Is(err, ErrOutcomeUnknown) || !errors.Is(err, ErrMultipleMatches) || reservation.State != store.CapacityCreateOutcomeUnknown {
 		t.Fatalf("multiple-match result = %+v, %v", reservation, err)
 	}
@@ -509,7 +526,7 @@ func TestProviderRejectionReleasesOnlyItsUncreatedReservation(t *testing.T) {
 		return vultrapi.Instance{}, vultrapi.ErrProviderReject
 	}
 	provisioner, _, _ := newTestProvisioner(t, provider)
-	reservation, err := provisioner.Provision(context.Background(), request("0123456789abcdef0123456789abcdef", "pilot-server", "staging"))
+	reservation, err := provisioner.Provision(context.Background(), defaultRequest())
 	if !errors.Is(err, ErrProviderRejected) || reservation.State != store.CapacityAbsent {
 		t.Fatalf("provider rejection = %+v, %v", reservation, err)
 	}
@@ -539,18 +556,11 @@ func TestInvalidAndUnsupportedRequestsDoNotCallProvider(t *testing.T) {
 	if _, err := provisioner.Provision(context.Background(), request("0123456789abcdef0123456789abcdef", "pilot-server", "development")); !errors.Is(err, pilotcapacity.ErrUnsupportedEnvironment) {
 		t.Fatalf("unsupported environment error = %v", err)
 	}
-	created, fetched, listed := provider.counts()
-	if created != 0 || fetched != 0 || listed != 0 {
-		t.Fatalf("invalid requests reached provider: create/get/list=%d/%d/%d", created, fetched, listed)
-	}
+	expectUntouched(t, provider, nil, "invalid requests")
 }
 
 func TestProvisionerRejectsDeclarativePolicy(t *testing.T) {
-	repository, err := store.OpenBolt(t.TempDir() + "/pilot.db")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer repository.Close()
+	repository := openRepository(t)
 	policy := testPolicy()
 	policy.RuntimeEnforced = false
 	credentials := &testCredentials{reference: "systemd-credential://vultr-token", token: []byte("fake-provider-token")}
@@ -561,27 +571,16 @@ func TestProvisionerRejectsDeclarativePolicy(t *testing.T) {
 
 func TestUnavailableCredentialLeavesNoCapacityReservation(t *testing.T) {
 	provider := successfulProvider()
-	repository, err := store.OpenBolt(t.TempDir() + "/pilot.db")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer repository.Close()
+	repository := openRepository(t)
 	credentials := &testCredentials{reference: "systemd-credential://vultr-token", err: errors.New("credential unavailable")}
 	provisioner, err := NewProvisioner(repository, testPolicy(), provider, credentials, credentials.reference)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provisioner.Provision(context.Background(), request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")); err == nil {
+	if _, err := provisioner.Provision(context.Background(), defaultRequest()); err == nil {
 		t.Fatal("missing credential unexpectedly allowed provisioning")
 	}
-	reservations, err := repository.ListCapacityReservations()
-	if err != nil || len(reservations) != 0 {
-		t.Fatalf("capacity reservations after unavailable credential = %v, %v", reservations, err)
-	}
-	created, fetched, listed := provider.counts()
-	if created != 0 || fetched != 0 || listed != 0 {
-		t.Fatalf("provider calls with unavailable credential: create/get/list=%d/%d/%d", created, fetched, listed)
-	}
+	expectUntouched(t, provider, repository, "unavailable credential")
 }
 
 func requestReservation(operationID, serverID, environment string) store.CapacityReservation {
@@ -608,19 +607,8 @@ func TestObservationTimeIsNotBeforeReservation(t *testing.T) {
 func TestProvisionReconcilesPreFirewallUnknownCreate(t *testing.T) {
 	provider := successfulProvider()
 	provisioner, repository, _ := newTestProvisioner(t, provider)
-	legacy := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
-	legacy.FirewallGroupID = ""
-	_, reservation, err := provisioner.prepare(legacy)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := repository.ReserveCapacity(reservation, 1, 1); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repository.MarkCapacityCreateSent(reservation.OperationID); err != nil {
-		t.Fatal(err)
-	}
-	result, err := provisioner.Provision(context.Background(), request(legacy.OperationID, legacy.ServerID, legacy.Environment))
+	reservation := seedReservation(t, provisioner, repository, olderBuildRequest(false), true)
+	result, err := provisioner.Provision(context.Background(), defaultRequest())
 	if !errors.Is(err, ErrOutcomeUnknown) || result.ResourceKey != reservation.ResourceKey {
 		t.Fatalf("pre-firewall reconciliation = %+v, %v", result, err)
 	}
@@ -632,7 +620,7 @@ func TestProvisionReconcilesPreFirewallUnknownCreate(t *testing.T) {
 func TestProvisionSendsAOneTimeHostKeyAndStoresOnlyItsPublicHalf(t *testing.T) {
 	provider := successfulProvider()
 	provisioner, repository, _ := newTestProvisioner(t, provider)
-	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	input := defaultRequest()
 	if _, err := provisioner.Provision(context.Background(), input); err != nil {
 		t.Fatal(err)
 	}
@@ -685,22 +673,24 @@ func TestProvisionRefusesWrongSSHKeysOrAnOpenFirewall(t *testing.T) {
 			provider := successfulProvider()
 			provider.sshKeys, provider.firewall = test.keys, test.firewall
 			provisioner, repository, _ := newTestProvisioner(t, provider)
-			input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+			input := defaultRequest()
 			if len(test.keys) == 2 {
 				input.SSHKeyIDs = []string{"sshkey-123", "sshkey-456"}
 			}
 			if _, err := provisioner.Provision(context.Background(), input); !errors.Is(err, test.want) {
 				t.Fatalf("Provision = %v, want %v", err, test.want)
 			}
-			reservations, _ := repository.ListCapacityReservations()
-			if created, _, _ := provider.counts(); created != 0 || len(reservations) != 0 {
-				t.Fatalf("create=%d reservations=%d", created, len(reservations))
+			if created, _, _ := provider.counts(); created != 0 {
+				t.Fatalf("create=%d", created)
+			}
+			if reservations, err := repository.ListCapacityReservations(); err != nil || len(reservations) != 0 {
+				t.Fatalf("reservations=%+v err=%v", reservations, err)
 			}
 		})
 	}
 	provider := successfulProvider()
 	provisioner, _, _ := newTestProvisioner(t, provider)
-	input := request("0123456789abcdef0123456789abcdef", "pilot-server", "staging")
+	input := defaultRequest()
 	input.FirewallGroupID = ""
 	if _, err := provisioner.Provision(context.Background(), input); !errors.Is(err, ErrInvalidRequest) {
 		t.Fatalf("create without a firewall group: %v", err)
