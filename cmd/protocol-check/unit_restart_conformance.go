@@ -69,24 +69,44 @@ func restartSaveStepBound(pkg *protocolPackage, fixture, c map[string]any, r res
 	if selectedCapability == nil {
 		selectedCapability = asObject(fixture["selected_game_capability"])
 	}
-	advertisedCapability, capabilityErr := findAdapterCapability(pkg, selectedAdapterID, "game.save.request")
-	capabilityIdentityBound := capabilityErr == nil &&
-		selectedCapability["adapter_id"] == selectedAdapterID &&
-		selectedCapability["name"] == "game.save.request" &&
-		selectedCapability["name"] == advertisedCapability["name"] &&
-		selectedCapability["version"] == advertisedCapability["version"] &&
-		selectedCapability["input_schema_uri"] == advertisedCapability["input_schema_uri"] &&
-		selectedCapability["output_schema_uri"] == advertisedCapability["output_schema_uri"]
+	return selectedSaveCapabilityBound(pkg, selectedAdapterID, selectedCapability) &&
+		r.saveStepPayloadBound(pkg, selectedCapability) &&
+		r.saveStepRecordBound(selectedAdapterID, selectedCapability)
+}
+
+// selectedSaveCapabilityBound: the selected capability is game.save.request
+// on the selected adapter, exactly as that adapter's descriptor advertises
+// it (name, version and both schemas).
+func selectedSaveCapabilityBound(pkg *protocolPackage, adapterID string, selected map[string]any) bool {
+	advertised, err := findAdapterCapability(pkg, adapterID, "game.save.request")
+	return err == nil &&
+		selected["adapter_id"] == adapterID &&
+		selected["name"] == "game.save.request" &&
+		selected["name"] == advertised["name"] &&
+		selected["version"] == advertised["version"] &&
+		selected["input_schema_uri"] == advertised["input_schema_uri"] &&
+		selected["output_schema_uri"] == advertised["output_schema_uri"]
+}
+
+// saveStepPayloadBound: the save step's input and output match the selected
+// capability's schemas, and the input asks to save this target and release
+// at the operator's request.
+func (r restartCase) saveStepPayloadBound(pkg *protocolPackage, selected map[string]any) bool {
 	stepInput := asObject(r.saveStep["input"])
-	stepInputSchema := pkg.validateSchema(stringValue(selectedCapability, "input_schema_uri"), stepInput) == nil
-	stepOutputSchema := pkg.validateSchema(stringValue(selectedCapability, "output_schema_uri"), r.saveStep["output"]) == nil
-	stepInputBound := stepInputSchema && reflect.DeepEqual(r.target, stepInput["target"]) &&
-		r.request["release_id"] == stepInput["release_id"] && stringValue(stepInput, "reason") == "operator_request"
-	return capabilityIdentityBound && stepInputBound && stepOutputSchema &&
-		stringValue(r.core, "operation_id") != "" && r.saveStep["operation_id"] == r.core["operation_id"] &&
+	return pkg.validateSchema(stringValue(selected, "input_schema_uri"), stepInput) == nil &&
+		reflect.DeepEqual(r.target, stepInput["target"]) &&
+		r.request["release_id"] == stepInput["release_id"] && stringValue(stepInput, "reason") == "operator_request" &&
+		pkg.validateSchema(stringValue(selected, "output_schema_uri"), r.saveStep["output"]) == nil
+}
+
+// saveStepRecordBound: the save step is the request's succeeded step of
+// this operation, ran the selected adapter's game.save.request at the
+// selected version, and its output is the save confirmation.
+func (r restartCase) saveStepRecordBound(adapterID string, selected map[string]any) bool {
+	return stringValue(r.core, "operation_id") != "" && r.saveStep["operation_id"] == r.core["operation_id"] &&
 		r.saveStep["step_id"] == r.request["save_step_id"] && stringValue(r.saveStep, "status") == "succeeded" &&
-		r.saveStep["adapter_id"] == selectedAdapterID && r.saveStep["capability_name"] == "game.save.request" &&
-		r.saveStep["capability_version"] == selectedCapability["version"] && reflect.DeepEqual(r.save, r.saveStep["output"])
+		r.saveStep["adapter_id"] == adapterID && r.saveStep["capability_name"] == "game.save.request" &&
+		r.saveStep["capability_version"] == selected["version"] && reflect.DeepEqual(r.save, r.saveStep["output"])
 }
 
 // unitCurrent: the pre-dispatch inspection shows this unit running the
@@ -202,18 +222,28 @@ func (r restartCase) outcomeChecks(pkg *protocolPackage, dispatchAllowed bool) r
 		operationBound: r.operationBound(),
 	}
 	o.bound = r.resultBound(o.operationBound)
-	newRuntime := stringValue(r.output, "runtime_id") != "" && r.output["runtime_id"] != r.request["expected_runtime_id"]
 	outcome := stringValue(r.output, "outcome")
-	cycleConsistent := (!newRuntime || boolValue(r.output, "clean_stop_confirmed")) && (outcome != "completed" || newRuntime)
-	o.resultValid = o.outputValid && o.bound && cycleConsistent
+	o.resultValid = o.outputValid && o.bound && r.cycleConsistent()
 	o.confirmed = dispatchAllowed && o.resultValid && outcome == "completed"
 	o.uncertain = outcome == "accepted" || outcome == "outcome_unknown"
 	afterBound := r.afterBound(pkg)
 	o.reconciled = dispatchAllowed && o.resultValid && o.uncertain && r.reconciled(afterBound)
-	unresolved := len(r.after) > 0 &&
-		(!afterBound || stringValue(r.after, "state") == "unknown" || (stringValue(r.resolved, "state") == "completed" && !o.reconciled))
-	o.operatorRequired = dispatchAllowed && o.uncertain && (!o.operationBound || unresolved)
+	o.operatorRequired = dispatchAllowed && o.uncertain && (!o.operationBound || r.unresolved(afterBound, o.reconciled))
 	return o
+}
+
+// cycleConsistent: a new runtime is reported only with a confirmed clean
+// stop, and a completed restart always reports a new runtime.
+func (r restartCase) cycleConsistent() bool {
+	newRuntime := stringValue(r.output, "runtime_id") != "" && r.output["runtime_id"] != r.request["expected_runtime_id"]
+	return (!newRuntime || boolValue(r.output, "clean_stop_confirmed")) && (stringValue(r.output, "outcome") != "completed" || newRuntime)
+}
+
+// unresolved: a follow-up inspection exists but is unbound, reports an
+// unknown state, or shows a completed operation that did not reconcile.
+func (r restartCase) unresolved(afterBound, reconciled bool) bool {
+	return len(r.after) > 0 &&
+		(!afterBound || stringValue(r.after, "state") == "unknown" || (stringValue(r.resolved, "state") == "completed" && !reconciled))
 }
 
 func findAdapterCapability(pkg *protocolPackage, adapterID, capabilityName string) (map[string]any, error) {
