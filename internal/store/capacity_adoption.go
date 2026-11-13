@@ -21,12 +21,28 @@ type CapacityAdoption struct {
 	ObservedAt time.Time `json:"observed_at"`
 }
 
+// publicIPv4 reports whether value is a global unicast, non-private IPv4
+// address.
+func publicIPv4(value string) bool {
+	ip, err := netip.ParseAddr(value)
+	return err == nil && ip.Is4() && ip.IsGlobalUnicast() && !ip.IsPrivate()
+}
+
+// validAdoptedInstance reports whether the adopted instance's identifiers
+// and OS ID are usable.
+func validAdoptedInstance(a CapacityAdoption) bool {
+	return validCapacityIdentifier(a.InstanceID, 200) && validCapacityIdentifier(a.Region, 200) &&
+		validCapacityIdentifier(a.Plan, 200) && validCapacityIdentifier(a.OS, 500) && a.OSID >= 1
+}
+
+// plausibleObservationTime reports whether at is set and no more than five
+// minutes in the future.
+func plausibleObservationTime(at time.Time) bool {
+	return !at.IsZero() && !at.After(time.Now().UTC().Add(5*time.Minute))
+}
+
 func validateCapacityAdoption(a CapacityAdoption) error {
-	ip, err := netip.ParseAddr(a.IP)
-	if err != nil || !ip.Is4() || !ip.IsGlobalUnicast() || ip.IsPrivate() ||
-		!validCapacityIdentifier(a.InstanceID, 200) || !validCapacityIdentifier(a.Region, 200) ||
-		!validCapacityIdentifier(a.Plan, 200) || !validCapacityIdentifier(a.OS, 500) || a.OSID < 1 ||
-		a.ObservedAt.IsZero() || a.ObservedAt.After(time.Now().UTC().Add(5*time.Minute)) {
+	if !publicIPv4(a.IP) || !validAdoptedInstance(a) || !plausibleObservationTime(a.ObservedAt) {
 		return ErrInvalidRecord
 	}
 	return nil
