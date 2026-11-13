@@ -44,84 +44,21 @@ func TestReserveCapacityIsAtomicAcrossConcurrentCreates(t *testing.T) {
 
 func TestCapacityCreateDispatchClaimIsOneShotUnderConcurrency(t *testing.T) {
 	store := openTestStore(t)
-	reservation, _, err := store.ReserveCapacity(capacityRequest("op-claim", "server-claim", "staging", "shared_nonproduction"), 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const callers = 12
-	start := make(chan struct{})
-	results := make(chan error, callers)
-	var wait sync.WaitGroup
-	for range callers {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			<-start
-			_, claimErr := store.MarkCapacityCreateSent(reservation.OperationID)
-			results <- claimErr
-		}()
-	}
-	close(start)
-	wait.Wait()
-	close(results)
-
-	succeeded, rejected := 0, 0
-	for claimErr := range results {
-		switch {
-		case claimErr == nil:
-			succeeded++
-		case errors.Is(claimErr, ErrCapacityTransition):
-			rejected++
-		default:
-			t.Fatalf("unexpected dispatch claim error: %v", claimErr)
-		}
-	}
-	if succeeded != 1 || rejected != callers-1 {
-		t.Fatalf("dispatch claims succeeded=%d rejected=%d; want 1 and %d", succeeded, rejected, callers-1)
-	}
+	reservation := reserve(t, store, capacityRequest("op-claim", "server-claim", "staging", "shared_nonproduction"))
+	assertOneShotClaim(t, func() error {
+		_, err := store.MarkCapacityCreateSent(reservation.OperationID)
+		return err
+	})
 }
 
 func TestCapacityDestroyDispatchClaimIsOneShotUnderConcurrency(t *testing.T) {
 	store := openTestStore(t)
-	reservation, _, err := store.ReserveCapacity(capacityRequest("op-destroy-claim", "server-destroy-claim", "staging", "shared_nonproduction"), 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reservation, err = store.ObserveCapacity(reservation.OperationID, capacityObservation(reservation, "present", "instance-claim", time.Now().UTC().Add(time.Second)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	const callers = 12
-	start := make(chan struct{})
-	results := make(chan error, callers)
-	var wait sync.WaitGroup
-	for range callers {
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
-			<-start
-			_, claimErr := store.MarkCapacityDestroySent(reservation.OperationID)
-			results <- claimErr
-		}()
-	}
-	close(start)
-	wait.Wait()
-	close(results)
-
-	succeeded, rejected := 0, 0
-	for claimErr := range results {
-		switch {
-		case claimErr == nil:
-			succeeded++
-		case errors.Is(claimErr, ErrCapacityTransition):
-			rejected++
-		default:
-			t.Fatalf("unexpected destroy dispatch claim error: %v", claimErr)
-		}
-	}
-	if succeeded != 1 || rejected != callers-1 {
-		t.Fatalf("destroy dispatch claims succeeded=%d rejected=%d; want 1 and %d", succeeded, rejected, callers-1)
-	}
+	reservation := reserve(t, store, capacityRequest("op-destroy-claim", "server-destroy-claim", "staging", "shared_nonproduction"))
+	observePresent(t, store, reservation, "instance-claim", time.Now().UTC().Add(time.Second), time.Time{})
+	assertOneShotClaim(t, func() error {
+		_, err := store.MarkCapacityDestroySent(reservation.OperationID)
+		return err
+	})
 }
 
 func TestReserveCapacityIsIdempotentAndRejectsOccupiedSlot(t *testing.T) {
@@ -148,10 +85,7 @@ func TestReserveCapacityIsIdempotentAndRejectsOccupiedSlot(t *testing.T) {
 
 func TestReleaseUnsentReservationOnlyReleasesExactReservedOperation(t *testing.T) {
 	store := openTestStore(t)
-	reservation, _, err := store.ReserveCapacity(capacityRequest("op-release", "server-release", "staging", "shared_nonproduction"), 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reservation := reserve(t, store, capacityRequest("op-release", "server-release", "staging", "shared_nonproduction"))
 	if err := store.ReleaseUnsentCapacityReservation(reservation.OperationID, "other-resource"); !errors.Is(err, ErrCapacityConflict) {
 		t.Fatalf("release with wrong resource key = %v", err)
 	}
@@ -161,10 +95,7 @@ func TestReleaseUnsentReservationOnlyReleasesExactReservedOperation(t *testing.T
 	if _, err := store.GetCapacityReservation(reservation.OperationID); !errors.Is(err, ErrCapacityNotFound) {
 		t.Fatalf("released reservation lookup = %v, want not found", err)
 	}
-	reservation, _, err = store.ReserveCapacity(capacityRequest("op-release", "server-release", "staging", "shared_nonproduction"), 1, 1)
-	if err != nil {
-		t.Fatalf("reserve again after safe release: %v", err)
-	}
+	reservation = reserve(t, store, capacityRequest("op-release", "server-release", "staging", "shared_nonproduction"))
 	if _, err := store.MarkCapacityCreateSent(reservation.OperationID); err != nil {
 		t.Fatal(err)
 	}
@@ -175,10 +106,7 @@ func TestReleaseUnsentReservationOnlyReleasesExactReservedOperation(t *testing.T
 
 func TestUnresolvedCreateAndDestroyKeepCapacityUntilProviderObservation(t *testing.T) {
 	store := openTestStore(t)
-	reservation, _, err := store.ReserveCapacity(capacityRequest("op-create", "server-1", "staging", "shared_nonproduction"), 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reservation := reserve(t, store, capacityRequest("op-create", "server-1", "staging", "shared_nonproduction"))
 	if _, err := store.MarkCapacityCreateSent(reservation.OperationID); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +115,7 @@ func TestUnresolvedCreateAndDestroyKeepCapacityUntilProviderObservation(t *testi
 	}
 	assertCapacityBlocked(t, store, "op-blocked-1", "server-2", "testing", "shared_nonproduction", 1, 1)
 
-	reservation, err = store.ObserveCapacity(reservation.OperationID, capacityObservation(reservation, "absent", "", time.Now().UTC().Add(time.Second)))
+	reservation, err := store.ObserveCapacity(reservation.OperationID, capacityObservation(reservation, "absent", "", time.Now().UTC().Add(time.Second)))
 	if err != nil || reservation.State != CapacityAbsent {
 		t.Fatalf("confirmed absent observation = (%+v, %v)", reservation, err)
 	}
@@ -225,10 +153,7 @@ func TestCapacityReservationPersistsAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, _, err := store.ReserveCapacity(capacityRequest("op-persist", "server-1", "production", "production"), 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	created := reserve(t, store, capacityRequest("op-persist", "server-1", "production", "production"))
 	if _, err := store.MarkCapacityCreateSent(created.OperationID); err != nil {
 		t.Fatal(err)
 	}
@@ -266,10 +191,7 @@ func TestCapacityGroupLimitIsEnforcedAlongsideTotal(t *testing.T) {
 
 func TestObserveCapacityRequiresMatchingFreshProviderEvidence(t *testing.T) {
 	store := openTestStore(t)
-	reservation, _, err := store.ReserveCapacity(capacityRequest("op-evidence", "server-1", "staging", "shared_nonproduction"), 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reservation := reserve(t, store, capacityRequest("op-evidence", "server-1", "staging", "shared_nonproduction"))
 	observation := capacityObservation(reservation, "present", "instance-1", time.Now().UTC().Add(time.Second))
 	wrongProvider := observation
 	wrongProvider.Provider = "other-provider"
@@ -296,27 +218,21 @@ func TestObserveCapacityRequiresMatchingFreshProviderEvidence(t *testing.T) {
 
 func TestCapacityRecordsExactProvisionAndPaperReadinessTimes(t *testing.T) {
 	repository := openTestStore(t)
-	reservation, _, err := repository.ReserveCapacity(capacityRequest("op-boot", "server-boot", "staging", "shared_nonproduction"), 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reservation := reserve(t, repository, capacityRequest("op-boot", "server-boot", "staging", "shared_nonproduction"))
 	provisionedAt := time.Now().UTC()
 	observedAt := time.Now().UTC()
 	if observedAt.Before(provisionedAt) {
 		observedAt = provisionedAt
 	}
-	reservation, err = repository.ObserveCapacity(reservation.OperationID, CapacityProviderObservation{
-		Provider: reservation.Provider, ResourceKey: reservation.ResourceKey,
-		ProviderInstanceID: "vm-boot", State: "present", ObservedAt: observedAt, ProvisionedAt: provisionedAt,
-	})
-	if err != nil || !reservation.ProvisionedAt.Equal(provisionedAt) {
-		t.Fatalf("provisioning timestamp = %s, err=%v", reservation.ProvisionedAt, err)
+	reservation = observePresent(t, repository, reservation, "vm-boot", observedAt, provisionedAt)
+	if !reservation.ProvisionedAt.Equal(provisionedAt) {
+		t.Fatalf("provisioning timestamp = %s", reservation.ProvisionedAt)
 	}
 	readyAt := time.Now().UTC()
 	if readyAt.Before(provisionedAt) {
 		t.Fatal("test clock moved backwards")
 	}
-	reservation, err = repository.RecordCapacityReady("server-boot", "staging", "vm-boot", readyAt)
+	reservation, err := repository.RecordCapacityReady("server-boot", "staging", "vm-boot", readyAt)
 	if err != nil || !reservation.ReadyAt.Equal(readyAt) {
 		t.Fatalf("Paper readiness timestamp = %s, err=%v", reservation.ReadyAt, err)
 	}
@@ -334,20 +250,14 @@ func TestCapacityRecordsExactProvisionAndPaperReadinessTimes(t *testing.T) {
 
 func TestCapacityKeepsUnknownProvisioningTimeAndStillRecordsReadiness(t *testing.T) {
 	repository := openTestStore(t)
-	reservation, _, err := repository.ReserveCapacity(capacityRequest("op-unknown-boot", "server-unknown-boot", "staging", "shared_nonproduction"), 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reservation := reserve(t, repository, capacityRequest("op-unknown-boot", "server-unknown-boot", "staging", "shared_nonproduction"))
 	observedAt := time.Now().UTC().Add(time.Second)
-	reservation, err = repository.ObserveCapacity(reservation.OperationID, CapacityProviderObservation{
-		Provider: reservation.Provider, ResourceKey: reservation.ResourceKey,
-		ProviderInstanceID: "vm-unknown-boot", State: "present", ObservedAt: observedAt,
-	})
-	if err != nil || reservation.State != CapacityActive || !reservation.ProvisionedAt.IsZero() {
-		t.Fatalf("active reservation with unknown provision time = (%+v, %v)", reservation, err)
+	reservation = observePresent(t, repository, reservation, "vm-unknown-boot", observedAt, time.Time{})
+	if reservation.State != CapacityActive || !reservation.ProvisionedAt.IsZero() {
+		t.Fatalf("active reservation with unknown provision time = %+v", reservation)
 	}
 	readyAt := observedAt.Add(time.Second)
-	reservation, err = repository.RecordCapacityReady("server-unknown-boot", "staging", "vm-unknown-boot", readyAt)
+	reservation, err := repository.RecordCapacityReady("server-unknown-boot", "staging", "vm-unknown-boot", readyAt)
 	if err != nil || !reservation.ReadyAt.Equal(readyAt) || !reservation.ProvisionedAt.IsZero() {
 		t.Fatalf("readiness with unknown provision time = (%+v, %v)", reservation, err)
 	}
@@ -359,10 +269,7 @@ func TestCapacityKeepsUnknownProvisioningTimeAndStillRecordsReadiness(t *testing
 
 func TestObserveCapacityRejectsProvisionTimeBeforeReservation(t *testing.T) {
 	repository := openTestStore(t)
-	reservation, _, err := repository.ReserveCapacity(capacityRequest("op-early-boot", "server-early-boot", "staging", "shared_nonproduction"), 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reservation := reserve(t, repository, capacityRequest("op-early-boot", "server-early-boot", "staging", "shared_nonproduction"))
 	observation := CapacityProviderObservation{
 		Provider: reservation.Provider, ResourceKey: reservation.ResourceKey,
 		ProviderInstanceID: "vm-early-boot", State: "present",
@@ -383,29 +290,16 @@ func TestRecordCapacityReadyRejectsNonActiveReservations(t *testing.T) {
 		t.Run(providerState, func(t *testing.T) {
 			repository := openTestStore(t)
 			operationID := "op-ready-after-" + providerState
-			reservation, _, err := repository.ReserveCapacity(capacityRequest(operationID, "server-ready-after-"+providerState, "staging", "shared_nonproduction"), 1, 1)
-			if err != nil {
-				t.Fatal(err)
-			}
+			reservation := reserve(t, repository, capacityRequest(operationID, "server-ready-after-"+providerState, "staging", "shared_nonproduction"))
 			presentAt := time.Now().UTC().Add(time.Second)
-			reservation, err = repository.ObserveCapacity(operationID, CapacityProviderObservation{
-				Provider: reservation.Provider, ResourceKey: reservation.ResourceKey,
-				ProviderInstanceID: "vm-ready-after-" + providerState, State: "present",
-				ObservedAt: presentAt, ProvisionedAt: reservation.CreatedAt,
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
+			reservation = observePresent(t, repository, reservation, "vm-ready-after-"+providerState, presentAt, reservation.CreatedAt)
 			if providerState == "destroyed" {
 				if _, err := repository.MarkCapacityDestroySent(operationID); err != nil {
 					t.Fatal(err)
 				}
 			}
 			observedAt := presentAt.Add(time.Second)
-			reservation, err = repository.ObserveCapacity(operationID, CapacityProviderObservation{
-				Provider: reservation.Provider, ResourceKey: reservation.ResourceKey,
-				ProviderInstanceID: reservation.ProviderInstanceID, State: providerState, ObservedAt: observedAt,
-			})
+			reservation, err := repository.ObserveCapacity(operationID, capacityObservation(reservation, providerState, reservation.ProviderInstanceID, observedAt))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -421,10 +315,7 @@ func TestCapacityRejectsReadinessForUntrackedOrPrematureInstances(t *testing.T) 
 	if _, err := repository.RecordCapacityReady("server-boot", "staging", "untracked", time.Now().UTC()); !errors.Is(err, ErrCapacityNotFound) {
 		t.Fatalf("unmanaged instance readiness returned %v, want not found", err)
 	}
-	reservation, _, err := repository.ReserveCapacity(capacityRequest("op-premature", "server-boot", "staging", "shared_nonproduction"), 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reservation := reserve(t, repository, capacityRequest("op-premature", "server-boot", "staging", "shared_nonproduction"))
 	if _, err := repository.RecordCapacityReady(reservation.ServerID, reservation.EnvironmentID, "vm-premature", time.Now().UTC()); !errors.Is(err, ErrCapacityNotFound) {
 		t.Fatalf("unprovisioned reservation readiness returned %v, want not found", err)
 	}
@@ -444,6 +335,65 @@ func capacityObservation(reservation CapacityReservation, state, instanceID stri
 	}
 }
 
+// reserve stores request under the default limits of one total and one per
+// group, failing the test on error.
+func reserve(t *testing.T, store *BoltStore, request CapacityReservation) CapacityReservation {
+	t.Helper()
+	reservation, _, err := store.ReserveCapacity(request, 1, 1)
+	if err != nil {
+		t.Fatalf("reserve %s: %v", request.OperationID, err)
+	}
+	return reservation
+}
+
+// observePresent records that the provider shows instanceID for reservation,
+// created at provisionedAt (zero when unknown), failing the test on error.
+func observePresent(t *testing.T, store *BoltStore, reservation CapacityReservation, instanceID string, observedAt, provisionedAt time.Time) CapacityReservation {
+	t.Helper()
+	observation := capacityObservation(reservation, "present", instanceID, observedAt)
+	observation.ProvisionedAt = provisionedAt
+	observed, err := store.ObserveCapacity(reservation.OperationID, observation)
+	if err != nil {
+		t.Fatalf("observe %s present: %v", instanceID, err)
+	}
+	return observed
+}
+
+// assertOneShotClaim runs claim from twelve goroutines at once and fails
+// unless exactly one succeeds and every other returns ErrCapacityTransition.
+func assertOneShotClaim(t *testing.T, claim func() error) {
+	t.Helper()
+	const callers = 12
+	start := make(chan struct{})
+	results := make(chan error, callers)
+	var wait sync.WaitGroup
+	for range callers {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			<-start
+			results <- claim()
+		}()
+	}
+	close(start)
+	wait.Wait()
+	close(results)
+	succeeded, rejected := 0, 0
+	for err := range results {
+		switch {
+		case err == nil:
+			succeeded++
+		case errors.Is(err, ErrCapacityTransition):
+			rejected++
+		default:
+			t.Fatalf("unexpected claim error: %v", err)
+		}
+	}
+	if succeeded != 1 || rejected != callers-1 {
+		t.Fatalf("claims succeeded=%d rejected=%d; want 1 and %d", succeeded, rejected, callers-1)
+	}
+}
+
 func assertCapacityBlocked(t *testing.T, store *BoltStore, operationID, serverID, environmentID, group string, totalLimit, groupLimit int) {
 	t.Helper()
 	if _, _, err := store.ReserveCapacity(capacityRequest(operationID, serverID, environmentID, group), totalLimit, groupLimit); !errors.Is(err, ErrCapacityReached) {
@@ -453,17 +403,11 @@ func assertCapacityBlocked(t *testing.T, store *BoltStore, operationID, serverID
 
 func TestCapacityReadinessRollsBackWithLifecycleTransaction(t *testing.T) {
 	repository := openTestStore(t)
-	reservation, _, err := repository.ReserveCapacity(capacityRequest("atomic-boot", "atomic-server", "staging", "staging"), 1, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reservation := reserve(t, repository, capacityRequest("atomic-boot", "atomic-server", "staging", "staging"))
 	now := time.Now().UTC()
-	_, err = repository.ObserveCapacity(reservation.OperationID, CapacityProviderObservation{Provider: reservation.Provider, ResourceKey: reservation.ResourceKey, ProviderInstanceID: "atomic-vm", State: "present", ObservedAt: now, ProvisionedAt: now})
-	if err != nil {
-		t.Fatal(err)
-	}
+	observePresent(t, repository, reservation, "atomic-vm", now, now)
 	abort := errors.New("lifecycle transaction failed")
-	err = repository.db.Update(func(tx *bolt.Tx) error {
+	err := repository.db.Update(func(tx *bolt.Tx) error {
 		if _, err := recordCapacityReadyTx(tx, "atomic-server", "staging", "atomic-vm", "", now.Add(time.Second)); err != nil {
 			return err
 		}
@@ -484,15 +428,9 @@ func TestSuccessfulBootRequiresExactHostingAdapter(t *testing.T) {
 			repository := openTestStore(t)
 			request := capacityRequest("adapter-boot", "adapter-server", "staging", "staging")
 			request.ProviderAdapterID = adapterID
-			reservation, _, err := repository.ReserveCapacity(request, 1, 1)
-			if err != nil {
-				t.Fatal(err)
-			}
+			reservation := reserve(t, repository, request)
 			now := time.Now().UTC()
-			_, err = repository.ObserveCapacity(reservation.OperationID, CapacityProviderObservation{Provider: request.Provider, ResourceKey: request.ResourceKey, ProviderInstanceID: "shared-id", State: "present", ObservedAt: now, ProvisionedAt: now})
-			if err != nil {
-				t.Fatal(err)
-			}
+			observePresent(t, repository, reservation, "shared-id", now, now)
 			ref := json.RawMessage(`{"adapter_id":"hosting.vultr","environment_id":"staging","resource_kind":"instance","external_id":"shared-id"}`)
 			result, err := json.Marshal(map[string]any{"operation_data": map[string]any{"readiness_assertion": map[string]any{"server_id": "adapter-server", "environment_id": "staging", "instance_ref": ref, "observed_at": now.Add(time.Second)}}})
 			if err != nil {
