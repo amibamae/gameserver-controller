@@ -175,7 +175,12 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
 		access := provisionAccess{FirewallGroupID: *firewallGroupID, ControllerIP: *controllerIP, SSHCredentialRef: *sshCredentialRef}
-		return provisionVultr(*execute, *confirmCreate, *timeout, policy, statePath, *serverID, *environmentID, *region, *plan, *osID, *hostname, sshKeyIDs, *startupScriptID, *startupScriptSHA256, *credentialRef, *operationID, access, stdout, stderr)
+		return provisionVultr(provisionRequest{
+			Execute: *execute, Confirmation: *confirmCreate, Timeout: *timeout,
+			ServerID: *serverID, Environment: *environmentID, Region: *region, Plan: *plan, OSID: *osID, Hostname: *hostname,
+			SSHKeyIDs: sshKeyIDs, StartupScriptID: *startupScriptID, StartupScriptSHA256: *startupScriptSHA256,
+			CredentialRef: *credentialRef, OperationID: *operationID, Access: access,
+		}, policy, statePath, stdout, stderr)
 	case "adopt":
 		if err := allowOnlyFlags(flags, "execute", "confirm-adopt", "timeout", "server-id", "environment", "instance-id", "expected-ip", "region", "plan", "os-id", "os-name", "credential-ref", "operation-id"); err != nil {
 			return err
@@ -300,151 +305,296 @@ func usage(w io.Writer) error {
 	return errors.New("an action is required")
 }
 
-func provisionVultr(execute bool, confirmation string, timeout time.Duration, policy pilotcapacity.Policy, statePath, serverID, environment, region, plan, osID, hostname string, sshKeyIDs []string, startupScriptID, startupScriptSHA256, credentialRef, operationID string, access provisionAccess, stdout, stderr io.Writer) error {
-	if timeout <= 0 || timeout > 24*time.Hour {
-		return errors.New("--timeout must be greater than zero and no more than 24h")
-	}
-	if !safePilotServerID.MatchString(serverID) {
-		return errors.New("--server-id must be a lower-case identifier")
-	}
-	if len(sshKeyIDs) == 0 {
-		return errors.New("at least one --ssh-key-id is required so the VM is reachable")
-	}
-	if startupScriptID == "" || !safeStartupScriptDigest.MatchString(startupScriptSHA256) {
-		return errors.New("--startup-script-id and a 64-character lowercase --startup-script-sha256 are required")
-	}
-	if !safeCredentialRef.MatchString(credentialRef) || !safeCredentialRef.MatchString(access.SSHCredentialRef) {
-		return errors.New("--credential-ref and --ssh-credential-ref must use systemd-credential://NAME")
-	}
-	controllerAddress, err := netip.ParseAddr(access.ControllerIP)
-	if err != nil || access.FirewallGroupID == "" {
-		return errors.New("--firewall-group-id and an exact --controller-ip address (not a range) are required so SSH is reachable only from the controller")
-	}
-	if !policy.RuntimeEnforced {
-		return errors.New("capacity policy is not marked for runtime enforcement")
-	}
-	groupID, _, supported := policy.GroupForEnvironment(environment)
-	if !supported {
-		return pilotcapacity.ErrUnsupportedEnvironment
-	}
-	providerOSID, err := vultrapi.ParseOSID(osID)
+// provisionRequest is what the provision command was given on the command
+// line.
+type provisionRequest struct {
+	Execute             bool
+	Confirmation        string
+	Timeout             time.Duration
+	ServerID            string
+	Environment         string
+	Region              string
+	Plan                string
+	OSID                string
+	Hostname            string
+	SSHKeyIDs           []string
+	StartupScriptID     string
+	StartupScriptSHA256 string
+	CredentialRef       string
+	OperationID         string
+	Access              provisionAccess
+}
+
+// provisionEnvironment is the fixed policy, state database and output that a
+// provision run uses.
+type provisionEnvironment struct {
+	policy    pilotcapacity.Policy
+	statePath string
+	stdout    io.Writer
+	stderr    io.Writer
+}
+
+// checkedProvision holds what validation derived from a provisionRequest.
+type checkedProvision struct {
+	groupID    string
+	osID       int
+	controller netip.Addr
+}
+
+// provisionVultr validates the request, prints the dry run unless --execute
+// is given, and otherwise requires the exact --confirm-create before any
+// audit write, credential read, capacity change or provider call.
+func provisionVultr(request provisionRequest, policy pilotcapacity.Policy, statePath string, stdout, stderr io.Writer) error {
+	checked, err := validateProvisionRequest(request, policy)
 	if err != nil {
-		return errors.New("--os-id must be a positive Vultr OS ID")
+		return err
+	}
+	if !request.Execute {
+		return provisionDryRun(request, policy, checked, stdout)
+	}
+	operationID, err := confirmProvisionCreate(request)
+	if err != nil {
+		return err
+	}
+	return executeProvision(request, provisionEnvironment{policy: policy, statePath: statePath, stdout: stdout, stderr: stderr}, checked, operationID)
+}
+
+func validateProvisionRequest(request provisionRequest, policy pilotcapacity.Policy) (checkedProvision, error) {
+	controller, err := validateProvisionInputs(request)
+	if err != nil {
+		return checkedProvision{}, err
+	}
+	groupID, osID, err := validateProvisionTarget(request, policy)
+	if err != nil {
+		return checkedProvision{}, err
+	}
+	return checkedProvision{groupID: groupID, osID: osID, controller: controller}, nil
+}
+
+// validateProvisionInputs checks the flags that need no policy, and returns
+// the controller's exact address.
+func validateProvisionInputs(request provisionRequest) (netip.Addr, error) {
+	if request.Timeout <= 0 || request.Timeout > 24*time.Hour {
+		return netip.Addr{}, errors.New("--timeout must be greater than zero and no more than 24h")
+	}
+	if !safePilotServerID.MatchString(request.ServerID) {
+		return netip.Addr{}, errors.New("--server-id must be a lower-case identifier")
+	}
+	if len(request.SSHKeyIDs) == 0 {
+		return netip.Addr{}, errors.New("at least one --ssh-key-id is required so the VM is reachable")
+	}
+	if request.StartupScriptID == "" || !safeStartupScriptDigest.MatchString(request.StartupScriptSHA256) {
+		return netip.Addr{}, errors.New("--startup-script-id and a 64-character lowercase --startup-script-sha256 are required")
+	}
+	return validateProvisionAccess(request)
+}
+
+// validateProvisionAccess checks the credential references and the
+// controller-only firewall, and returns the controller's exact address.
+func validateProvisionAccess(request provisionRequest) (netip.Addr, error) {
+	if !safeCredentialRef.MatchString(request.CredentialRef) || !safeCredentialRef.MatchString(request.Access.SSHCredentialRef) {
+		return netip.Addr{}, errors.New("--credential-ref and --ssh-credential-ref must use systemd-credential://NAME")
+	}
+	controller, err := netip.ParseAddr(request.Access.ControllerIP)
+	if err != nil || request.Access.FirewallGroupID == "" {
+		return netip.Addr{}, errors.New("--firewall-group-id and an exact --controller-ip address (not a range) are required so SSH is reachable only from the controller")
+	}
+	return controller, nil
+}
+
+// validateProvisionTarget checks the request against the capacity policy and
+// the provider's create rules, and returns the capacity group and OS ID.
+func validateProvisionTarget(request provisionRequest, policy pilotcapacity.Policy) (string, int, error) {
+	if !policy.RuntimeEnforced {
+		return "", 0, errors.New("capacity policy is not marked for runtime enforcement")
+	}
+	groupID, _, supported := policy.GroupForEnvironment(request.Environment)
+	if !supported {
+		return "", 0, pilotcapacity.ErrUnsupportedEnvironment
+	}
+	osID, err := vultrapi.ParseOSID(request.OSID)
+	if err != nil {
+		return "", 0, errors.New("--os-id must be a positive Vultr OS ID")
 	}
 	validation := vultrapi.CreateInstanceRequest{
-		Region: region, Plan: plan, OSID: providerOSID, Label: "gsc-managed-dry-run",
-		Hostname: hostname, SSHKeyIDs: append([]string(nil), sshKeyIDs...), StartupScriptID: startupScriptID,
-		FirewallGroupID: access.FirewallGroupID,
+		Region: request.Region, Plan: request.Plan, OSID: osID, Label: "gsc-managed-dry-run",
+		Hostname: request.Hostname, SSHKeyIDs: append([]string(nil), request.SSHKeyIDs...), StartupScriptID: request.StartupScriptID,
+		FirewallGroupID: request.Access.FirewallGroupID,
 	}
 	if err := vultrapi.ValidateCreateInstanceRequest(validation); err != nil {
-		return errors.New("region, plan, hostname, SSH key ID, or firewall group ID is invalid")
+		return "", 0, errors.New("region, plan, hostname, SSH key ID, or firewall group ID is invalid")
 	}
-	expectedConfirmation := serverID + "@" + environment
-	if !execute {
-		if confirmation != "" {
-			return errors.New("--confirm-create requires --execute")
-		}
-		if operationID != "" {
-			return errors.New("--operation-id requires --execute")
-		}
-		fmt.Fprintln(stdout, "Dry run: no provider API call, credential read, or capacity reservation was made.")
-		fmt.Fprintf(stdout, "Would create one managed Vultr VM: server=%s environment=%s group=%s region=%s plan=%s os_id=%d\n", serverID, environment, groupID, region, plan, providerOSID)
-		fmt.Fprintf(stdout, "Bootstrap startup script ID: %s\nBootstrap SHA-256: %s\n", startupScriptID, startupScriptSHA256)
-		fmt.Fprintf(stdout, "Firewall group %s must admit SSH only from %s; this is checked before the create.\n", access.FirewallGroupID, controllerAddress)
-		fmt.Fprintln(stdout, "A single-use SSH host key will be generated for this VM; only its public half is stored.")
-		fmt.Fprintf(stdout, "Configured hard limit: %d controller-owned VM(s).\n", policy.MaxInstancesTotal)
-		fmt.Fprintf(stdout, "To create it, add --execute --confirm-create %s.\n", expectedConfirmation)
-		return nil
+	return groupID, osID, nil
+}
+
+// provisionTarget is <server-id>@<environment>: the exact --confirm-create
+// value and the audit target.
+func provisionTarget(request provisionRequest) string {
+	return request.ServerID + "@" + request.Environment
+}
+
+// provisionDryRun prints what --execute would create. It makes no provider
+// call, credential read, audit write or capacity reservation.
+func provisionDryRun(request provisionRequest, policy pilotcapacity.Policy, checked checkedProvision, stdout io.Writer) error {
+	if request.Confirmation != "" {
+		return errors.New("--confirm-create requires --execute")
 	}
-	if confirmation != expectedConfirmation {
-		return fmt.Errorf("Vultr create not started: --confirm-create must exactly match %q", expectedConfirmation)
+	if request.OperationID != "" {
+		return errors.New("--operation-id requires --execute")
 	}
-	if operationID == "" {
-		operationID, err = newOperationID()
+	fmt.Fprintln(stdout, "Dry run: no provider API call, credential read, or capacity reservation was made.")
+	fmt.Fprintf(stdout, "Would create one managed Vultr VM: server=%s environment=%s group=%s region=%s plan=%s os_id=%d\n", request.ServerID, request.Environment, checked.groupID, request.Region, request.Plan, checked.osID)
+	fmt.Fprintf(stdout, "Bootstrap startup script ID: %s\nBootstrap SHA-256: %s\n", request.StartupScriptID, request.StartupScriptSHA256)
+	fmt.Fprintf(stdout, "Firewall group %s must admit SSH only from %s; this is checked before the create.\n", request.Access.FirewallGroupID, checked.controller)
+	fmt.Fprintln(stdout, "A single-use SSH host key will be generated for this VM; only its public half is stored.")
+	fmt.Fprintf(stdout, "Configured hard limit: %d controller-owned VM(s).\n", policy.MaxInstancesTotal)
+	fmt.Fprintf(stdout, "To create it, add --execute --confirm-create %s.\n", provisionTarget(request))
+	return nil
+}
+
+// confirmProvisionCreate requires the exact --confirm-create and returns the
+// operation ID to use: the given one, or a new one.
+func confirmProvisionCreate(request provisionRequest) (string, error) {
+	expected := provisionTarget(request)
+	if request.Confirmation != expected {
+		return "", fmt.Errorf("Vultr create not started: --confirm-create must exactly match %q", expected)
+	}
+	if request.OperationID == "" {
+		operationID, err := newOperationID()
 		if err != nil {
-			return fmt.Errorf("create operation ID: %w", err)
+			return "", fmt.Errorf("create operation ID: %w", err)
 		}
-	} else if !safeOperationID.MatchString(operationID) {
-		return errors.New("--operation-id must be 32 lowercase hexadecimal characters")
+		return operationID, nil
 	}
+	if !safeOperationID.MatchString(request.OperationID) {
+		return "", errors.New("--operation-id must be 32 lowercase hexadecimal characters")
+	}
+	return request.OperationID, nil
+}
+
+// provisionRun is one confirmed provision operation and its audit trail.
+type provisionRun struct {
+	auditPath   string
+	operationID string
+	target      string
+	stdout      io.Writer
+	stderr      io.Writer
+}
+
+func (run provisionRun) audit(event, detail string) error {
+	return appendAuditEvent(run.auditPath, run.operationID, event, "provision", run.target, "vultr.instance.create", detail)
+}
+
+// recordSetupFailure audits a failure before the provisioner ran and returns
+// cause behind prefix.
+func (run provisionRun) recordSetupFailure(prefix string, cause error, detail string) error {
+	if auditErr := run.audit("provision_failed", detail); auditErr != nil {
+		return fmt.Errorf("%s%v; audit update also failed: %w", prefix, cause, auditErr)
+	}
+	if prefix == "" {
+		return cause
+	}
+	return fmt.Errorf("%s%w", prefix, cause)
+}
+
+// executeProvision audits the request, loads the credentials and capacity
+// store, and runs the capacity-checked create.
+func executeProvision(request provisionRequest, env provisionEnvironment, checked checkedProvision, operationID string) error {
 	auditPath, err := defaultAuditPath()
 	if err != nil {
 		return fmt.Errorf("resolve audit log path: %w", err)
 	}
-	auditTarget := serverID + "@" + environment
-	auditDetail := fmt.Sprintf("region=%s plan=%s os_id=%d startup_script_id=%s startup_script_sha256=%s", region, plan, providerOSID, startupScriptID, startupScriptSHA256)
-	if err := appendAuditEvent(auditPath, operationID, "provision_requested", "provision", auditTarget, "vultr.instance.create", auditDetail); err != nil {
+	run := provisionRun{auditPath: auditPath, operationID: operationID, target: provisionTarget(request), stdout: env.stdout, stderr: env.stderr}
+	auditDetail := fmt.Sprintf("region=%s plan=%s os_id=%d startup_script_id=%s startup_script_sha256=%s", request.Region, request.Plan, checked.osID, request.StartupScriptID, request.StartupScriptSHA256)
+	if err := run.audit("provision_requested", auditDetail); err != nil {
 		return fmt.Errorf("Vultr create not started: could not persist the audit event: %w", err)
 	}
 	resolver, err := credential.FromEnvironment()
 	if err != nil {
-		if auditErr := appendAuditEvent(auditPath, operationID, "provision_failed", "provision", auditTarget, "vultr.instance.create", "systemd credential directory unavailable"); auditErr != nil {
-			return fmt.Errorf("load systemd credential directory: %v; audit update also failed: %w", err, auditErr)
-		}
-		return fmt.Errorf("load systemd credential directory: %w", err)
+		return run.recordSetupFailure("load systemd credential directory: ", err, "systemd credential directory unavailable")
 	}
-	controllerKey, err := controllerPublicKey(resolver, access.SSHCredentialRef)
+	controllerKey, err := controllerPublicKey(resolver, request.Access.SSHCredentialRef)
 	if err != nil {
-		if auditErr := appendAuditEvent(auditPath, operationID, "provision_failed", "provision", auditTarget, "vultr.instance.create", "controller SSH key credential unavailable"); auditErr != nil {
-			return fmt.Errorf("%v; audit update also failed: %w", err, auditErr)
-		}
-		return err
+		return run.recordSetupFailure("", err, "controller SSH key credential unavailable")
 	}
-	repository, err := store.OpenBolt(statePath)
+	repository, err := store.OpenBolt(env.statePath)
 	if err != nil {
-		if auditErr := appendAuditEvent(auditPath, operationID, "provision_failed", "provision", auditTarget, "vultr.instance.create", "capacity store unavailable"); auditErr != nil {
-			return fmt.Errorf("open capacity store: %v; audit update also failed: %w", err, auditErr)
-		}
-		return fmt.Errorf("open capacity store: %w", err)
+		return run.recordSetupFailure("open capacity store: ", err, "capacity store unavailable")
 	}
 	defer repository.Close()
-	service, err := pilotvultr.NewProvisioner(repository, policy, vultrapi.NewClient(nil), resolver, credentialRef)
+	service, err := pilotvultr.NewProvisioner(repository, env.policy, vultrapi.NewClient(nil), resolver, request.CredentialRef)
 	if err != nil {
 		return err
 	}
 	input := pilotvultr.CreateRequest{
-		OperationID: operationID, ServerID: serverID, Environment: environment,
-		Region: region, Plan: plan, OSID: osID, Hostname: hostname,
-		SSHKeyIDs: append([]string(nil), sshKeyIDs...), StartupScriptID: startupScriptID,
-		StartupScriptSHA256: startupScriptSHA256, FirewallGroupID: access.FirewallGroupID,
-		ControllerIP: controllerAddress, ControllerSSHPublicKey: controllerKey,
+		OperationID: operationID, ServerID: request.ServerID, Environment: request.Environment,
+		Region: request.Region, Plan: request.Plan, OSID: request.OSID, Hostname: request.Hostname,
+		SSHKeyIDs: append([]string(nil), request.SSHKeyIDs...), StartupScriptID: request.StartupScriptID,
+		StartupScriptSHA256: request.StartupScriptSHA256, FirewallGroupID: request.Access.FirewallGroupID,
+		ControllerIP: checked.controller, ControllerSSHPublicKey: controllerKey,
 	}
-	fmt.Fprintf(stdout, "Operation ID: %s\n", operationID)
-	fmt.Fprintf(stdout, "Submitting capacity-checked Vultr create for %s in %s.\n", serverID, environment)
-	fmt.Fprintln(stdout, "This creates a billable VM; game installation and readiness are not part of this command.")
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	fmt.Fprintf(env.stdout, "Operation ID: %s\n", operationID)
+	fmt.Fprintf(env.stdout, "Submitting capacity-checked Vultr create for %s in %s.\n", request.ServerID, request.Environment)
+	fmt.Fprintln(env.stdout, "This creates a billable VM; game installation and readiness are not part of this command.")
+	ctx, cancel := context.WithTimeout(context.Background(), request.Timeout)
 	defer cancel()
 	reservation, err := service.Provision(ctx, input)
-	if errors.Is(err, pilotvultr.ErrOutcomeUnknown) {
-		fmt.Fprintf(stderr, "The slot remains occupied. Re-run with --operation-id %s and the same create parameters to reconcile; the service will not resend an uncertain create.\n", operationID)
-	}
 	if err != nil {
-		event := "provision_failed"
-		detail := "create request did not complete"
-		switch {
-		case errors.Is(err, pilotvultr.ErrOutcomeUnknown):
-			event, detail = "outcome_unknown", "provider result requires reconciliation; capacity remains occupied"
-		case errors.Is(err, pilotvultr.ErrProviderRejected):
-			event, detail = "provider_rejected", "provider definitively rejected create; reservation was released"
-		case errors.Is(err, store.ErrCapacityReached), errors.Is(err, store.ErrCapacityOccupied), errors.Is(err, pilotcapacity.ErrUnsupportedEnvironment):
-			event, detail = "provision_rejected", "capacity policy rejected the request before provider dispatch"
-		case errors.Is(err, pilotvultr.ErrSSHKeyMismatch), errors.Is(err, pilotvultr.ErrFirewall), errors.Is(err, pilotvultr.ErrBootstrapScript):
-			event, detail = "provision_rejected", "pre-create check failed; nothing was sent to Vultr"
-		}
-		if auditErr := appendAuditEvent(auditPath, operationID, event, "provision", auditTarget, "vultr.instance.create", detail); auditErr != nil {
-			return fmt.Errorf("provision failed (%v); audit update also failed: %w", err, auditErr)
-		}
-		if errors.Is(err, store.ErrCapacityReached) || errors.Is(err, store.ErrCapacityOccupied) || errors.Is(err, pilotcapacity.ErrUnsupportedEnvironment) {
-			fmt.Fprintf(stderr, "Provision request rejected before provider create. Operation ID: %s\n", operationID)
-		}
-		return err
+		return run.recordProvisionFailure(err)
 	}
-	if err := appendAuditEvent(auditPath, operationID, "provision_confirmed", "provision", auditTarget, "vultr.instance.create", "exact Vultr instance ID and managed label were observed"); err != nil {
+	return run.reportConfirmed(reservation)
+}
+
+// rejectedByCapacity reports whether the capacity policy refused the
+// request before anything was sent to the provider.
+func rejectedByCapacity(err error) bool {
+	return errors.Is(err, store.ErrCapacityReached) || errors.Is(err, store.ErrCapacityOccupied) || errors.Is(err, pilotcapacity.ErrUnsupportedEnvironment)
+}
+
+// failedPreCreateCheck reports whether a check made before the create (SSH
+// keys, firewall, bootstrap script) failed, so nothing was sent.
+func failedPreCreateCheck(err error) bool {
+	return errors.Is(err, pilotvultr.ErrSSHKeyMismatch) || errors.Is(err, pilotvultr.ErrFirewall) || errors.Is(err, pilotvultr.ErrBootstrapScript)
+}
+
+// provisionFailureEvent names the audit event and detail for a failed
+// Provision call.
+func provisionFailureEvent(err error) (string, string) {
+	switch {
+	case errors.Is(err, pilotvultr.ErrOutcomeUnknown):
+		return "outcome_unknown", "provider result requires reconciliation; capacity remains occupied"
+	case errors.Is(err, pilotvultr.ErrProviderRejected):
+		return "provider_rejected", "provider definitively rejected create; reservation was released"
+	case rejectedByCapacity(err):
+		return "provision_rejected", "capacity policy rejected the request before provider dispatch"
+	case failedPreCreateCheck(err):
+		return "provision_rejected", "pre-create check failed; nothing was sent to Vultr"
+	default:
+		return "provision_failed", "create request did not complete"
+	}
+}
+
+func (run provisionRun) recordProvisionFailure(err error) error {
+	if errors.Is(err, pilotvultr.ErrOutcomeUnknown) {
+		fmt.Fprintf(run.stderr, "The slot remains occupied. Re-run with --operation-id %s and the same create parameters to reconcile; the service will not resend an uncertain create.\n", run.operationID)
+	}
+	event, detail := provisionFailureEvent(err)
+	if auditErr := run.audit(event, detail); auditErr != nil {
+		return fmt.Errorf("provision failed (%v); audit update also failed: %w", err, auditErr)
+	}
+	if rejectedByCapacity(err) {
+		fmt.Fprintf(run.stderr, "Provision request rejected before provider create. Operation ID: %s\n", run.operationID)
+	}
+	return err
+}
+
+func (run provisionRun) reportConfirmed(reservation store.CapacityReservation) error {
+	if err := run.audit("provision_confirmed", "exact Vultr instance ID and managed label were observed"); err != nil {
 		return fmt.Errorf("Vultr instance %s is present but the audit event could not be persisted: %w", reservation.ProviderInstanceID, err)
 	}
-	fmt.Fprintf(stdout, "Vultr instance %s is confirmed present and counted (capacity state %s).\n", reservation.ProviderInstanceID, reservation.State)
-	fmt.Fprintln(stdout, "Provider presence is confirmed; game readiness is not verified.")
-	fmt.Fprintf(stdout, "Next: gsc-pilot handoff --operation-id %s --wasabi-region <region> verifies the VM's host key, then sends the Wasabi restore credentials.\n", operationID)
+	fmt.Fprintf(run.stdout, "Vultr instance %s is confirmed present and counted (capacity state %s).\n", reservation.ProviderInstanceID, reservation.State)
+	fmt.Fprintln(run.stdout, "Provider presence is confirmed; game readiness is not verified.")
+	fmt.Fprintf(run.stdout, "Next: gsc-pilot handoff --operation-id %s --wasabi-region <region> verifies the VM's host key, then sends the Wasabi restore credentials.\n", run.operationID)
 	return nil
 }
 
