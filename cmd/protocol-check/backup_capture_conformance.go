@@ -36,36 +36,28 @@ func evaluateBackupCapture(pkg *protocolPackage, fixture map[string]any) (map[st
 func evaluateBackupCaptureCase(pkg *protocolPackage, fixture, input, evaluation map[string]any) map[string]any {
 	bc := newBackupCaptureCase(input, evaluation)
 	request := bc.request
-	inputSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-capture-input", request) == nil
-	outputSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-capture-output", bc.output) == nil
-	preparationSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-prepare-output", bc.preparation) == nil
-	requestContextSchemaValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:common:request-context", bc.requestContext) == nil
-	transferSchemaValid := len(bc.streamTransfers) == 1 && pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:storage:storage-transfer-reference", asObject(bc.streamTransfers[0])) == nil
-	schemasValid := inputSchemaValid && outputSchemaValid && requestContextSchemaValid && transferSchemaValid
+	schemas := bc.schemaChecks(pkg)
 	target := asObject(request["target"])
 	requestTargetBound := stringValue(target, "server_id") == stringValue(bc.requestContext, "server_id") &&
 		stringValue(target, "environment_id") == stringValue(bc.requestContext, "environment_id")
-	preparationBound := preparationSchemaValid && backupCapturePreparationBound(request, bc.preparation)
-	transferAuthorized := transferSchemaValid && backupCaptureTransferAuthorized(fixture, input, bc.requestContext, request, bc.scope, bc.transfer)
+	preparationBound := schemas.preparation && backupCapturePreparationBound(request, bc.preparation)
+	transferAuthorized := schemas.transfer && backupCaptureTransferAuthorized(fixture, input, bc.requestContext, request, bc.scope, bc.transfer)
 	bindingExact := backupCaptureBindingExact(request, bc.output)
 	transferID := stringValue(bc.transfer, "transfer_id")
-
 	streamBytes := []byte(stringValue(evaluation, "stream_bytes"))
 	stream := checkBackupCaptureStream(bc, evaluation, streamBytes)
 	outcome := stringValue(bc.output, "outcome")
-	dispatchPermitted := inputSchemaValid && requestContextSchemaValid && transferSchemaValid &&
+	dispatchPermitted := schemas.input && schemas.requestContext && schemas.transfer &&
 		requestTargetBound && preparationBound && transferAuthorized
-	captureAccepted := schemasValid && requestTargetBound && preparationBound && transferAuthorized && bindingExact &&
-		outcome == "captured" && stream.completed && stream.withinBounds && stream.checksumValid
-	requiresReconciliation := !outputSchemaValid || outcome == "outcome_unknown" ||
-		outcome == "captured" && !captureAccepted ||
-		outcome == "rejected" && (!bindingExact || !dispatchPermitted || len(streamBytes) != 0)
+	captureAccepted := schemas.all() && requestTargetBound && preparationBound && transferAuthorized && bindingExact &&
+		outcome == "captured" && stream.accepted()
+	requiresReconciliation := backupCaptureNeedsReconciliation(schemas.output, outcome, captureAccepted, bindingExact, dispatchPermitted, len(streamBytes))
 	watermark := asObject(bc.output["write_watermark"])
 	watermarkBound := len(watermark) > 0 && stringValue(watermark, "data_generation_id") == stringValue(request, "data_generation_id")
 
 	return map[string]any{
-		"schemas_valid":                         schemasValid,
-		"preparation_result_schema_valid":       preparationSchemaValid,
+		"schemas_valid":                         schemas.all(),
+		"preparation_result_schema_valid":       schemas.preparation,
 		"preparation_bound":                     preparationBound,
 		"dispatch_permitted":                    dispatchPermitted,
 		"request_target_bound":                  requestTargetBound,
@@ -82,6 +74,45 @@ func evaluateBackupCaptureCase(pkg *protocolPackage, fixture, input, evaluation 
 		"requires_reconciliation":               requiresReconciliation,
 		"retry_permitted":                       false,
 		"destruction_current_generation_proven": backupCaptureCurrentGenerationProven(captureAccepted, evaluation, request),
+	}
+}
+
+// backupCaptureSchemas records which capture messages match their schemas.
+// The transfer is valid only when there is exactly one.
+type backupCaptureSchemas struct {
+	input, output, preparation, requestContext, transfer bool
+}
+
+func (bc backupCaptureCase) schemaChecks(pkg *protocolPackage) backupCaptureSchemas {
+	return backupCaptureSchemas{
+		input:          pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-capture-input", bc.request) == nil,
+		output:         pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-capture-output", bc.output) == nil,
+		preparation:    pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:game:backup-prepare-output", bc.preparation) == nil,
+		requestContext: pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:common:request-context", bc.requestContext) == nil,
+		transfer: len(bc.streamTransfers) == 1 &&
+			pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:storage:storage-transfer-reference", asObject(bc.streamTransfers[0])) == nil,
+	}
+}
+
+// all excludes the preparation result, which is reported separately.
+func (s backupCaptureSchemas) all() bool {
+	return s.input && s.output && s.requestContext && s.transfer
+}
+
+// backupCaptureNeedsReconciliation: an invalid or unknown result, a
+// "captured" result that was not accepted, or a "rejected" result that is
+// unbound, was never permitted, or still streamed bytes, must be reconciled
+// before anything else happens.
+func backupCaptureNeedsReconciliation(outputValid bool, outcome string, captureAccepted, bindingExact, dispatchPermitted bool, streamedBytes int) bool {
+	switch {
+	case !outputValid || outcome == "outcome_unknown":
+		return true
+	case outcome == "captured":
+		return !captureAccepted
+	case outcome == "rejected":
+		return !bindingExact || !dispatchPermitted || streamedBytes != 0
+	default:
+		return false
 	}
 }
 
@@ -134,6 +165,12 @@ type backupCaptureStream struct {
 	completed, withinBounds, checksumValid bool
 }
 
+// accepted: the stream finished, stayed within its bounds, and matches the
+// reported checksum.
+func (s backupCaptureStream) accepted() bool {
+	return s.completed && s.withinBounds && s.checksumValid
+}
+
 func checkBackupCaptureStream(bc backupCaptureCase, evaluation map[string]any, streamBytes []byte) backupCaptureStream {
 	maximumBytes, maximumErr := integerValue(bc.transfer["maximum_bytes"])
 	reportedBytes, sizeErr := integerValue(bc.output["size_bytes"])
@@ -168,6 +205,13 @@ func backupCaptureCurrentGenerationProven(captureAccepted bool, evaluation, requ
 }
 
 func backupCaptureTransferAuthorized(fixture, fixtureInput, requestContext, request, scope, transfer map[string]any) bool {
+	return backupCaptureTransferTimely(fixtureInput, requestContext, transfer) &&
+		backupCaptureScopeMatches(fixture, fixtureInput, requestContext, request, scope, transfer)
+}
+
+// backupCaptureTransferTimely: the transfer is unexpired, lives at most
+// five minutes, and expires no later than the request deadline.
+func backupCaptureTransferTimely(fixtureInput, requestContext, transfer map[string]any) bool {
 	expiry, err := time.Parse(time.RFC3339, stringValue(transfer, "expires_at"))
 	if err != nil {
 		return false
@@ -177,11 +221,17 @@ func backupCaptureTransferAuthorized(fixture, fixtureInput, requestContext, requ
 		return false
 	}
 	deadline, err := time.Parse(time.RFC3339, stringValue(requestContext, "deadline"))
-	if err != nil || expiry.After(deadline) {
-		return false
-	}
+	return err == nil && !expiry.After(deadline)
+}
+
+// backupCaptureScopeMatches: the unconsumed transfer scope grants exactly
+// this adapter-to-controller transfer, size and expiry, for this operation
+// step, capability, adapter, target, data generation, data set and
+// capture.
+func backupCaptureScopeMatches(fixture, fixtureInput, requestContext, request, scope, transfer map[string]any) bool {
 	maximumBytes, maxErr := integerValue(transfer["maximum_bytes"])
 	scopeMaximumBytes, scopeMaxErr := integerValue(scope["maximum_bytes"])
+	target := asObject(request["target"])
 	return maxErr == nil && scopeMaxErr == nil && maximumBytes == scopeMaximumBytes &&
 		stringValue(transfer, "direction") == "adapter_to_controller" &&
 		stringValue(scope, "direction") == stringValue(transfer, "direction") &&
@@ -195,8 +245,8 @@ func backupCaptureTransferAuthorized(fixture, fixtureInput, requestContext, requ
 		stringValue(scope, "data_generation_id") == stringValue(request, "data_generation_id") &&
 		stringValue(scope, "data_set_id") == stringValue(request, "data_set_id") &&
 		stringValue(scope, "capture_id") == stringValue(request, "capture_id") &&
-		stringValue(requestContext, "server_id") == stringValue(asObject(request["target"]), "server_id") &&
-		stringValue(requestContext, "environment_id") == stringValue(asObject(request["target"]), "environment_id") &&
+		stringValue(requestContext, "server_id") == stringValue(target, "server_id") &&
+		stringValue(requestContext, "environment_id") == stringValue(target, "environment_id") &&
 		!backupCaptureBoolValue(scope["consumed"])
 }
 
