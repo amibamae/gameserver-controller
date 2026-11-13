@@ -970,6 +970,12 @@ func (e *Engine) preflight(record store.OperationRecord, step store.OperationSte
 	if !containsProtocol(descriptor.ProtocolVersions, record.ProtocolVersion) {
 		return adapter.Capability{}, errors.New("recorded adapter does not support operation protocol version")
 	}
+	return e.recordedCapability(descriptor, step, input)
+}
+
+// recordedCapability finds the step's exact capability in the adapter
+// descriptor and checks the step input against its loaded schemas.
+func (e *Engine) recordedCapability(descriptor adapter.Descriptor, step store.OperationStep, input json.RawMessage) (adapter.Capability, error) {
 	for _, capability := range descriptor.Capabilities {
 		if capability.Name != step.CapabilityName {
 			continue
