@@ -116,50 +116,16 @@ func DecodePolicy(reader io.Reader) (Policy, error) {
 }
 
 func policyFromDocument(document policyDocument) (Policy, error) {
-	if document.PolicyID != "supervised-pilot-vm-capacity" || document.PolicyVersion < 2 || document.MaxInstancesTotal < 1 {
-		return Policy{}, fmt.Errorf("%w: invalid identity, version, or total limit", ErrInvalidPolicy)
-	}
-	if document.Enforcement.Mode != "declarative" && document.Enforcement.Mode != "runtime" {
-		return Policy{}, fmt.Errorf("%w: enforcement mode must be declarative or runtime", ErrInvalidPolicy)
-	}
-	if document.Enforcement.RuntimeEnforced == nil || !*document.Enforcement.RuntimeEnforced {
-		if document.Enforcement.Mode == "runtime" {
-			return Policy{}, fmt.Errorf("%w: runtime enforcement mode requires runtime_enforced=true", ErrInvalidPolicy)
+	for _, check := range []func(policyDocument) error{
+		checkPolicyIdentity,
+		checkPolicyEnforcement,
+		checkPolicyOwnership,
+		checkPolicyCreateRules,
+		checkPolicyCapacityGroups,
+	} {
+		if err := check(document); err != nil {
+			return Policy{}, err
 		}
-	} else if document.Enforcement.Mode == "declarative" {
-		return Policy{}, fmt.Errorf("%w: declarative mode requires runtime_enforced=false", ErrInvalidPolicy)
-	}
-	ownership := document.OwnershipScope
-	if !isTrue(ownership.CapacityCountsOnlyControllerInstances) || !isTrue(ownership.UnmanagedProductionMayRemainLive) ||
-		!isTrue(ownership.ProductionAdoptionIsOptional) || !isTrue(ownership.ProviderCreatedInstancesManaged) {
-		return Policy{}, fmt.Errorf("%w: ownership scope must preserve controller-only capacity and optional production adoption", ErrInvalidPolicy)
-	}
-	create := document.CreatePolicy
-	if !isTrue(create.ReserveBeforeProviderCreate) || !isTrue(create.ReservationConsumesCapacity) ||
-		!isTrue(create.RejectDuplicateOrOccupied) || !isTrue(create.RejectOverTotalLimit) || !isTrue(create.RejectUnsupportedEnvironment) ||
-		!isTrue(create.Occupancy.CountManagedUntilConfirmed) || !isTrue(create.Occupancy.CountUnknownCreate) ||
-		!isTrue(create.Occupancy.CountUnknownDestroy) || !sameStates(create.Occupancy.ReleaseOnlyAfter, []string{"absent", "destroyed"}) {
-		return Policy{}, fmt.Errorf("%w: create and occupancy rules are incomplete", ErrInvalidPolicy)
-	}
-	if len(document.CapacityGroups) == 0 {
-		return Policy{}, fmt.Errorf("%w: capacity groups are required", ErrInvalidPolicy)
-	}
-	seenEnvironments := map[string]bool{}
-	groupTotal := 0
-	for groupID, group := range document.CapacityGroups {
-		if groupID == "" || group.MaxInstances < 1 || len(group.AcceptedEnvironments) == 0 {
-			return Policy{}, fmt.Errorf("%w: invalid capacity group %q", ErrInvalidPolicy, groupID)
-		}
-		groupTotal += group.MaxInstances
-		for _, environment := range group.AcceptedEnvironments {
-			if environment == "" || seenEnvironments[environment] {
-				return Policy{}, fmt.Errorf("%w: empty or duplicate environment %q", ErrInvalidPolicy, environment)
-			}
-			seenEnvironments[environment] = true
-		}
-	}
-	if document.MaxInstancesTotal > groupTotal {
-		return Policy{}, fmt.Errorf("%w: total limit exceeds the sum of group capacities", ErrInvalidPolicy)
 	}
 	return Policy{
 		PolicyID: document.PolicyID, PolicyVersion: document.PolicyVersion,
@@ -168,6 +134,82 @@ func policyFromDocument(document policyDocument) (Policy, error) {
 		CapacityGroups:    cloneGroups(document.CapacityGroups),
 		ReleasedStates:    map[string]bool{"absent": true, "destroyed": true},
 	}, nil
+}
+
+func checkPolicyIdentity(document policyDocument) error {
+	if document.PolicyID != "supervised-pilot-vm-capacity" || document.PolicyVersion < 2 || document.MaxInstancesTotal < 1 {
+		return fmt.Errorf("%w: invalid identity, version, or total limit", ErrInvalidPolicy)
+	}
+	return nil
+}
+
+// checkPolicyEnforcement requires the mode and the runtime_enforced flag to
+// agree: runtime mode is enforced, declarative mode is not.
+func checkPolicyEnforcement(document policyDocument) error {
+	if document.Enforcement.Mode != "declarative" && document.Enforcement.Mode != "runtime" {
+		return fmt.Errorf("%w: enforcement mode must be declarative or runtime", ErrInvalidPolicy)
+	}
+	if document.Enforcement.RuntimeEnforced == nil || !*document.Enforcement.RuntimeEnforced {
+		if document.Enforcement.Mode == "runtime" {
+			return fmt.Errorf("%w: runtime enforcement mode requires runtime_enforced=true", ErrInvalidPolicy)
+		}
+	} else if document.Enforcement.Mode == "declarative" {
+		return fmt.Errorf("%w: declarative mode requires runtime_enforced=false", ErrInvalidPolicy)
+	}
+	return nil
+}
+
+// checkPolicyOwnership requires capacity to count only controller-owned
+// instances, an unmanaged production server to be allowed to stay live, and
+// production adoption to stay optional.
+func checkPolicyOwnership(document policyDocument) error {
+	ownership := document.OwnershipScope
+	if !isTrue(ownership.CapacityCountsOnlyControllerInstances) || !isTrue(ownership.UnmanagedProductionMayRemainLive) ||
+		!isTrue(ownership.ProductionAdoptionIsOptional) || !isTrue(ownership.ProviderCreatedInstancesManaged) {
+		return fmt.Errorf("%w: ownership scope must preserve controller-only capacity and optional production adoption", ErrInvalidPolicy)
+	}
+	return nil
+}
+
+// checkPolicyCreateRules requires every create safeguard: reserve before the
+// provider call, count reservations and unresolved outcomes as occupied, and
+// release a slot only after confirmed absence or destruction.
+func checkPolicyCreateRules(document policyDocument) error {
+	create := document.CreatePolicy
+	if !isTrue(create.ReserveBeforeProviderCreate) || !isTrue(create.ReservationConsumesCapacity) ||
+		!isTrue(create.RejectDuplicateOrOccupied) || !isTrue(create.RejectOverTotalLimit) || !isTrue(create.RejectUnsupportedEnvironment) ||
+		!isTrue(create.Occupancy.CountManagedUntilConfirmed) || !isTrue(create.Occupancy.CountUnknownCreate) ||
+		!isTrue(create.Occupancy.CountUnknownDestroy) || !sameStates(create.Occupancy.ReleaseOnlyAfter, []string{"absent", "destroyed"}) {
+		return fmt.Errorf("%w: create and occupancy rules are incomplete", ErrInvalidPolicy)
+	}
+	return nil
+}
+
+// checkPolicyCapacityGroups requires at least one group, a positive limit and
+// at least one environment per group, each environment in only one group, and
+// a total limit no larger than the groups' combined capacity.
+func checkPolicyCapacityGroups(document policyDocument) error {
+	if len(document.CapacityGroups) == 0 {
+		return fmt.Errorf("%w: capacity groups are required", ErrInvalidPolicy)
+	}
+	seenEnvironments := map[string]bool{}
+	groupTotal := 0
+	for groupID, group := range document.CapacityGroups {
+		if groupID == "" || group.MaxInstances < 1 || len(group.AcceptedEnvironments) == 0 {
+			return fmt.Errorf("%w: invalid capacity group %q", ErrInvalidPolicy, groupID)
+		}
+		groupTotal += group.MaxInstances
+		for _, environment := range group.AcceptedEnvironments {
+			if environment == "" || seenEnvironments[environment] {
+				return fmt.Errorf("%w: empty or duplicate environment %q", ErrInvalidPolicy, environment)
+			}
+			seenEnvironments[environment] = true
+		}
+	}
+	if document.MaxInstancesTotal > groupTotal {
+		return fmt.Errorf("%w: total limit exceeds the sum of group capacities", ErrInvalidPolicy)
+	}
+	return nil
 }
 
 func (p Policy) Validate() error {
