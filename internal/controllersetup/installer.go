@@ -198,7 +198,7 @@ func ApplyInstallBundle(ctx context.Context, root string, host Host, bundle Inst
 		return errors.New("installation root must be an existing real directory")
 	}
 	for _, dir := range bundle.Directories {
-		if dir.Mode.Perm()&0o022 != 0 || dir.Mode&0o7000 != 0 {
+		if unsafeInstallMode(dir.Mode) {
 			return errors.New("installation directory permissions are unsafe")
 		}
 		path, err := mapInstallPath(root, dir.Path)
@@ -216,7 +216,7 @@ func ApplyInstallBundle(ctx context.Context, root string, host Host, bundle Inst
 		}
 	}
 	for _, file := range bundle.Files {
-		if file.Mode.Perm()&0o022 != 0 || file.Mode&0o7000 != 0 {
+		if unsafeInstallMode(file.Mode) {
 			return errors.New("installation file permissions are unsafe")
 		}
 		if !accountNamePattern.MatchString(file.Owner) || !accountNamePattern.MatchString(file.Group) {
@@ -270,6 +270,14 @@ func ApplyInstallBundle(ctx context.Context, root string, host Host, bundle Inst
 		return errors.New("systemd daemon reload failed; newly installed files were removed")
 	}
 	return nil
+}
+
+// unsafeInstallMode reports a group- or world-writable mode, or any setuid,
+// setgid, or sticky bit. Go's FileMode carries those as fs.ModeSetuid,
+// fs.ModeSetgid, and fs.ModeSticky, which os.Chmod applies; the raw Unix bits
+// 0o7000 are rejected as well.
+func unsafeInstallMode(mode fs.FileMode) bool {
+	return mode.Perm()&0o022 != 0 || mode&(fs.ModeSetuid|fs.ModeSetgid|fs.ModeSticky|0o7000) != 0
 }
 
 func preflightInstallFile(path string, file InstallFile) error {
