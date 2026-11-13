@@ -332,76 +332,11 @@ func (r *Registry) Invoke(ctx context.Context, adapterID string, request InvokeR
 }
 
 func (r *Registry) invoke(ctx context.Context, adapterID string, request InvokeRequest) (InvokeResponse, error) {
-	if r == nil {
-		return InvokeResponse{}, ErrAdapterNotFound
-	}
-	r.mu.RLock()
-	registered, ok := r.adapters[adapterID]
-	r.mu.RUnlock()
-	if !ok {
-		return InvokeResponse{}, ErrAdapterNotFound
-	}
-	capability, ok := registered.capabilities[request.Params.Capability]
-	if !ok {
-		return InvokeResponse{}, ErrUnsupportedCapability
-	}
-	if ctx == nil {
-		return InvokeResponse{}, errors.New("invocation context is required")
+	registered, capability, err := r.prepareInvocation(ctx, adapterID, request)
+	if err != nil {
+		return InvokeResponse{}, err
 	}
 	transfers := request.Params.RequestContext.StreamTransfers
-	if capability.Name == "game.backup.capture" && len(transfers) != 1 {
-		return InvokeResponse{}, errors.New("backup capture requires one stream transfer")
-	}
-	if len(transfers) > 0 {
-		direction, _ := capability.Constraints["stream_transfer_direction"].(string)
-		if direction == "" || len(registered.descriptor.StreamTransportProfiles) == 0 {
-			return InvokeResponse{}, errors.New("capability does not declare stream transport")
-		}
-		seenTransferIDs := make(map[string]struct{}, len(transfers))
-		for _, transfer := range transfers {
-			if _, duplicate := seenTransferIDs[transfer.TransferID]; duplicate {
-				return InvokeResponse{}, errors.New("transient stream transfer IDs must be unique within an invocation")
-			}
-			seenTransferIDs[transfer.TransferID] = struct{}{}
-			if transfer.Direction != direction || !transfer.ExpiresAt.After(time.Now()) || transfer.ExpiresAt.After(request.Params.RequestContext.Deadline) || (capability.Name == "game.backup.capture" && time.Until(transfer.ExpiresAt) > 5*time.Minute) {
-				return InvokeResponse{}, errors.New("invalid transient stream transfer")
-			}
-		}
-	}
-	if request.Params.ProtocolVersion != r.version {
-		return InvokeResponse{}, fmt.Errorf("request protocol version %q does not match selected version %q", request.Params.ProtocolVersion, r.version)
-	}
-	if request.Params.RequestContext.Deadline.IsZero() {
-		return InvokeResponse{}, errors.New("request context deadline is required")
-	}
-	if capability.Mutating && (request.Params.RequestContext.OperationID == "" || request.Params.RequestContext.StepID == "") {
-		return InvokeResponse{}, ErrMutatingContext
-	}
-	if request.ID != request.Params.RequestContext.RequestID {
-		return InvokeResponse{}, errors.New("JSON-RPC ID must match request_context.request_id")
-	}
-	encodedRequest, err := json.Marshal(request)
-	if err != nil {
-		return InvokeResponse{}, fmt.Errorf("encode adapter request: %w", err)
-	}
-	requestSchema := "urn:gameserver-controller:" + r.version + ":rpc:adapter-invoke-request"
-	if err := r.schemas.ValidateJSON(requestSchema, encodedRequest); err != nil {
-		return InvokeResponse{}, fmt.Errorf("invalid adapter invocation request: %w", err)
-	}
-	if err := r.schemas.ValidateJSON(capability.InputSchemaURI, request.Params.Input); err != nil {
-		return InvokeResponse{}, fmt.Errorf("invalid input for capability %q: %w", capability.Name, err)
-	}
-	if len(transfers) > 0 {
-		var input any
-		if json.Unmarshal(request.Params.Input, &input) != nil {
-			return InvokeResponse{}, errors.New("invalid streamed input")
-		}
-		for _, transfer := range transfers {
-			if containsStreamCredential(input, transfer.TransferID) {
-				return InvokeResponse{}, errors.New("stream credential in durable input")
-			}
-		}
-	}
 	inputCopy := append(json.RawMessage(nil), request.Params.Input...)
 	request.Params.Input = inputCopy
 	request.Params.RequestContext.StreamTransfers = cloneSlice(transfers)
@@ -417,42 +352,146 @@ func (r *Registry) invoke(ctx context.Context, adapterID string, request InvokeR
 	if err != nil {
 		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: err}
 	}
-	if response.JSONRPC != "2.0" || response.ID != request.ID {
-		return InvokeResponse{}, &InvocationError{
-			MayHaveSideEffects: capability.Mutating,
-			Cause:              errors.New("adapter response JSON-RPC version or ID does not match the request"),
+	if err := r.checkResponse(capability, request.ID, transfers, response); err != nil {
+		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: err}
+	}
+	return response, nil
+}
+
+// prepareInvocation checks a request before the adapter is called: a
+// registered adapter and advertised capability, a context, valid stream
+// transfers, the selected protocol version, a deadline, an operation step
+// for mutating calls, matching JSON-RPC and request IDs, schema-valid request
+// and input, and no stream credential in the durable input.
+func (r *Registry) prepareInvocation(ctx context.Context, adapterID string, request InvokeRequest) (registeredAdapter, Capability, error) {
+	if r == nil {
+		return registeredAdapter{}, Capability{}, ErrAdapterNotFound
+	}
+	r.mu.RLock()
+	registered, ok := r.adapters[adapterID]
+	r.mu.RUnlock()
+	if !ok {
+		return registeredAdapter{}, Capability{}, ErrAdapterNotFound
+	}
+	capability, ok := registered.capabilities[request.Params.Capability]
+	if !ok {
+		return registeredAdapter{}, Capability{}, ErrUnsupportedCapability
+	}
+	if ctx == nil {
+		return registeredAdapter{}, Capability{}, errors.New("invocation context is required")
+	}
+	transfers := request.Params.RequestContext.StreamTransfers
+	if capability.Name == "game.backup.capture" && len(transfers) != 1 {
+		return registeredAdapter{}, Capability{}, errors.New("backup capture requires one stream transfer")
+	}
+	if err := checkStreamTransfers(capability, registered.descriptor.StreamTransportProfiles, request.Params.RequestContext, time.Now()); err != nil {
+		return registeredAdapter{}, Capability{}, err
+	}
+	if request.Params.ProtocolVersion != r.version {
+		return registeredAdapter{}, Capability{}, fmt.Errorf("request protocol version %q does not match selected version %q", request.Params.ProtocolVersion, r.version)
+	}
+	if request.Params.RequestContext.Deadline.IsZero() {
+		return registeredAdapter{}, Capability{}, errors.New("request context deadline is required")
+	}
+	if capability.Mutating && (request.Params.RequestContext.OperationID == "" || request.Params.RequestContext.StepID == "") {
+		return registeredAdapter{}, Capability{}, ErrMutatingContext
+	}
+	if request.ID != request.Params.RequestContext.RequestID {
+		return registeredAdapter{}, Capability{}, errors.New("JSON-RPC ID must match request_context.request_id")
+	}
+	encodedRequest, err := json.Marshal(request)
+	if err != nil {
+		return registeredAdapter{}, Capability{}, fmt.Errorf("encode adapter request: %w", err)
+	}
+	requestSchema := "urn:gameserver-controller:" + r.version + ":rpc:adapter-invoke-request"
+	if err := r.schemas.ValidateJSON(requestSchema, encodedRequest); err != nil {
+		return registeredAdapter{}, Capability{}, fmt.Errorf("invalid adapter invocation request: %w", err)
+	}
+	if err := r.schemas.ValidateJSON(capability.InputSchemaURI, request.Params.Input); err != nil {
+		return registeredAdapter{}, Capability{}, fmt.Errorf("invalid input for capability %q: %w", capability.Name, err)
+	}
+	if len(transfers) > 0 {
+		var input any
+		if json.Unmarshal(request.Params.Input, &input) != nil {
+			return registeredAdapter{}, Capability{}, errors.New("invalid streamed input")
+		}
+		if containsAnyStreamCredential(input, transfers) {
+			return registeredAdapter{}, Capability{}, errors.New("stream credential in durable input")
 		}
 	}
+	return registered, capability, nil
+}
+
+// checkStreamTransfers requires any stream transfers to use a capability that
+// declares stream transport, to have unique IDs, to flow in the declared
+// direction, and to expire after now but no later than the deadline (and,
+// for backup capture, within five minutes).
+func checkStreamTransfers(capability Capability, profiles []string, c RequestContext, now time.Time) error {
+	if len(c.StreamTransfers) == 0 {
+		return nil
+	}
+	direction, _ := capability.Constraints["stream_transfer_direction"].(string)
+	if direction == "" || len(profiles) == 0 {
+		return errors.New("capability does not declare stream transport")
+	}
+	seenTransferIDs := make(map[string]struct{}, len(c.StreamTransfers))
+	for _, transfer := range c.StreamTransfers {
+		if _, duplicate := seenTransferIDs[transfer.TransferID]; duplicate {
+			return errors.New("transient stream transfer IDs must be unique within an invocation")
+		}
+		seenTransferIDs[transfer.TransferID] = struct{}{}
+		if transfer.Direction != direction || !transfer.ExpiresAt.After(now) || transfer.ExpiresAt.After(c.Deadline) || (capability.Name == "game.backup.capture" && transfer.ExpiresAt.Sub(now) > 5*time.Minute) {
+			return errors.New("invalid transient stream transfer")
+		}
+	}
+	return nil
+}
+
+// checkResponse validates an adapter response: JSON-RPC version and ID, an
+// observation time, no stream credential when streams were used, and
+// schema-valid output and result. The caller wraps any error with the
+// capability's side-effect risk.
+func (r *Registry) checkResponse(capability Capability, requestID string, transfers []capturestream.Reference, response InvokeResponse) error {
+	if response.JSONRPC != "2.0" || response.ID != requestID {
+		return errors.New("adapter response JSON-RPC version or ID does not match the request")
+	}
 	if response.Result.ObservedAt.IsZero() {
-		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("adapter response observed_at is required")}
+		return errors.New("adapter response observed_at is required")
 	}
 	if len(transfers) > 0 {
 		encoded, encodeErr := json.Marshal(response)
 		if encodeErr != nil {
-			return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("invalid streamed response")}
+			return errors.New("invalid streamed response")
 		}
 		var decoded any
 		if json.Unmarshal(encoded, &decoded) != nil {
-			return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("invalid streamed response")}
+			return errors.New("invalid streamed response")
 		}
-		for _, transfer := range transfers {
-			if containsStreamCredential(decoded, transfer.TransferID) {
-				return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: errors.New("stream credential in adapter response")}
-			}
+		if containsAnyStreamCredential(decoded, transfers) {
+			return errors.New("stream credential in adapter response")
 		}
 	}
 	if err := r.schemas.ValidateJSON(capability.OutputSchemaURI, response.Result.Output); err != nil {
-		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: fmt.Errorf("invalid output for capability %q: %w", capability.Name, err)}
+		return fmt.Errorf("invalid output for capability %q: %w", capability.Name, err)
 	}
 	encodedResponse, err := json.Marshal(response)
 	if err != nil {
-		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: fmt.Errorf("encode adapter response: %w", err)}
+		return fmt.Errorf("encode adapter response: %w", err)
 	}
 	responseSchema := "urn:gameserver-controller:" + r.version + ":rpc:adapter-invoke-result"
 	if err := r.schemas.ValidateJSON(responseSchema, encodedResponse); err != nil {
-		return InvokeResponse{}, &InvocationError{MayHaveSideEffects: capability.Mutating, Cause: fmt.Errorf("invalid adapter response: %w", err)}
+		return fmt.Errorf("invalid adapter response: %w", err)
 	}
-	return response, nil
+	return nil
+}
+
+func containsAnyStreamCredential(value any, transfers []capturestream.Reference) bool {
+	for _, transfer := range transfers {
+		if containsStreamCredential(value, transfer.TransferID) {
+			return true
+		}
+	}
+	return false
 }
 
 func containsStreamCredential(value any, credential string) bool {
