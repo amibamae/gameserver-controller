@@ -522,113 +522,164 @@ func (w *ServerProvisionWorkflow) observeCreatedCapacity(operation store.Operati
 }
 
 func (w *ServerProvisionWorkflow) CheckPreconditions(ctx context.Context, operation store.OperationRecord, step store.OperationStep) error {
-	if ctx == nil || operation.OperationType != "server.provision" || operation.ProtocolVersion != w.schemas.ProtocolVersion() {
-		return errors.New("server.provision operation and context are required")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
+	server, request, err := w.provisionPreconditionState(ctx, operation)
 	if err != nil {
 		return err
 	}
-	server := stored.Record
-	if server.ServerID != operation.Target.ServerID || server.EnvironmentID != operation.Target.EnvironmentID {
-		return store.ErrLogicalServerTargetMismatch
-	}
-	var request provisionRequest
-	if json.Unmarshal(operation.RequestSnapshot.Parameters, &request) != nil {
-		return errors.New("persisted provision request cannot be decoded")
-	}
-	if step.StepID == provisionCompatibilityStep {
+	switch step.StepID {
+	case provisionCompatibilityStep:
 		if request.RestoreBackup == "" {
 			return errors.New("backup compatibility step is not part of this provision request")
 		}
 		return nil
+	case provisionCreateStep:
+		return w.checkProvisionCreate(ctx, operation, server, request, step)
 	}
-	if step.StepID == provisionCreateStep {
-		if request.RestoreBackup != "" {
-			profile, err := w.profiles.ResolveServerProvision(ctx, server, operation.RequestSnapshot.Parameters)
-			if err != nil || !provisionCompatibilitySucceeded(operation, w.schemas, profile) {
-				return errors.New("provider create requires a complete compatible-backup result")
-			}
-		}
-		initial := server.LifecycleState == protocolstate.ServerUnprovisioned || server.LifecycleState == protocolstate.ServerProvisioning
-		if !initial || len(server.InstanceRef) != 0 || step.Attempt != 0 {
-			return errors.New("provider create requires an unprovisioned logical server")
-		}
-		return nil
+	instanceRef, err := provisionInstanceRef(operation, server)
+	if err != nil {
+		return err
 	}
-	instanceRef := server.InstanceRef
-	if len(instanceRef) == 0 {
-		created, err := provisionCreateStepOutput(operation)
-		if err != nil {
-			return errors.New("provision step requires a verified created instance")
-		}
-		instanceRef = created.InstanceRef
+	if err := checkProvisionStepBinding(operation, step, instanceRef); err != nil {
+		return err
 	}
-	switch step.StepID {
-	case provisionStartUnitStep, provisionInspectUnitStep:
+	rule, ok := provisionPrerequisites[step.StepID]
+	if !ok {
+		return fmt.Errorf("unsupported server.provision step %q", step.StepID)
+	}
+	return rule(provisionPrerequisiteCheck{ctx: ctx, workflow: w, operation: operation, server: server, restoring: request.RestoreBackup != ""})
+}
+
+// provisionPreconditionState checks the context and operation, then loads
+// the target server and decodes the persisted request.
+func (w *ServerProvisionWorkflow) provisionPreconditionState(ctx context.Context, operation store.OperationRecord) (store.LogicalServer, provisionRequest, error) {
+	if ctx == nil || operation.OperationType != "server.provision" || operation.ProtocolVersion != w.schemas.ProtocolVersion() {
+		return store.LogicalServer{}, provisionRequest{}, errors.New("server.provision operation and context are required")
+	}
+	if err := ctx.Err(); err != nil {
+		return store.LogicalServer{}, provisionRequest{}, err
+	}
+	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
+	if err != nil {
+		return store.LogicalServer{}, provisionRequest{}, err
+	}
+	server := stored.Record
+	if server.ServerID != operation.Target.ServerID || server.EnvironmentID != operation.Target.EnvironmentID {
+		return store.LogicalServer{}, provisionRequest{}, store.ErrLogicalServerTargetMismatch
+	}
+	var request provisionRequest
+	if json.Unmarshal(operation.RequestSnapshot.Parameters, &request) != nil {
+		return store.LogicalServer{}, provisionRequest{}, errors.New("persisted provision request cannot be decoded")
+	}
+	return server, request, nil
+}
+
+// checkProvisionCreate allows the provider create only once, for a server
+// with no instance yet, and after a compatible backup when restoring.
+func (w *ServerProvisionWorkflow) checkProvisionCreate(ctx context.Context, operation store.OperationRecord, server store.LogicalServer, request provisionRequest, step store.OperationStep) error {
+	if request.RestoreBackup != "" {
+		profile, err := w.profiles.ResolveServerProvision(ctx, server, operation.RequestSnapshot.Parameters)
+		if err != nil || !provisionCompatibilitySucceeded(operation, w.schemas, profile) {
+			return errors.New("provider create requires a complete compatible-backup result")
+		}
+	}
+	initial := server.LifecycleState == protocolstate.ServerUnprovisioned || server.LifecycleState == protocolstate.ServerProvisioning
+	if !initial || len(server.InstanceRef) != 0 || step.Attempt != 0 {
+		return errors.New("provider create requires an unprovisioned logical server")
+	}
+	return nil
+}
+
+// provisionInstanceRef is the server's instance, or the one the provider
+// create step verifiably returned.
+func provisionInstanceRef(operation store.OperationRecord, server store.LogicalServer) (json.RawMessage, error) {
+	if len(server.InstanceRef) != 0 {
+		return server.InstanceRef, nil
+	}
+	created, err := provisionCreateStepOutput(operation)
+	if err != nil {
+		return nil, errors.New("provision step requires a verified created instance")
+	}
+	return created.InstanceRef, nil
+}
+
+// checkProvisionStepBinding requires a unit step to use the created unit on
+// the created instance, and any other step to name the created instance.
+func checkProvisionStepBinding(operation store.OperationRecord, step store.OperationStep, instanceRef json.RawMessage) error {
+	if step.StepID == provisionStartUnitStep || step.StepID == provisionInspectUnitStep {
 		createdUnit := operationStep(operation, provisionCreateUnitStep)
 		if !equalJSON(stepField(step.Input, "unit_ref"), stepField(createdUnit.Input, "unit_ref")) ||
 			!provisionTargetBinds(createdUnit, instanceRef) {
 			return fmt.Errorf("provision step %q is not bound to the exact created unit and instance", step.StepID)
 		}
-	default:
-		if !provisionStepBinds(step, "instance_ref", instanceRef) && !provisionTargetBinds(step, instanceRef) {
-			return fmt.Errorf("provision step %q is not bound to the exact created instance", step.StepID)
-		}
+		return nil
 	}
-	switch step.StepID {
-	case provisionWaitStep:
-		if !stepSucceeded(operation, provisionCreateStep) {
-			return errors.New("instance wait requires a completed provider create")
-		}
-	case provisionBootstrapStep:
-		if !stepSucceeded(operation, provisionWaitStep) || !provisionWaitSucceeded(operation) {
-			return errors.New("bootstrap requires the exact instance to be confirmed active")
-		}
-	case provisionBootstrapInspect:
-		if !stepSucceeded(operation, provisionBootstrapStep) {
-			return errors.New("bootstrap inspection requires a completed delivery request")
-		}
-	case provisionInstallStep:
-		if !stepSucceeded(operation, provisionBootstrapInspect) || !provisionBootstrapSucceeded(operation) {
-			return errors.New("game installation requires successful inspection of the pinned bootstrap")
-		}
-	case provisionRestoreStep:
-		profile, err := w.profiles.ResolveServerProvision(ctx, server, operation.RequestSnapshot.Parameters)
-		if err != nil || !stepSucceeded(operation, provisionInstallStep) || !provisionInstallSucceeded(operation) ||
-			!provisionCompatibilitySucceeded(operation, w.schemas, profile) {
-			return errors.New("backup restore requires verified installation and a compatible exact backup")
-		}
-	case provisionRestoreInspectStep:
-		if !stepSucceeded(operation, provisionRestoreStep) {
-			return errors.New("restore inspection requires the recorded restore call")
-		}
-	case provisionCreateUnitStep:
-		if !stepSucceeded(operation, provisionInstallStep) || !provisionInstallSucceeded(operation) {
-			return errors.New("execution unit creation requires verified installation of the pinned game release")
-		}
-		if request.RestoreBackup != "" && !provisionRestoreSucceeded(operation) {
-			return errors.New("execution unit creation requires verified completion of the requested backup restore")
-		}
-	case provisionStartUnitStep:
-		if !stepSucceeded(operation, provisionCreateUnitStep) || !provisionUnitCreated(operation) {
-			return errors.New("execution unit start requires a verified stopped or unchanged unit")
-		}
-	case provisionInspectUnitStep:
-		if !stepSucceeded(operation, provisionStartUnitStep) || !provisionUnitStarted(operation) {
-			return errors.New("unit inspection requires a completed start")
-		}
-	case provisionReadinessStep:
-		if !stepSucceeded(operation, provisionInspectUnitStep) || !provisionUnitRunning(operation) || (request.RestoreBackup != "" && !provisionRestoreSucceeded(operation)) {
-			return errors.New("game readiness requires the exact execution unit to be running")
-		}
-	default:
-		return fmt.Errorf("unsupported server.provision step %q", step.StepID)
+	if !provisionStepBinds(step, "instance_ref", instanceRef) && !provisionTargetBinds(step, instanceRef) {
+		return fmt.Errorf("provision step %q is not bound to the exact created instance", step.StepID)
 	}
 	return nil
+}
+
+// provisionPrerequisiteCheck is what a step's prerequisite rule reads.
+type provisionPrerequisiteCheck struct {
+	ctx       context.Context
+	workflow  *ServerProvisionWorkflow
+	operation store.OperationRecord
+	server    store.LogicalServer
+	restoring bool
+}
+
+func (c provisionPrerequisiteCheck) succeeded(stepID string) bool {
+	return stepSucceeded(c.operation, stepID)
+}
+
+// requirePrerequisite returns message as an error unless ok.
+func requirePrerequisite(ok bool, message string) error {
+	if ok {
+		return nil
+	}
+	return errors.New(message)
+}
+
+// provisionPrerequisites maps each step after the provider create to the
+// earlier results it needs before it may be dispatched.
+var provisionPrerequisites = map[string]func(provisionPrerequisiteCheck) error{
+	provisionWaitStep: func(c provisionPrerequisiteCheck) error {
+		return requirePrerequisite(c.succeeded(provisionCreateStep), "instance wait requires a completed provider create")
+	},
+	provisionBootstrapStep: func(c provisionPrerequisiteCheck) error {
+		return requirePrerequisite(c.succeeded(provisionWaitStep) && provisionWaitSucceeded(c.operation), "bootstrap requires the exact instance to be confirmed active")
+	},
+	provisionBootstrapInspect: func(c provisionPrerequisiteCheck) error {
+		return requirePrerequisite(c.succeeded(provisionBootstrapStep), "bootstrap inspection requires a completed delivery request")
+	},
+	provisionInstallStep: func(c provisionPrerequisiteCheck) error {
+		return requirePrerequisite(c.succeeded(provisionBootstrapInspect) && provisionBootstrapSucceeded(c.operation), "game installation requires successful inspection of the pinned bootstrap")
+	},
+	provisionRestoreStep: func(c provisionPrerequisiteCheck) error {
+		profile, err := c.workflow.profiles.ResolveServerProvision(c.ctx, c.server, c.operation.RequestSnapshot.Parameters)
+		ok := err == nil && c.succeeded(provisionInstallStep) && provisionInstallSucceeded(c.operation) &&
+			provisionCompatibilitySucceeded(c.operation, c.workflow.schemas, profile)
+		return requirePrerequisite(ok, "backup restore requires verified installation and a compatible exact backup")
+	},
+	provisionRestoreInspectStep: func(c provisionPrerequisiteCheck) error {
+		return requirePrerequisite(c.succeeded(provisionRestoreStep), "restore inspection requires the recorded restore call")
+	},
+	provisionCreateUnitStep: func(c provisionPrerequisiteCheck) error {
+		if !c.succeeded(provisionInstallStep) || !provisionInstallSucceeded(c.operation) {
+			return errors.New("execution unit creation requires verified installation of the pinned game release")
+		}
+		return requirePrerequisite(!c.restoring || provisionRestoreSucceeded(c.operation), "execution unit creation requires verified completion of the requested backup restore")
+	},
+	provisionStartUnitStep: func(c provisionPrerequisiteCheck) error {
+		return requirePrerequisite(c.succeeded(provisionCreateUnitStep) && provisionUnitCreated(c.operation), "execution unit start requires a verified stopped or unchanged unit")
+	},
+	provisionInspectUnitStep: func(c provisionPrerequisiteCheck) error {
+		return requirePrerequisite(c.succeeded(provisionStartUnitStep) && provisionUnitStarted(c.operation), "unit inspection requires a completed start")
+	},
+	provisionReadinessStep: func(c provisionPrerequisiteCheck) error {
+		ok := c.succeeded(provisionInspectUnitStep) && provisionUnitRunning(c.operation) && (!c.restoring || provisionRestoreSucceeded(c.operation))
+		return requirePrerequisite(ok, "game readiness requires the exact execution unit to be running")
+	},
 }
 
 func provisionStepBinds(step store.OperationStep, path string, expected json.RawMessage) bool {
