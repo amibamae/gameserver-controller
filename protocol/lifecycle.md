@@ -36,7 +36,7 @@ The following states are normative for this draft.
 | `restoring` | A specifically identified backup is being validated and restored to the target data location. |
 | `starting` | The game execution unit is being started. |
 | `validating` | Startup completed sufficiently to run required game, runtime, network, and dependency checks. |
-| `ready` | Required readiness checks passed. The controller may permit routing according to policy; this state alone does not assert that a proxy has registered the backend. |
+| `ready` | Required readiness checks passed. The controller MAY permit routing according to policy; this state alone does not assert that a proxy has registered the backend. |
 | `degraded` | The server exists but one or more required health conditions are failing or uncertain. It MUST NOT receive new player routing. |
 | `draining` | New player routing is being prevented and existing players/sessions are being given the configured opportunity to leave. |
 | `stopping` | The game execution unit is being stopped gracefully or, under an explicitly authorized policy, forcibly. |
@@ -162,13 +162,13 @@ A failed or uncertain backup MUST block destruction. An unknown destroy result M
 
 ### 5.6 Restore
 
-Restore MUST use an explicit backup reference and validate integrity, ownership, environment, game compatibility, and archive safety before writing data. The backup manifest's `server_id` and `environment_id` MUST match the logical restore target; the physical target instance may differ from the manifest's source instance during replacement. A successful restore MUST assign a new data generation distinct from the source backup's generation before the runtime can write. Importing backup data into a different logical server requires a separate, explicitly authorized workflow. Restore MUST NOT extract paths outside the configured data root or follow unsafe archive links.
+Restore MUST use an explicit backup reference and validate integrity, ownership, environment, game compatibility, and archive safety before writing data. The backup manifest's `server_id` and `environment_id` MUST match the logical restore target; the physical target instance MAY differ from the manifest's source instance during replacement. A successful restore MUST assign a new data generation distinct from the source backup's generation before the runtime can write. Importing backup data into a different logical server requires a separate, explicitly authorized workflow. Restore MUST NOT extract paths outside the configured data root or follow unsafe archive links.
 
 Restoring over existing data requires a separate safety plan and approval according to environment policy. A restore to a new replacement instance is preferred where practical. A successful restore can end in `stopped` or proceed to `starting`, according to the accepted operation.
 
 ### 5.7 Replacement
 
-Replacement preserves `server_id` and `environment_id` but creates a new infrastructure instance reference. The replacement reference MUST identify a different concrete provider resource from the prior instance; an old external reference MUST never be reassigned to the replacement. The old instance reference and observations MUST remain in operation/audit history until its state and data disposition are reconciled. A replacement MUST restore from a specifically selected verified backup or use an explicitly documented data migration capability, and MUST start a new data generation before any write epoch. The controller MUST NOT route to the replacement until it is `ready` and proxy integration confirms registration.
+Replacement preserves `server_id` and `environment_id` but creates a new infrastructure instance reference. The replacement reference MUST identify a different concrete provider resource from the prior instance; an old external reference MUST NOT be reassigned to the replacement. The old instance reference and observations MUST remain in operation/audit history until its state and data disposition are reconciled. A replacement MUST restore from a specifically selected verified backup or use an explicitly documented data migration capability, and MUST start a new data generation before any write epoch. The controller MUST NOT route to the replacement until it is `ready` and proxy integration confirms registration.
 
 ## 6. Persistent-data generation
 
@@ -190,7 +190,7 @@ The generation ID is an opaque identity token for one persistent-data write epoc
 
 `ready` means all checks in the server's declared, versioned game-specific readiness set passed at a recorded time. Each game adapter MUST declare the required check IDs and versions for the target release and applicable environment. The controller MUST require exactly one fresh result for every declared check, bound to the exact server, environment, instance, and release, and MUST accept only `pass` results. Missing, duplicate, extra, stale, failed, unknown, or target-mismatched results MUST block `ready`. There is no universal core checklist; a Paper adapter, for example, defines its own checks. A process merely existing, a TCP port merely listening, or a provider merely reporting a running VM is insufficient.
 
-A readiness policy may include:
+A readiness policy MAY include:
 - Host/bootstrap completion.
 - Runtime process state.
 - Game-specific startup/readiness signal.

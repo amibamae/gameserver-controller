@@ -20,10 +20,10 @@ An `adapter.invoke` request carries:
 
 - `protocol_version`: the negotiated version.
 - `capability`: the exact name the adapter declared.
-- `request_context`: request and correlation IDs; operation and step IDs for mutating work; deadline; environment and, where applicable, logical server ID; and an idempotency key when supported. A controller may add one-use `stream_transfers` immediately before dispatch when a capability needs bounded byte streams. These bearer handles are ephemeral invocation context; they MUST NOT be persisted in operation records or copied into logs, audit records, errors, or management API responses.
+- `request_context`: request and correlation IDs; operation and step IDs for mutating work; deadline; environment and, where applicable, logical server ID; and an idempotency key when supported. A controller MAY add one-use `stream_transfers` immediately before dispatch when a capability needs bounded byte streams. These bearer handles are ephemeral invocation context; they MUST NOT be persisted in operation records or copied into logs, audit records, errors, or management API responses.
 - `input`: the capability-specific object, validated against its declared input schema.
 
-The controller must not trust actor identity or authorization claims from an adapter. It gives the adapter only the scoped operation context and permissions required for the work.
+The controller MUST NOT trust actor identity or authorization claims from an adapter. It gives the adapter only the scoped operation context and permissions required for the work.
 
 ## 3. Initialize
 
@@ -62,13 +62,13 @@ Example result:
 }
 ```
 
-The adapter selects only a mutually supported version. If none is compatible, initialization returns a structured protocol-version error. It may omit `selected_stream_transport` when it does not support the optional profile. A selected profile must be one the controller offered.
+The adapter selects only a mutually supported version. If none is compatible, initialization returns a structured protocol-version error. It MAY omit `selected_stream_transport` when it does not support the optional profile. A selected profile MUST be one the controller offered.
 
 ## 4. Describe and health
 
 `adapter.describe` returns the descriptor defined in [adapter contracts](../adapters/README.md). The controller validates it before enabling the adapter.
 
-`adapter.health` is read-only. It returns health, observation time, and safe diagnostics. It must not expose credentials, raw environment variables, or unredacted provider responses.
+`adapter.health` is read-only. It returns health, observation time, and safe diagnostics. It MUST NOT expose credentials, raw environment variables, or unredacted provider responses.
 
 ## 5. Invoke
 
@@ -101,7 +101,7 @@ Example request:
 }
 ```
 
-Mutating capabilities also include `operation_id` and `step_id`. When the capability contract defines provider idempotency, the controller may include a provider-scoped token. That is separate from the management API's client `Idempotency-Key`; the client key does not prove a provider call is idempotent. The adapter contract defines the provider token's scope and meaning.
+Mutating capabilities also include `operation_id` and `step_id`. When the capability contract defines provider idempotency, the controller MAY include a provider-scoped token. That is separate from the management API's client `Idempotency-Key`; the client key does not prove a provider call is idempotent. The adapter contract defines the provider token's scope and meaning.
 
 A result distinguishes:
 
@@ -135,9 +135,9 @@ For an `outcome_unknown` response, the controller validates the capability outpu
 
 ## 6. Reconcile
 
-`adapter.reconcile` receives the original operation and step IDs, capability name, the fingerprint of the durable capability input, and any prior external references. It should inspect state without mutating it. The controller computes the fingerprint from RFC 8785 JCS bytes and excludes transient request context, stream handles, outputs, and resolved secret values.
+`adapter.reconcile` receives the original operation and step IDs, capability name, the fingerprint of the durable capability input, and any prior external references. It SHOULD inspect state without mutating it. The controller computes the fingerprint from RFC 8785 JCS bytes and excludes transient request context, stream handles, outputs, and resolved secret values.
 
-It returns a documented result such as `completed`, `not_applied`, `still_pending`, or `indeterminate`. It must not repeat the original side effect just to discover what happened. If the adapter cannot determine the outcome, the controller suspends the operation for operator review.
+It returns a documented result such as `completed`, `not_applied`, `still_pending`, or `indeterminate`. It MUST NOT repeat the original side effect just to discover what happened. If the adapter cannot determine the outcome, the controller suspends the operation for operator review.
 
 ## 7. JSON-RPC errors
 
@@ -151,7 +151,7 @@ Required JSON-RPC codes:
 - `-32602`: Invalid params.
 - `-32603`: Internal error.
 
-Application errors may use the server-error range and must include a protocol error code in `error.data`.
+Application errors MAY use the server-error range and MUST include a protocol error code in `error.data`.
 
 ## 8. Notifications and batches
 

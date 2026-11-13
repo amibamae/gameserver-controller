@@ -4,7 +4,7 @@
 
 ## 1. One authority
 
-The controller core makes every authorization decision. HTTP handlers, CLI commands, UI clients, and adapters must call the same core policy. Hiding a button in a client does not protect an operation.
+The controller core makes every authorization decision. HTTP handlers, CLI commands, UI clients, and adapters MUST call the same core policy. Hiding a button in a client does not protect an operation.
 
 ## 2. Scope permissions
 
@@ -25,7 +25,7 @@ Permissions name an action, resource, and environment. Initial names are in [sec
 - `storage.backup.delete`
 - `proxy.backend.manage`
 
-Each implementation must document how principals, roles/groups, scopes, resources, and environments relate. Permission wildcards must be explicit; a wildcard must not silently include future destructive actions.
+Each implementation MUST document how principals, roles/groups, scopes, resources, and environments relate. Permission wildcards MUST be explicit; a wildcard MUST NOT silently include future destructive actions.
 
 ### 2.1 Submit decisions
 
@@ -63,7 +63,7 @@ Before accepting an operation, the core checks:
 
 Check authorization again immediately before a sensitive step if permissions, policy, approval, or target may have changed since acceptance.
 
-An adapter's capability does not authorize the caller. A caller's permission does not grant provider credentials. The core must check both.
+An adapter's capability does not authorize the caller. A caller's permission does not grant provider credentials. The core MUST check both.
 
 ## 4. Bind approval to the exact plan
 
@@ -75,7 +75,7 @@ The API exposes approval status or a reference without revealing approval secret
 
 Filter list and inspect results by authorization before returning resources. Avoid confirming that an inaccessible resource exists.
 
-Bind each pagination cursor to the authenticated actor and canonical filter scope. Reject a cursor reused under another actor or filter with the generic `core.validation.invalid_request` error and return no resource items or metadata. The error must not reveal which scope check failed.
+Bind each pagination cursor to the authenticated actor and canonical filter scope. Reject a cursor reused under another actor or filter with the generic `core.validation.invalid_request` error and return no resource items or metadata. The error MUST NOT reveal which scope check failed.
 
 ## 6. Conformance checks
 
