@@ -621,15 +621,40 @@ func showCapacity(policy pilotcapacity.Policy, statePath string, stdout io.Write
 	if !policy.RuntimeEnforced {
 		return errors.New("capacity policy is not marked for runtime enforcement")
 	}
+	reservations, err := listCapacityReservations(statePath)
+	if err != nil {
+		return err
+	}
+	writeCapacitySummary(stdout, policy, reservations)
+	if len(reservations) == 0 {
+		fmt.Fprintln(stdout, "No managed VM reservations are recorded.")
+		return nil
+	}
+	fmt.Fprintln(stdout, "OPERATION_ID\tSERVER\tENVIRONMENT\tSTATE\tPROVIDER_INSTANCE_ID\tRESOURCE_LABEL")
+	for _, reservation := range reservations {
+		instanceID := reservation.ProviderInstanceID
+		if instanceID == "" {
+			instanceID = "-"
+		}
+		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%s\n", reservation.OperationID, reservation.ServerID, reservation.EnvironmentID, reservation.State, instanceID, reservation.ResourceKey)
+	}
+	return nil
+}
+
+// listCapacityReservations opens the capacity store, lists every
+// reservation, and closes the store again.
+func listCapacityReservations(statePath string) ([]store.CapacityReservation, error) {
 	repository, err := store.OpenBolt(statePath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer repository.Close()
-	reservations, err := repository.ListCapacityReservations()
-	if err != nil {
-		return err
-	}
+	return repository.ListCapacityReservations()
+}
+
+// writeCapacitySummary prints the occupied slots in total and per capacity
+// group, in group ID order.
+func writeCapacitySummary(stdout io.Writer, policy pilotcapacity.Policy, reservations []store.CapacityReservation) {
 	occupied, groupCounts := 0, make(map[string]int)
 	for _, reservation := range reservations {
 		if policy.ReleasedStates[string(reservation.State)] {
@@ -648,35 +673,43 @@ func showCapacity(policy pilotcapacity.Policy, statePath string, stdout io.Write
 		group := policy.CapacityGroups[groupID]
 		fmt.Fprintf(stdout, "%s: %d/%d slot(s)\n", groupID, groupCounts[groupID], group.MaxInstances)
 	}
-	if len(reservations) == 0 {
-		fmt.Fprintln(stdout, "No managed VM reservations are recorded.")
-		return nil
+}
+
+// knownPilotEnvironment reports whether environmentID is one of the
+// configured environments.
+func knownPilotEnvironment(environmentID string) bool {
+	return environmentID == "production" || environmentID == "staging" || environmentID == "testing"
+}
+
+func showBootStatus(serverID, environmentID, statePath string, now time.Time, stdout io.Writer) error {
+	if !safePilotServerID.MatchString(serverID) || !knownPilotEnvironment(environmentID) || now.IsZero() {
+		return errors.New("a valid server ID, environment, and current time are required")
 	}
-	fmt.Fprintln(stdout, "OPERATION_ID\tSERVER\tENVIRONMENT\tSTATE\tPROVIDER_INSTANCE_ID\tRESOURCE_LABEL")
-	for _, reservation := range reservations {
-		instanceID := reservation.ProviderInstanceID
-		if instanceID == "" {
-			instanceID = "-"
-		}
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%s\n", reservation.OperationID, reservation.ServerID, reservation.EnvironmentID, reservation.State, instanceID, reservation.ResourceKey)
+	reservations, err := listCapacityReservations(statePath)
+	if err != nil {
+		return err
+	}
+	current, durations := bootHistory(reservations, serverID, environmentID)
+	switch {
+	case current == nil:
+		fmt.Fprintf(stdout, "No controller-owned VM is currently recorded for %s@%s.\n", serverID, environmentID)
+		writeHistoricalBootEstimate(stdout, durations)
+	case current.State != store.CapacityActive:
+		writeInactiveBootStatus(stdout, current, durations)
+	case !current.ReadyAt.IsZero():
+		writeReadyBootStatus(stdout, current)
+	case current.ProvisionedAt.IsZero():
+		fmt.Fprintln(stdout, "Provider presence is confirmed, but no provisioning timestamp is available; Paper boot progress is indeterminate.")
+		writeHistoricalBootEstimate(stdout, durations)
+	default:
+		writePendingBootProgress(stdout, current, durations, now)
 	}
 	return nil
 }
 
-func showBootStatus(serverID, environmentID, statePath string, now time.Time, stdout io.Writer) error {
-	if !safePilotServerID.MatchString(serverID) ||
-		(environmentID != "production" && environmentID != "staging" && environmentID != "testing") || now.IsZero() {
-		return errors.New("a valid server ID, environment, and current time are required")
-	}
-	repository, err := store.OpenBolt(statePath)
-	if err != nil {
-		return err
-	}
-	defer repository.Close()
-	reservations, err := repository.ListCapacityReservations()
-	if err != nil {
-		return err
-	}
+// bootHistory returns the server's last reservation that is not absent or
+// destroyed, if any, and every measured provision-to-ready duration.
+func bootHistory(reservations []store.CapacityReservation, serverID, environmentID string) (*store.CapacityReservation, []time.Duration) {
 	var current *store.CapacityReservation
 	var durations []time.Duration
 	for i := range reservations {
@@ -684,63 +717,59 @@ func showBootStatus(serverID, environmentID, statePath string, now time.Time, st
 		if reservation.ServerID != serverID || reservation.EnvironmentID != environmentID {
 			continue
 		}
-		if !reservation.ProvisionedAt.IsZero() && !reservation.ReadyAt.IsZero() {
-			if duration := reservation.ReadyAt.Sub(reservation.ProvisionedAt); duration > 0 {
-				durations = append(durations, duration)
-			}
+		if duration := measuredBootDuration(*reservation); duration > 0 {
+			durations = append(durations, duration)
 		}
 		if reservation.State != store.CapacityAbsent && reservation.State != store.CapacityDestroyed {
 			current = reservation
 		}
 	}
-	if current == nil {
-		fmt.Fprintf(stdout, "No controller-owned VM is currently recorded for %s@%s.\n", serverID, environmentID)
-		writeHistoricalBootEstimate(stdout, durations)
-		return nil
+	return current, durations
+}
+
+// measuredBootDuration is the provision-to-ready time, or zero when either
+// timestamp is missing.
+func measuredBootDuration(reservation store.CapacityReservation) time.Duration {
+	if reservation.ProvisionedAt.IsZero() || reservation.ReadyAt.IsZero() {
+		return 0
 	}
-	if current.State != store.CapacityActive {
-		if !current.ReadyAt.IsZero() {
-			fmt.Fprintf(stdout, "Paper readiness was previously confirmed at %s.\n", current.ReadyAt.UTC().Format(time.RFC3339))
-		}
-		fmt.Fprintf(stdout, "Managed VM state: %s. Current Paper readiness is not confirmed; boot progress is indeterminate.\n", current.State)
-		writeHistoricalBootEstimate(stdout, durations)
-		return nil
-	}
+	return reservation.ReadyAt.Sub(reservation.ProvisionedAt)
+}
+
+func writeInactiveBootStatus(stdout io.Writer, current *store.CapacityReservation, durations []time.Duration) {
 	if !current.ReadyAt.IsZero() {
-		fmt.Fprintf(stdout, "Paper readiness was confirmed at %s.\n", current.ReadyAt.UTC().Format(time.RFC3339))
-		if !current.ProvisionedAt.IsZero() {
-			fmt.Fprintf(stdout, "Measured provision-to-Paper-ready time: %s.\n", current.ReadyAt.Sub(current.ProvisionedAt).Round(time.Second))
-		}
-		fmt.Fprintln(stdout, "Progress: [####################] 100% (initial boot completed)")
-		return nil
+		fmt.Fprintf(stdout, "Paper readiness was previously confirmed at %s.\n", current.ReadyAt.UTC().Format(time.RFC3339))
 	}
-	if current.ProvisionedAt.IsZero() {
-		fmt.Fprintln(stdout, "Provider presence is confirmed, but no provisioning timestamp is available; Paper boot progress is indeterminate.")
-		writeHistoricalBootEstimate(stdout, durations)
-		return nil
+	fmt.Fprintf(stdout, "Managed VM state: %s. Current Paper readiness is not confirmed; boot progress is indeterminate.\n", current.State)
+	writeHistoricalBootEstimate(stdout, durations)
+}
+
+func writeReadyBootStatus(stdout io.Writer, current *store.CapacityReservation) {
+	fmt.Fprintf(stdout, "Paper readiness was confirmed at %s.\n", current.ReadyAt.UTC().Format(time.RFC3339))
+	if !current.ProvisionedAt.IsZero() {
+		fmt.Fprintf(stdout, "Measured provision-to-Paper-ready time: %s.\n", current.ReadyAt.Sub(current.ProvisionedAt).Round(time.Second))
 	}
-	elapsed := now.Sub(current.ProvisionedAt)
-	if elapsed < 0 {
-		elapsed = 0
-	}
+	fmt.Fprintln(stdout, "Progress: [####################] 100% (initial boot completed)")
+}
+
+// writePendingBootProgress prints the advisory progress of a provisioned VM
+// whose readiness is not yet confirmed. It needs three local boot samples.
+func writePendingBootProgress(stdout io.Writer, current *store.CapacityReservation, durations []time.Duration, now time.Time) {
+	elapsed := max(now.Sub(current.ProvisionedAt), 0)
 	fmt.Fprintf(stdout, "Paper readiness is pending. Time since provisioning: %s.\n", elapsed.Round(time.Second))
 	if len(durations) < 3 {
 		fmt.Fprintf(stdout, "Estimate and progress are indeterminate (%d completed boot sample(s); 3 required).\n", len(durations))
-		return nil
+		return
 	}
 	estimate, err := boottiming.Estimate(durations, boottiming.DefaultSafetyFactor)
 	if err != nil {
 		fmt.Fprintf(stdout, "Estimate and progress are indeterminate (%d completed boot sample(s)).\n", len(durations))
-		return nil
+		return
 	}
-	remaining := estimate - elapsed
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(estimate-elapsed, 0)
 	percent := boottiming.ProgressPercent(elapsed, estimate, false)
 	fmt.Fprintf(stdout, "Estimated total: %s; estimated time remaining: %s.\n", estimate.Round(time.Second), remaining.Round(time.Second))
 	fmt.Fprintf(stdout, "Progress: %s (advisory; never reaches 100%% before Paper readiness).\n", bootProgressBar(percent))
-	return nil
 }
 
 func writeHistoricalBootEstimate(stdout io.Writer, durations []time.Duration) {
