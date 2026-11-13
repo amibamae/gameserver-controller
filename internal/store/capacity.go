@@ -420,6 +420,56 @@ func recordCapacityLifecycleOutcomeTx(tx *bolt.Tx, operation OperationRecord, se
 // used for the capacity observation; accepted or ambiguous destroys never
 // reach this path.
 func recordDestroyedCapacityTx(tx *bolt.Tx, operation OperationRecord, server LogicalServer) error {
+	instance, observedAt, err := destroyedCapacityEvidence(operation, server)
+	if err != nil {
+		return err
+	}
+	match, err := findDestroyedCapacityReservation(tx.Bucket(capacityReservationsBucket), server, instance)
+	if err != nil || match == nil {
+		return err
+	}
+	if match.State != CapacityActive && match.State != CapacityDestroyOutcomeUnknown {
+		return fmt.Errorf("%w: cannot release managed VM capacity from state %q", ErrCapacityTransition, match.State)
+	}
+	return observeCapacityTx(tx, match.OperationID, CapacityProviderObservation{
+		Provider: match.Provider, ResourceKey: match.ResourceKey, ProviderInstanceID: instance.ExternalID,
+		State: "destroyed", ObservedAt: observedAt,
+	})
+}
+
+// destroyedCapacityInstance is the exact provider instance a successful
+// server.destroy targeted.
+type destroyedCapacityInstance struct {
+	AdapterID    string `json:"adapter_id"`
+	ResourceKind string `json:"resource_kind"`
+	ExternalID   string `json:"external_id"`
+}
+
+// destroyedCapacityEvidence checks, in order, the destroy result, the
+// provider absence step, the target instance, and the absence time bound,
+// returning the destroyed instance and when its absence was observed.
+func destroyedCapacityEvidence(operation OperationRecord, server LogicalServer) (destroyedCapacityInstance, time.Time, error) {
+	if !destroyResultHasEvidence(operation, server) {
+		return destroyedCapacityInstance{}, time.Time{}, fmt.Errorf("%w: server.destroy success lacks exact absence and backup evidence", ErrInvalidRecord)
+	}
+	observedAt, ok := destroyAbsenceObservedAt(operation)
+	if !ok {
+		return destroyedCapacityInstance{}, time.Time{}, fmt.Errorf("%w: server.destroy success lacks exact provider absence observation", ErrInvalidRecord)
+	}
+	var instance destroyedCapacityInstance
+	if json.Unmarshal(operation.Target.InstanceRef, &instance) != nil || instance.AdapterID == "" || instance.ResourceKind != "instance" || instance.ExternalID == "" {
+		return destroyedCapacityInstance{}, time.Time{}, fmt.Errorf("%w: server.destroy target is not an exact provider instance", ErrInvalidRecord)
+	}
+	if observedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+		return destroyedCapacityInstance{}, time.Time{}, fmt.Errorf("%w: provider absence observation is too far in the future", ErrInvalidRecord)
+	}
+	return instance, observedAt, nil
+}
+
+// destroyResultHasEvidence reports whether the server.destroy result names
+// the target instance, a verified backup of the server's data generation,
+// confirmed provider absence, and a destroyed final lifecycle state.
+func destroyResultHasEvidence(operation OperationRecord, server LogicalServer) bool {
 	var result struct {
 		OperationType string `json:"operation_type"`
 		OperationData struct {
@@ -430,45 +480,46 @@ func recordDestroyedCapacityTx(tx *bolt.Tx, operation OperationRecord, server Lo
 			FinalLifecycleState string          `json:"final_lifecycle_state"`
 		} `json:"operation_data"`
 	}
-	if json.Unmarshal(operation.Result, &result) != nil || result.OperationType != "server.destroy" ||
-		!equalCanonicalJSON(result.OperationData.InstanceRef, operation.Target.InstanceRef) ||
-		result.OperationData.VerifiedBackupID == "" || result.OperationData.DataGenerationID != server.DataGenerationID ||
-		!result.OperationData.ProviderAbsence || result.OperationData.FinalLifecycleState != "destroyed" {
-		return fmt.Errorf("%w: server.destroy success lacks exact absence and backup evidence", ErrInvalidRecord)
-	}
+	return json.Unmarshal(operation.Result, &result) == nil && result.OperationType == "server.destroy" &&
+		equalCanonicalJSON(result.OperationData.InstanceRef, operation.Target.InstanceRef) &&
+		result.OperationData.VerifiedBackupID != "" && result.OperationData.DataGenerationID == server.DataGenerationID &&
+		result.OperationData.ProviderAbsence && result.OperationData.FinalLifecycleState == "destroyed"
+}
+
+// destroyAbsenceObservedAt returns when the first verify-instance-absence
+// step observed the target instance destroyed, and false unless that step
+// succeeded with exact, timestamped evidence.
+func destroyAbsenceObservedAt(operation OperationRecord) (time.Time, bool) {
 	var absence struct {
 		InstanceRef json.RawMessage `json:"instance_ref"`
 		State       string          `json:"state"`
 		ObservedAt  time.Time       `json:"observed_at"`
 	}
-	var absenceStep *OperationStep
-	for i := range operation.Steps {
-		if operation.Steps[i].StepID == "verify-instance-absence" {
-			absenceStep = &operation.Steps[i]
-			break
-		}
-	}
-	if absenceStep == nil || absenceStep.Status != "succeeded" || json.Unmarshal(absenceStep.Output, &absence) != nil ||
+	step := firstOperationStep(operation.Steps, "verify-instance-absence")
+	if step == nil || step.Status != "succeeded" || json.Unmarshal(step.Output, &absence) != nil ||
 		!equalCanonicalJSON(absence.InstanceRef, operation.Target.InstanceRef) || absence.State != "destroyed" || absence.ObservedAt.IsZero() {
-		return fmt.Errorf("%w: server.destroy success lacks exact provider absence observation", ErrInvalidRecord)
+		return time.Time{}, false
 	}
-	var instance struct {
-		AdapterID    string `json:"adapter_id"`
-		ResourceKind string `json:"resource_kind"`
-		ExternalID   string `json:"external_id"`
-	}
-	if json.Unmarshal(operation.Target.InstanceRef, &instance) != nil || instance.AdapterID == "" || instance.ResourceKind != "instance" || instance.ExternalID == "" {
-		return fmt.Errorf("%w: server.destroy target is not an exact provider instance", ErrInvalidRecord)
-	}
-	if absence.ObservedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
-		return fmt.Errorf("%w: provider absence observation is too far in the future", ErrInvalidRecord)
-	}
-	var match *CapacityReservation
-	err := forEachCapacityReservation(tx.Bucket(capacityReservationsBucket), func(_ []byte, reservation CapacityReservation) error {
-		if reservation.ServerID != server.ServerID || reservation.EnvironmentID != server.EnvironmentID {
-			return nil
+	return absence.ObservedAt, true
+}
+
+// firstOperationStep returns the first step with stepID, or nil.
+func firstOperationStep(steps []OperationStep, stepID string) *OperationStep {
+	for i := range steps {
+		if steps[i].StepID == stepID {
+			return &steps[i]
 		}
-		if capacityStateReleased(reservation.State) {
+	}
+	return nil
+}
+
+// findDestroyedCapacityReservation returns the one unreleased reservation for
+// the destroyed server, or nil when there is none. An unreleased reservation
+// for a different adapter or instance, or a second match, is a conflict.
+func findDestroyedCapacityReservation(bucket *bolt.Bucket, server LogicalServer, instance destroyedCapacityInstance) (*CapacityReservation, error) {
+	var match *CapacityReservation
+	err := forEachCapacityReservation(bucket, func(_ []byte, reservation CapacityReservation) error {
+		if reservation.ServerID != server.ServerID || reservation.EnvironmentID != server.EnvironmentID || capacityStateReleased(reservation.State) {
 			return nil
 		}
 		if (reservation.ProviderAdapterID != "" && reservation.ProviderAdapterID != instance.AdapterID) || reservation.ProviderInstanceID != instance.ExternalID {
@@ -482,18 +533,9 @@ func recordDestroyedCapacityTx(tx *bolt.Tx, operation OperationRecord, server Lo
 		return nil
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if match == nil {
-		return nil
-	}
-	if match.State != CapacityActive && match.State != CapacityDestroyOutcomeUnknown {
-		return fmt.Errorf("%w: cannot release managed VM capacity from state %q", ErrCapacityTransition, match.State)
-	}
-	return observeCapacityTx(tx, match.OperationID, CapacityProviderObservation{
-		Provider: match.Provider, ResourceKey: match.ResourceKey, ProviderInstanceID: instance.ExternalID,
-		State: "destroyed", ObservedAt: absence.ObservedAt,
-	})
+	return match, nil
 }
 
 func (s *BoltStore) GetCapacityReservation(operationID string) (CapacityReservation, error) {
