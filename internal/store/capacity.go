@@ -206,15 +206,13 @@ func validateCapacityObservation(observation CapacityProviderObservation) error 
 		observation.ObservedAt.IsZero() || observation.ObservedAt.After(time.Now().UTC().Add(5*time.Minute)) {
 		return fmt.Errorf("%w: invalid provider observation", ErrInvalidRecord)
 	}
-	switch observation.State {
-	case "present", "absent", "destroyed":
-	default:
+	if !knownCapacityObservationState(observation.State) {
 		return fmt.Errorf("%w: unsupported provider observation state", ErrInvalidRecord)
 	}
 	if observation.State == "present" && !validCapacityIdentifier(observation.ProviderInstanceID, 240) {
 		return fmt.Errorf("%w: present observation requires provider_instance_id", ErrInvalidRecord)
 	}
-	if !observation.ProvisionedAt.IsZero() && (observation.State != "present" || observation.ProvisionedAt.After(observation.ObservedAt)) {
+	if !capacityObservationProvisionOrdered(observation) {
 		return fmt.Errorf("%w: invalid provider provisioning timestamp", ErrInvalidRecord)
 	}
 	if observation.ProviderInstanceID != "" && !validCapacityIdentifier(observation.ProviderInstanceID, 240) {
@@ -866,24 +864,51 @@ func capacityObservationConsistent(r CapacityReservation) bool {
 	if observation == nil {
 		return true
 	}
+	return capacityObservationMatchesReservation(r, *observation) && capacityObservationProvisionOrdered(*observation) &&
+		knownCapacityObservationState(observation.State) && capacityStateAgreesWithObservation(r.State, observation.State)
+}
+
+// capacityObservationMatchesReservation requires the observation to be for
+// the reservation's provider resource, no earlier than its creation, with a
+// valid instance ID when present and one that agrees with the reservation's.
+func capacityObservationMatchesReservation(r CapacityReservation, observation CapacityProviderObservation) bool {
 	if observation.Provider != r.Provider || observation.ResourceKey != r.ResourceKey || observation.ObservedAt.Before(r.CreatedAt) ||
 		(observation.State == "present" && !validCapacityIdentifier(observation.ProviderInstanceID, 240)) {
 		return false
 	}
-	if observation.ProviderInstanceID != "" && (!validCapacityIdentifier(observation.ProviderInstanceID, 240) ||
-		(r.ProviderInstanceID != "" && r.ProviderInstanceID != observation.ProviderInstanceID)) {
-		return false
-	}
-	if !observation.ProvisionedAt.IsZero() && (observation.State != "present" || observation.ProvisionedAt.After(observation.ObservedAt)) {
-		return false
-	}
-	switch observation.State {
+	return observation.ProviderInstanceID == "" || (validCapacityIdentifier(observation.ProviderInstanceID, 240) &&
+		(r.ProviderInstanceID == "" || r.ProviderInstanceID == observation.ProviderInstanceID))
+}
+
+// capacityObservationProvisionOrdered allows a provisioning time only on a
+// present observation, and no later than the observation itself.
+func capacityObservationProvisionOrdered(observation CapacityProviderObservation) bool {
+	return observation.ProvisionedAt.IsZero() || (observation.State == "present" && !observation.ProvisionedAt.After(observation.ObservedAt))
+}
+
+// knownCapacityObservationState reports whether state is a provider
+// observation state the store understands.
+func knownCapacityObservationState(state string) bool {
+	switch state {
 	case "present", "absent", "destroyed":
-	default:
-		return false
+		return true
 	}
-	return !((r.State == CapacityAbsent && observation.State != "absent") || (r.State == CapacityDestroyed && observation.State != "destroyed") ||
-		(r.State == CapacityActive && observation.State != "present"))
+	return false
+}
+
+// capacityStateAgreesWithObservation requires active, absent and destroyed
+// reservations to match the last observed provider state; other states may
+// carry any observation.
+func capacityStateAgreesWithObservation(state CapacityState, observed string) bool {
+	switch state {
+	case CapacityActive:
+		return observed == "present"
+	case CapacityAbsent:
+		return observed == "absent"
+	case CapacityDestroyed:
+		return observed == "destroyed"
+	}
+	return true
 }
 
 func sameCapacityRequest(existing, requested CapacityReservation) bool {
