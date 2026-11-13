@@ -183,11 +183,19 @@ func decodeReadinessEvidence(schemas schemaRuntime, version string, step store.O
 // checkReadinessEvidenceBinding requires the request and observation to name
 // the operation's server and environment, one release, and the managed
 // instance, and the observation to hold one result per required check.
+// readinessEvidenceBound reports whether the readiness check's input and
+// output both name the operation's server and environment, one game
+// release, and the server's managed instance.
+func readinessEvidenceBound(operation store.OperationRecord, server store.LogicalServer, input readinessCheckInput, output readinessCheckOutput) bool {
+	target := operation.Target
+	return input.ServerID == target.ServerID && input.EnvironmentID == target.EnvironmentID &&
+		output.ServerID == target.ServerID && output.EnvironmentID == target.EnvironmentID &&
+		input.GameReleaseID != "" && output.GameReleaseID == input.GameReleaseID &&
+		equalJSON(input.InstanceRef, server.InstanceRef) && equalJSON(output.InstanceRef, server.InstanceRef)
+}
+
 func checkReadinessEvidenceBinding(operation store.OperationRecord, server store.LogicalServer, input readinessCheckInput, output readinessCheckOutput) error {
-	if input.ServerID != operation.Target.ServerID || input.EnvironmentID != operation.Target.EnvironmentID ||
-		output.ServerID != operation.Target.ServerID || output.EnvironmentID != operation.Target.EnvironmentID ||
-		input.GameReleaseID == "" || output.GameReleaseID != input.GameReleaseID ||
-		!equalJSON(input.InstanceRef, server.InstanceRef) || !equalJSON(output.InstanceRef, server.InstanceRef) {
+	if !readinessEvidenceBound(operation, server, input, output) {
 		return errors.New("readiness evidence is not bound to the requested server, release, and managed instance")
 	}
 	if input.ReadinessCheckSetID == "" || len(input.RequiredChecks) == 0 || len(output.CheckResults) != len(input.RequiredChecks) {
