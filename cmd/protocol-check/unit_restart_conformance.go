@@ -145,39 +145,75 @@ func (r restartCase) reconciled(afterBound bool) bool {
 
 func evaluateUnitRestartCase(pkg *protocolPackage, fixture, c map[string]any) map[string]any {
 	r := newRestartCase(c)
-	requestValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-input", r.request) == nil
-	outputValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-output", r.output) == nil
-	saveStepBound := restartSaveStepBound(pkg, fixture, c, r)
-	adapterBound := stringValue(r.core, "execution_adapter_id") != "" && r.unit["adapter_id"] == r.core["execution_adapter_id"]
-	targetConsistent := r.unit["environment_id"] == r.target["environment_id"] && r.target["environment_id"] == r.instance["environment_id"] &&
-		stringValue(r.unit, "resource_kind") == "systemd-unit"
-	unitBound := reflect.DeepEqual(r.unit, r.binding["unit_ref"]) && reflect.DeepEqual(r.target, r.binding["target"]) && r.request["release_id"] == r.binding["release_id"]
-	unitCurrent := r.unitCurrent(pkg)
-	unitInspectionPrecedesSave := unitCurrent && r.saved.ok && !r.saved.at.Before(r.unitObserved.at)
-	saveBound := r.saveConfirmationBound(saveStepBound, unitInspectionPrecedesSave)
-	dispatchAllowed := requestValid && adapterBound && targetConsistent && unitBound && unitCurrent && saveBound
+	d := r.dispatchChecks(pkg, fixture, c)
+	dispatchAllowed := d.allowed()
+	o := r.outcomeChecks(pkg, dispatchAllowed)
+	return map[string]any{
+		"case_id": stringValue(c, "case_id"), "request_schema_valid": d.requestValid, "result_schema_valid": o.outputValid,
+		"adapter_bound": d.adapterBound, "target_consistent": d.targetConsistent, "unit_bound": d.unitBound, "unit_current": d.unitCurrent,
+		"save_step_bound": d.saveStepBound, "unit_inspection_precedes_save": d.inspectionPrecedesSave, "save_confirmation_bound": d.saveBound,
+		"dispatch_allowed": dispatchAllowed, "result_bound": o.bound,
+		"restart_confirmed": o.confirmed || o.reconciled, "reconciliation_confirmed": o.reconciled,
+		"must_inspect_before_retry": dispatchAllowed && (!o.resultValid || (o.uncertain && !o.reconciled)),
+		"retry_permitted":           false, "operator_required": o.operatorRequired, "readiness_established": false,
+	}
+}
 
-	operationBound := r.operationBound()
-	bound := r.resultBound(operationBound)
+// restartDispatch holds the preconditions for dispatching a unit restart.
+type restartDispatch struct {
+	requestValid, saveStepBound, adapterBound, targetConsistent bool
+	unitBound, unitCurrent, inspectionPrecedesSave, saveBound   bool
+}
+
+func (r restartCase) dispatchChecks(pkg *protocolPackage, fixture, c map[string]any) restartDispatch {
+	d := restartDispatch{
+		requestValid:  pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-input", r.request) == nil,
+		saveStepBound: restartSaveStepBound(pkg, fixture, c, r),
+		adapterBound:  stringValue(r.core, "execution_adapter_id") != "" && r.unit["adapter_id"] == r.core["execution_adapter_id"],
+		targetConsistent: r.unit["environment_id"] == r.target["environment_id"] && r.target["environment_id"] == r.instance["environment_id"] &&
+			stringValue(r.unit, "resource_kind") == "systemd-unit",
+		unitBound: reflect.DeepEqual(r.unit, r.binding["unit_ref"]) && reflect.DeepEqual(r.target, r.binding["target"]) &&
+			r.request["release_id"] == r.binding["release_id"],
+		unitCurrent: r.unitCurrent(pkg),
+	}
+	d.inspectionPrecedesSave = d.unitCurrent && r.saved.ok && !r.saved.at.Before(r.unitObserved.at)
+	d.saveBound = r.saveConfirmationBound(d.saveStepBound, d.inspectionPrecedesSave)
+	return d
+}
+
+func (d restartDispatch) allowed() bool {
+	return d.requestValid && d.adapterBound && d.targetConsistent && d.unitBound && d.unitCurrent && d.saveBound
+}
+
+// restartOutcome is what the restart result, and any follow-up
+// inspection, proves.
+type restartOutcome struct {
+	outputValid, operationBound, bound, resultValid, uncertain bool
+	confirmed, reconciled, operatorRequired                    bool
+}
+
+// outcomeChecks: a valid, bound result with a consistent stop-start cycle
+// confirms the restart when completed. An accepted or unknown outcome is
+// reconciled only by a bound inspection showing a new running runtime;
+// anything else that cannot be resolved needs an operator.
+func (r restartCase) outcomeChecks(pkg *protocolPackage, dispatchAllowed bool) restartOutcome {
+	o := restartOutcome{
+		outputValid:    pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-output", r.output) == nil,
+		operationBound: r.operationBound(),
+	}
+	o.bound = r.resultBound(o.operationBound)
 	newRuntime := stringValue(r.output, "runtime_id") != "" && r.output["runtime_id"] != r.request["expected_runtime_id"]
 	outcome := stringValue(r.output, "outcome")
 	cycleConsistent := (!newRuntime || boolValue(r.output, "clean_stop_confirmed")) && (outcome != "completed" || newRuntime)
-	resultValid := outputValid && bound && cycleConsistent
-	confirmed := dispatchAllowed && resultValid && outcome == "completed"
-	uncertain := outcome == "accepted" || outcome == "outcome_unknown"
+	o.resultValid = o.outputValid && o.bound && cycleConsistent
+	o.confirmed = dispatchAllowed && o.resultValid && outcome == "completed"
+	o.uncertain = outcome == "accepted" || outcome == "outcome_unknown"
 	afterBound := r.afterBound(pkg)
-	reconciled := dispatchAllowed && resultValid && uncertain && r.reconciled(afterBound)
-	operatorRequired := dispatchAllowed && uncertain && (!operationBound || (len(r.after) > 0 &&
-		(!afterBound || stringValue(r.after, "state") == "unknown" || (stringValue(r.resolved, "state") == "completed" && !reconciled))))
-	return map[string]any{
-		"case_id": stringValue(c, "case_id"), "request_schema_valid": requestValid, "result_schema_valid": outputValid,
-		"adapter_bound": adapterBound, "target_consistent": targetConsistent, "unit_bound": unitBound, "unit_current": unitCurrent,
-		"save_step_bound": saveStepBound, "unit_inspection_precedes_save": unitInspectionPrecedesSave, "save_confirmation_bound": saveBound,
-		"dispatch_allowed": dispatchAllowed, "result_bound": bound,
-		"restart_confirmed": confirmed || reconciled, "reconciliation_confirmed": reconciled,
-		"must_inspect_before_retry": dispatchAllowed && (!resultValid || (uncertain && !reconciled)),
-		"retry_permitted":           false, "operator_required": operatorRequired, "readiness_established": false,
-	}
+	o.reconciled = dispatchAllowed && o.resultValid && o.uncertain && r.reconciled(afterBound)
+	unresolved := len(r.after) > 0 &&
+		(!afterBound || stringValue(r.after, "state") == "unknown" || (stringValue(r.resolved, "state") == "completed" && !o.reconciled))
+	o.operatorRequired = dispatchAllowed && o.uncertain && (!o.operationBound || unresolved)
+	return o
 }
 
 func findAdapterCapability(pkg *protocolPackage, adapterID, capabilityName string) (map[string]any, error) {
