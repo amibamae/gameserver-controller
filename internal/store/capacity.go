@@ -655,58 +655,97 @@ func validateCapacityReservationRequest(reservation CapacityReservation) error {
 	return nil
 }
 
+// validatePersistedCapacityReservation rejects a stored reservation that breaks
+// any of the persistence rules below. Every rule reports the same
+// ErrInvalidRecord, so a new rule is one more function in this list.
 func validatePersistedCapacityReservation(reservation CapacityReservation) error {
-	if reservation.Adoption != nil && (validateCapacityAdoption(*reservation.Adoption) != nil || reservation.ProviderInstanceID != reservation.Adoption.InstanceID || !reservation.CreatedAt.Equal(reservation.Adoption.ObservedAt) || reservation.LastObservation == nil || !reservation.ProvisionedAt.IsZero() || !reservation.ReadyAt.IsZero()) {
-		return ErrInvalidRecord
-	}
-	if reservation.ProviderAdapterID != "" && !validCapacityIdentifier(reservation.ProviderAdapterID, 160) {
-		return ErrInvalidRecord
-	}
-	if !validCapacityIdentifier(reservation.OperationID, 200) || !validCapacityIdentifier(reservation.ServerID, 200) ||
-		!validCapacityIdentifier(reservation.EnvironmentID, 200) || !validCapacityIdentifier(reservation.CapacityGroup, 100) ||
-		!validCapacityIdentifier(reservation.Provider, 100) || !validCapacityIdentifier(reservation.ResourceKey, 240) ||
-		reservation.CreatedAt.IsZero() || reservation.UpdatedAt.Before(reservation.CreatedAt) {
-		return ErrInvalidRecord
-	}
-	switch reservation.State {
-	case CapacityReserved, CapacityCreateOutcomeUnknown, CapacityActive, CapacityDestroyOutcomeUnknown, CapacityAbsent, CapacityDestroyed:
-	default:
-		return ErrInvalidRecord
-	}
-	if reservation.State == CapacityActive && !validCapacityIdentifier(reservation.ProviderInstanceID, 240) {
-		return ErrInvalidRecord
-	}
-	if !reservation.ProvisionedAt.IsZero() && (reservation.ProvisionedAt.Before(reservation.CreatedAt) || reservation.ProvisionedAt.After(reservation.UpdatedAt)) {
-		return ErrInvalidRecord
-	}
-	if !reservation.ReadyAt.IsZero() && (reservation.ReadyAt.Before(reservation.CreatedAt) ||
-		(!reservation.ProvisionedAt.IsZero() && reservation.ReadyAt.Before(reservation.ProvisionedAt)) || reservation.ReadyAt.After(reservation.UpdatedAt)) {
-		return ErrInvalidRecord
-	}
-	if reservation.LastObservation != nil {
-		observation := reservation.LastObservation
-		if observation.Provider != reservation.Provider || observation.ResourceKey != reservation.ResourceKey || observation.ObservedAt.Before(reservation.CreatedAt) ||
-			(observation.State == "present" && !validCapacityIdentifier(observation.ProviderInstanceID, 240)) {
-			return ErrInvalidRecord
-		}
-		if observation.ProviderInstanceID != "" && (!validCapacityIdentifier(observation.ProviderInstanceID, 240) ||
-			(reservation.ProviderInstanceID != "" && reservation.ProviderInstanceID != observation.ProviderInstanceID)) {
-			return ErrInvalidRecord
-		}
-		if !observation.ProvisionedAt.IsZero() && (observation.State != "present" || observation.ProvisionedAt.After(observation.ObservedAt)) {
-			return ErrInvalidRecord
-		}
-		switch observation.State {
-		case "present", "absent", "destroyed":
-		default:
-			return ErrInvalidRecord
-		}
-		if (reservation.State == CapacityAbsent && observation.State != "absent") || (reservation.State == CapacityDestroyed && observation.State != "destroyed") ||
-			(reservation.State == CapacityActive && observation.State != "present") {
+	for _, valid := range []func(CapacityReservation) bool{
+		capacityAdoptionConsistent,
+		capacityIdentityValid,
+		capacityStateValid,
+		capacityTimesOrdered,
+		capacityObservationConsistent,
+	} {
+		if !valid(reservation) {
 			return ErrInvalidRecord
 		}
 	}
 	return nil
+}
+
+// capacityAdoptionConsistent requires an adopted reservation to carry a valid
+// adoption record for its own provider instance, created when the adoption
+// was observed, with an observation and no provision or ready time.
+func capacityAdoptionConsistent(r CapacityReservation) bool {
+	if r.Adoption == nil {
+		return true
+	}
+	return validateCapacityAdoption(*r.Adoption) == nil && r.ProviderInstanceID == r.Adoption.InstanceID &&
+		r.CreatedAt.Equal(r.Adoption.ObservedAt) && r.LastObservation != nil &&
+		r.ProvisionedAt.IsZero() && r.ReadyAt.IsZero()
+}
+
+// capacityIdentityValid requires every identifier to be present and bounded
+// (the provider adapter ID is optional) and the record to have a creation
+// time no later than its update time.
+func capacityIdentityValid(r CapacityReservation) bool {
+	if r.ProviderAdapterID != "" && !validCapacityIdentifier(r.ProviderAdapterID, 160) {
+		return false
+	}
+	return validCapacityIdentifier(r.OperationID, 200) && validCapacityIdentifier(r.ServerID, 200) &&
+		validCapacityIdentifier(r.EnvironmentID, 200) && validCapacityIdentifier(r.CapacityGroup, 100) &&
+		validCapacityIdentifier(r.Provider, 100) && validCapacityIdentifier(r.ResourceKey, 240) &&
+		!r.CreatedAt.IsZero() && !r.UpdatedAt.Before(r.CreatedAt)
+}
+
+// capacityStateValid requires a known state, and an active reservation to name
+// its provider instance.
+func capacityStateValid(r CapacityReservation) bool {
+	switch r.State {
+	case CapacityReserved, CapacityCreateOutcomeUnknown, CapacityActive, CapacityDestroyOutcomeUnknown, CapacityAbsent, CapacityDestroyed:
+	default:
+		return false
+	}
+	return r.State != CapacityActive || validCapacityIdentifier(r.ProviderInstanceID, 240)
+}
+
+// capacityTimesOrdered requires provision and ready times, when set, to fall
+// within the record's lifetime, with ready no earlier than provisioned.
+func capacityTimesOrdered(r CapacityReservation) bool {
+	if !r.ProvisionedAt.IsZero() && (r.ProvisionedAt.Before(r.CreatedAt) || r.ProvisionedAt.After(r.UpdatedAt)) {
+		return false
+	}
+	return r.ReadyAt.IsZero() || !(r.ReadyAt.Before(r.CreatedAt) ||
+		(!r.ProvisionedAt.IsZero() && r.ReadyAt.Before(r.ProvisionedAt)) || r.ReadyAt.After(r.UpdatedAt))
+}
+
+// capacityObservationConsistent requires the last provider observation, if
+// any, to be for this provider and resource key, observed after creation, with
+// a known state that matches the reservation state, and an instance ID (present
+// whenever the instance was seen) that agrees with the reservation's.
+func capacityObservationConsistent(r CapacityReservation) bool {
+	observation := r.LastObservation
+	if observation == nil {
+		return true
+	}
+	if observation.Provider != r.Provider || observation.ResourceKey != r.ResourceKey || observation.ObservedAt.Before(r.CreatedAt) ||
+		(observation.State == "present" && !validCapacityIdentifier(observation.ProviderInstanceID, 240)) {
+		return false
+	}
+	if observation.ProviderInstanceID != "" && (!validCapacityIdentifier(observation.ProviderInstanceID, 240) ||
+		(r.ProviderInstanceID != "" && r.ProviderInstanceID != observation.ProviderInstanceID)) {
+		return false
+	}
+	if !observation.ProvisionedAt.IsZero() && (observation.State != "present" || observation.ProvisionedAt.After(observation.ObservedAt)) {
+		return false
+	}
+	switch observation.State {
+	case "present", "absent", "destroyed":
+	default:
+		return false
+	}
+	return !((r.State == CapacityAbsent && observation.State != "absent") || (r.State == CapacityDestroyed && observation.State != "destroyed") ||
+		(r.State == CapacityActive && observation.State != "present"))
 }
 
 func sameCapacityRequest(existing, requested CapacityReservation) bool {
