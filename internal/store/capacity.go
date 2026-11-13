@@ -224,34 +224,72 @@ func validateCapacityObservation(observation CapacityProviderObservation) error 
 }
 
 func applyCapacityObservation(current CapacityReservation, observation CapacityProviderObservation) (CapacityReservation, error) {
+	if err := checkCapacityObservationIdentity(current, observation); err != nil {
+		return CapacityReservation{}, err
+	}
+	replay, err := capacityObservationReplay(current.LastObservation, observation)
+	if err != nil {
+		return CapacityReservation{}, err
+	}
+	if replay {
+		return current, nil
+	}
+	if err := checkCapacityObservationTransition(current, observation); err != nil {
+		return CapacityReservation{}, err
+	}
+	return withCapacityObservation(current, observation), nil
+}
+
+// checkCapacityObservationIdentity rejects an observation of another provider
+// resource, or one observed or provisioned before the reservation existed.
+func checkCapacityObservationIdentity(current CapacityReservation, observation CapacityProviderObservation) error {
 	if current.Provider != observation.Provider || current.ResourceKey != observation.ResourceKey {
-		return CapacityReservation{}, ErrCapacityConflict
+		return ErrCapacityConflict
 	}
 	if observation.ObservedAt.Before(current.CreatedAt) {
-		return CapacityReservation{}, ErrCapacityConflict
+		return ErrCapacityConflict
 	}
 	if !observation.ProvisionedAt.IsZero() && observation.ProvisionedAt.Before(current.CreatedAt) {
-		return CapacityReservation{}, fmt.Errorf("%w: provider provisioning time precedes reservation", ErrInvalidRecord)
+		return fmt.Errorf("%w: provider provisioning time precedes reservation", ErrInvalidRecord)
 	}
-	if current.LastObservation != nil {
-		if observation.ObservedAt.Before(current.LastObservation.ObservedAt) {
-			return CapacityReservation{}, ErrCapacityConflict
-		}
-		if observation.ObservedAt.Equal(current.LastObservation.ObservedAt) {
-			if sameCapacityObservation(*current.LastObservation, observation) {
-				return current, nil
-			}
-			return CapacityReservation{}, ErrCapacityConflict
-		}
+	return nil
+}
+
+// capacityObservationReplay orders observation after last (nil when there is
+// none). It reports true for an exact replay of last, and ErrCapacityConflict
+// for an older observation or a different one at the same time.
+func capacityObservationReplay(last *CapacityProviderObservation, observation CapacityProviderObservation) (bool, error) {
+	if last == nil {
+		return false, nil
 	}
+	if observation.ObservedAt.Before(last.ObservedAt) {
+		return false, ErrCapacityConflict
+	}
+	if !observation.ObservedAt.Equal(last.ObservedAt) {
+		return false, nil
+	}
+	if sameCapacityObservation(*last, observation) {
+		return true, nil
+	}
+	return false, ErrCapacityConflict
+}
+
+// checkCapacityObservationTransition rejects a different provider instance,
+// and a released reservation moving to the other released state.
+func checkCapacityObservationTransition(current CapacityReservation, observation CapacityProviderObservation) error {
 	if current.ProviderInstanceID != "" && observation.ProviderInstanceID != "" && current.ProviderInstanceID != observation.ProviderInstanceID {
-		return CapacityReservation{}, ErrCapacityConflict
+		return ErrCapacityConflict
 	}
-	if current.State == CapacityAbsent || current.State == CapacityDestroyed {
-		if observation.State != "present" && observation.State != string(current.State) {
-			return CapacityReservation{}, ErrCapacityTransition
-		}
+	if capacityStateReleased(current.State) && observation.State != "present" && observation.State != string(current.State) {
+		return ErrCapacityTransition
 	}
+	return nil
+}
+
+// withCapacityObservation returns current moved to the observed state, with
+// the first known provisioning time, the observed instance ID when given, and
+// observation as its last observation.
+func withCapacityObservation(current CapacityReservation, observation CapacityProviderObservation) CapacityReservation {
 	switch observation.State {
 	case "present":
 		current.State = CapacityActive
@@ -268,7 +306,7 @@ func applyCapacityObservation(current CapacityReservation, observation CapacityP
 	}
 	copyObservation := observation
 	current.LastObservation = &copyObservation
-	return current, nil
+	return current
 }
 
 func observeCapacityTx(tx *bolt.Tx, operationID string, observation CapacityProviderObservation) error {
