@@ -119,143 +119,232 @@ type restoreValidationCheck struct {
 	ObservedAt string `json:"observed_at"`
 }
 
+// restorePlan holds the validated request, server, profile and backup that a
+// restore plan is built from.
+type restorePlan struct {
+	operationID  string
+	parameters   serverRestoreParameters
+	server       store.LogicalServer
+	profile      ServerRestoreProfile
+	backupResult json.RawMessage
+	manifestRaw  json.RawMessage
+	manifest     provisionBackupManifest
+}
+
+// restoreStepRequirement pins the adapter capability one planned step uses.
+type restoreStepRequirement struct {
+	id, adapterID       string
+	category            adapter.Category
+	name, input, output string
+	mutating            bool
+}
+
 // BuildPlan pins every adapter capability and exact resource before dispatch.
 func (w *ServerRestoreWorkflow) BuildPlan(ctx context.Context, operation store.OperationRecord) ([]store.OperationStep, error) {
-	if ctx == nil || w == nil || w.servers == nil || w.adapters == nil || w.schemas == nil || w.profiles == nil || w.backups == nil || w.authorizer == nil {
-		return nil, errors.New("initialized server.restore workflow and context are required")
-	}
-	if err := ctx.Err(); err != nil {
+	parameters, err := w.restorePlanRequest(ctx, operation)
+	if err != nil {
 		return nil, err
 	}
-	if operation.OperationType != "server.restore" || operation.ProtocolVersion != w.schemas.ProtocolVersion() ||
-		operation.RequestSnapshot.OperationType != "server.restore" || operation.Target.ServerID == "" || operation.Target.EnvironmentID == "" || !isObject(operation.RequestSnapshot.Parameters) {
-		return nil, errors.New("server.restore operation and loaded protocol version are required")
+	server, err := w.restorePlanServer(operation, parameters)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := w.resolveRestorePlan(ctx, operation.OperationID, parameters, server)
+	if err != nil {
+		return nil, err
+	}
+	version := w.schemas.ProtocolVersion()
+	requirements := restorePlanRequirements(server, parameters.StartAfterRestore)
+	steps := make([]store.OperationStep, 0, len(requirements))
+	for _, requirement := range requirements {
+		step, err := w.planRestoreStep(version, requirement, plan)
+		if err != nil {
+			return nil, err
+		}
+		steps = append(steps, step)
+	}
+	return steps, nil
+}
+
+// restorePlanRequest checks the workflow, context and operation and decodes
+// the request parameters.
+func (w *ServerRestoreWorkflow) restorePlanRequest(ctx context.Context, operation store.OperationRecord) (serverRestoreParameters, error) {
+	if ctx == nil || !w.restoreDependenciesReady() {
+		return serverRestoreParameters{}, errors.New("initialized server.restore workflow and context are required")
+	}
+	if err := ctx.Err(); err != nil {
+		return serverRestoreParameters{}, err
+	}
+	if !restoreOperationPlannable(operation, w.schemas.ProtocolVersion()) {
+		return serverRestoreParameters{}, errors.New("server.restore operation and loaded protocol version are required")
 	}
 	var parameters serverRestoreParameters
 	if err := json.Unmarshal(operation.RequestSnapshot.Parameters, &parameters); err != nil || parameters.BackupID == "" {
-		return nil, errors.New("decode server.restore parameters")
+		return serverRestoreParameters{}, errors.New("decode server.restore parameters")
 	}
+	return parameters, nil
+}
+
+func (w *ServerRestoreWorkflow) restoreDependenciesReady() bool {
+	if w == nil || w.servers == nil || w.adapters == nil || w.schemas == nil {
+		return false
+	}
+	return w.profiles != nil && w.backups != nil && w.authorizer != nil
+}
+
+// restoreOperationPlannable reports whether operation is a server.restore of
+// the loaded protocol version naming a server, environment and parameters.
+func restoreOperationPlannable(operation store.OperationRecord, version string) bool {
+	identified := operation.OperationType == "server.restore" && operation.ProtocolVersion == version && operation.RequestSnapshot.OperationType == "server.restore"
+	return identified && operation.Target.ServerID != "" && operation.Target.EnvironmentID != "" && isObject(operation.RequestSnapshot.Parameters)
+}
+
+// restorePlanServer loads the logical server and checks it can be restored
+// onto exactly the requested instance.
+func (w *ServerRestoreWorkflow) restorePlanServer(operation store.OperationRecord, parameters serverRestoreParameters) (store.LogicalServer, error) {
 	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
 	if err != nil {
-		return nil, fmt.Errorf("load logical server for restore plan: %w", err)
+		return store.LogicalServer{}, fmt.Errorf("load logical server for restore plan: %w", err)
 	}
 	server := stored.Record
-	if (server.LifecycleState != protocolstate.ServerStopped && server.LifecycleState != protocolstate.ServerFailed) || len(server.InstanceRef) == 0 {
-		return nil, errors.New("server.restore requires a stopped or failed logical server with a managed instance")
+	if !stoppedOrFailedLifecycle(server.LifecycleState) || len(server.InstanceRef) == 0 {
+		return store.LogicalServer{}, errors.New("server.restore requires a stopped or failed logical server with a managed instance")
 	}
 	if server.NetworkProfile != "" {
-		return nil, errors.New("server.restore cannot mutate a network-routed server until proxy isolation is integrated")
+		return store.LogicalServer{}, errors.New("server.restore cannot mutate a network-routed server until proxy isolation is integrated")
 	}
-	if (len(operation.Target.InstanceRef) > 0 && !equalJSON(operation.Target.InstanceRef, server.InstanceRef)) ||
-		(len(parameters.TargetInstanceRef) > 0 && !equalJSON(parameters.TargetInstanceRef, server.InstanceRef)) {
-		return nil, store.ErrLogicalServerTargetMismatch
+	if restoreInstanceRequestDiffers(operation, parameters, server) {
+		return store.LogicalServer{}, store.ErrLogicalServerTargetMismatch
 	}
-	profile, err := w.profiles.ResolveServerRestore(ctx, server)
+	return server, nil
+}
+
+// resolveRestorePlan resolves the trusted profile and verified backup and
+// checks the approval and start policy the request depends on.
+func (w *ServerRestoreWorkflow) resolveRestorePlan(ctx context.Context, operationID string, parameters serverRestoreParameters, server store.LogicalServer) (restorePlan, error) {
+	profile, err := w.resolveRestorePlanProfile(ctx, server, parameters)
 	if err != nil {
-		return nil, fmt.Errorf("resolve trusted server restore profile: %w", err)
-	}
-	if err := validateServerRestoreProfile(server, profile); err != nil {
-		return nil, err
-	}
-	if restoreRequiresOverwriteApproval(server, profile) && !parameters.ReplaceExisting {
-		return nil, errors.New("restore target is not confirmed empty; replace_existing_data=true and explicit approval are required")
-	}
-	if err := validateServerRestoreRelease(w.schemas, server, profile); err != nil {
-		return nil, err
+		return restorePlan{}, err
 	}
 	backup, err := w.backups.ResolveServerRestoreBackup(ctx, server, profile.StorageProfileID, parameters.BackupID)
 	if err != nil {
-		return nil, fmt.Errorf("resolve verified restore backup: %w", err)
+		return restorePlan{}, fmt.Errorf("resolve verified restore backup: %w", err)
 	}
 	backupResult, manifestRaw, manifest, err := validateServerRestoreBackup(w.schemas, server, parameters.BackupID, profile, backup)
 	if err != nil {
-		return nil, err
+		return restorePlan{}, err
 	}
-	if parameters.ReplaceExisting {
-		if parameters.ApprovalID == "" {
-			return nil, errors.New("replace_existing_data requires an approval_id")
-		}
+	if parameters.ReplaceExisting && parameters.ApprovalID == "" {
+		return restorePlan{}, errors.New("replace_existing_data requires an approval_id")
 	}
-	if parameters.StartAfterRestore {
-		descriptor, err := w.adapters.Descriptor(server.GameAdapterID)
-		if err != nil || verifyReadinessSetDeclared(descriptor, server.EnvironmentID, ServerStartProfile{
-			GameReleaseID: profile.GameReleaseID, ReadinessCheckSetID: profile.ReadinessCheckSetID, RequiredChecks: profile.RequiredReadinessChecks,
-		}) != nil {
-			return nil, errors.New("restore start policy lacks the declared exact readiness check set")
-		}
+	if parameters.StartAfterRestore && !w.restoreReadinessDeclared(server, profile) {
+		return restorePlan{}, errors.New("restore start policy lacks the declared exact readiness check set")
 	}
+	return restorePlan{operationID: operationID, parameters: parameters, server: server, profile: profile,
+		backupResult: backupResult, manifestRaw: manifestRaw, manifest: manifest}, nil
+}
 
-	version := w.schemas.ProtocolVersion()
-	type requirement struct {
-		id, adapterID       string
-		category            adapter.Category
-		name, input, output string
-		mutating            bool
+func (w *ServerRestoreWorkflow) resolveRestorePlanProfile(ctx context.Context, server store.LogicalServer, parameters serverRestoreParameters) (ServerRestoreProfile, error) {
+	profile, err := w.profiles.ResolveServerRestore(ctx, server)
+	if err != nil {
+		return ServerRestoreProfile{}, fmt.Errorf("resolve trusted server restore profile: %w", err)
 	}
-	requirements := []requirement{
+	if err := validateServerRestoreProfile(server, profile); err != nil {
+		return ServerRestoreProfile{}, err
+	}
+	if restoreRequiresOverwriteApproval(server, profile) && !parameters.ReplaceExisting {
+		return ServerRestoreProfile{}, errors.New("restore target is not confirmed empty; replace_existing_data=true and explicit approval are required")
+	}
+	if err := validateServerRestoreRelease(w.schemas, server, profile); err != nil {
+		return ServerRestoreProfile{}, err
+	}
+	return profile, nil
+}
+
+// restorePlanRequirements lists the planned steps in order; the runtime is
+// started only when the request asks for it.
+func restorePlanRequirements(server store.LogicalServer, start bool) []restoreStepRequirement {
+	requirements := []restoreStepRequirement{
 		{restoreInspectInstanceStep, adapterIDFromRef(server.InstanceRef), adapter.CategoryHosting, "hosting.instance.inspect", "hosting:instance-inspect-input", "hosting:instance-inspect-output", false},
 		{restoreCompatibilityStep, server.GameAdapterID, adapter.CategoryGame, "game.compatibility.check", "game:compatibility-check-input", "game:compatibility-check-output", false},
 		{restoreInspectRuntimeStep, server.ExecutionAdapterID, adapter.CategoryExecution, "execution.unit.inspect", "execution:systemd-unit-inspect-input", "execution:systemd-unit-inspect-output", false},
 		{restoreApplyStep, server.GameAdapterID, adapter.CategoryGame, "game.restore", "game:restore-input", "game:restore-output", true},
 		{restoreInspectStep, server.GameAdapterID, adapter.CategoryGame, "game.restore.inspect", "game:restore-inspect-input", "game:restore-output", false},
 	}
-	if parameters.StartAfterRestore {
-		requirements = append(requirements,
-			requirement{restoreStartStep, server.ExecutionAdapterID, adapter.CategoryExecution, "execution.unit.start", "execution:systemd-unit-start-input", "execution:systemd-unit-start-output", true},
-			requirement{restoreVerifyRuntimeStep, server.ExecutionAdapterID, adapter.CategoryExecution, "execution.unit.inspect", "execution:systemd-unit-inspect-input", "execution:systemd-unit-inspect-output", false},
-			requirement{restoreReadinessStep, server.GameAdapterID, adapter.CategoryGame, "game.readiness.check", "game:readiness-check-input", "game:readiness-check-output", false})
+	if !start {
+		return requirements
 	}
-	target := map[string]any{"server_id": server.ServerID, "environment_id": server.EnvironmentID, "instance_ref": server.InstanceRef}
-	steps := make([]store.OperationStep, 0, len(requirements))
-	for _, req := range requirements {
-		capability, err := exactCapability(w.adapters, req.adapterID, req.category, req.name,
-			"urn:gameserver-controller:"+version+":"+req.input, "urn:gameserver-controller:"+version+":"+req.output, req.mutating)
-		if err != nil {
-			return nil, err
-		}
-		var input any
-		switch req.id {
-		case restoreInspectInstanceStep:
-			input = map[string]any{"instance_ref": server.InstanceRef}
-		case restoreInspectRuntimeStep, restoreVerifyRuntimeStep:
-			input = map[string]any{"unit_ref": profile.UnitRef}
-		case restoreCompatibilityStep:
-			input = map[string]any{"source_manifest": manifestRaw, "target_release": profile.GameReleaseDescription, "required_check_ids": profile.RequiredCompatibilityCheckIDs}
-		case restoreApplyStep:
-			objects := make([]map[string]any, 0, len(manifest.Objects))
-			for _, object := range manifest.Objects {
-				objects = append(objects, map[string]any{"object_ref": object.ObjectRef})
-			}
-			input = map[string]any{"source_backup": backupResult, "target": target, "target_release_id": profile.GameReleaseID,
-				"target_data_generation_id": restoreDataGeneration(operation.OperationID), "required_check_ids": profile.RequiredRestoreCheckIDs, "object_streams": objects}
-		case restoreInspectStep:
-			input = map[string]any{"backup_id": parameters.BackupID, "target": target, "target_data_generation_id": restoreDataGeneration(operation.OperationID)}
-		case restoreStartStep:
-			input = map[string]any{"unit_ref": profile.UnitRef}
-		case restoreReadinessStep:
-			input = map[string]any{"server_id": server.ServerID, "environment_id": server.EnvironmentID, "instance_ref": server.InstanceRef,
-				"game_release_id": profile.GameReleaseID, "readiness_check_set_id": profile.ReadinessCheckSetID, "required_checks": profile.RequiredReadinessChecks}
-		}
-		encoded, err := json.Marshal(input)
-		if err != nil {
-			return nil, fmt.Errorf("encode %s input: %w", req.id, err)
-		}
-		bindings := []inputbinding.Binding(nil)
-		if req.id == restoreApplyStep {
-			bindings = []inputbinding.Binding{{TargetPointer: "/compatibility_result", SourceStepID: restoreCompatibilityStep, SourcePointer: ""}}
-		}
-		if req.id == restoreInspectStep {
-			bindings = []inputbinding.Binding{{TargetPointer: "/restore_execution_ref", SourceStepID: restoreApplyStep, SourcePointer: "/restore_execution_ref"}}
-		}
-		if len(bindings) == 0 {
-			if err := w.schemas.ValidateJSON(capability.InputSchemaURI, encoded); err != nil {
-				return nil, fmt.Errorf("planned %s input does not match its declared capability schema: %w", req.id, err)
-			}
-		}
-		steps = append(steps, store.OperationStep{StepID: req.id, StepType: capability.Name, Status: protocolstate.StepPending,
-			AdapterID: req.adapterID, CapabilityName: capability.Name, CapabilityVersion: capability.Version, Input: encoded, InputBindings: bindings})
+	return append(requirements,
+		restoreStepRequirement{restoreStartStep, server.ExecutionAdapterID, adapter.CategoryExecution, "execution.unit.start", "execution:systemd-unit-start-input", "execution:systemd-unit-start-output", true},
+		restoreStepRequirement{restoreVerifyRuntimeStep, server.ExecutionAdapterID, adapter.CategoryExecution, "execution.unit.inspect", "execution:systemd-unit-inspect-input", "execution:systemd-unit-inspect-output", false},
+		restoreStepRequirement{restoreReadinessStep, server.GameAdapterID, adapter.CategoryGame, "game.readiness.check", "game:readiness-check-input", "game:readiness-check-output", false})
+}
+
+// planRestoreStep pins one step's capability and encodes its input. Inputs
+// completed by bindings are validated only once they are resolved.
+func (w *ServerRestoreWorkflow) planRestoreStep(version string, requirement restoreStepRequirement, plan restorePlan) (store.OperationStep, error) {
+	capability, err := exactCapability(w.adapters, requirement.adapterID, requirement.category, requirement.name,
+		"urn:gameserver-controller:"+version+":"+requirement.input, "urn:gameserver-controller:"+version+":"+requirement.output, requirement.mutating)
+	if err != nil {
+		return store.OperationStep{}, err
 	}
-	return steps, nil
+	encoded, err := json.Marshal(restoreStepInput(requirement.id, plan))
+	if err != nil {
+		return store.OperationStep{}, fmt.Errorf("encode %s input: %w", requirement.id, err)
+	}
+	bindings := restoreStepBindings(requirement.id)
+	if len(bindings) == 0 {
+		if err := w.schemas.ValidateJSON(capability.InputSchemaURI, encoded); err != nil {
+			return store.OperationStep{}, fmt.Errorf("planned %s input does not match its declared capability schema: %w", requirement.id, err)
+		}
+	}
+	return store.OperationStep{StepID: requirement.id, StepType: capability.Name, Status: protocolstate.StepPending,
+		AdapterID: requirement.adapterID, CapabilityName: capability.Name, CapabilityVersion: capability.Version, Input: encoded, InputBindings: bindings}, nil
+}
+
+// restoreStepInput is the planned input of the step with the given ID.
+func restoreStepInput(stepID string, plan restorePlan) any {
+	server, profile := plan.server, plan.profile
+	switch stepID {
+	case restoreInspectInstanceStep:
+		return map[string]any{"instance_ref": server.InstanceRef}
+	case restoreInspectRuntimeStep, restoreVerifyRuntimeStep, restoreStartStep:
+		return map[string]any{"unit_ref": profile.UnitRef}
+	case restoreCompatibilityStep:
+		return map[string]any{"source_manifest": plan.manifestRaw, "target_release": profile.GameReleaseDescription, "required_check_ids": profile.RequiredCompatibilityCheckIDs}
+	case restoreApplyStep:
+		return restoreApplyInput(plan)
+	case restoreInspectStep:
+		return map[string]any{"backup_id": plan.parameters.BackupID, "target": restorePlanTarget(server), "target_data_generation_id": restoreDataGeneration(plan.operationID)}
+	case restoreReadinessStep:
+		return map[string]any{"server_id": server.ServerID, "environment_id": server.EnvironmentID, "instance_ref": server.InstanceRef,
+			"game_release_id": profile.GameReleaseID, "readiness_check_set_id": profile.ReadinessCheckSetID, "required_checks": profile.RequiredReadinessChecks}
+	}
+	return nil
+}
+
+func restoreApplyInput(plan restorePlan) map[string]any {
+	objects := make([]map[string]any, 0, len(plan.manifest.Objects))
+	for _, object := range plan.manifest.Objects {
+		objects = append(objects, map[string]any{"object_ref": object.ObjectRef})
+	}
+	return map[string]any{"source_backup": plan.backupResult, "target": restorePlanTarget(plan.server), "target_release_id": plan.profile.GameReleaseID,
+		"target_data_generation_id": restoreDataGeneration(plan.operationID), "required_check_ids": plan.profile.RequiredRestoreCheckIDs, "object_streams": objects}
+}
+
+func restorePlanTarget(server store.LogicalServer) map[string]any {
+	return map[string]any{"server_id": server.ServerID, "environment_id": server.EnvironmentID, "instance_ref": server.InstanceRef}
+}
+
+// restoreStepBindings lists the inputs a step takes from earlier outputs.
+func restoreStepBindings(stepID string) []inputbinding.Binding {
+	switch stepID {
+	case restoreApplyStep:
+		return []inputbinding.Binding{{TargetPointer: "/compatibility_result", SourceStepID: restoreCompatibilityStep, SourcePointer: ""}}
+	case restoreInspectStep:
+		return []inputbinding.Binding{{TargetPointer: "/restore_execution_ref", SourceStepID: restoreApplyStep, SourcePointer: "/restore_execution_ref"}}
+	}
+	return nil
 }
 
 func validateServerRestoreProfile(server store.LogicalServer, profile ServerRestoreProfile) error {
