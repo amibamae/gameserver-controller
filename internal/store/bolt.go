@@ -389,15 +389,31 @@ func writeAcceptedOperation(tx *bolt.Tx, prepared OperationRecord, logicalServer
 	if err := putOperation(tx, StoredOperation{Record: prepared, Revision: 1}); err != nil {
 		return err
 	}
-	if logicalServer != nil {
-		serverJSON, err := encodeLogicalServer(*logicalServer)
-		if err != nil {
-			return err
-		}
-		if err := tx.Bucket(logicalServersBucket).Put(logicalServerKey(logicalServer.EnvironmentID, logicalServer.ServerID), serverJSON); err != nil {
-			return err
-		}
+	if err := putDefinedLogicalServer(tx, logicalServer); err != nil {
+		return err
 	}
+	if err := putIdempotencyEntry(tx, prepared, proof); err != nil {
+		return err
+	}
+	return putAcceptedLocks(tx, prepared, scopes)
+}
+
+// putDefinedLogicalServer stores the server a definition creates, if any.
+func putDefinedLogicalServer(tx *bolt.Tx, logicalServer *LogicalServer) error {
+	if logicalServer == nil {
+		return nil
+	}
+	serverJSON, err := encodeLogicalServer(*logicalServer)
+	if err != nil {
+		return err
+	}
+	return tx.Bucket(logicalServersBucket).Put(logicalServerKey(logicalServer.EnvironmentID, logicalServer.ServerID), serverJSON)
+}
+
+// putIdempotencyEntry records the active-key verifier and its key version.
+func putIdempotencyEntry(tx *bolt.Tx, prepared OperationRecord, proof IdempotencyProof) error {
+	// The proof always has an active-key verifier here: prepareAcceptance
+	// rejects a proof without one before the transaction starts.
 	activeVerifier, _ := findVerifier(proof, proof.ActiveKeyVersion)
 	entry := idempotencyEntry{
 		OperationID:   prepared.OperationID,
@@ -412,9 +428,12 @@ func writeAcceptedOperation(tx *bolt.Tx, prepared OperationRecord, logicalServer
 	if err := tx.Bucket(idempotencyBucket).Put(verifierIndex(activeVerifier), entryJSON); err != nil {
 		return err
 	}
-	if err := tx.Bucket(keyVersionsBucket).Put([]byte(proof.ActiveKeyVersion), []byte{1}); err != nil {
-		return err
-	}
+	return tx.Bucket(keyVersionsBucket).Put([]byte(proof.ActiveKeyVersion), []byte{1})
+}
+
+// putAcceptedLocks writes the forward lock for every scope and the reverse
+// index of the operation's scopes. An operation without scopes has neither.
+func putAcceptedLocks(tx *bolt.Tx, prepared OperationRecord, scopes []string) error {
 	if len(scopes) == 0 {
 		return nil
 	}
