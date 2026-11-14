@@ -294,53 +294,58 @@ func findReplayedOperation(tx *bolt.Tx, proof IdempotencyProof, actorID string) 
 // its server ID is unused in every environment. Any other server operation
 // requires an existing, valid logical server and returns nil.
 func acceptanceLogicalServer(tx *bolt.Tx, prepared OperationRecord) (*LogicalServer, error) {
-	servers := tx.Bucket(logicalServersBucket)
 	if prepared.OperationType == "server.define" {
-		if len(prepared.Steps) != 0 || len(prepared.RequestSnapshot.SecretRefs) != 0 || len(prepared.Target.InstanceRef) != 0 {
-			return nil, fmt.Errorf("%w: server.define must contain only a logical definition", ErrInvalidRecord)
-		}
-		server, err := newLogicalServerFromDefinition(prepared)
-		if err != nil {
-			return nil, err
-		}
-		key := logicalServerKey(server.EnvironmentID, server.ServerID)
-		if servers.Get(key) != nil {
-			return nil, ErrLogicalServerAlreadyExists
-		}
-		// Server IDs are unique across environments, because management
-		// routes after definition name only the server.
-		if err := servers.ForEach(func(_, value []byte) error {
-			var existing StoredLogicalServer
-			if json.Unmarshal(value, &existing) == nil && existing.Record.ServerID == server.ServerID {
-				return ErrLogicalServerAlreadyExists
-			}
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-		server.CreatedAt = prepared.CreatedAt
-		server.UpdatedAt = prepared.CreatedAt
-		server.LastOperationID = prepared.OperationID
-		return &server, nil
+		return definedLogicalServer(tx.Bucket(logicalServersBucket), prepared)
 	}
 	if !strings.HasPrefix(prepared.OperationType, "server.") {
 		return nil, nil
 	}
-	value := servers.Get(logicalServerKey(prepared.Target.EnvironmentID, prepared.Target.ServerID))
-	if value == nil {
-		return nil, ErrLogicalServerNotFound
+	server, err := readLogicalServerTx(tx, prepared.Target, "logical server key does not match its record")
+	if err != nil {
+		return nil, err
 	}
-	var server StoredLogicalServer
-	if err := json.Unmarshal(value, &server); err != nil {
-		return nil, fmt.Errorf("%w: decode logical server: %v", ErrCorruptStore, err)
+	return nil, requireValidStoredServer(server.Record)
+}
+
+// definedLogicalServer returns the logical server a server.define creates.
+func definedLogicalServer(servers *bolt.Bucket, prepared OperationRecord) (*LogicalServer, error) {
+	if !logicalDefinitionOnly(prepared) {
+		return nil, fmt.Errorf("%w: server.define must contain only a logical definition", ErrInvalidRecord)
 	}
-	if server.Revision == 0 || server.Record.EnvironmentID != prepared.Target.EnvironmentID || server.Record.ServerID != prepared.Target.ServerID {
-		return nil, fmt.Errorf("%w: logical server key does not match its record", ErrCorruptStore)
+	server, err := newLogicalServerFromDefinition(prepared)
+	if err != nil {
+		return nil, err
 	}
-	if err := validatePersistedLogicalServer(server.Record); err != nil {
-		return nil, fmt.Errorf("%w: invalid logical server record", ErrCorruptStore)
+	if err := requireUnusedServerID(servers, server); err != nil {
+		return nil, err
 	}
-	return nil, nil
+	server.CreatedAt = prepared.CreatedAt
+	server.UpdatedAt = prepared.CreatedAt
+	server.LastOperationID = prepared.OperationID
+	return &server, nil
+}
+
+func logicalDefinitionOnly(prepared OperationRecord) bool {
+	return len(prepared.Steps) == 0 && len(prepared.RequestSnapshot.SecretRefs) == 0 && len(prepared.Target.InstanceRef) == 0
+}
+
+// requireUnusedServerID fails when the server's key is taken or when any
+// environment already uses its server ID, because management routes after
+// definition name only the server.
+func requireUnusedServerID(servers *bolt.Bucket, server LogicalServer) error {
+	if servers.Get(logicalServerKey(server.EnvironmentID, server.ServerID)) != nil {
+		return ErrLogicalServerAlreadyExists
+	}
+	return servers.ForEach(func(_, value []byte) error {
+		// A record that does not decode is skipped rather than reported
+		// here: this check only looks for a taken ID, and the reads that
+		// depend on that record report its corruption.
+		var existing StoredLogicalServer
+		if json.Unmarshal(value, &existing) == nil && existing.Record.ServerID == server.ServerID {
+			return ErrLogicalServerAlreadyExists
+		}
+		return nil
+	})
 }
 
 // requireFreeLocks fails with ErrResourceConflict when another operation
@@ -365,11 +370,7 @@ func requireFreeLocks(tx *bolt.Tx, scopes []string) error {
 // server a definition creates, the active-key idempotency entry, the key
 // version, and the forward and reverse lock indexes, in one transaction.
 func writeAcceptedOperation(tx *bolt.Tx, prepared OperationRecord, logicalServer *LogicalServer, proof IdempotencyProof, scopes []string) error {
-	encoded, err := json.Marshal(operationEnvelope{Revision: 1, Record: prepared})
-	if err != nil {
-		return fmt.Errorf("encode operation record: %w", err)
-	}
-	if err := tx.Bucket(operationsBucket).Put([]byte(prepared.OperationID), encoded); err != nil {
+	if err := putOperation(tx, StoredOperation{Record: prepared, Revision: 1}); err != nil {
 		return err
 	}
 	if logicalServer != nil {
