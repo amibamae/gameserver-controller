@@ -124,15 +124,19 @@ func validateReadinessRequest(schemas schemaRuntime, operation store.OperationRe
 	if operation.ProtocolVersion == "" || operation.ProtocolVersion != schemas.ProtocolVersion() {
 		return errors.New("readiness operation protocol version is not loaded by the schema registry")
 	}
-	if operation.Target.ServerID == "" || operation.Target.EnvironmentID == "" ||
-		server.ServerID != operation.Target.ServerID || server.EnvironmentID != operation.Target.EnvironmentID ||
-		server.LifecycleState == protocolstate.ServerDestroyed || len(server.InstanceRef) == 0 {
+	if !readinessTargetMatches(operation, server) || server.LifecycleState == protocolstate.ServerDestroyed || len(server.InstanceRef) == 0 {
 		return errors.New("readiness target does not match an existing managed instance")
 	}
 	if len(operation.Target.InstanceRef) > 0 && !equalJSON(operation.Target.InstanceRef, server.InstanceRef) {
 		return errors.New("readiness target instance does not match the managed instance")
 	}
 	return nil
+}
+
+func readinessTargetMatches(operation store.OperationRecord, server store.LogicalServer) bool {
+	target := operation.Target
+	return target.ServerID != "" && target.EnvironmentID != "" &&
+		server.ServerID == target.ServerID && server.EnvironmentID == target.EnvironmentID
 }
 
 // findReadinessStep returns the named step from the persisted operation. It
@@ -188,10 +192,18 @@ func decodeReadinessEvidence(schemas schemaRuntime, version string, step store.O
 // release, and the server's managed instance.
 func readinessEvidenceBound(operation store.OperationRecord, server store.LogicalServer, input readinessCheckInput, output readinessCheckOutput) bool {
 	target := operation.Target
-	return input.ServerID == target.ServerID && input.EnvironmentID == target.EnvironmentID &&
-		output.ServerID == target.ServerID && output.EnvironmentID == target.EnvironmentID &&
+	return readinessEvidenceNamesTarget(input, output, target.ServerID, target.EnvironmentID) &&
 		input.GameReleaseID != "" && output.GameReleaseID == input.GameReleaseID &&
-		equalJSON(input.InstanceRef, server.InstanceRef) && equalJSON(output.InstanceRef, server.InstanceRef)
+		readinessEvidenceNamesInstance(input, output, server.InstanceRef)
+}
+
+func readinessEvidenceNamesTarget(input readinessCheckInput, output readinessCheckOutput, serverID, environmentID string) bool {
+	return input.ServerID == serverID && input.EnvironmentID == environmentID &&
+		output.ServerID == serverID && output.EnvironmentID == environmentID
+}
+
+func readinessEvidenceNamesInstance(input readinessCheckInput, output readinessCheckOutput, instanceRef json.RawMessage) bool {
+	return equalJSON(input.InstanceRef, instanceRef) && equalJSON(output.InstanceRef, instanceRef)
 }
 
 func checkReadinessEvidenceBinding(operation store.OperationRecord, server store.LogicalServer, input readinessCheckInput, output readinessCheckOutput) error {
@@ -223,17 +235,9 @@ func checkReadinessResults(input readinessCheckInput, output readinessCheckOutpu
 	expiresAt := aggregateObservedAt.Add(ttl)
 	checkVersions := make([]string, 0, len(output.CheckResults))
 	for _, check := range output.CheckResults {
-		expectedVersion, ok := required[check.CheckID]
-		if !ok {
-			return time.Time{}, time.Time{}, nil, fmt.Errorf("readiness observation contains unrequested check %q", check.CheckID)
-		}
-		delete(required, check.CheckID)
-		if check.CheckVersion == "" || check.CheckVersion != expectedVersion || check.Result != "pass" {
-			return time.Time{}, time.Time{}, nil, fmt.Errorf("required readiness check %q did not pass at its declared version", check.CheckID)
-		}
-		observedAt, parseErr := time.Parse(time.RFC3339Nano, check.ObservedAt)
-		if parseErr != nil || observedAt.After(aggregateObservedAt) || observedAt.After(now) || !observedAt.Add(ttl).After(now) {
-			return time.Time{}, time.Time{}, nil, fmt.Errorf("readiness check %q has an invalid, stale, or future observation time", check.CheckID)
+		observedAt, err := validateReadinessCheck(check, required, aggregateObservedAt, now, ttl)
+		if err != nil {
+			return time.Time{}, time.Time{}, nil, err
 		}
 		if checkExpiresAt := observedAt.Add(ttl); checkExpiresAt.Before(expiresAt) {
 			expiresAt = checkExpiresAt
@@ -245,6 +249,22 @@ func checkReadinessResults(input readinessCheckInput, output readinessCheckOutpu
 	}
 	sort.Strings(checkVersions)
 	return aggregateObservedAt, expiresAt, checkVersions, nil
+}
+
+func validateReadinessCheck(check readinessCheckResult, required map[string]string, aggregate, now time.Time, ttl time.Duration) (time.Time, error) {
+	expectedVersion, ok := required[check.CheckID]
+	if !ok {
+		return time.Time{}, fmt.Errorf("readiness observation contains unrequested check %q", check.CheckID)
+	}
+	delete(required, check.CheckID)
+	if check.CheckVersion == "" || check.CheckVersion != expectedVersion || check.Result != "pass" {
+		return time.Time{}, fmt.Errorf("required readiness check %q did not pass at its declared version", check.CheckID)
+	}
+	observedAt, err := time.Parse(time.RFC3339Nano, check.ObservedAt)
+	if err != nil || observedAt.After(aggregate) || observedAt.After(now) || !observedAt.Add(ttl).After(now) {
+		return time.Time{}, fmt.Errorf("readiness check %q has an invalid, stale, or future observation time", check.CheckID)
+	}
+	return observedAt, nil
 }
 
 // requiredReadinessChecks maps each required check ID to its version and
