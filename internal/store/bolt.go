@@ -64,6 +64,22 @@ func OpenBolt(path string) (*BoltStore, error) {
 	if path == "" {
 		return nil, fmt.Errorf("open operation store: %w: empty path", ErrInvalidRecord)
 	}
+	db, err := openPrivateBoltFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Update(initializeSchema); err != nil {
+		return nil, closeAfterFailedOpen(db, fmt.Errorf("initialize operation store: %w", err))
+	}
+	if err := db.View(verifyRecoveryIndexes); err != nil {
+		return nil, closeAfterFailedOpen(db, fmt.Errorf("verify operation recovery indexes: %w", err))
+	}
+	return &BoltStore{db: db}, nil
+}
+
+// openPrivateBoltFile creates the parent directory, opens the database, and
+// restricts the file to the current user.
+func openPrivateBoltFile(path string) (*bolt.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("create operation store directory: %w", err)
 	}
@@ -72,61 +88,61 @@ func OpenBolt(path string) (*BoltStore, error) {
 		return nil, fmt.Errorf("open bbolt operation store: %w", err)
 	}
 	if err := os.Chmod(path, 0o600); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("restrict operation store permissions: %w", err)
+		return nil, closeAfterFailedOpen(db, fmt.Errorf("restrict operation store permissions: %w", err))
 	}
-	if err := db.Update(func(tx *bolt.Tx) error {
-		meta, err := tx.CreateBucketIfNotExists(metadataBucket)
-		if err != nil {
+	return db, nil
+}
+
+// closeAfterFailedOpen closes db after a failed open step and returns that
+// step's error. The close error is deliberately dropped: the caller must
+// see the open step's error, whose message is part of the store contract,
+// and there is no store left to report a close failure against.
+func closeAfterFailedOpen(db *bolt.DB, err error) error {
+	_ = db.Close()
+	return err
+}
+
+// initializeSchema creates every bucket and brings the schema version to
+// databaseSchema, refusing stores whose legacy records need a migration.
+func initializeSchema(tx *bolt.Tx) error {
+	meta, err := tx.CreateBucketIfNotExists(metadataBucket)
+	if err != nil {
+		return err
+	}
+	for _, name := range [][]byte{operationsBucket, idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket, capacityReservationsBucket, managementAPIKeysBucket, hostHandoffsBucket} {
+		if _, err := tx.CreateBucketIfNotExists(name); err != nil {
 			return err
 		}
-		if _, err := tx.CreateBucketIfNotExists(operationsBucket); err != nil {
-			return err
-		}
-		for _, name := range [][]byte{idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket, capacityReservationsBucket, managementAPIKeysBucket, hostHandoffsBucket} {
-			if _, err := tx.CreateBucketIfNotExists(name); err != nil {
-				return err
-			}
-		}
-		version := meta.Get(schemaKey)
-		if version == nil {
-			for _, name := range [][]byte{operationsBucket, idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket, capacityReservationsBucket} {
-				cursor := tx.Bucket(name).Cursor()
-				if key, _ := cursor.First(); key != nil {
-					return ErrStoreNeedsMigration
-				}
-			}
-			return meta.Put(schemaKey, []byte(databaseSchema))
-		}
-		if bytes.Equal(version, []byte("1")) {
-			cursor := tx.Bucket(operationsBucket).Cursor()
-			if key, _ := cursor.First(); key != nil {
-				return ErrStoreNeedsMigration
-			}
-			return meta.Put(schemaKey, []byte(databaseSchema))
-		}
-		if bytes.Equal(version, []byte("2")) {
-			return meta.Put(schemaKey, []byte(databaseSchema))
-		}
-		if bytes.Equal(version, []byte("3")) {
-			return meta.Put(schemaKey, []byte(databaseSchema))
-		}
-		if bytes.Equal(version, []byte("4")) {
-			return meta.Put(schemaKey, []byte(databaseSchema))
-		}
-		if !bytes.Equal(version, []byte(databaseSchema)) {
-			return fmt.Errorf("unsupported operation store schema version %q", version)
-		}
+	}
+	return migrateSchemaVersion(tx, meta)
+}
+
+// migrateSchemaVersion stamps databaseSchema on an unversioned or older
+// store. An unversioned store must hold no records in the buckets that
+// predate versioning, and a version 1 store no operations.
+func migrateSchemaVersion(tx *bolt.Tx, meta *bolt.Bucket) error {
+	version := meta.Get(schemaKey)
+	if version == nil {
+		return stampSchemaWhenEmpty(tx, meta, [][]byte{operationsBucket, idempotencyBucket, locksBucket, operationLocksBucket, keyVersionsBucket, logicalServersBucket, capacityReservationsBucket})
+	}
+	switch string(version) {
+	case "1":
+		return stampSchemaWhenEmpty(tx, meta, [][]byte{operationsBucket})
+	case "2", "3", "4":
+		return meta.Put(schemaKey, []byte(databaseSchema))
+	case databaseSchema:
 		return nil
-	}); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("initialize operation store: %w", err)
 	}
-	if err := db.View(verifyRecoveryIndexes); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("verify operation recovery indexes: %w", err)
+	return fmt.Errorf("unsupported operation store schema version %q", version)
+}
+
+func stampSchemaWhenEmpty(tx *bolt.Tx, meta *bolt.Bucket, buckets [][]byte) error {
+	for _, name := range buckets {
+		if key, _ := tx.Bucket(name).Cursor().First(); key != nil {
+			return ErrStoreNeedsMigration
+		}
 	}
-	return &BoltStore{db: db}, nil
+	return meta.Put(schemaKey, []byte(databaseSchema))
 }
 
 func (s *BoltStore) Close() error {
