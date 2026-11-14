@@ -63,6 +63,7 @@ Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is cont
 | Codex | `cmd/supervised-pilot/*` | #256 merged | `main.go` still 5.37; further work is Codex's |
 | Codex | `internal/controllersetup/installer.go`, `cmd/controller-setup/*` | local branch `codex/controller-setup-apply` | **uncommitted** in Codex's checkout on the owner's Mac; not on GitHub yet |
 | Codex | `docs/ROADMAP.md` estimates | #255 | open |
+| Codex | `internal/workflow/readiness.go` | `codex/refactor-readiness-results` | Evidence validation refactor; local score 7.43 → 7.72, maximum complexity 18 → 15 |
 | Codex | `internal/store/logical_servers.go` | #254 merged | done (8.47) |
 | Claude | `internal/workflow/server_provision*.go` | `claude/r3-server-provision` | on hold; work unavailable |
 | Claude | `internal/workflow/server_restore*.go` | `claude/r3-server-restore` | on hold; work unavailable |
