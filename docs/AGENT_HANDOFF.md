@@ -22,6 +22,12 @@ If the repowise tools aren't available, you can measure complexity with a cyclom
 
 ## Current work: raising code health (resume here)
 
+**Backup follow-up (2026-11-14).** PR #258 combines the backup refactor with the checker merged in #260. The integration worktree is `/private/tmp/gsc-backup-health-checker`, branch `codex/backup-health-checker`. The published PR branch is `codex/refactor-backup-lifecycle`.
+
+- The integrated changes clear all 22 findings from the initial checker run. Characterization tests pin capture error order, retry and reconciliation decisions, validation rejections, and manifest and readiness binding.
+- Local Repowise 0.61.0 compares the same analyzer on base `47d8a31` and the integrated branch. `server_backup.go` rose from 5.37 to 10.00. Every changed production file scores 8.04 or higher. The existing changed test file stayed at 10.00. Run the complete validation on the published head before merging.
+- For a new local score, use `/private/tmp/gsc-repowise-venv/bin/repowise health --recompute --format json`. The comparable base report is `/private/tmp/gsc-baseline-47d8-health.json`. Keep `.repowise/` out of commits.
+
 The owner's goal is a repowise average health of **7–8**. The method:
 - one PR per file group;
 - characterization tests first, green on the old code;
@@ -48,7 +54,7 @@ The owner's goal is a repowise average health of **7–8**. The method:
 
 ### Who owns what (check this before you start anything)
 
-Two agents work on this repository: a Claude session and ChatGPT Codex. The owner split the files on 2026-11-14 so the two don't collide. Only work on files your agent owns. If you need a file another agent owns, ask the owner first, and update this table in the same PR when ownership changes.
+Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is continuing the published backup draft. Keep unfinished Claude scopes on hold when their work is unavailable. Check the published branches and open PRs before resuming any scope.
 
 | Owner | Files | Branch or PR | Status (2026-11-14) |
 |---|---|---|---|
@@ -58,13 +64,13 @@ Two agents work on this repository: a Claude session and ChatGPT Codex. The owne
 | Codex | `internal/controllersetup/installer.go`, `cmd/controller-setup/*` | local branch `codex/controller-setup-apply` | **uncommitted** in Codex's checkout on the owner's Mac; not on GitHub yet |
 | Codex | `docs/ROADMAP.md` estimates | #255 | open |
 | Codex | `internal/store/logical_servers.go` | #254 merged | done (8.47) |
-| Claude | `internal/workflow/server_provision*.go` | `claude/r3-server-provision` | in progress |
-| Claude | `internal/workflow/server_restore*.go` | `claude/r3-server-restore` | in progress |
-| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | `claude/r3-server-start-stop` | in progress |
-| Claude | `internal/workflow/file_stream_broker*.go` | `claude/r3-file-stream-broker` | in progress |
-| Claude | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | in progress |
-| Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | in progress |
-| Claude | `cmd/complexity-check/*`, its CI step | `claude/complexity-check` | PR open; once merged, CI checks every pull request |
+| Claude | `internal/workflow/server_provision*.go` | `claude/r3-server-provision` | on hold; work unavailable |
+| Claude | `internal/workflow/server_restore*.go` | `claude/r3-server-restore` | on hold; work unavailable |
+| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | `claude/r3-server-start-stop` | on hold; work unavailable |
+| Claude | `internal/workflow/file_stream_broker*.go` | `claude/r3-file-stream-broker` | on hold; work unavailable |
+| Claude | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | on hold; work unavailable |
+| Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | on hold; work unavailable |
+| Codex | `cmd/complexity-check/*`, its CI step | #260 merged | checker runs on PRs |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
 
 Claude's earlier backup, destroy, supervised-pilot and controller-setup agents were stopped unpublished, so their local work is dropped and those files are Codex's.
@@ -85,10 +91,7 @@ Claude's earlier backup, destroy, supervised-pilot and controller-setup agents w
 4. After the current rows merge, ask the owner to re-index repowise, run `get_health` on the changed files, and report the real before and after scores. Then continue with any file still below 7, worst first.
 5. When `cmd/complexity-check` is on `main`, run it before every push, for example `go run ./cmd/complexity-check -base origin/main`.
 
-**Current isolated continuation (2026-11-13):** local branch `codex/refactor-logical-server-validation`, worktree `/private/tmp/gsc-health-logical-server-validation`, based on `d958cbb`. Draft PR #254 is open. The shared checkout on `codex/controller-setup-apply` contains uncommitted controller-setup work; leave it untouched. This continuation owns only `internal/store/logical_servers.go`, its focused validation tests, and this handoff. Characterization tests passed against the original production code before refactoring. The refactor now groups identity comparisons and lifecycle-event validation into named predicates while preserving check order, transitions, and exact errors. The store tests, full `go vet ./...`, `go test ./...`, `gofmt -l .`, `git diff --check`, and `go run ./cmd/protocol-check` pass. Comparable local Repowise 0.61.0 recomputes measured the production file at 7.32 before and 9.23 after. The test file stayed at 10.00 after splitting field and lifecycle cases. Check CI on the latest PR head before merging.
-
 **Known limits:**
-- The first parallel batch uses separate worktrees under `/private/tmp`: `gsc-backup-lifecycle` for backup lifecycle projection, `gsc-health-server-destroy` for destroy completion and reconciliation, and `gsc-pilot-provision-parallel` for the pilot CLI. Base all score comparisons on the actual branch tree. The hosted index at `d958cbb` is the baseline for draft PR #254, whose published head is `38f9a935` and whose Go validation run 815 passed. PR #255 owns roadmap estimates. Backup is draft PR #258, destroy is #257, and the pilot CLI is #256. At the published follow-up revisions the pilot CLI scored 7.09 and destroy scored 7.00, with all extracted production files above 7. Backup's original file remained at 5.37 and its validation test file declined from 8.58 to 8.04, so continue that draft with the same test coverage. Leave the shared controller setup checkout alone.
 - A few branches are kept verbatim because no test can reach them; each PR lists them.
 - `ValidateCompletion` in `server_destroy.go` can reuse `destroyRuntimeStoppedOrAbsent`.
 - `capacity_adoption.go` has its own scan loop and deliberately returns a different error.
