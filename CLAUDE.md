@@ -26,6 +26,7 @@ The project owner requires this for all work, including future conversations and
 - **Files:** keep one responsibility per file, and aim for under about 500 lines. When a file passes about 800 lines, split it into sibling files by responsibility.
 - **Parameters and errors:** take at most 5 parameters; group related ones in a struct. Do not discard an error silently; handle it or explain in a comment why it cannot fail.
 - **Tests:** cover every new branch and pin its exact error messages. When refactoring, first write characterization tests that pass on the old code, then change it without changing behaviour.
+- **Check changed functions:** run `go run ./cmd/complexity-check -base origin/main` before pushing. It reports functions you added or changed that exceed the complexity, nesting or boolean-operator limits, and CI runs the same check on every pull request. If a function really is an exception, put `complexity-check:allow <reason>` in its doc comment and give the reason in the PR.
 - **Check before merging:** when the repowise MCP tools are available, run `get_health` on the files you changed. Each changed production file should score 7 or more, and no change should lower a file's score. Report the scores in the PR.
 - **Exceptions:** skip a rule only when meeting it would make the code worse, and say why in the PR. Examples: a flat dispatch table or switch that maps names to handlers, generated code, or a branch that must stay verbatim because a protocol rule or byte-identical output depends on it.
 

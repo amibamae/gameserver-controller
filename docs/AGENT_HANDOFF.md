@@ -64,7 +64,7 @@ Two agents work on this repository: a Claude session and ChatGPT Codex. The owne
 | Claude | `internal/workflow/file_stream_broker*.go` | `claude/r3-file-stream-broker` | in progress |
 | Claude | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | in progress |
 | Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | in progress |
-| Claude | `cmd/complexity-check/*`, its CI step | `claude/complexity-check` | in progress |
+| Claude | `cmd/complexity-check/*`, its CI step | `claude/complexity-check` | PR open; once merged, CI checks every pull request |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
 
 Claude's earlier backup, destroy, supervised-pilot and controller-setup agents were stopped unpublished, so their local work is dropped and those files are Codex's.

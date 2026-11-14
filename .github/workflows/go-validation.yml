@@ -33,6 +33,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # Full history, so the complexity check can diff against the base branch.
+          fetch-depth: 0
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -62,3 +65,8 @@ jobs:
         run: go run ./cmd/config-check validate configs/controller.example.yaml
       - name: Validate declarative pilot policy
         run: go run ./cmd/pilot-capacity-check
+      - name: Check complexity of changed functions
+        # Fails only for functions this pull request adds or changes that
+        # exceed the CLAUDE.md limits; existing code is not checked.
+        if: github.event_name == 'pull_request'
+        run: go run ./cmd/complexity-check -base "origin/${{ github.base_ref }}"
