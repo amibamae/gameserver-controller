@@ -802,36 +802,71 @@ func validateRestoreExecutionRef(schemas schemaRuntime, raw json.RawMessage, ada
 	return ok && ref.AdapterID == adapterID && ref.EnvironmentID == environmentID && ref.ResourceKind == "restore-execution"
 }
 
+// Reconcile inspects a restore call whose outcome is unknown by its exact
+// execution reference. Anything it cannot prove needs an operator.
 func (w *ServerRestoreWorkflow) Reconcile(ctx context.Context, operation store.OperationRecord, step store.OperationStep) (Resolution, error) {
-	if ctx == nil || w == nil || operation.OperationType != "server.restore" || step.StepID != restoreApplyStep || step.CapabilityName != "game.restore" {
+	if !w.trustedRestoreExecution(ctx, operation, step) {
 		return Resolution{State: ResolutionNeedsOperator}, nil
 	}
-	if len(step.ExternalOperationRef) == 0 {
-		return Resolution{State: ResolutionNeedsOperator}, nil
-	}
-	if !validateRestoreExecutionRef(w.schemas, step.ExternalOperationRef, step.AdapterID, operation.Target.EnvironmentID) {
-		return Resolution{State: ResolutionNeedsOperator}, nil
-	}
-	if outputRef := stepField(step.Output, "restore_execution_ref"); len(outputRef) > 0 &&
-		(!validateRestoreExecutionRef(w.schemas, outputRef, step.AdapterID, operation.Target.EnvironmentID) || !equalJSON(outputRef, step.ExternalOperationRef)) {
-		return Resolution{State: ResolutionNeedsOperator}, nil
-	}
+	needsOperator := Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}
 	capability, err := exactCapability(w.adapters, step.AdapterID, adapter.CategoryGame, "game.restore.inspect",
 		"urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":game:restore-inspect-input", "urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":game:restore-output", false)
 	if err != nil {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+		return needsOperator, nil
 	}
-	input := step.ResolvedInput
-	if len(input) == 0 {
-		input = step.Input
+	planned, ok := decodeRestoreReconcilePlan(step)
+	if !ok || !w.restorePlanStillTargets(operation, planned) {
+		return needsOperator, nil
 	}
+	response, ok := w.inspectRestoreExecution(ctx, operation, step, capability, planned)
+	if !ok {
+		return needsOperator, nil
+	}
+	var output restoreGameResult
+	if json.Unmarshal(response.Result.Output, &output) != nil || !w.restoreInspectionBound(output, planned, operation, step) {
+		return needsOperator, nil
+	}
+	return restoreReconcileOutcome(operation, output, response.Result.Output, needsOperator), nil
+}
+
+// trustedRestoreExecution reports whether step is an exact restore call
+// whose recorded execution reference may be sent to the adapter.
+func (w *ServerRestoreWorkflow) trustedRestoreExecution(ctx context.Context, operation store.OperationRecord, step store.OperationStep) bool {
+	if ctx == nil || w == nil || !isRestoreApplyCall(operation, step) || len(step.ExternalOperationRef) == 0 {
+		return false
+	}
+	if !validateRestoreExecutionRef(w.schemas, step.ExternalOperationRef, step.AdapterID, operation.Target.EnvironmentID) {
+		return false
+	}
+	outputRef := stepField(step.Output, "restore_execution_ref")
+	if len(outputRef) == 0 {
+		return true
+	}
+	return validateRestoreExecutionRef(w.schemas, outputRef, step.AdapterID, operation.Target.EnvironmentID) && equalJSON(outputRef, step.ExternalOperationRef)
+}
+
+func isRestoreApplyCall(operation store.OperationRecord, step store.OperationStep) bool {
+	return operation.OperationType == "server.restore" && step.StepID == restoreApplyStep && step.CapabilityName == "game.restore"
+}
+
+// restoreReconcilePlan is the part of the planned restore call that its
+// inspection must confirm.
+type restoreReconcilePlan struct {
+	Target            json.RawMessage
+	TargetGeneration  string
+	BackupID          string
+	SourceEnvironment string
+	SourceGeneration  string
+}
+
+func decodeRestoreReconcilePlan(step store.OperationStep) (restoreReconcilePlan, bool) {
 	var planned struct {
 		SourceBackup     json.RawMessage `json:"source_backup"`
 		Target           json.RawMessage `json:"target"`
 		TargetGeneration string          `json:"target_data_generation_id"`
 	}
-	if json.Unmarshal(input, &planned) != nil {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+	if json.Unmarshal(effectiveStepInput(step), &planned) != nil {
+		return restoreReconcilePlan{}, false
 	}
 	var source struct {
 		OperationData struct {
@@ -841,36 +876,72 @@ func (w *ServerRestoreWorkflow) Reconcile(ctx context.Context, operation store.O
 		} `json:"operation_data"`
 	}
 	if json.Unmarshal(planned.SourceBackup, &source) != nil {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+		return restoreReconcilePlan{}, false
 	}
+	return restoreReconcilePlan{Target: planned.Target, TargetGeneration: planned.TargetGeneration, BackupID: source.OperationData.BackupID,
+		SourceEnvironment: source.OperationData.EnvironmentID, SourceGeneration: source.OperationData.DataGenerationID}, true
+}
+
+// restorePlanStillTargets reports whether the plan still names the server's
+// current target, this operation's new generation and a complete source.
+func (w *ServerRestoreWorkflow) restorePlanStillTargets(operation store.OperationRecord, planned restoreReconcilePlan) bool {
 	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
-	if err != nil || !restoreTargetMatches(planned.Target, stored.Record) || planned.TargetGeneration != restoreDataGeneration(operation.OperationID) ||
-		source.OperationData.BackupID == "" || source.OperationData.EnvironmentID != operation.Target.EnvironmentID || source.OperationData.DataGenerationID == "" {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+	if err != nil || !restoreTargetMatches(planned.Target, stored.Record) || planned.TargetGeneration != restoreDataGeneration(operation.OperationID) {
+		return false
 	}
-	inspectInput, _ := json.Marshal(map[string]any{"backup_id": source.OperationData.BackupID, "target": planned.Target,
+	return planned.BackupID != "" && planned.SourceEnvironment == operation.Target.EnvironmentID && planned.SourceGeneration != ""
+}
+
+// inspectRestoreExecution asks the game adapter for the exact execution's
+// result and accepts only a completed, schema-valid answer.
+func (w *ServerRestoreWorkflow) inspectRestoreExecution(ctx context.Context, operation store.OperationRecord, step store.OperationStep,
+	capability adapter.Capability, planned restoreReconcilePlan) (adapter.InvokeResponse, bool) {
+	inspectInput, err := json.Marshal(map[string]any{"backup_id": planned.BackupID, "target": planned.Target,
 		"target_data_generation_id": planned.TargetGeneration, "restore_execution_ref": step.ExternalOperationRef})
+	if err != nil {
+		// Unreachable: both raw values were decoded or schema-validated above.
+		return adapter.InvokeResponse{}, false
+	}
 	response, err := w.invoke(ctx, operation, step, capability, inspectInput, "restore-reconcile")
 	if err != nil || response.Result.Outcome != adapter.OutcomeCompleted || w.schemas.ValidateJSON(capability.OutputSchemaURI, response.Result.Output) != nil {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+		return adapter.InvokeResponse{}, false
 	}
-	var output restoreGameResult
-	if json.Unmarshal(response.Result.Output, &output) != nil || output.BackupID != source.OperationData.BackupID || output.EnvironmentID != operation.Target.EnvironmentID ||
-		output.SourceGenerationID != source.OperationData.DataGenerationID || output.TargetGenerationID != planned.TargetGeneration || !equalJSON(output.Target, planned.Target) ||
-		!equalJSON(output.RestoreExecutionRef, step.ExternalOperationRef) || !observationIsCurrent(output.ObservedAt, w.assertionTTL, time.Now().UTC()) ||
-		!restoreValidationChecksCurrentAt(output.ValidationChecks, output.ObservedAt, w.assertionTTL) {
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
-	}
+	return response, true
+}
+
+// restoreInspectionBound reports whether the inspection describes the exact
+// planned restore, execution and a current observation.
+func (w *ServerRestoreWorkflow) restoreInspectionBound(output restoreGameResult, planned restoreReconcilePlan, operation store.OperationRecord, step store.OperationStep) bool {
+	return restoreInspectionSourceMatches(output, planned, operation.Target.EnvironmentID) &&
+		restoreInspectionTargetMatches(output, planned, step.ExternalOperationRef) &&
+		w.restoreInspectionCurrent(output)
+}
+
+func restoreInspectionSourceMatches(output restoreGameResult, planned restoreReconcilePlan, environmentID string) bool {
+	return output.BackupID == planned.BackupID && output.EnvironmentID == environmentID && output.SourceGenerationID == planned.SourceGeneration
+}
+
+func restoreInspectionTargetMatches(output restoreGameResult, planned restoreReconcilePlan, executionRef json.RawMessage) bool {
+	return output.TargetGenerationID == planned.TargetGeneration && equalJSON(output.Target, planned.Target) && equalJSON(output.RestoreExecutionRef, executionRef)
+}
+
+func (w *ServerRestoreWorkflow) restoreInspectionCurrent(output restoreGameResult) bool {
+	return observationIsCurrent(output.ObservedAt, w.assertionTTL, time.Now().UTC()) &&
+		restoreValidationChecksCurrentAt(output.ValidationChecks, output.ObservedAt, w.assertionTTL)
+}
+
+// restoreReconcileOutcome maps a bound inspection's outcome to a resolution.
+func restoreReconcileOutcome(operation store.OperationRecord, output restoreGameResult, raw json.RawMessage, needsOperator Resolution) Resolution {
 	switch output.Outcome {
 	case "restored":
 		if !restoreRequiredChecksPass(output.ValidationChecks, restoreRequiredChecks(operation)) {
-			return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+			return needsOperator
 		}
-		return Resolution{State: ResolutionCompleted, Output: response.Result.Output, ExternalOperationRef: step.ExternalOperationRef}, nil
+		return Resolution{State: ResolutionCompleted, Output: raw, ExternalOperationRef: needsOperator.ExternalOperationRef}
 	case "rejected":
-		return Resolution{State: ResolutionDefinitiveError, Error: protocolError("core.restore.rejected", "provider_failure", "The exact restore execution was confirmed rejected.", operation.OperationID, false, "operator_review", false), ExternalOperationRef: step.ExternalOperationRef}, nil
+		return Resolution{State: ResolutionDefinitiveError, Error: protocolError("core.restore.rejected", "provider_failure", "The exact restore execution was confirmed rejected.", operation.OperationID, false, "operator_review", false), ExternalOperationRef: needsOperator.ExternalOperationRef}
 	default:
-		return Resolution{State: ResolutionNeedsOperator, ExternalOperationRef: step.ExternalOperationRef}, nil
+		return needsOperator
 	}
 }
 
