@@ -396,123 +396,253 @@ func restoreRequiredChecksPass(checks []restoreValidationCheck, required []strin
 	return true
 }
 
+// restorePrecondition is the persisted request, current server and trusted
+// profile every step rule is checked against.
+type restorePrecondition struct {
+	operation  store.OperationRecord
+	step       store.OperationStep
+	parameters serverRestoreParameters
+	server     store.LogicalServer
+	profile    ServerRestoreProfile
+}
+
+type restorePreconditionRule func(context.Context, *ServerRestoreWorkflow, restorePrecondition) error
+
+// restorePreconditionRules maps each planned step to the evidence it needs.
+var restorePreconditionRules = map[string]restorePreconditionRule{
+	restoreInspectInstanceStep: checkRestoreInspectInstance,
+	restoreInspectRuntimeStep:  checkRestoreInspectRuntime,
+	restoreCompatibilityStep:   checkRestoreCompatibility,
+	restoreApplyStep:           checkRestoreApply,
+	restoreInspectStep:         checkRestoreInspect,
+	restoreStartStep:           checkRestoreStart,
+	restoreVerifyRuntimeStep:   checkRestoreVerifyRuntime,
+	restoreReadinessStep:       checkRestoreReadiness,
+}
+
 func (w *ServerRestoreWorkflow) CheckPreconditions(ctx context.Context, operation store.OperationRecord, step store.OperationStep) error {
+	parameters, err := w.restorePreconditionRequest(ctx, operation)
+	if err != nil {
+		return err
+	}
+	server, profile, err := w.restorePreconditionTarget(ctx, operation, parameters)
+	if err != nil {
+		return err
+	}
+	rule, ok := restorePreconditionRules[step.StepID]
+	if !ok {
+		return fmt.Errorf("unsupported server.restore step %q", step.StepID)
+	}
+	return rule(ctx, w, restorePrecondition{operation: operation, step: step, parameters: parameters, server: server, profile: profile})
+}
+
+// restorePreconditionRequest checks the context and decodes the persisted
+// request.
+func (w *ServerRestoreWorkflow) restorePreconditionRequest(ctx context.Context, operation store.OperationRecord) (serverRestoreParameters, error) {
 	if ctx == nil || w == nil || operation.OperationType != "server.restore" || operation.ProtocolVersion != w.schemas.ProtocolVersion() {
-		return errors.New("server.restore operation and context are required")
+		return serverRestoreParameters{}, errors.New("server.restore operation and context are required")
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return serverRestoreParameters{}, err
 	}
-	parameters, err := restoreRequest(operation, w.schemas.ProtocolVersion())
-	if err != nil {
-		return err
-	}
+	return restoreRequest(operation, w.schemas.ProtocolVersion())
+}
+
+// restorePreconditionTarget loads the exact current server and revalidates
+// the trusted profile, overwrite intent and release for it.
+func (w *ServerRestoreWorkflow) restorePreconditionTarget(ctx context.Context, operation store.OperationRecord, parameters serverRestoreParameters) (store.LogicalServer, ServerRestoreProfile, error) {
 	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
 	if err != nil {
-		return err
+		return store.LogicalServer{}, ServerRestoreProfile{}, err
 	}
 	server := stored.Record
-	if len(server.InstanceRef) == 0 || (len(operation.Target.InstanceRef) > 0 && !equalJSON(operation.Target.InstanceRef, server.InstanceRef)) ||
-		(len(parameters.TargetInstanceRef) > 0 && !equalJSON(parameters.TargetInstanceRef, server.InstanceRef)) {
-		return store.ErrLogicalServerTargetMismatch
+	if len(server.InstanceRef) == 0 || restoreInstanceRequestDiffers(operation, parameters, server) {
+		return store.LogicalServer{}, ServerRestoreProfile{}, store.ErrLogicalServerTargetMismatch
 	}
 	profile, err := w.profiles.ResolveServerRestore(ctx, server)
 	if err != nil || validateServerRestoreProfile(server, profile) != nil {
-		return errors.New("trusted restore profile is unavailable or invalid")
+		return store.LogicalServer{}, ServerRestoreProfile{}, errors.New("trusted restore profile is unavailable or invalid")
 	}
 	if restoreRequiresOverwriteApproval(server, profile) && !parameters.ReplaceExisting {
-		return errors.New("restore target is not confirmed empty; explicit overwrite intent is required")
+		return store.LogicalServer{}, ServerRestoreProfile{}, errors.New("restore target is not confirmed empty; explicit overwrite intent is required")
 	}
 	if err := validateServerRestoreRelease(w.schemas, server, profile); err != nil {
+		return store.LogicalServer{}, ServerRestoreProfile{}, err
+	}
+	return server, profile, nil
+}
+
+// restoreInstanceRequestDiffers reports whether the operation target or the
+// requested target instance names another instance than the server's.
+func restoreInstanceRequestDiffers(operation store.OperationRecord, parameters serverRestoreParameters, server store.LogicalServer) bool {
+	return instanceRefDiffers(operation.Target.InstanceRef, server.InstanceRef) || instanceRefDiffers(parameters.TargetInstanceRef, server.InstanceRef)
+}
+
+// instanceRefDiffers reports whether an optional expected reference is set
+// and names another instance.
+func instanceRefDiffers(expected, actual json.RawMessage) bool {
+	return len(expected) > 0 && !equalJSON(expected, actual)
+}
+
+func checkRestoreInspectInstance(_ context.Context, _ *ServerRestoreWorkflow, check restorePrecondition) error {
+	if !stoppedOrFailedLifecycle(check.server.LifecycleState) || !stepBindsRef(check.step.Input, "instance_ref", check.server.InstanceRef) {
+		return errors.New("restore requires a stopped or failed server and exact provider inspection")
+	}
+	return nil
+}
+
+func checkRestoreInspectRuntime(_ context.Context, _ *ServerRestoreWorkflow, check restorePrecondition) error {
+	if !stepSucceeded(check.operation, restoreInspectInstanceStep) || !stepSucceeded(check.operation, restoreCompatibilityStep) {
+		return errors.New("runtime inspection requires successful provider and compatibility inspection")
+	}
+	if !restoreProviderConfirmed(check.operation, check.server) {
+		return errors.New("runtime inspection requires the exact active or stopped provider instance")
+	}
+	return nil
+}
+
+func checkRestoreCompatibility(_ context.Context, _ *ServerRestoreWorkflow, check restorePrecondition) error {
+	if !stepSucceeded(check.operation, restoreInspectInstanceStep) {
+		return errors.New("compatibility check requires successful provider inspection")
+	}
+	if !restoreProviderConfirmed(check.operation, check.server) {
+		return errors.New("restore compatibility check requires the exact provider instance")
+	}
+	return nil
+}
+
+// restoreProviderConfirmed reports whether the recorded provider inspection
+// is a fresh observation of the server's exact active or stopped instance.
+func restoreProviderConfirmed(operation store.OperationRecord, server store.LogicalServer) bool {
+	provider, err := restoreProviderInspection(operation)
+	if err != nil || !equalJSON(provider.InstanceRef, server.InstanceRef) || !restoreProviderStateUsable(provider.State) {
+		return false
+	}
+	return observationIsFreshForStep(provider.ObservedAt, operationStep(operation, restoreInspectInstanceStep))
+}
+
+func restoreProviderStateUsable(state string) bool { return state == "active" || state == "stopped" }
+
+// checkRestoreApply runs just before the restore call is dispatched. The
+// engine checks dispatch preconditions before it records the restore step as
+// running. Until that durable transition, the lifecycle projector correctly
+// leaves a stopped or failed server in its existing state.
+func checkRestoreApply(ctx context.Context, w *ServerRestoreWorkflow, check restorePrecondition) error {
+	if !w.restoreDispatchCompatible(check) {
+		return errors.New("restore dispatch requires the exact backup to pass compatibility checks")
+	}
+	if !w.restoreRuntimeStillStopped(check) {
+		return errors.New("restore dispatch requires the runtime to remain stopped")
+	}
+	if err := w.revalidateRestoreBackup(ctx, check); err != nil {
 		return err
 	}
-	switch step.StepID {
-	case restoreInspectInstanceStep:
-		if !stoppedOrFailedLifecycle(server.LifecycleState) || !stepBindsRef(step.Input, "instance_ref", server.InstanceRef) {
-			return errors.New("restore requires a stopped or failed server and exact provider inspection")
-		}
-	case restoreInspectRuntimeStep:
-		if !stepSucceeded(operation, restoreInspectInstanceStep) || !stepSucceeded(operation, restoreCompatibilityStep) {
-			return errors.New("runtime inspection requires successful provider and compatibility inspection")
-		}
-		provider, err := restoreProviderInspection(operation)
-		if err != nil || !equalJSON(provider.InstanceRef, server.InstanceRef) || (provider.State != "active" && provider.State != "stopped") ||
-			!observationIsFreshForStep(provider.ObservedAt, operationStep(operation, restoreInspectInstanceStep)) {
-			return errors.New("runtime inspection requires the exact active or stopped provider instance")
-		}
-	case restoreCompatibilityStep:
-		if !stepSucceeded(operation, restoreInspectInstanceStep) {
-			return errors.New("compatibility check requires successful provider inspection")
-		}
-		provider, err := restoreProviderInspection(operation)
-		if err != nil || !equalJSON(provider.InstanceRef, server.InstanceRef) || (provider.State != "active" && provider.State != "stopped") ||
-			!observationIsFreshForStep(provider.ObservedAt, operationStep(operation, restoreInspectInstanceStep)) {
-			return errors.New("restore compatibility check requires the exact provider instance")
-		}
-	case restoreApplyStep:
-		// The engine checks dispatch preconditions before it records the restore
-		// step as running. Until that durable transition, the lifecycle projector
-		// correctly leaves a stopped or failed server in its existing state.
-		if (!stoppedOrFailedLifecycle(server.LifecycleState) && server.LifecycleState != protocolstate.ServerRestoring) ||
-			!stepSucceeded(operation, restoreCompatibilityStep) || !restoreCompatible(operation, w.schemas, profile, parameters.BackupID, server.EnvironmentID) ||
-			!observationIsFreshForStep(stepFieldString(operationStep(operation, restoreCompatibilityStep).Output, "observed_at"), operationStep(operation, restoreCompatibilityStep)) {
-			return errors.New("restore dispatch requires the exact backup to pass compatibility checks")
-		}
-		unit, err := restoreRuntimeInspection(operation, restoreInspectRuntimeStep)
-		if err != nil || (unit.State != "stopped" && unit.State != "absent") || !equalJSON(unit.UnitRef, profile.UnitRef) ||
-			!observationIsCurrent(unit.ObservedAt, w.assertionTTL, time.Now().UTC()) {
-			return errors.New("restore dispatch requires the runtime to remain stopped")
-		}
-		backup, err := w.backups.ResolveServerRestoreBackup(ctx, server, profile.StorageProfileID, parameters.BackupID)
-		if err != nil {
-			return errors.New("exact verified restore backup is no longer available")
-		}
-		_, _, manifest, err := validateServerRestoreBackup(w.schemas, server, parameters.BackupID, profile, backup)
-		if err != nil {
-			return err
-		}
-		if err := validateRestoreStreamPlan(step, backup.Result, manifest, server, profile, operation); err != nil {
-			return err
-		}
-		if parameters.ReplaceExisting {
-			if parameters.ApprovalID == "" {
-				return errors.New("replace_existing_data requires an approval_id")
-			}
-			if err := w.authorizer.AuthorizeServerRestore(ctx, operation.ActorID, parameters.ApprovalID, operation, server, parameters.BackupID); err != nil {
-				return fmt.Errorf("revalidate exact server.restore approval: %w", err)
-			}
-		}
-	case restoreInspectStep:
-		if !stepSucceeded(operation, restoreApplyStep) || !restoreApplySucceeded(operation, w.schemas, parameters.BackupID, server) {
-			return errors.New("restore inspection requires an exact completed restore call")
-		}
-	case restoreStartStep:
-		if !parameters.StartAfterRestore || server.LifecycleState != protocolstate.ServerRestoring || !restoreInspectionSucceeded(operation, w.schemas, parameters.BackupID, server) {
-			return errors.New("runtime start requires an explicitly requested and verified restore")
-		}
-		descriptor, err := w.adapters.Descriptor(server.GameAdapterID)
-		if err != nil || verifyReadinessSetDeclared(descriptor, server.EnvironmentID, ServerStartProfile{GameReleaseID: profile.GameReleaseID,
-			ReadinessCheckSetID: profile.ReadinessCheckSetID, RequiredChecks: profile.RequiredReadinessChecks}) != nil {
-			return errors.New("runtime start requires the current trusted readiness policy")
-		}
-	case restoreVerifyRuntimeStep:
-		start := operationStep(operation, restoreStartStep)
-		var started struct {
-			UnitRef json.RawMessage `json:"unit_ref"`
-			Outcome string          `json:"outcome"`
-			State   string          `json:"state"`
-		}
-		if start.Status != protocolstate.StepSucceeded || json.Unmarshal(start.Output, &started) != nil || started.Outcome != "completed" || started.State != "running" ||
-			!equalJSON(started.UnitRef, profile.UnitRef) {
-			return errors.New("runtime verification requires a completed start of the exact unit")
-		}
-	case restoreReadinessStep:
-		unit, err := restoreRuntimeInspection(operation, restoreVerifyRuntimeStep)
-		if err != nil || unit.State != "running" || !equalJSON(unit.UnitRef, profile.UnitRef) {
-			return errors.New("readiness check requires the exact runtime to be confirmed running")
-		}
-	default:
-		return fmt.Errorf("unsupported server.restore step %q", step.StepID)
+	return w.revalidateRestoreApproval(ctx, check)
+}
+
+func (w *ServerRestoreWorkflow) restoreDispatchCompatible(check restorePrecondition) bool {
+	compatibility := operationStep(check.operation, restoreCompatibilityStep)
+	if !restoreDispatchLifecycle(check.server.LifecycleState) || !stepSucceeded(check.operation, restoreCompatibilityStep) {
+		return false
+	}
+	return restoreCompatible(check.operation, w.schemas, check.profile, check.parameters.BackupID, check.server.EnvironmentID) &&
+		observationIsFreshForStep(stepFieldString(compatibility.Output, "observed_at"), compatibility)
+}
+
+func restoreDispatchLifecycle(state protocolstate.ServerState) bool {
+	return stoppedOrFailedLifecycle(state) || state == protocolstate.ServerRestoring
+}
+
+func (w *ServerRestoreWorkflow) restoreRuntimeStillStopped(check restorePrecondition) bool {
+	unit, err := restoreRuntimeInspection(check.operation, restoreInspectRuntimeStep)
+	if err != nil || (unit.State != "stopped" && unit.State != "absent") || !equalJSON(unit.UnitRef, check.profile.UnitRef) {
+		return false
+	}
+	return observationIsCurrent(unit.ObservedAt, w.assertionTTL, time.Now().UTC())
+}
+
+// revalidateRestoreBackup confirms the exact verified backup is still
+// available and still matches the immutable planned streams.
+func (w *ServerRestoreWorkflow) revalidateRestoreBackup(ctx context.Context, check restorePrecondition) error {
+	backup, err := w.backups.ResolveServerRestoreBackup(ctx, check.server, check.profile.StorageProfileID, check.parameters.BackupID)
+	if err != nil {
+		return errors.New("exact verified restore backup is no longer available")
+	}
+	_, _, manifest, err := validateServerRestoreBackup(w.schemas, check.server, check.parameters.BackupID, check.profile, backup)
+	if err != nil {
+		return err
+	}
+	return validateRestoreStreamPlan(check.step, backup.Result, manifest, check.server, check.profile, check.operation)
+}
+
+// revalidateRestoreApproval rechecks overwrite approval when it was asked for.
+func (w *ServerRestoreWorkflow) revalidateRestoreApproval(ctx context.Context, check restorePrecondition) error {
+	if !check.parameters.ReplaceExisting {
+		return nil
+	}
+	if check.parameters.ApprovalID == "" {
+		return errors.New("replace_existing_data requires an approval_id")
+	}
+	if err := w.authorizer.AuthorizeServerRestore(ctx, check.operation.ActorID, check.parameters.ApprovalID, check.operation, check.server, check.parameters.BackupID); err != nil {
+		return fmt.Errorf("revalidate exact server.restore approval: %w", err)
+	}
+	return nil
+}
+
+func checkRestoreInspect(_ context.Context, w *ServerRestoreWorkflow, check restorePrecondition) error {
+	if !stepSucceeded(check.operation, restoreApplyStep) || !restoreApplySucceeded(check.operation, w.schemas, check.parameters.BackupID, check.server) {
+		return errors.New("restore inspection requires an exact completed restore call")
+	}
+	return nil
+}
+
+func checkRestoreStart(_ context.Context, w *ServerRestoreWorkflow, check restorePrecondition) error {
+	if !check.parameters.StartAfterRestore || check.server.LifecycleState != protocolstate.ServerRestoring ||
+		!restoreInspectionSucceeded(check.operation, w.schemas, check.parameters.BackupID, check.server) {
+		return errors.New("runtime start requires an explicitly requested and verified restore")
+	}
+	if !w.restoreReadinessDeclared(check.server, check.profile) {
+		return errors.New("runtime start requires the current trusted readiness policy")
+	}
+	return nil
+}
+
+// restoreReadinessDeclared reports whether the game adapter declares the
+// profile's exact readiness check set for the server's environment.
+func (w *ServerRestoreWorkflow) restoreReadinessDeclared(server store.LogicalServer, profile ServerRestoreProfile) bool {
+	descriptor, err := w.adapters.Descriptor(server.GameAdapterID)
+	if err != nil {
+		return false
+	}
+	return verifyReadinessSetDeclared(descriptor, server.EnvironmentID, ServerStartProfile{GameReleaseID: profile.GameReleaseID,
+		ReadinessCheckSetID: profile.ReadinessCheckSetID, RequiredChecks: profile.RequiredReadinessChecks}) == nil
+}
+
+func checkRestoreVerifyRuntime(_ context.Context, _ *ServerRestoreWorkflow, check restorePrecondition) error {
+	if !restoreStartConfirmed(operationStep(check.operation, restoreStartStep), check.profile.UnitRef) {
+		return errors.New("runtime verification requires a completed start of the exact unit")
+	}
+	return nil
+}
+
+// restoreStartConfirmed reports whether the start step completed and left
+// the exact unit running.
+func restoreStartConfirmed(start store.OperationStep, unitRef json.RawMessage) bool {
+	var started struct {
+		UnitRef json.RawMessage `json:"unit_ref"`
+		Outcome string          `json:"outcome"`
+		State   string          `json:"state"`
+	}
+	if start.Status != protocolstate.StepSucceeded || json.Unmarshal(start.Output, &started) != nil {
+		return false
+	}
+	return started.Outcome == "completed" && started.State == "running" && equalJSON(started.UnitRef, unitRef)
+}
+
+func checkRestoreReadiness(_ context.Context, _ *ServerRestoreWorkflow, check restorePrecondition) error {
+	unit, err := restoreRuntimeInspection(check.operation, restoreVerifyRuntimeStep)
+	if err != nil || unit.State != "running" || !equalJSON(unit.UnitRef, check.profile.UnitRef) {
+		return errors.New("readiness check requires the exact runtime to be confirmed running")
 	}
 	return nil
 }
