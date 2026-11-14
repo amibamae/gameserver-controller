@@ -227,17 +227,18 @@ func TestServerRestoreR3BackupValidation(t *testing.T) {
 		{"manifest for another server", result("server-2", "operation_data", "manifest", "server_id"), manifestUnbind},
 		{"manifest in another environment", result("production", "operation_data", "manifest", "environment_id"), manifestUnbind},
 		{"manifest for another generation", result("generation-other", "operation_data", "manifest", "data_generation_id"), manifestUnbind},
-		{"manifest fails schema", result(restoreR3Remove, "operation_data", "manifest", "game"), manifestUnbind},
-		{"no objects", result([]any{}, "operation_data", "manifest", "objects"), manifestUnbind},
+		// The result schema validates the embedded manifest before deeper checks run.
+		{"manifest fails schema", result(restoreR3Remove, "operation_data", "manifest", "game"), notVerified},
+		{"no objects", result([]any{}, "operation_data", "manifest", "objects"), notVerified},
 		{"object of another storage adapter", object("object_ref", "storage.other", "adapter_id"), objectInvalid},
 		{"object of another storage profile", object("object_ref", "storage-2", "storage_profile_id"), objectInvalid},
 		{"object in another environment", object("object_ref", "production", "environment_id"), objectInvalid},
-		{"object ref fails schema", object("object_ref", restoreR3Remove, "key"), objectInvalid},
-		{"negative size", object("size_bytes", -1), objectInvalid},
-		{"another checksum algorithm", object("checksum_algorithm", "md5"), objectInvalid},
-		{"short checksum", object("checksum", "abc"), objectInvalid},
+		{"object ref fails schema", object("object_ref", restoreR3Remove, "key"), notVerified},
+		{"negative size", object("size_bytes", -1), notVerified},
+		{"another checksum algorithm", object("checksum_algorithm", "md5"), notVerified},
+		{"short checksum", object("checksum", "abc"), notVerified},
 		{"unversioned object", object("object_ref", restoreR3Remove, "version_id"), "selected backup object lacks an immutable version reference"},
-		{"checksum not hexadecimal", object("checksum", strings.Repeat("z", 64)), "selected backup object checksum is not hexadecimal"},
+		{"checksum not hexadecimal", object("checksum", strings.Repeat("z", 64)), notVerified},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
