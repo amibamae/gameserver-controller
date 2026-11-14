@@ -115,9 +115,7 @@ func (b *FileServerBackupTransferBroker) VerifyStepStreams(
 	ctx context.Context, operation store.OperationRecord, step store.OperationStep,
 	expectations []ServerBackupStreamExpectation,
 ) error {
-	if b == nil || ctx == nil || ctx.Err() != nil || operation.OperationID == "" ||
-		operation.OperationType != "server.backup" || step.StepID == "" ||
-		step.Status != protocolstate.StepSucceeded || step.Attempt < 1 || len(expectations) == 0 {
+	if b == nil || !completedBackupStreamStep(ctx, operation, step, expectations) {
 		return errors.New("completed server.backup stream step and context are required")
 	}
 	direction, sink, err := backupStreamRoute(step)
@@ -132,36 +130,7 @@ func (b *FileServerBackupTransferBroker) VerifyStepStreams(
 	if err := b.validateOperationInput(operation, step, expectations); err != nil {
 		return err
 	}
-	seen := make(map[string]struct{}, len(expectations))
-	for _, expectation := range expectations {
-		if expectation.DataSetID == "" || expectation.SizeBytes < 0 || expectation.SizeBytes > expectation.MaximumBytes {
-			return errors.New("stream verification expectation has an invalid data set or byte count")
-		}
-		if _, duplicate := seen[expectation.DataSetID]; duplicate {
-			return errors.New("stream verification repeats a data set")
-		}
-		seen[expectation.DataSetID] = struct{}{}
-		dataPath, metaPath, err := b.streamPaths(operation.OperationID, step.StepID, step.Attempt, expectation.DataSetID)
-		if err != nil {
-			return err
-		}
-		record, err := readStagedStreamRecord(metaPath)
-		if err != nil {
-			return errors.New("stream completion evidence is missing")
-		}
-		if !stagedRecordMatches(record, operation, step, expectation, direction, sink) ||
-			!record.Complete || record.ActualSize != expectation.SizeBytes ||
-			record.ActualSHA256 != expectation.SHA256 {
-			return errors.New("stream completion evidence does not match the exact operation, step, data set, size, and checksum")
-		}
-		if sink {
-			size, digest, err := hashFileBounded(dataPath, expectation.MaximumBytes)
-			if err != nil || size != expectation.SizeBytes || digest != expectation.SHA256 {
-				return errors.New("staged stream bytes do not match the adapter output and trusted expectation")
-			}
-		}
-	}
-	return nil
+	return b.verifyCompletedStreams(stepStreams{operation: operation, step: step, direction: direction, storesBytes: sink}, expectations)
 }
 
 // verifyInvocationStream validates completion evidence while the workflow
@@ -171,8 +140,7 @@ func (b *FileServerBackupTransferBroker) verifyInvocationStream(
 	operation store.OperationRecord, step store.OperationStep,
 	expectation ServerBackupStreamExpectation, direction string, storesBytes bool,
 ) error {
-	if b == nil || operation.OperationType != "server.backup" || step.Status != protocolstate.StepRunning ||
-		step.Attempt < 1 || expectation.DataSetID == "" {
+	if b == nil || !runningInvocationStream(operation, step, expectation) {
 		return errors.New("running server.backup stream and trusted expectation are required")
 	}
 	b.mu.Lock()
@@ -186,16 +154,11 @@ func (b *FileServerBackupTransferBroker) verifyInvocationStream(
 	}
 	record, err := readStagedStreamRecord(metaPath)
 	if err != nil || !stagedRecordMatches(record, operation, step, expectation, direction, storesBytes) ||
-		!record.Complete || record.ActualSize < 0 || record.ActualSize > expectation.MaximumBytes ||
-		(record.ExpectedSize >= 0 && record.ActualSize != record.ExpectedSize) ||
-		(record.ExpectedSHA256 != "" && record.ActualSHA256 != record.ExpectedSHA256) {
+		!invocationRecordComplete(record, expectation.MaximumBytes) {
 		return errors.New("backup stream was not fully consumed or did not match its exact integrity expectation")
 	}
-	if storesBytes {
-		size, digest, err := hashFileBounded(dataPath, expectation.MaximumBytes)
-		if err != nil || size != record.ActualSize || digest != record.ActualSHA256 {
-			return errors.New("staged backup bytes failed independent size or checksum verification")
-		}
+	if storesBytes && !stagedBytesMatch(dataPath, expectation.MaximumBytes, record.ActualSize, record.ActualSHA256) {
+		return errors.New("staged backup bytes failed independent size or checksum verification")
 	}
 	return nil
 }
