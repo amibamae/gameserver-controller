@@ -22,11 +22,11 @@ If the repowise tools aren't available, you can measure complexity with a cyclom
 
 ## Current work: raising code health (resume here)
 
-**Backup follow-up (2026-11-14).** PR #258 combines the backup refactor with the checker merged in #260. The integration worktree is `/private/tmp/gsc-backup-health-checker`, branch `codex/backup-health-checker`. The published PR branch is `codex/refactor-backup-lifecycle`.
+**Priority (2026-11-14).** Raise code health across the repository before starting roadmap features. Keep the existing target of 7–8 for the repository average and report scores for each changed file. Use the hosted index to rank candidates and the same local analyzer on base and branch to measure patches. The hosted index was last observed at `354ee6a`, before the backup merge.
 
-- The integrated changes clear all 22 findings from the initial checker run. Characterization tests pin capture error order, retry and reconciliation decisions, validation rejections, and manifest and readiness binding.
-- Local Repowise 0.61.0 compares the same analyzer on base `47d8a31` and the integrated branch. `server_backup.go` rose from 5.37 to 10.00. Every changed production file scores 8.04 or higher. The existing changed test file stayed at 10.00. Run the complete validation on the published head before merging.
-- For a new local score, use `/private/tmp/gsc-repowise-venv/bin/repowise health --recompute --format json`. The comparable base report is `/private/tmp/gsc-baseline-47d8-health.json`. Keep `.repowise/` out of commits.
+- Backup #258 merged at `c839fd1` after green CI. It cleared all 22 changed-function findings. Local Repowise moved `server_backup.go` from 5.37 to 10.00, and every changed production file scored at least 8.04.
+- The next health patch separates Vultr request identity and provider checks from the pilot provisioner. It lives on `codex/refactor-pilot-vultr-request` in `/private/tmp/gsc-pilot-vultr-health`. A characterization test pins the resource label and validation order. Local scores for the initial patch are 7.60 for `provisioner.go`, 9.23 for the provider checks and 10.00 for request preparation.
+- Claude’s unpublished scopes stay on hold until the original changes are available. See the ownership table below. Continue with available hotspots in the pilot and production paths.
 
 The owner's goal is a repowise average health of **7–8**. The method:
 - one PR per file group;
@@ -54,11 +54,11 @@ The owner's goal is a repowise average health of **7–8**. The method:
 
 ### Who owns what (check this before you start anything)
 
-Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is continuing the published backup draft. Keep unfinished Claude scopes on hold when their work is unavailable. Check the published branches and open PRs before resuming any scope.
+Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is continuing the code-health backlog. Keep unfinished Claude scopes on hold when their work is unavailable. Check the published branches and open PRs before resuming any scope.
 
 | Owner | Files | Branch or PR | Status (2026-11-14) |
 |---|---|---|---|
-| Codex | `internal/workflow/server_backup*.go` | draft #258 `codex/refactor-backup-lifecycle` | in progress |
+| Codex | `internal/workflow/server_backup*.go` | #258 merged | completed |
 | Codex | `internal/workflow/server_destroy*.go` | #257 merged | `server_destroy.go` still 1.0; further work is Codex's |
 | Codex | `cmd/supervised-pilot/*` | #256 merged | `main.go` still 5.37; further work is Codex's |
 | Codex | `internal/controllersetup/installer.go`, `cmd/controller-setup/*` | local branch `codex/controller-setup-apply` | **uncommitted** in Codex's checkout on the owner's Mac; not on GitHub yet |
