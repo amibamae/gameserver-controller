@@ -11,17 +11,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/capturestream"
-	"github.com/amibamae/gameserver-controller/internal/credential"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
@@ -35,11 +31,6 @@ const (
 	maxMultipartParts = int64(10000)
 	maxPartSize       = int64(128 * 1024 * 1024)
 	minPartSize       = int64(16 * 1024 * 1024)
-)
-
-var (
-	adapterIDPattern = regexp.MustCompile(`^[a-z][a-z0-9.-]{1,159}$`)
-	regionPattern    = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 )
 
 // Config contains non-secret settings for one environment-specific Wasabi
@@ -113,32 +104,6 @@ func newAdapter(config Config, protocolVersion string, resolver CredentialResolv
 
 // ValidateConfig checks a profile without contacting Wasabi or resolving credentials.
 func ValidateConfig(config Config) error { return validateConfig(config) }
-
-func validateConfig(config Config) error {
-	if !adapterIDPattern.MatchString(config.AdapterID) || !strings.HasPrefix(config.AdapterID, "storage.") || config.StorageProfileID == "" || config.EnvironmentID == "" || config.Container == "" || len(config.Container) > 500 || !strings.HasSuffix(config.KeyPrefix, "/") || len(config.KeyPrefix) > 2048 || !regionPattern.MatchString(config.Region) {
-		return errors.New("storage profile, environment, container, key prefix, and Wasabi region are required")
-	}
-	if config.MaxObjectBytes < 1 || config.MaxObjectBytes > maxS3ObjectSize || config.MaxObjectBytes > maxPartSize*maxMultipartParts {
-		return errors.New("maximum object size must be between 1 byte and the bounded multipart limit")
-	}
-	if !strings.HasPrefix(config.AccessKeyIDRef, credential.SystemdReferenceScheme) ||
-		!strings.HasPrefix(config.SecretAccessKeyRef, credential.SystemdReferenceScheme) ||
-		config.AccessKeyIDRef == config.SecretAccessKeyRef {
-		return errors.New("separate systemd credential references for both Wasabi keys are required")
-	}
-	endpoint, err := url.Parse(config.EndpointURL)
-	if err != nil || endpoint.Scheme != "https" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Hostname() == "" || (endpoint.Path != "" && endpoint.Path != "/") {
-		return errors.New("Wasabi endpoint must be an HTTPS URL without user information, query, or fragment")
-	}
-	host := strings.TrimSuffix(strings.ToLower(endpoint.Hostname()), ".")
-	if net.ParseIP(host) != nil || !(host == "wasabisys.com" || strings.HasSuffix(host, ".wasabisys.com")) {
-		return errors.New("Wasabi endpoint host must be within wasabisys.com")
-	}
-	if endpoint.Port() != "" && endpoint.Port() != "443" {
-		return errors.New("Wasabi endpoint must use HTTPS port 443")
-	}
-	return nil
-}
 
 func (a *Adapter) Descriptor() adapter.Descriptor {
 	version := a.protocolVersion
