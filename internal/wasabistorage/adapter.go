@@ -12,7 +12,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -207,88 +206,6 @@ type headInput struct {
 	ObjectRef objectReference `json:"object_ref"`
 }
 
-func (a *Adapter) put(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	var input putInput
-	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validTarget(input.Target) || !validExpected(input.ExpectedSizeBytes, input.ExpectedChecksum, a.config.MaxObjectBytes) {
-		return nil, errors.New("invalid object upload request")
-	}
-	transfer, err := singleTransfer(request, "controller_to_adapter", input.ExpectedSizeBytes)
-	if err != nil {
-		return nil, err
-	}
-	stream, err := request.Params.RequestContext.OpenStream(transfer.TransferID)
-	if err != nil {
-		return nil, errors.New("upload stream is unavailable")
-	}
-	defer stream.Close()
-	staged, err := stageVerifiedUpload(stream, input.ExpectedSizeBytes, input.ExpectedChecksum.Digest)
-	if err != nil {
-		return nil, errors.New("upload stream did not match its declared size and checksum")
-	}
-	defer func() {
-		_ = staged.Close()
-		_ = os.Remove(staged.Name())
-	}()
-	client, err := a.openClient(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	uploader := manager.NewUploader(client, func(u *manager.Uploader) {
-		u.PartSize = partSize(input.ExpectedSizeBytes)
-		u.Concurrency = 1
-		u.LeavePartsOnError = false
-	})
-	result, err := uploader.Upload(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(input.Target.Container), Key: aws.String(input.Target.Key),
-		Body: staged, ContentLength: aws.Int64(input.ExpectedSizeBytes),
-		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
-	})
-	if err != nil {
-		return nil, sideEffectError("Wasabi upload failed")
-	}
-	ref := objectReference{objectTarget: input.Target}
-	ref.VersionID, _ = confirmedVersion("", result.VersionID)
-	if a.missingRequiredVersion(ref.VersionID) {
-		return nil, sideEffectError("Wasabi did not return the required immutable object version")
-	}
-	value := map[string]any{"target": input.Target, "upload_state": "uploaded", "object_ref": ref,
-		"bytes_received": input.ExpectedSizeBytes, "observed_at": time.Now().UTC().Format(time.RFC3339Nano)}
-	if result.ETag != nil && *result.ETag != "" {
-		value["provider_etag"] = *result.ETag
-	}
-	return value, nil
-}
-
-func stageVerifiedUpload(stream io.Reader, expectedSize int64, expectedDigest string) (*os.File, error) {
-	file, err := os.CreateTemp("", "gsc-wasabi-upload-*")
-	if err != nil {
-		return nil, errors.New("private upload staging is unavailable")
-	}
-	cleanup := func() {
-		_ = file.Close()
-		_ = os.Remove(file.Name())
-	}
-	hasher := sha256.New()
-	count, err := io.Copy(io.MultiWriter(file, hasher), io.LimitReader(stream, expectedSize+1))
-	if err != nil || count != expectedSize || !strings.EqualFold(hex.EncodeToString(hasher.Sum(nil)), expectedDigest) {
-		cleanup()
-		return nil, errors.New("upload data does not match the declared size and checksum")
-	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		cleanup()
-		return nil, errors.New("private upload staging could not be rewound")
-	}
-	return file, nil
-}
-
-func partSize(objectSize int64) int64 {
-	partSize := minPartSize
-	if required := (objectSize + maxMultipartParts - 1) / maxMultipartParts; required > partSize {
-		partSize = required
-	}
-	return partSize
-}
-
 func (a *Adapter) get(ctx context.Context, request adapter.InvokeRequest) (any, error) {
 	var input getInput
 	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validReference(input.ObjectRef) || !validExpected(input.ExpectedSizeBytes, input.ExpectedChecksum, a.config.MaxObjectBytes) {
@@ -422,6 +339,29 @@ func immutableVersion(version string) bool {
 // an object without an immutable one.
 func (a *Adapter) missingRequiredVersion(version string) bool {
 	return a.config.RequireVersionIDs && !immutableVersion(version)
+}
+
+// decodeInput decodes a capability's input and applies its acceptance check;
+// a malformed or refused input reports only the capability's rejection text.
+func decodeInput[T any](request adapter.InvokeRequest, rejection string, accept func(T) bool) (T, error) {
+	var input T
+	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !accept(input) {
+		var refused T
+		return refused, errors.New(rejection)
+	}
+	return input, nil
+}
+
+// acceptsTransfer reports a request from this profile's environment for an
+// object inside its bucket and prefix, with a bounded size and a SHA-256.
+func (a *Adapter) acceptsTransfer(request adapter.InvokeRequest, target objectTarget, size int64, expected checksum) bool {
+	return a.validRequestEnvironment(request) && a.validTarget(target) && validExpected(size, expected, a.config.MaxObjectBytes)
+}
+
+func addProviderETag(value map[string]any, etag *string) {
+	if etag != nil && *etag != "" {
+		value["provider_etag"] = *etag
+	}
 }
 
 func (a *Adapter) validTarget(value objectTarget) bool {
