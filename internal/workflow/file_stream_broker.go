@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/adapter"
-	"github.com/amibamae/gameserver-controller/internal/capturestream"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
@@ -95,166 +94,19 @@ func (b *FileServerBackupTransferBroker) IssueStepStreamTransfers(
 	ctx context.Context, operation store.OperationRecord, step store.OperationStep,
 	expectations []ServerBackupStreamExpectation, direction string,
 ) ([]adapter.StreamTransfer, error) {
-	if b == nil || ctx == nil || ctx.Err() != nil || operation.OperationID == "" ||
-		operation.OperationType != "server.backup" || step.StepID == "" || step.Attempt < 1 ||
-		step.Status != protocolstate.StepRunning || len(expectations) == 0 || len(expectations) > 128 {
+	if b == nil || !activeBackupStreamStep(ctx, operation, step, expectations) {
 		return nil, errors.New("active server.backup stream step and context are required")
 	}
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		return nil, errors.New("stream invocation deadline is required")
+	issue, err := b.planStreamIssue(ctx, operation, step, expectations, direction)
+	if err != nil {
+		return nil, err
 	}
-	expectedDirection, sink, err := backupStreamRoute(step)
-	if err != nil || direction != expectedDirection {
-		return nil, errors.New("stream direction does not match the exact backup capability")
-	}
-	now := time.Now().UTC()
-	expiresAt := now.Add(b.transferLifetime)
-	if deadline.Before(expiresAt) {
-		expiresAt = deadline.UTC()
-	}
-	if !expiresAt.After(now) {
-		return nil, errors.New("stream invocation deadline has expired")
-	}
-
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if _, err := b.sweepExpiredLocked(now); err != nil {
+	if err := b.admitStreamIssueLocked(issue); err != nil {
 		return nil, err
 	}
-	if err := b.validateOperationInput(operation, step, expectations); err != nil {
-		return nil, err
-	}
-	if step.CapabilityName == "storage.object.get" {
-		if err := b.clearPriorStepAttempts(operation.OperationID, step.StepID, step.Attempt); err != nil {
-			return nil, err
-		}
-	}
-	if sink && len(expectations) != 1 {
-		return nil, errors.New("one sink stream is allowed per backup capture or readback step")
-	}
-	seenDataSets := make(map[string]struct{}, len(expectations))
-	for _, expectation := range expectations {
-		if expectation.DataSetID == "" || expectation.MaximumBytes < 1 ||
-			expectation.MaximumBytes > b.maxStagingBytes ||
-			expectation.SizeBytes < -1 || expectation.SizeBytes > expectation.MaximumBytes ||
-			(expectation.SizeBytes == -1 && !sink) {
-			return nil, errors.New("stream expectation is outside the configured operation and transfer bounds")
-		}
-		if _, duplicate := seenDataSets[expectation.DataSetID]; duplicate {
-			return nil, errors.New("backup stream step repeats a data set")
-		}
-		seenDataSets[expectation.DataSetID] = struct{}{}
-	}
-	if !sink {
-		for _, expectation := range expectations {
-			sourceStepID := backupStreamSourceStepID(step.CapabilityName, expectation.DataSetID)
-			if err := b.verifySourceArtifact(operation, sourceStepID, expectation); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if sink {
-		usage, err := b.stagingUsageLocked()
-		if err != nil {
-			return nil, err
-		}
-		reserved := int64(0)
-		for _, expectation := range expectations {
-			if expectation.MaximumBytes > b.maxStagingBytes-reserved {
-				return nil, errors.New("backup stream staging reservation exceeds the configured budget")
-			}
-			reserved += expectation.MaximumBytes
-		}
-		if usage > b.maxStagingBytes-reserved {
-			return nil, errors.New("backup stream staging budget is exhausted")
-		}
-	}
-
-	transfers := make([]adapter.StreamTransfer, 0, len(expectations))
-	createdPaths := make([]string, 0, len(expectations)*2)
-	committed := false
-	defer func() {
-		if committed {
-			return
-		}
-		for _, transfer := range transfers {
-			if transfer.Source != nil {
-				_ = transfer.Source.Close()
-			}
-			if transfer.Sink != nil {
-				_ = transfer.Sink.Close()
-			}
-		}
-		for _, path := range createdPaths {
-			_ = os.Remove(path)
-		}
-	}()
-	for _, expectation := range expectations {
-		transferID, err := randomTransferID()
-		if err != nil {
-			return nil, err
-		}
-		reference := capturestream.Reference{
-			TransferID: transferID, Direction: direction,
-			MaximumBytes: expectation.MaximumBytes, ExpiresAt: expiresAt,
-		}
-		record := b.newRecord(operation, step, expectation, direction, expiresAt, sink)
-		dataPath, metaPath, err := b.streamPaths(operation.OperationID, step.StepID, step.Attempt, expectation.DataSetID)
-		if err != nil {
-			return nil, err
-		}
-		if err := os.MkdirAll(filepath.Dir(dataPath), 0700); err != nil {
-			return nil, err
-		}
-		if _, err := os.Lstat(metaPath); err == nil || !errors.Is(err, os.ErrNotExist) {
-			return nil, errors.New("stream attempt already has transfer metadata")
-		}
-		if sink {
-			file, err := os.OpenFile(dataPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
-			if err != nil {
-				return nil, fmt.Errorf("create bounded stream staging file: %w", err)
-			}
-			createdPaths = append(createdPaths, dataPath, metaPath)
-			if err := writeStagedStreamRecord(metaPath, record); err != nil {
-				_ = file.Close()
-				_ = os.Remove(dataPath)
-				return nil, err
-			}
-			writer, err := newStagedStreamWriter(file, metaPath, record)
-			if err != nil {
-				_ = file.Close()
-				return nil, err
-			}
-			transfers = append(transfers, adapter.StreamTransfer{Reference: reference, Sink: writer,
-				Verify: func() error { return b.verifyInvocationStream(operation, step, expectation, direction, true) }})
-		} else {
-			sourceStepID := backupStreamSourceStepID(step.CapabilityName, expectation.DataSetID)
-			sourceStep := operationStep(operation, sourceStepID)
-			sourcePath, _, pathErr := b.streamPaths(operation.OperationID, sourceStepID, sourceStep.Attempt, expectation.DataSetID)
-			if pathErr != nil {
-				return nil, pathErr
-			}
-			readerFile, err := os.Open(sourcePath)
-			if err != nil {
-				return nil, fmt.Errorf("open verified backup source stream: %w", err)
-			}
-			createdPaths = append(createdPaths, metaPath)
-			if err := writeStagedStreamRecord(metaPath, record); err != nil {
-				_ = readerFile.Close()
-				return nil, err
-			}
-			reader, err := newStagedStreamReader(readerFile, metaPath, record)
-			if err != nil {
-				_ = readerFile.Close()
-				return nil, err
-			}
-			transfers = append(transfers, adapter.StreamTransfer{Reference: reference, Source: reader,
-				Verify: func() error { return b.verifyInvocationStream(operation, step, expectation, direction, false) }})
-		}
-	}
-	committed = true
-	return transfers, nil
+	return b.openStreamIssueLocked(issue)
 }
 
 // VerifyStepStreams independently checks the measured stream sidecars and, for
