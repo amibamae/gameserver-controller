@@ -59,8 +59,10 @@ func (profiles *restoreR3Profiles) ResolveServerRestore(context.Context, store.L
 }
 
 type restoreR3Backups struct {
-	backup VerifiedProvisionBackup
-	err    error
+	backup  VerifiedProvisionBackup
+	err     error
+	openErr error
+	noData  bool
 }
 
 func (backups *restoreR3Backups) ResolveServerRestoreBackup(context.Context, store.LogicalServer, string, string) (VerifiedProvisionBackup, error) {
@@ -68,6 +70,9 @@ func (backups *restoreR3Backups) ResolveServerRestoreBackup(context.Context, sto
 }
 
 func (backups *restoreR3Backups) OpenServerRestoreBackupObject(context.Context, store.LogicalServer, string, json.RawMessage) (io.ReadCloser, error) {
+	if backups.openErr != nil || backups.noData {
+		return nil, backups.openErr
+	}
 	return io.NopCloser(strings.NewReader(restoreR3BackupData)), nil
 }
 
@@ -277,6 +282,10 @@ func restoreR3ValidOutput(t *testing.T, fixture *restoreR3Fixture, stepID string
 		return restoreR3JSON(t, map[string]any{"unit_ref": json.RawMessage(restoreR3Unit), "outcome": "completed", "state": "running", "observed_at": now})
 	case restoreVerifyRuntimeStep:
 		return restoreR3JSON(t, map[string]any{"unit_ref": json.RawMessage(restoreR3Unit), "state": "running", "observed_at": now})
+	case restoreReadinessStep:
+		return restoreR3JSON(t, map[string]any{"server_id": "server-1", "environment_id": "staging", "instance_ref": json.RawMessage(restoreR3Instance),
+			"game_release_id": "paper-1", "observed_at": now,
+			"check_results": []any{map[string]any{"check_id": "paper.ready", "check_version": "1", "result": "pass", "observed_at": now}}})
 	}
 	t.Fatalf("no valid output for %s", stepID)
 	return nil
@@ -287,14 +296,54 @@ func restoreR3ValidOutput(t *testing.T, fixture *restoreR3Fixture, stepID string
 // moves the server to restoring, as the projector would.
 func restoreR3CompleteThrough(t *testing.T, fixture *restoreR3Fixture, stepID string) {
 	t.Helper()
+	if !restoreR3CompleteUntil(t, fixture, stepID) {
+		t.Fatalf("no planned step %s", stepID)
+	}
+}
+
+// restoreR3CompleteAll records valid outputs for every planned step.
+func restoreR3CompleteAll(t *testing.T, fixture *restoreR3Fixture) {
+	t.Helper()
+	restoreR3CompleteUntil(t, fixture, "")
+}
+
+func restoreR3CompleteUntil(t *testing.T, fixture *restoreR3Fixture, stepID string) bool {
+	t.Helper()
 	for _, step := range fixture.operation.Steps {
 		if step.StepID == stepID {
-			return
+			return true
 		}
 		restoreR3Succeed(fixture, step.StepID, restoreR3ValidOutput(t, fixture, step.StepID))
 		if step.StepID == restoreApplyStep {
 			fixture.server().LifecycleState = protocolstate.ServerRestoring
 		}
 	}
-	t.Fatalf("no planned step %s", stepID)
+	return stepID == ""
 }
+
+// restoreR3Patch returns raw with the value at path replaced, or removed
+// when value is restoreR3Remove.
+func restoreR3Patch(t *testing.T, raw json.RawMessage, value any, path ...string) json.RawMessage {
+	t.Helper()
+	var root map[string]any
+	if err := json.Unmarshal(raw, &root); err != nil {
+		t.Fatal(err)
+	}
+	node := root
+	for _, key := range path[:len(path)-1] {
+		child, ok := node[key].(map[string]any)
+		if !ok {
+			t.Fatalf("no object at %s in %s", key, raw)
+		}
+		node = child
+	}
+	last := path[len(path)-1]
+	node[last] = value
+	if value == restoreR3Remove {
+		delete(node, last)
+	}
+	return restoreR3JSON(t, root)
+}
+
+// restoreR3Remove marks a field restoreR3Patch deletes.
+var restoreR3Remove any = &struct{ remove bool }{true}
