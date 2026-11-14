@@ -248,7 +248,7 @@ func (a *Adapter) put(ctx context.Context, request adapter.InvokeRequest) (any, 
 	}
 	ref := objectReference{objectTarget: input.Target}
 	ref.VersionID, _ = confirmedVersion("", result.VersionID)
-	if a.config.RequireVersionIDs && (ref.VersionID == "" || ref.VersionID == "null") {
+	if a.missingRequiredVersion(ref.VersionID) {
 		return nil, sideEffectError("Wasabi did not return the required immutable object version")
 	}
 	value := map[string]any{"target": input.Target, "upload_state": "uploaded", "object_ref": ref,
@@ -334,7 +334,7 @@ func (a *Adapter) get(ctx context.Context, request adapter.InvokeRequest) (any, 
 	if err != nil {
 		return nil, err
 	}
-	if a.config.RequireVersionIDs && (ref.VersionID == "" || ref.VersionID == "null") {
+	if a.missingRequiredVersion(ref.VersionID) {
 		return nil, errors.New("Wasabi object did not resolve to an immutable version")
 	}
 	return map[string]any{"object_ref": ref, "transfer_state": "complete", "bytes_sent": count,
@@ -367,7 +367,7 @@ func (a *Adapter) head(ctx context.Context, request adapter.InvokeRequest) (any,
 	if err != nil {
 		return nil, err
 	}
-	if a.config.RequireVersionIDs && (ref.VersionID == "" || ref.VersionID == "null") {
+	if a.missingRequiredVersion(ref.VersionID) {
 		return nil, errors.New("Wasabi object has no immutable version ID")
 	}
 	value := map[string]any{"object_ref": ref, "object_state": "present", "observed_at": time.Now().UTC().Format(time.RFC3339Nano)}
@@ -389,20 +389,39 @@ func (a *Adapter) head(ctx context.Context, request adapter.InvokeRequest) (any,
 	return value, nil
 }
 
+// confirmedVersion returns the exact version a read observed. A requested
+// version must be echoed by the provider; with none requested, the observed
+// version is kept when it is immutable.
 func confirmedVersion(requested string, observed *string) (string, error) {
-	if requested != "" && requested != "null" {
-		if observed == nil || *observed != requested {
-			return "", errors.New("Wasabi did not confirm the requested object version")
-		}
-		return requested, nil
+	if requested == "" {
+		return observedVersion(observed), nil
 	}
 	if requested == "null" {
 		return "", errors.New("the mutable null object version is not accepted as an exact version")
 	}
-	if observed != nil && *observed != "" && *observed != "null" {
-		return *observed, nil
+	if observed == nil || *observed != requested {
+		return "", errors.New("Wasabi did not confirm the requested object version")
 	}
-	return "", nil
+	return requested, nil
+}
+
+// observedVersion returns the provider's version ID, or "" when it reported
+// none or only the mutable "null" version.
+func observedVersion(observed *string) string {
+	if observed != nil && immutableVersion(*observed) {
+		return *observed
+	}
+	return ""
+}
+
+func immutableVersion(version string) bool {
+	return version != "" && version != "null"
+}
+
+// missingRequiredVersion reports a profile that requires version IDs meeting
+// an object without an immutable one.
+func (a *Adapter) missingRequiredVersion(version string) bool {
+	return a.config.RequireVersionIDs && !immutableVersion(version)
 }
 
 func (a *Adapter) validTarget(value objectTarget) bool {
