@@ -42,10 +42,23 @@ func measureFunc(fset *token.FileSet, fn *ast.FuncDecl) funcMetrics {
 		EndLine:    fset.Position(fn.End()).Line,
 		Complexity: cyclomatic(fn.Body),
 		Nesting:    maxNesting(fn.Body),
-		Allowed:    fn.Doc != nil && strings.Contains(fn.Doc.Text(), allowMarker),
+		Allowed:    hasComplexityException(fn.Doc),
 	}
 	m.BoolOps, m.BoolLine = largestCondition(fset, fn.Body)
 	return m
+}
+
+func hasComplexityException(doc *ast.CommentGroup) bool {
+	if doc == nil {
+		return false
+	}
+	for _, line := range strings.Split(doc.Text(), "\n") {
+		marker, reason, ok := strings.Cut(strings.TrimSpace(line), " ")
+		if ok && marker == allowMarker && strings.TrimSpace(reason) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // funcName is "Name" for a function and "Type.Name" for a method.

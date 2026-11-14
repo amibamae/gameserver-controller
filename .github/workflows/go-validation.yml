@@ -69,4 +69,6 @@ jobs:
         # Fails only for functions this pull request adds or changes that
         # exceed the CLAUDE.md limits; existing code is not checked.
         if: github.event_name == 'pull_request'
-        run: go run ./cmd/complexity-check -base "origin/${{ github.base_ref }}"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: go run ./cmd/complexity-check -base "origin/$BASE_REF"

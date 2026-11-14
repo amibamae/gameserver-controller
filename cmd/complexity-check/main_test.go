@@ -86,3 +86,13 @@ func TestRepositoryCodeOfThisCommand(t *testing.T) {
 		t.Fatalf("complexity-check is over its own limits:\n%s%s", stdout, stderr)
 	}
 }
+
+func TestRunRequiresAnExceptionReason(t *testing.T) {
+	for _, comment := range []string{"complexity-check:allow", "mentions complexity-check:allow a reason"} {
+		source := "package a\n// " + comment + "\nfunc Wide(a, b, c, d, e bool) bool { return a && b && c && d && e }\n"
+		code, stdout, stderr := runCheck(t, writeTree(t, source))
+		if code != 1 || strings.Contains(stdout, "allowed by") || !strings.Contains(stderr, "over the limits") {
+			t.Fatalf("comment %q: code %d, stdout %q, stderr %q", comment, code, stdout, stderr)
+		}
+	}
+}
