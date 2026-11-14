@@ -2,6 +2,20 @@
 
 This file is for agents that read `AGENTS.md`, such as ChatGPT Codex. Claude sessions read the same rules from `CLAUDE.md`.
 
+## Working style (owner requirements)
+
+For all development tasks in this repository:
+
+- Work on a dedicated feature branch, never directly on main.
+- Run appropriate tests before committing.
+- Create small, descriptive local Git commits after completing and validating each task.
+- Never commit secrets, credentials, or local progress files (`.opencode/` is ignored; keep it that way).
+- Do not push to GitHub, create pull requests, or merge changes without the owner's explicit approval.
+- Update `.opencode/WORK_PROGRESS.md` after each task.
+- Report the branch name, commit hash, test results, and next steps.
+
+Follow these rules unless the owner explicitly instructs otherwise.
+
 1. Read [CLAUDE.md](CLAUDE.md). Its rules are standing requirements from the project owner and apply to every agent, and to every subagent you start (pass them on when you delegate):
    - credit all third-party software in `THIRD_PARTY_NOTICES.md` in the same PR that adds, upgrades, or removes it;
    - work protocol first;
