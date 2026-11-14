@@ -782,40 +782,58 @@ func decodeEnvelope(value []byte) (StoredOperation, error) {
 	return StoredOperation{Record: envelope.Record, Revision: envelope.Revision}, nil
 }
 
+// sameAcceptedRequest reports whether next keeps every field that was fixed
+// when the request was accepted.
 func sameAcceptedRequest(current, next OperationRecord) bool {
-	return current.BackupInitialLifecycleState == next.BackupInitialLifecycleState &&
-		current.OperationID == next.OperationID &&
-		current.OperationType == next.OperationType &&
-		current.ProtocolVersion == next.ProtocolVersion &&
-		current.SchemaPackageRevision == next.SchemaPackageRevision &&
-		current.Target.ServerID == next.Target.ServerID &&
-		current.Target.EnvironmentID == next.Target.EnvironmentID &&
-		bytes.Equal(current.Target.InstanceRef, next.Target.InstanceRef) &&
-		current.ActorID == next.ActorID &&
-		current.CorrelationID == next.CorrelationID &&
-		current.IdempotencyKey == next.IdempotencyKey &&
-		current.RequestFingerprint == next.RequestFingerprint &&
-		current.RequestSnapshot.OperationType == next.RequestSnapshot.OperationType &&
-		bytes.Equal(current.RequestSnapshot.Parameters, next.RequestSnapshot.Parameters) &&
-		secretReferencesEqual(current.RequestSnapshot.SecretRefs, next.RequestSnapshot.SecretRefs) &&
+	return acceptedIdentityOf(current) == acceptedIdentityOf(next) &&
+		sameOperationTarget(current.Target, next.Target) &&
+		sameRequestSnapshot(current.RequestSnapshot, next.RequestSnapshot) &&
 		equalTimePointer(current.Deadline, next.Deadline)
 }
 
+// acceptedIdentity holds the comparable scalar fields of an accepted request.
+type acceptedIdentity struct {
+	backupInitialLifecycleState protocolstate.ServerState
+	operationID                 string
+	operationType               string
+	protocolVersion             string
+	schemaPackageRevision       string
+	actorID                     string
+	correlationID               string
+	idempotencyKey              string
+	requestFingerprint          string
+}
+
+func acceptedIdentityOf(record OperationRecord) acceptedIdentity {
+	return acceptedIdentity{
+		backupInitialLifecycleState: record.BackupInitialLifecycleState,
+		operationID:                 record.OperationID,
+		operationType:               record.OperationType,
+		protocolVersion:             record.ProtocolVersion,
+		schemaPackageRevision:       record.SchemaPackageRevision,
+		actorID:                     record.ActorID,
+		correlationID:               record.CorrelationID,
+		idempotencyKey:              record.IdempotencyKey,
+		requestFingerprint:          record.RequestFingerprint,
+	}
+}
+
+func sameOperationTarget(current, next OperationTarget) bool {
+	return current.ServerID == next.ServerID && current.EnvironmentID == next.EnvironmentID && bytes.Equal(current.InstanceRef, next.InstanceRef)
+}
+
+func sameRequestSnapshot(current, next RequestSnapshot) bool {
+	return current.OperationType == next.OperationType && bytes.Equal(current.Parameters, next.Parameters) &&
+		secretReferencesEqual(current.SecretRefs, next.SecretRefs)
+}
+
 func secretReferencesEqual(left, right []SecretReference) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i].SecretRef != right[i].SecretRef || left[i].Purpose != right[i].Purpose || left[i].VersionRef != right[i].VersionRef || len(left[i].PermissionScope) != len(right[i].PermissionScope) {
-			return false
-		}
-		for j := range left[i].PermissionScope {
-			if left[i].PermissionScope[j] != right[i].PermissionScope[j] {
-				return false
-			}
-		}
-	}
-	return true
+	return slices.EqualFunc(left, right, sameSecretReference)
+}
+
+func sameSecretReference(left, right SecretReference) bool {
+	return left.SecretRef == right.SecretRef && left.Purpose == right.Purpose && left.VersionRef == right.VersionRef &&
+		slices.Equal(left.PermissionScope, right.PermissionScope)
 }
 
 func equalTimePointer(left, right *time.Time) bool {
