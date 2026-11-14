@@ -635,51 +635,18 @@ func requireOperationLock(tx *bolt.Tx, operationID, requiredScope string) error 
 	return nil
 }
 
+// updateOperationTx applies one checked operation update inside tx: it
+// validates the change, assigns the store-owned timestamps, releases the
+// locks of a terminal operation, and writes the next revision.
 func updateOperationTx(tx *bolt.Tx, expectedRevision uint64, next OperationRecord) (StoredOperation, error) {
-	bucket := tx.Bucket(operationsBucket)
-	value := bucket.Get([]byte(next.OperationID))
-	if value == nil {
-		return StoredOperation{}, ErrNotFound
-	}
-	current, err := decodeEnvelope(value)
+	current, err := loadOperationAtRevision(tx, next.OperationID, expectedRevision)
 	if err != nil {
 		return StoredOperation{}, err
 	}
-	if current.Revision != expectedRevision {
-		return StoredOperation{}, ErrRevisionConflict
-	}
-	if protocolstate.IsTerminalOperation(current.Record.Status) {
-		return StoredOperation{}, ErrTerminalOperation
-	}
-	if !sameAcceptedRequest(current.Record, next) {
-		return StoredOperation{}, ErrImmutableFields
-	}
-	if next.Status != current.Record.Status {
-		if err := protocolstate.ValidateOperationTransition(current.Record.Status, next.Status); err != nil {
-			return StoredOperation{}, err
-		}
-	}
-	if err := validateStepChanges(current.Record.Steps, next.Steps, next.Status); err != nil {
+	if err := validateOperationChange(current.Record, next); err != nil {
 		return StoredOperation{}, err
 	}
-	if next.Steps == nil {
-		next.Steps = []OperationStep{}
-	}
-	now := monotonicTimestamp(current.Record.UpdatedAt, time.Now().UTC())
-	next.CreatedAt = current.Record.CreatedAt
-	next.UpdatedAt = now
-	next.StartedAt = current.Record.StartedAt
-	if next.StartedAt == nil && next.Status == protocolstate.OperationRunning {
-		startedAt := now
-		next.StartedAt = &startedAt
-	}
-	next.Steps = updateStepTimestamps(current.Record.Steps, next.Steps, now)
-	if protocolstate.IsTerminalOperation(next.Status) {
-		completedAt := now
-		next.CompletedAt = &completedAt
-	} else {
-		next.CompletedAt = nil
-	}
+	next = stampOperationUpdate(current.Record, next, monotonicTimestamp(current.Record.UpdatedAt, time.Now().UTC()))
 	if err := validateRecord(next); err != nil {
 		return StoredOperation{}, err
 	}
@@ -695,14 +662,76 @@ func updateOperationTx(tx *bolt.Tx, expectedRevision uint64, next OperationRecor
 		return StoredOperation{}, fmt.Errorf("%w: revision exhausted", ErrInvalidRecord)
 	}
 	updated := StoredOperation{Record: next, Revision: current.Revision + 1}
-	encoded, err := json.Marshal(operationEnvelope{Revision: updated.Revision, Record: updated.Record})
-	if err != nil {
-		return StoredOperation{}, fmt.Errorf("encode operation record: %w", err)
-	}
-	if err := bucket.Put([]byte(next.OperationID), encoded); err != nil {
+	if err := putOperation(tx, updated); err != nil {
 		return StoredOperation{}, err
 	}
 	return updated, nil
+}
+
+// loadOperationAtRevision reads and decodes the stored operation and
+// requires it to be at expectedRevision.
+func loadOperationAtRevision(tx *bolt.Tx, operationID string, expectedRevision uint64) (StoredOperation, error) {
+	value := tx.Bucket(operationsBucket).Get([]byte(operationID))
+	if value == nil {
+		return StoredOperation{}, ErrNotFound
+	}
+	current, err := decodeEnvelope(value)
+	if err != nil {
+		return StoredOperation{}, err
+	}
+	if current.Revision != expectedRevision {
+		return StoredOperation{}, ErrRevisionConflict
+	}
+	return current, nil
+}
+
+// validateOperationChange rejects a change to a terminal operation or to
+// the accepted request, an illegal status transition, and an illegal step
+// change.
+func validateOperationChange(current, next OperationRecord) error {
+	if protocolstate.IsTerminalOperation(current.Status) {
+		return ErrTerminalOperation
+	}
+	if !sameAcceptedRequest(current, next) {
+		return ErrImmutableFields
+	}
+	if next.Status != current.Status {
+		if err := protocolstate.ValidateOperationTransition(current.Status, next.Status); err != nil {
+			return err
+		}
+	}
+	return validateStepChanges(current.Steps, next.Steps, next.Status)
+}
+
+// stampOperationUpdate replaces the caller's timestamps with the store's:
+// creation and first start are kept, the update and any start or
+// completion happen now.
+func stampOperationUpdate(current, next OperationRecord, now time.Time) OperationRecord {
+	if next.Steps == nil {
+		next.Steps = []OperationStep{}
+	}
+	next.CreatedAt = current.CreatedAt
+	next.UpdatedAt = now
+	next.StartedAt = current.StartedAt
+	if next.StartedAt == nil && next.Status == protocolstate.OperationRunning {
+		startedAt := now
+		next.StartedAt = &startedAt
+	}
+	next.Steps = updateStepTimestamps(current.Steps, next.Steps, now)
+	next.CompletedAt = nil
+	if protocolstate.IsTerminalOperation(next.Status) {
+		completedAt := now
+		next.CompletedAt = &completedAt
+	}
+	return next
+}
+
+func putOperation(tx *bolt.Tx, stored StoredOperation) error {
+	encoded, err := json.Marshal(operationEnvelope{Revision: stored.Revision, Record: stored.Record})
+	if err != nil {
+		return fmt.Errorf("encode operation record: %w", err)
+	}
+	return tx.Bucket(operationsBucket).Put([]byte(stored.Record.OperationID), encoded)
 }
 
 func releaseOperationLocks(tx *bolt.Tx, operationID string) error {
