@@ -64,14 +64,21 @@ Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is cont
 | Codex | `internal/controllersetup/installer.go`, `cmd/controller-setup/*` | local branch `codex/controller-setup-apply` | **uncommitted** in Codex's checkout on the owner's Mac; not on GitHub yet |
 | Codex | `docs/ROADMAP.md` estimates | #255 | open |
 | Codex | `internal/store/logical_servers.go` | #254 merged | done (8.47) |
-| Claude | `internal/workflow/server_provision*.go` | `claude/r3-server-provision` | on hold; work unavailable |
-| Claude | `internal/workflow/server_restore*.go` | `claude/r3-server-restore` | on hold; work unavailable |
-| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | `claude/r3-server-start-stop` | on hold; work unavailable |
-| Claude | `internal/workflow/file_stream_broker*.go` | `claude/r3-file-stream-broker` | on hold; work unavailable |
-| Claude | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | on hold; work unavailable |
-| Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | on hold; work unavailable |
+| Claude | `internal/workflow/server_provision*.go` | `claude/r3-server-provision` | WIP pushed (5 commits), unfinished; no PR |
+| Claude | `internal/workflow/server_restore*.go` | `claude/r3-server-restore` | WIP pushed (5 commits), unfinished; no PR |
+| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | `claude/r3-server-start-stop` | WIP pushed (1 commit, tests only), unfinished; no PR |
+| Claude | `internal/workflow/file_stream_broker*.go` | `claude/r3-file-stream-broker` | WIP pushed (4 commits), unfinished; no PR |
+| Claude | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | WIP pushed (12 commits), unfinished; no PR |
+| Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | WIP pushed (10 commits), unfinished; no PR |
 | Codex | `cmd/complexity-check/*`, its CI step | #260 merged | checker runs on PRs |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
+
+**Claude session paused (2026-11-14):** its six round-3 agents stopped on the account's weekly usage limit, which resets 2026-11-19 at 11:00 UTC. Their unfinished work was committed as `wip:` and pushed to the `claude/r3-*` branches above. Those commits are unreviewed, and their tests may not pass. To continue a row:
+1. Check out its branch and rebase onto `main`.
+2. Run every check. Characterization tests must pass on the old code before any refactor commit; check the branch's commit order.
+3. Finish the work and open the PR.
+
+If a branch looks wrong, redo it from `main` instead. The owner decides whether Codex or the resumed Claude session takes these rows; update the table when that happens.
 
 Claude's earlier backup, destroy, supervised-pilot and controller-setup agents were stopped unpublished, so their local work is dropped and those files are Codex's.
 
