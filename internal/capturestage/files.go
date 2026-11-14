@@ -3,17 +3,14 @@
 package capturestage
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"hash"
-	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/amibamae/gameserver-controller/internal/captureinvoke"
@@ -71,7 +68,7 @@ func key(scope capturestream.Scope) (string, error) {
 	return hex.EncodeToString(digest[:]) + ".json", nil
 }
 func (f *Files) Open(ctx context.Context, scope capturestream.Scope) (captureinvoke.Stage, error) {
-	if f == nil || f.root == "" || f.syncRoot == nil || ctx == nil || ctx.Err() != nil {
+	if !f.ready(ctx) {
 		return nil, ErrInvalid
 	}
 	name, err := key(scope)
@@ -270,122 +267,4 @@ func (s *stage) Discard() error {
 	}
 	s.discarded = true
 	return nil
-}
-func privateFile(path string) (*os.File, error) {
-	before, err := os.Lstat(path)
-	if err != nil || !before.Mode().IsRegular() || before.Mode().Perm()&0077 != 0 {
-		return nil, ErrInvalid
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, ErrInvalid
-	}
-	after, err := file.Stat()
-	if err != nil || !os.SameFile(before, after) {
-		file.Close()
-		return nil, ErrInvalid
-	}
-	return file, nil
-}
-func safeDirectory(name string) bool {
-	if !strings.HasPrefix(name, "capture-") || len(name) > 128 || len(name) <= 8 {
-		return false
-	}
-	for _, c := range name[8:] {
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') {
-			return false
-		}
-	}
-	return true
-}
-
-// OpenVerified reopens a sealed capture by exact scope and rehashes its bytes.
-// The returned descriptor is rewound. Callers must close it and independently
-// verify any subsequent storage transfer. This is not a verified backup.
-func (f *Files) OpenVerified(ctx context.Context, scope capturestream.Scope) (*os.File, capturestream.Receipt, error) {
-	file, receipt, _, err := f.openVerifiedCapture(ctx, scope)
-	return file, receipt, err
-}
-
-// OpenVerifiedCapture reopens the exact sealed stream and its original
-// validated adapter response. Version 1 receipts remain readable through
-// OpenVerified, but cannot recover a completed workflow step automatically.
-func (f *Files) OpenVerifiedCapture(ctx context.Context, scope capturestream.Scope) (io.ReadCloser, capturestream.Receipt, json.RawMessage, error) {
-	return f.openVerifiedCapture(ctx, scope)
-}
-
-func (f *Files) openVerifiedCapture(ctx context.Context, scope capturestream.Scope) (*os.File, capturestream.Receipt, json.RawMessage, error) {
-	if f == nil || f.root == "" || f.syncRoot == nil || ctx == nil || ctx.Err() != nil {
-		return nil, capturestream.Receipt{}, nil, ErrInvalid
-	}
-	name, err := key(scope)
-	if err != nil {
-		return nil, capturestream.Receipt{}, nil, err
-	}
-	record, err := privateFile(filepath.Join(f.root, name))
-	if err != nil {
-		return nil, capturestream.Receipt{}, nil, err
-	}
-	encoded, err := io.ReadAll(io.LimitReader(record, 65537))
-	record.Close()
-	if err != nil || len(encoded) > 65536 {
-		return nil, capturestream.Receipt{}, nil, ErrInvalid
-	}
-	var m manifest
-	decoder := json.NewDecoder(bytes.NewReader(encoded))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&m) != nil || decoder.Decode(new(any)) != io.EOF || (m.Version != 1 && m.Version != 2) || m.Receipt.Scope != scope || !safeDirectory(m.Directory) || m.Receipt.SizeBytes < 0 || m.Receipt.SizeBytes > 9007199254740991 {
-		return nil, capturestream.Receipt{}, nil, ErrInvalid
-	}
-	if m.Version == 1 {
-		if len(m.Output) != 0 || m.OutputSHA != "" {
-			return nil, capturestream.Receipt{}, nil, ErrInvalid
-		}
-	} else {
-		if len(m.Output) == 0 || len(m.Output) > maximumCaptureOutputBytes || !json.Valid(m.Output) {
-			return nil, capturestream.Receipt{}, nil, ErrInvalid
-		}
-		outputDigest := sha256.Sum256(m.Output)
-		if m.OutputSHA != hex.EncodeToString(outputDigest[:]) {
-			return nil, capturestream.Receipt{}, nil, ErrInvalid
-		}
-	}
-	directory := filepath.Join(f.root, m.Directory)
-	info, err := os.Lstat(directory)
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
-		return nil, capturestream.Receipt{}, nil, ErrInvalid
-	}
-	file, err := privateFile(filepath.Join(directory, "data"))
-	if err != nil {
-		return nil, capturestream.Receipt{}, nil, err
-	}
-	valid := false
-	defer func() {
-		if !valid {
-			file.Close()
-		}
-	}()
-	digest := sha256.New()
-	reader := &contextReader{ctx: ctx, reader: io.LimitReader(file, m.Receipt.SizeBytes+1)}
-	size, err := io.Copy(digest, reader)
-	if err != nil || ctx.Err() != nil || size != m.Receipt.SizeBytes || hex.EncodeToString(digest.Sum(nil)) != m.Receipt.SHA256 {
-		return nil, capturestream.Receipt{}, nil, ErrInvalid
-	}
-	if _, err = file.Seek(0, io.SeekStart); err != nil {
-		return nil, capturestream.Receipt{}, nil, ErrInvalid
-	}
-	valid = true
-	return file, m.Receipt, append(json.RawMessage(nil), m.Output...), nil
-}
-
-type contextReader struct {
-	ctx    context.Context
-	reader io.Reader
-}
-
-func (r *contextReader) Read(p []byte) (int, error) {
-	if err := r.ctx.Err(); err != nil {
-		return 0, err
-	}
-	return r.reader.Read(p)
 }
