@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
+
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 	"github.com/amibamae/gameserver-controller/internal/store"
-	"time"
 )
 
 type backupDataSetDescription struct {
@@ -19,7 +20,7 @@ type backupDataSetDescription struct {
 
 func backupDataDescriptionMatches(operation store.OperationRecord, profile ServerBackupProfile, server store.LogicalServer) bool {
 	step := operationStep(operation, backupDescribeDataStep)
-	if step.StepID == "" || step.Status != protocolstate.StepSucceeded {
+	if !backupEvidenceStepSucceeded(step) {
 		return false
 	}
 	var input struct {
@@ -32,25 +33,53 @@ func backupDataDescriptionMatches(operation store.OperationRecord, profile Serve
 		DataSets   []backupDataSetDescription `json:"data_sets"`
 		ObservedAt string                     `json:"observed_at"`
 	}
-	if json.Unmarshal(effectiveStepInput(step), &input) != nil || json.Unmarshal(step.Output, &output) != nil ||
-		!equalJSON(input.Target, output.Target) || input.ReleaseID != profile.GameReleaseID || output.ReleaseID != profile.GameReleaseID ||
-		!equalJSON(output.Target, mustJSON(map[string]any{"server_id": server.ServerID, "environment_id": server.EnvironmentID, "instance_ref": server.InstanceRef})) ||
-		len(output.DataSets) != len(profile.DataSets) {
+	if json.Unmarshal(effectiveStepInput(step), &input) != nil || json.Unmarshal(step.Output, &output) != nil {
 		return false
 	}
-	if _, err := time.Parse(time.RFC3339Nano, output.ObservedAt); err != nil {
+	if !backupDescriptionMatchesRequest(input.Target, output.Target, input.ReleaseID, output.ReleaseID, profile.GameReleaseID) {
 		return false
 	}
-	for i, actual := range output.DataSets {
-		trusted := profile.DataSets[i]
-		if actual.DataSetID != trusted.DataSetID || actual.Required != trusted.Required || actual.DataFormat != trusted.DataFormat ||
-			!sameStringSlice(actual.RelativePaths, trusted.RelativePaths) || !sameStringSlice(actual.SupportedConsistencyModes, trusted.SupportedConsistencyModes) {
+	target := mustJSON(map[string]any{"server_id": server.ServerID, "environment_id": server.EnvironmentID, "instance_ref": server.InstanceRef})
+	if !equalJSON(output.Target, target) {
+		return false
+	}
+	return backupDataSetDescriptionsMatch(output.DataSets, profile.DataSets, output.ObservedAt)
+}
+
+func backupDataSetDescriptionsMatch(actual []backupDataSetDescription, trusted []ServerBackupDataSet, observedAt string) bool {
+	if len(actual) != len(trusted) {
+		return false
+	}
+	if _, err := time.Parse(time.RFC3339Nano, observedAt); err != nil {
+		return false
+	}
+	for i, description := range actual {
+		if !backupDataSetDescriptionMatches(description, trusted[i]) {
 			return false
 		}
-		for _, relative := range actual.RelativePaths {
-			if !validBackupRelativePath(relative) {
-				return false
-			}
+	}
+	return true
+}
+
+func backupEvidenceStepSucceeded(step store.OperationStep) bool {
+	return step.StepID != "" && step.Status == protocolstate.StepSucceeded
+}
+
+func backupDescriptionMatchesRequest(inputTarget, outputTarget json.RawMessage, inputRelease, outputRelease, expectedRelease string) bool {
+	return equalJSON(inputTarget, outputTarget) && inputRelease == expectedRelease && outputRelease == expectedRelease
+}
+
+func backupDataSetDescriptionMatches(actual backupDataSetDescription, trusted ServerBackupDataSet) bool {
+	if actual.DataSetID != trusted.DataSetID || actual.Required != trusted.Required || actual.DataFormat != trusted.DataFormat {
+		return false
+	}
+	if !sameStringSlice(actual.RelativePaths, trusted.RelativePaths) ||
+		!sameStringSlice(actual.SupportedConsistencyModes, trusted.SupportedConsistencyModes) {
+		return false
+	}
+	for _, relative := range actual.RelativePaths {
+		if !validBackupRelativePath(relative) {
+			return false
 		}
 	}
 	return true
@@ -102,15 +131,19 @@ func backupRuntimeStopOutput(operation store.OperationRecord) (executionUnitStop
 	var output executionUnitStopResult
 	step := operationStep(operation, backupStopRuntimeStep)
 	if step.StepID == "" || step.Status != protocolstate.StepSucceeded || json.Unmarshal(step.Output, &output) != nil ||
-		output.Outcome != "completed" || output.State != "stopped" || !stepBindsRef(step.Input, "unit_ref", output.UnitRef) {
+		!backupStopOutputMatchesUnit(step, output) {
 		return executionUnitStopResult{}, errors.New("runtime stop output does not confirm the exact unit stopped")
 	}
 	return output, nil
 }
 
+func backupStopOutputMatchesUnit(step store.OperationStep, output executionUnitStopResult) bool {
+	return output.Outcome == "completed" && output.State == "stopped" && stepBindsRef(step.Input, "unit_ref", output.UnitRef)
+}
+
 func gameBackupSaveConfirmed(operation store.OperationRecord) bool {
 	step := operationStep(operation, backupSaveGameStep)
-	if step.StepID == "" || step.Status != protocolstate.StepSucceeded {
+	if !backupEvidenceStepSucceeded(step) {
 		return false
 	}
 	var input, output struct {
@@ -124,16 +157,23 @@ func gameBackupSaveConfirmed(operation store.OperationRecord) bool {
 		ObservedAt string `json:"observed_at"`
 		SavedAt    string `json:"saved_at"`
 	}
-	if json.Unmarshal(effectiveStepInput(step), &input) != nil || json.Unmarshal(step.Output, &output) != nil ||
-		output.Outcome != "confirmed" || output.Target.ServerID != operation.Target.ServerID ||
-		output.Target.EnvironmentID != operation.Target.EnvironmentID || output.ReleaseID != input.ReleaseID ||
-		!equalJSON(output.Target.InstanceRef, input.Target.InstanceRef) ||
+	if json.Unmarshal(effectiveStepInput(step), &input) != nil || json.Unmarshal(step.Output, &output) != nil {
+		return false
+	}
+	if !backupSaveMatchesTarget(operation, output.Outcome, output.Target.ServerID, output.Target.EnvironmentID) || output.ReleaseID != input.ReleaseID {
+		return false
+	}
+	if !equalJSON(output.Target.InstanceRef, input.Target.InstanceRef) ||
 		!equalJSON(input.Target.InstanceRef, stepField(operationStep(operation, backupInspectInstanceStep).Input, "instance_ref")) {
 		return false
 	}
 	_, observedErr := time.Parse(time.RFC3339Nano, output.ObservedAt)
 	_, savedErr := time.Parse(time.RFC3339Nano, output.SavedAt)
 	return observedErr == nil && savedErr == nil
+}
+
+func backupSaveMatchesTarget(operation store.OperationRecord, outcome, serverID, environmentID string) bool {
+	return outcome == "confirmed" && serverID == operation.Target.ServerID && environmentID == operation.Target.EnvironmentID
 }
 
 func backupReadbacksComplete(operation store.OperationRecord, profile ServerBackupProfile) bool {
@@ -161,20 +201,23 @@ func backupDataDescribeInputMatches(operation store.OperationRecord, profile Ser
 		} `json:"target"`
 		ReleaseID string `json:"release_id"`
 	}
-	return step.StepID != "" && json.Unmarshal(effectiveStepInput(step), &input) == nil &&
-		input.Target.ServerID == server.ServerID && input.Target.EnvironmentID == server.EnvironmentID &&
+	if step.StepID == "" || json.Unmarshal(effectiveStepInput(step), &input) != nil {
+		return false
+	}
+	return input.Target.ServerID == server.ServerID && input.Target.EnvironmentID == server.EnvironmentID &&
 		equalJSON(input.Target.InstanceRef, server.InstanceRef) && input.ReleaseID == profile.GameReleaseID
 }
 
 func backupValidationConfirmed(operation store.OperationRecord, profile ServerBackupProfile) bool {
 	step := operationStep(operation, backupValidateStep)
-	if step.StepID == "" || step.Status != protocolstate.StepSucceeded {
+	if !backupEvidenceStepSucceeded(step) {
 		return false
 	}
 	var output backupValidationObservation
-	if json.Unmarshal(step.Output, &output) != nil || output.ValidationResult != "valid" ||
-		output.BackupID != operation.OperationID || output.EnvironmentID != operation.Target.EnvironmentID ||
-		len(output.CheckResults) != len(profile.ValidationChecks) {
+	if json.Unmarshal(step.Output, &output) != nil {
+		return false
+	}
+	if !backupValidationMatchesOperation(operation, output, len(profile.ValidationChecks)) {
 		return false
 	}
 	var input struct {
@@ -188,6 +231,19 @@ func backupValidationConfirmed(operation store.OperationRecord, profile ServerBa
 		input.Manifest.EnvironmentID != output.EnvironmentID || input.Manifest.DataGenerationID != output.DataGenerationID {
 		return false
 	}
+	if !backupValidationChecksPassed(profile, output) {
+		return false
+	}
+	_, err := time.Parse(time.RFC3339Nano, output.ObservedAt)
+	return err == nil
+}
+
+func backupValidationMatchesOperation(operation store.OperationRecord, output backupValidationObservation, checkCount int) bool {
+	return output.ValidationResult == "valid" && output.BackupID == operation.OperationID &&
+		output.EnvironmentID == operation.Target.EnvironmentID && len(output.CheckResults) == checkCount
+}
+
+func backupValidationChecksPassed(profile ServerBackupProfile, output backupValidationObservation) bool {
 	requested := make(map[string]string, len(profile.ValidationChecks))
 	for _, check := range profile.ValidationChecks {
 		requested[check.CheckID] = check.CheckVersion
@@ -202,11 +258,7 @@ func backupValidationConfirmed(operation store.OperationRecord, profile ServerBa
 			return false
 		}
 	}
-	if len(requested) != 0 {
-		return false
-	}
-	_, err := time.Parse(time.RFC3339Nano, output.ObservedAt)
-	return err == nil
+	return len(requested) == 0
 }
 
 func (w *ServerBackupWorkflow) verifyBackupValidationStreams(ctx context.Context, operation store.OperationRecord, profile ServerBackupProfile) error {
@@ -225,7 +277,7 @@ func (w *ServerBackupWorkflow) verifyBackupValidationStreams(ctx context.Context
 
 func backupRuntimeStartCompleted(operation store.OperationRecord) bool {
 	step := operationStep(operation, backupStartRuntimeStep)
-	if step.StepID == "" || step.Status != protocolstate.StepSucceeded {
+	if !backupEvidenceStepSucceeded(step) {
 		return false
 	}
 	var output executionUnitStartResult

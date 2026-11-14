@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
@@ -44,8 +45,7 @@ func (w *ServerBackupWorkflow) BuildSuccessResult(ctx context.Context, operation
 	manifest := decodeObject(validationInput.Manifest)
 	dataGenerationID := stringValueMap(manifest, "data_generation_id")
 	prepared, prepareErr := backupPrepareOutput(operation)
-	if dataGenerationID == "" || prepareErr != nil || dataGenerationID != prepared.DataGenerationID ||
-		(dataGenerationID != stored.Record.DataGenerationID && !backupResumeAfterBackup(operation)) {
+	if prepareErr != nil || !backupManifestGenerationBound(operation, dataGenerationID, prepared.DataGenerationID, stored.Record.DataGenerationID) {
 		return nil, errors.New("verified manifest is not bound to the accepted data generation")
 	}
 	finalState := string(protocolstate.ServerStopped)
@@ -78,6 +78,12 @@ func (w *ServerBackupWorkflow) BuildSuccessResult(ctx context.Context, operation
 		return nil, fmt.Errorf("server.backup result does not match protocol schema: %w", err)
 	}
 	return encoded, nil
+}
+
+// A resumed server can already have a new generation. Its manifest must
+// still name the generation recorded when the backup was prepared.
+func backupManifestGenerationBound(operation store.OperationRecord, manifest, prepared, current string) bool {
+	return manifest != "" && manifest == prepared && (manifest == current || backupResumeAfterBackup(operation))
 }
 
 func (w *ServerBackupWorkflow) BuildFailureResult(_ context.Context, operation store.OperationRecord, step store.OperationStep, failure json.RawMessage) (json.RawMessage, error) {
@@ -141,48 +147,69 @@ func backupNextGenerationID(operationID, previous string) string {
 	return "generation-" + hex.EncodeToString(digest[:16])
 }
 
+type backupResultData struct {
+	BackupID         string          `json:"backup_id"`
+	EnvironmentID    string          `json:"environment_id"`
+	DataGenerationID string          `json:"data_generation_id"`
+	Manifest         json.RawMessage `json:"manifest"`
+	FinalState       string          `json:"final_lifecycle_state"`
+	Readiness        json.RawMessage `json:"readiness_assertion"`
+}
+
+type backupResultManifest struct {
+	ManifestVersion   string          `json:"manifest_version"`
+	BackupID          string          `json:"backup_id"`
+	ServerID          string          `json:"server_id"`
+	EnvironmentID     string          `json:"environment_id"`
+	DataGenerationID  string          `json:"data_generation_id"`
+	SourceInstanceRef json.RawMessage `json:"source_instance_ref"`
+	SourceOperationID string          `json:"source_operation_id"`
+}
+
 func hasValidBackupResult(raw json.RawMessage, operation store.OperationRecord, server store.LogicalServer, schemas schemaRuntime, expectedState protocolstate.ServerState) bool {
 	if schemas == nil || schemas.ValidateJSON("urn:gameserver-controller:"+schemas.ProtocolVersion()+":operations:server-backup-result", raw) != nil {
 		return false
 	}
 	var result struct {
-		OperationType string `json:"operation_type"`
-		OperationData struct {
-			BackupID         string          `json:"backup_id"`
-			EnvironmentID    string          `json:"environment_id"`
-			DataGenerationID string          `json:"data_generation_id"`
-			Manifest         json.RawMessage `json:"manifest"`
-			FinalState       string          `json:"final_lifecycle_state"`
-			Readiness        json.RawMessage `json:"readiness_assertion"`
-		} `json:"operation_data"`
+		OperationType string           `json:"operation_type"`
+		OperationData backupResultData `json:"operation_data"`
 	}
-	if json.Unmarshal(raw, &result) != nil || result.OperationType != "server.backup" ||
-		result.OperationData.BackupID != operation.OperationID || result.OperationData.EnvironmentID != operation.Target.EnvironmentID ||
-		result.OperationData.FinalState != string(expectedState) || !isObject(result.OperationData.Manifest) {
+	if json.Unmarshal(raw, &result) != nil || result.OperationType != "server.backup" {
 		return false
 	}
-	var manifest struct {
-		ManifestVersion   string          `json:"manifest_version"`
-		BackupID          string          `json:"backup_id"`
-		ServerID          string          `json:"server_id"`
-		EnvironmentID     string          `json:"environment_id"`
-		DataGenerationID  string          `json:"data_generation_id"`
-		SourceInstanceRef json.RawMessage `json:"source_instance_ref"`
-		SourceOperationID string          `json:"source_operation_id"`
-	}
-	if json.Unmarshal(result.OperationData.Manifest, &manifest) != nil ||
-		manifest.ManifestVersion != backupManifestVersion || manifest.BackupID != operation.OperationID ||
-		manifest.ServerID != operation.Target.ServerID || manifest.EnvironmentID != operation.Target.EnvironmentID ||
-		manifest.DataGenerationID != result.OperationData.DataGenerationID || manifest.SourceOperationID != operation.OperationID ||
-		!equalJSON(manifest.SourceInstanceRef, server.InstanceRef) {
+	data := result.OperationData
+	if !backupResultBindsOperation(data, operation, expectedState) || !backupResultManifestBound(data, operation, server) {
 		return false
 	}
 	if expectedState == protocolstate.ServerReady {
-		var assertion readinessAssertion
-		return json.Unmarshal(result.OperationData.Readiness, &assertion) == nil &&
-			assertion.ServerID == server.ServerID && assertion.EnvironmentID == server.EnvironmentID &&
-			equalJSON(assertion.InstanceRef, server.InstanceRef) &&
-			schemas.ValidateJSON("urn:gameserver-controller:"+schemas.ProtocolVersion()+":lifecycle:readiness-assertion", result.OperationData.Readiness) == nil
+		return backupResultReadinessBound(data.Readiness, server, schemas)
 	}
 	return backupFinalRuntimeStopped(operation)
+}
+
+func backupResultBindsOperation(data backupResultData, operation store.OperationRecord, expectedState protocolstate.ServerState) bool {
+	return data.BackupID == operation.OperationID && data.EnvironmentID == operation.Target.EnvironmentID &&
+		data.FinalState == string(expectedState) && isObject(data.Manifest)
+}
+
+func backupResultManifestBound(data backupResultData, operation store.OperationRecord, server store.LogicalServer) bool {
+	var manifest backupResultManifest
+	if json.Unmarshal(data.Manifest, &manifest) != nil || manifest.ManifestVersion != backupManifestVersion {
+		return false
+	}
+	if manifest.BackupID != operation.OperationID || manifest.ServerID != operation.Target.ServerID ||
+		manifest.EnvironmentID != operation.Target.EnvironmentID {
+		return false
+	}
+	return manifest.DataGenerationID == data.DataGenerationID && manifest.SourceOperationID == operation.OperationID &&
+		equalJSON(manifest.SourceInstanceRef, server.InstanceRef)
+}
+
+func backupResultReadinessBound(raw json.RawMessage, server store.LogicalServer, schemas schemaRuntime) bool {
+	var assertion readinessAssertion
+	if json.Unmarshal(raw, &assertion) != nil || assertion.ServerID != server.ServerID ||
+		assertion.EnvironmentID != server.EnvironmentID || !equalJSON(assertion.InstanceRef, server.InstanceRef) {
+		return false
+	}
+	return schemas.ValidateJSON("urn:gameserver-controller:"+schemas.ProtocolVersion()+":lifecycle:readiness-assertion", raw) == nil
 }

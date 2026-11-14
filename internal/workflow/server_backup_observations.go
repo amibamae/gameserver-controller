@@ -4,10 +4,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/amibamae/gameserver-controller/internal/protocolstate"
-	"github.com/amibamae/gameserver-controller/internal/store"
 	"reflect"
 	"time"
+
+	"github.com/amibamae/gameserver-controller/internal/protocolstate"
+	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
 type backupPreparationObservation struct {
@@ -82,16 +83,25 @@ func backupPrepareOutput(operation store.OperationRecord) (backupPreparationObse
 		return output, errors.New("backup preparation output is missing")
 	}
 	var input backupPreparationObservation
-	if json.Unmarshal(effectiveStepInput(step), &input) != nil || output.Outcome != "prepared" ||
-		!equalJSON(output.Target, input.Target) || output.ReleaseID != input.ReleaseID || output.BackupID != input.BackupID ||
-		output.DataGenerationID != input.DataGenerationID || output.ConsistencyMode != input.ConsistencyMode ||
-		!sameStringSlice(output.DataSetIDs, input.DataSetIDs) || output.PreparationID == "" || output.ConsistencyEvidence == "" {
+	if json.Unmarshal(effectiveStepInput(step), &input) != nil || !preparationMatchesRequest(input, output) {
 		return backupPreparationObservation{}, errors.New("backup preparation output does not bind the exact request")
 	}
 	if _, err := time.Parse(time.RFC3339Nano, output.ObservedAt); err != nil {
 		return backupPreparationObservation{}, err
 	}
 	return output, nil
+}
+
+func preparationMatchesRequest(input, output backupPreparationObservation) bool {
+	if output.Outcome != "prepared" || !equalJSON(output.Target, input.Target) ||
+		output.ReleaseID != input.ReleaseID || output.BackupID != input.BackupID {
+		return false
+	}
+	if output.DataGenerationID != input.DataGenerationID || output.ConsistencyMode != input.ConsistencyMode ||
+		!sameStringSlice(output.DataSetIDs, input.DataSetIDs) {
+		return false
+	}
+	return output.PreparationID != "" && output.ConsistencyEvidence != ""
 }
 
 func backupCaptureOutput(operation store.OperationRecord, dataSetID string) (backupCaptureObservation, error) {
@@ -101,11 +111,7 @@ func backupCaptureOutput(operation store.OperationRecord, dataSetID string) (bac
 		return output, errors.New("capture output is missing")
 	}
 	var input backupCaptureObservation
-	if json.Unmarshal(effectiveStepInput(step), &input) != nil || output.Outcome != "captured" || !output.StreamCompleted ||
-		!equalJSON(output.Target, input.Target) || output.ReleaseID != input.ReleaseID || output.BackupID != input.BackupID ||
-		output.DataGenerationID != input.DataGenerationID || output.PreparationID != input.PreparationID ||
-		output.DataSetID != input.DataSetID || output.CaptureID != input.CaptureID || output.ConsistencyMode != input.ConsistencyMode ||
-		output.SizeBytes < 0 || output.Checksum.Algorithm != "sha256" || len(output.Checksum.Digest) != 64 {
+	if json.Unmarshal(effectiveStepInput(step), &input) != nil || !captureMatchesRequest(input, output) {
 		return backupCaptureObservation{}, errors.New("capture output does not bind the exact prepared data set")
 	}
 	if _, err := hex.DecodeString(output.Checksum.Digest); err != nil {
@@ -115,6 +121,28 @@ func backupCaptureOutput(operation store.OperationRecord, dataSetID string) (bac
 		return backupCaptureObservation{}, err
 	}
 	return output, nil
+}
+
+func captureMatchesRequest(input, output backupCaptureObservation) bool {
+	if output.Outcome != "captured" || !output.StreamCompleted || !equalJSON(output.Target, input.Target) {
+		return false
+	}
+	return captureMatchesPreparation(input, output) && captureMatchesDataSet(input, output) &&
+		output.SizeBytes >= 0 && captureHasSHA256(output)
+}
+
+func captureMatchesPreparation(input, output backupCaptureObservation) bool {
+	return output.ReleaseID == input.ReleaseID && output.BackupID == input.BackupID &&
+		output.DataGenerationID == input.DataGenerationID && output.PreparationID == input.PreparationID
+}
+
+func captureMatchesDataSet(input, output backupCaptureObservation) bool {
+	return output.DataSetID == input.DataSetID && output.CaptureID == input.CaptureID &&
+		output.ConsistencyMode == input.ConsistencyMode
+}
+
+func captureHasSHA256(output backupCaptureObservation) bool {
+	return output.Checksum.Algorithm == "sha256" && len(output.Checksum.Digest) == 64
 }
 
 func backupPutOutput(operation store.OperationRecord, dataSetID string) (backupPutObservation, error) {

@@ -1,0 +1,61 @@
+package sample
+
+// Simple has no decisions.
+func Simple() int { return 1 }
+
+// Branchy has complexity 5: if, for, case, and one &&.
+func Branchy(a, b bool, xs []int) int {
+	if a && b {
+		return 1
+	}
+	for range xs {
+		switch {
+		case a:
+			return 2
+		default:
+		}
+	}
+	return 0
+}
+
+// Deep nests four levels: for, if, switch, if.
+func Deep(xs []int) {
+	for _, x := range xs {
+		if x > 0 {
+			switch x {
+			case 1:
+				if x == 1 {
+					_ = x
+				}
+			}
+		}
+	}
+}
+
+// Chain keeps an else-if chain at one level.
+func Chain(x int) int {
+	if x == 1 {
+		return 1
+	} else if x == 2 {
+		return 2
+	} else if x == 3 {
+		return 3
+	}
+	return 0
+}
+
+// Wide has a condition with four boolean operators.
+func Wide(a, b, c, d, e bool) bool {
+	return a && b || c && d || e
+}
+
+// Exempt is over the limit on purpose.
+// complexity-check:allow a flat dispatch table reads best as one switch.
+func Exempt(a, b, c, d, e bool) bool {
+	return a && b && c && d && e
+}
+
+type T struct{}
+
+// Method has a pointer receiver.
+func (t *T) Method() {}

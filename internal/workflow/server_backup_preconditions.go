@@ -147,8 +147,16 @@ func (w *ServerBackupWorkflow) checkBackupDescribeData(_ context.Context, e *bac
 	return nil
 }
 
+func (e *backupPreconditionEvidence) activeProviderDescribed() bool {
+	return e.providerActive && e.dataDescribed
+}
+
+func (e *backupPreconditionEvidence) activeRuntimeDescribed() bool {
+	return e.providerActive && e.runtimeExpected && e.dataDescribed
+}
+
 func (w *ServerBackupWorkflow) checkBackupSaveGame(_ context.Context, e *backupPreconditionEvidence) error {
-	if !e.initiallyActive || e.server.LifecycleState != e.initialState || !e.providerActive || !e.runtimeExpected || !e.dataDescribed {
+	if !e.initiallyActive || e.server.LifecycleState != e.initialState || !e.activeRuntimeDescribed() {
 		return errors.New("offline backup save requires the exact ready or degraded running server and declared data sets")
 	}
 	return nil
@@ -156,7 +164,7 @@ func (w *ServerBackupWorkflow) checkBackupSaveGame(_ context.Context, e *backupP
 
 func (w *ServerBackupWorkflow) checkBackupStopRuntime(_ context.Context, e *backupPreconditionEvidence) error {
 	lifecycleHeld := e.server.LifecycleState == e.initialState || e.server.LifecycleState == protocolstate.ServerStopping
-	if !e.initiallyActive || !lifecycleHeld || !gameBackupSaveConfirmed(e.operation) || !e.providerActive || !e.dataDescribed {
+	if !e.initiallyActive || !lifecycleHeld || !gameBackupSaveConfirmed(e.operation) || !e.activeProviderDescribed() {
 		return errors.New("runtime stop requires a confirmed game save and exact ready or degraded server evidence")
 	}
 	if !stepBindsRef(e.step.Input, "unit_ref", e.unitRef) {
@@ -237,8 +245,7 @@ func (w *ServerBackupWorkflow) checkBackupReadback(ctx context.Context, e *backu
 	}
 	capture, captureErr := backupCaptureOutput(e.operation, dataSet.DataSetID)
 	put, putErr := backupPutOutput(e.operation, dataSet.DataSetID)
-	if captureErr != nil || putErr != nil || put.UploadState != "uploaded" || put.BytesReceived != capture.SizeBytes ||
-		!backupObjectRefMatchesTarget(put.ObjectRef, put.Target) {
+	if captureErr != nil || putErr != nil || !backupUploadMatchesCapture(put, capture) {
 		return errors.New("storage readback requires an exact completed upload")
 	}
 	return w.verifyStreams(ctx, e.operation, backupDataStepID("upload", dataSet.DataSetID), []ServerBackupStreamExpectation{{

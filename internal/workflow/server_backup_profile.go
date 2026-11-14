@@ -7,11 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/amibamae/gameserver-controller/internal/adapter"
-	"github.com/amibamae/gameserver-controller/internal/store"
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/amibamae/gameserver-controller/internal/adapter"
+	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
 func validateServerBackupProfile(server store.LogicalServer, requestedID string, profile ServerBackupProfile) error {
@@ -41,8 +42,12 @@ func backupProfileReleaseBound(requestedID string, profile ServerBackupProfile) 
 // consistency with 1-128 data sets and 1-64 validation checks.
 func backupProfileSetsBounded(profile ServerBackupProfile) bool {
 	return profile.ConsistencyMode == "offline" &&
-		len(profile.DataSets) > 0 && len(profile.DataSets) <= 128 &&
-		len(profile.ValidationChecks) > 0 && len(profile.ValidationChecks) <= 64
+		backupCountInBounds(len(profile.DataSets), 128) &&
+		backupCountInBounds(len(profile.ValidationChecks), 64)
+}
+
+func backupCountInBounds(count, limit int) bool {
+	return count > 0 && count <= limit
 }
 
 // backupProfileStorageBound reports whether the profile names a storage
@@ -100,10 +105,10 @@ func validateBackupProfileDataSets(profile ServerBackupProfile) error {
 // ID, a size limit within JSON's safe integer range, 1-128 relative paths and
 // at least one consistency mode.
 func backupDataSetDeclarationComplete(dataSet ServerBackupDataSet) bool {
-	return backupBoundedText(dataSet.DataSetID, 200) &&
-		dataSet.MaximumBytes >= 1 && dataSet.MaximumBytes <= 9007199254740991 &&
-		len(dataSet.RelativePaths) > 0 && len(dataSet.RelativePaths) <= 128 &&
-		len(dataSet.SupportedConsistencyModes) > 0
+	if !backupBoundedText(dataSet.DataSetID, 200) || dataSet.MaximumBytes < 1 || dataSet.MaximumBytes > 9007199254740991 {
+		return false
+	}
+	return backupCountInBounds(len(dataSet.RelativePaths), 128) && len(dataSet.SupportedConsistencyModes) > 0
 }
 
 func validateBackupDataSetPaths(dataSet ServerBackupDataSet) error {
@@ -137,7 +142,10 @@ func validateBackupProfileChecks(checks []ReadinessRequirement) error {
 }
 
 func validBackupRelativePath(value string) bool {
-	if value == "" || len(value) > 512 || strings.Contains(value, "\\") || path.IsAbs(value) || path.Clean(value) != value || value == "." {
+	if !backupBoundedText(value, 512) || strings.Contains(value, "\\") || path.IsAbs(value) {
+		return false
+	}
+	if path.Clean(value) != value || value == "." {
 		return false
 	}
 	for _, segment := range strings.Split(value, "/") {

@@ -11,8 +11,7 @@ func backupSaveRejected(operation store.OperationRecord) bool {
 	output := decodeObject(step.Output)
 	if !backupStepReportedRejection(step, output) ||
 		!backupRejectionFieldsMatch(input, output, "release_id") ||
-		!equalJSON(mustJSON(output["target"]), mustJSON(input["target"])) ||
-		!backupTargetMatchesOperation(mustJSON(output["target"]), operation) {
+		!backupRejectionTargetMatches(operation, input, output) {
 		return false
 	}
 	return validObservedAt(stringValueMap(output, "observed_at"))
@@ -30,8 +29,7 @@ func backupPreparationRejected(operation store.OperationRecord) bool {
 	if !backupStepReportedRejection(step, output) ||
 		!backupRejectionFieldsMatch(input, output, "backup_id", "data_generation_id", "release_id", "consistency_mode") ||
 		!sameJSONList(output["data_set_ids"], input["data_set_ids"]) ||
-		!equalJSON(mustJSON(output["target"]), mustJSON(input["target"])) ||
-		!backupTargetMatchesOperation(mustJSON(output["target"]), operation) {
+		!backupRejectionTargetMatches(operation, input, output) {
 		return false
 	}
 	return validObservedAt(stringValueMap(output, "observed_at"))
@@ -43,12 +41,21 @@ func backupCaptureRejected(operation store.OperationRecord, dataSetID string) bo
 	output := decodeObject(step.Output)
 	if !backupStepReportedRejection(step, output) ||
 		!backupRejectionFieldsMatch(input, output, "backup_id", "data_generation_id", "preparation_id") ||
-		stringValueMap(output, "data_set_id") != dataSetID || !backupRejectionFieldsMatch(input, output, "data_set_id", "capture_id", "release_id", "consistency_mode") ||
-		!equalJSON(mustJSON(output["target"]), mustJSON(input["target"])) ||
-		!backupTargetMatchesOperation(mustJSON(output["target"]), operation) {
+		!backupCaptureRejectionBound(operation, input, output, dataSetID) {
 		return false
 	}
 	return validObservedAt(stringValueMap(output, "observed_at"))
+}
+
+func backupCaptureRejectionBound(operation store.OperationRecord, input, output map[string]any, dataSetID string) bool {
+	return stringValueMap(output, "data_set_id") == dataSetID &&
+		backupRejectionFieldsMatch(input, output, "data_set_id", "capture_id", "release_id", "consistency_mode") &&
+		backupRejectionTargetMatches(operation, input, output)
+}
+
+func backupRejectionTargetMatches(operation store.OperationRecord, input, output map[string]any) bool {
+	target := mustJSON(output["target"])
+	return equalJSON(target, mustJSON(input["target"])) && backupTargetMatchesOperation(target, operation)
 }
 
 func backupValidationRejected(operation store.OperationRecord) bool {
@@ -56,16 +63,23 @@ func backupValidationRejected(operation store.OperationRecord) bool {
 	input := decodeObject(effectiveStepInput(step))
 	output := decodeObject(step.Output)
 	manifest := asStringMap(input["manifest"])
-	if step.StepID == "" || step.Status != protocolstate.StepSucceeded ||
-		stringValueMap(output, "validation_result") != "invalid" ||
-		stringValueMap(input, "backup_id") != operation.OperationID ||
-		stringValueMap(input, "environment_id") != operation.Target.EnvironmentID ||
-		stringValueMap(output, "backup_id") != operation.OperationID ||
-		stringValueMap(output, "environment_id") != operation.Target.EnvironmentID ||
+	if step.StepID == "" || step.Status != protocolstate.StepSucceeded || stringValueMap(output, "validation_result") != "invalid" {
+		return false
+	}
+	if !backupRejectionMatchesOperation(operation, input) || !backupRejectionMatchesOperation(operation, output) ||
 		stringValueMap(output, "data_generation_id") != stringValueMap(manifest, "data_generation_id") ||
 		!validObservedAt(stringValueMap(output, "observed_at")) {
 		return false
 	}
+	return backupValidationChecksFailed(output)
+}
+
+func backupRejectionMatchesOperation(operation store.OperationRecord, record map[string]any) bool {
+	return stringValueMap(record, "backup_id") == operation.OperationID &&
+		stringValueMap(record, "environment_id") == operation.Target.EnvironmentID
+}
+
+func backupValidationChecksFailed(output map[string]any) bool {
 	results, ok := output["check_results"].([]any)
 	if !ok || len(results) == 0 {
 		return false

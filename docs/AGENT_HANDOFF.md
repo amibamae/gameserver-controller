@@ -22,11 +22,11 @@ If the repowise tools aren't available, you can measure complexity with a cyclom
 
 ## Current work: raising code health (resume here)
 
-**Backup follow-up (2026-11-13).** Store validation (#254), supervised pilot (#256), and destroy (#257) merged after green CI. GitHub removed their remote branches. Backup PR #258 remains draft. Work in `/private/tmp/gsc-backup-lifecycle` on `codex/refactor-backup-lifecycle`; the shared controller setup checkout has separate uncommitted work.
+**Backup follow-up (2026-11-14).** PR #258 combines the backup refactor with the checker merged in #260. The integration worktree is `/private/tmp/gsc-backup-health-checker`, branch `codex/backup-health-checker`. The published PR branch is `codex/refactor-backup-lifecycle`.
 
-- Published backup head before the next update: `78b4963`. Local `706537d` separates stream issuance and step input binding, restores the original lifecycle test file, and passed the full Go suite with loopback enabled. Its remaining backup file scored 5.39 locally.
-- Local `bf419e0` separates planning, profile, provider observations, preconditions, evidence, reconciliation, and result construction. New tests pin retry boundaries and object evidence destination binding and passed before and after moving the code. The full Go suite and byte-for-byte protocol manifest comparison passed at this commit. The next evidence pass separates explicit rejections and reuses the existing upload and readback checks. Focused backup tests, vet, and 183 protocol fixtures passed on that pass. Confirm the final full suite and local scores before merging.
-- Use the temporary local Repowise CLI at `/private/tmp/gsc-repowise-venv/bin/repowise` with `health --recompute --format json`. Compare against `/private/tmp/gsc-baseline-d958-health.json` using the same analyzer. Keep `.repowise/` files out of commits. Preserve evidence precedence, exact errors, and reconciliation behavior. Check latest GitHub head and CI before acting.
+- The integrated changes clear all 22 findings from the initial checker run. Characterization tests pin capture error order, retry and reconciliation decisions, validation rejections, and manifest and readiness binding.
+- Local Repowise 0.61.0 compares the same analyzer on base `47d8a31` and the integrated branch. `server_backup.go` rose from 5.37 to 10.00. Every changed production file scores 8.04 or higher. The existing changed test file stayed at 10.00. Run the complete validation on the published head before merging.
+- For a new local score, use `/private/tmp/gsc-repowise-venv/bin/repowise health --recompute --format json`. The comparable base report is `/private/tmp/gsc-baseline-47d8-health.json`. Keep `.repowise/` out of commits.
 
 The owner's goal is a repowise average health of **7–8**. The method:
 - one PR per file group;
@@ -54,7 +54,7 @@ The owner's goal is a repowise average health of **7–8**. The method:
 
 ### Who owns what (check this before you start anything)
 
-Codex took over the published Claude scopes on 2026-11-13 while Claude is paused. Check published branches and open PRs before starting work.
+Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is continuing the published backup draft. Keep unfinished Claude scopes on hold when their work is unavailable. Check the published branches and open PRs before resuming any scope.
 
 | Owner | Files | Branch or PR | Status (2026-11-14) |
 |---|---|---|---|
@@ -64,13 +64,13 @@ Codex took over the published Claude scopes on 2026-11-13 while Claude is paused
 | Codex | `internal/controllersetup/installer.go`, `cmd/controller-setup/*` | local branch `codex/controller-setup-apply` | **uncommitted** in Codex's checkout on the owner's Mac; not on GitHub yet |
 | Codex | `docs/ROADMAP.md` estimates | #255 | open |
 | Codex | `internal/store/logical_servers.go` | #254 merged | done (8.47) |
-| Codex | `internal/workflow/server_provision*.go` | `claude/r3-server-provision` | in progress |
-| Codex | `internal/workflow/server_restore*.go` | `claude/r3-server-restore` | in progress |
-| Codex | `internal/workflow/server_start*.go`, `server_stop*.go` | `claude/r3-server-start-stop` | in progress |
-| Codex | `internal/workflow/file_stream_broker*.go` | `claude/r3-file-stream-broker` | in progress |
-| Codex | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | in progress |
-| Codex | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | in progress |
-| Codex | `cmd/complexity-check/*`, its CI step | PR #260 `claude/complexity-check` | under review |
+| Claude | `internal/workflow/server_provision*.go` | `claude/r3-server-provision` | on hold; work unavailable |
+| Claude | `internal/workflow/server_restore*.go` | `claude/r3-server-restore` | on hold; work unavailable |
+| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | `claude/r3-server-start-stop` | on hold; work unavailable |
+| Claude | `internal/workflow/file_stream_broker*.go` | `claude/r3-file-stream-broker` | on hold; work unavailable |
+| Claude | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | on hold; work unavailable |
+| Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | on hold; work unavailable |
+| Codex | `cmd/complexity-check/*`, its CI step | #260 merged | checker runs on PRs |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
 
 Claude's earlier backup, destroy, supervised-pilot and controller-setup agents were stopped unpublished, so their local work is dropped and those files are Codex's.

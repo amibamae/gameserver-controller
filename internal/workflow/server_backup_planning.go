@@ -75,15 +75,20 @@ func (w *ServerBackupWorkflow) backupRequest(ctx context.Context, operation stor
 
 // initialized reports whether the workflow has every dependency it uses.
 func (w *ServerBackupWorkflow) initialized() bool {
-	return w != nil && w.servers != nil && w.adapters != nil && w.schemas != nil && w.profiles != nil && w.transfers != nil
+	if w == nil || w.servers == nil || w.adapters == nil {
+		return false
+	}
+	return w.schemas != nil && w.profiles != nil && w.transfers != nil
 }
 
 // isServerBackupRequest reports whether operation is a server.backup request
 // for the loaded protocol version with a target and object parameters.
 func isServerBackupRequest(operation store.OperationRecord, protocolVersion string) bool {
-	return operation.OperationType == "server.backup" && operation.ProtocolVersion == protocolVersion &&
-		operation.Target.ServerID != "" && operation.Target.EnvironmentID != "" &&
-		operation.RequestSnapshot.OperationType == "server.backup" && isObject(operation.RequestSnapshot.Parameters)
+	if operation.OperationType != "server.backup" || operation.ProtocolVersion != protocolVersion ||
+		operation.Target.ServerID == "" || operation.Target.EnvironmentID == "" {
+		return false
+	}
+	return operation.RequestSnapshot.OperationType == "server.backup" && isObject(operation.RequestSnapshot.Parameters)
 }
 
 // backupServer loads the target server and checks that it can be backed up
