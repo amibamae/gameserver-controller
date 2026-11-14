@@ -226,63 +226,6 @@ func (b *FileServerBackupTransferBroker) newRecord(
 	}
 }
 
-func (b *FileServerBackupTransferBroker) validateOperationInput(
-	operation store.OperationRecord, step store.OperationStep, expectations []ServerBackupStreamExpectation,
-) error {
-	input := decodeObject(effectiveStepInput(step))
-	switch step.CapabilityName {
-	case "game.backup.capture":
-		if stringValueMap(input, "backup_id") != operation.OperationID ||
-			stringValueMap(input, "data_set_id") != expectations[0].DataSetID ||
-			!backupTargetMatchesOperation(mustJSON(input["target"]), operation) {
-			return errors.New("capture stream is not bound to the exact operation target and data set")
-		}
-	case "storage.object.put", "storage.object.get":
-		size, sizeErr := integerFromAny(input["expected_size_bytes"])
-		checksum := asStringMap(input["expected_checksum"])
-		if sizeErr != nil || size != expectations[0].SizeBytes ||
-			stringValueMap(checksum, "algorithm") != "sha256" ||
-			stringValueMap(checksum, "digest") != expectations[0].SHA256 {
-			return errors.New("storage stream is not bound to the exact expected size and checksum")
-		}
-		if step.CapabilityName == "storage.object.put" {
-			target := asStringMap(input["target"])
-			if stringValueMap(target, "environment_id") != operation.Target.EnvironmentID {
-				return errors.New("storage upload target crosses its operation environment")
-			}
-		} else {
-			objectRef := asStringMap(input["object_ref"])
-			if stringValueMap(objectRef, "environment_id") != operation.Target.EnvironmentID {
-				return errors.New("storage readback reference crosses its operation environment")
-			}
-		}
-	case "game.backup.validate":
-		if stringValueMap(input, "backup_id") != operation.OperationID ||
-			stringValueMap(input, "environment_id") != operation.Target.EnvironmentID {
-			return errors.New("game validation stream is not bound to its operation and environment")
-		}
-		manifest := asStringMap(input["manifest"])
-		objects := asAnySlice(manifest["objects"])
-		streams := asAnySlice(input["object_streams"])
-		if len(objects) != len(expectations) || len(streams) != len(expectations) {
-			return errors.New("game validation stream count differs from the manifest object count")
-		}
-		for index, expectation := range expectations {
-			object := asStringMap(objects[index])
-			stream := asStringMap(streams[index])
-			size, sizeErr := integerFromAny(object["size_bytes"])
-			if sizeErr != nil || stringValueMap(object, "data_set_id") != expectation.DataSetID ||
-				size != expectation.SizeBytes || stringValueMap(object, "checksum") != expectation.SHA256 ||
-				!equalJSON(mustJSON(stream["object_ref"]), mustJSON(object["object_ref"])) {
-				return errors.New("game validation stream is not bound to the corresponding exact manifest object")
-			}
-		}
-	default:
-		return errors.New("unsupported stream capability")
-	}
-	return nil
-}
-
 func (b *FileServerBackupTransferBroker) verifySourceArtifact(
 	operation store.OperationRecord, sourceStepID string, expectation ServerBackupStreamExpectation,
 ) error {
