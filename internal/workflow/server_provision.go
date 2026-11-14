@@ -492,24 +492,73 @@ func provisionCreateInput(server store.LogicalServer, request provisionRequest, 
 }
 
 func validateProvisionProfile(server store.LogicalServer, request provisionRequest, profile ServerProvisionProfile) error {
-	if profile.Provider == "" || profile.CapacityGroup == "" || profile.CapacityLimit < 1 || profile.CapacityGroupLimit < 1 ||
-		profile.RegionID == "" || profile.RegionID != request.RegionID || profile.PlanID == "" || profile.PlanID != request.PlanID ||
-		!isObject(profile.OS) || !equalJSON(profile.OS, request.OS) || !isObject(profile.Bootstrap) || !equalJSON(profile.Bootstrap, request.Bootstrap) ||
-		profile.GameReleaseID == "" || profile.GameReleaseID != request.Game.Release || profile.ArtifactURI == "" || len(profile.ArtifactChecksum) == 0 ||
-		profile.ReadinessCheckSetID == "" || len(profile.RequiredChecks) == 0 {
+	if !provisionProfileSatisfies(request, profile) {
 		return errors.New("trusted server provision profile does not exactly satisfy the selected request")
 	}
-	var unit struct {
-		AdapterID     string `json:"adapter_id"`
-		EnvironmentID string `json:"environment_id"`
-		ResourceKind  string `json:"resource_kind"`
-		ExternalID    string `json:"external_id"`
-	}
-	if json.Unmarshal(profile.UnitRef, &unit) != nil || !isObject(profile.UnitRef) || unit.AdapterID != server.ExecutionAdapterID ||
-		unit.EnvironmentID != server.EnvironmentID || unit.ResourceKind == "" || unit.ExternalID == "" {
+	if !provisionUnitBindsServer(server, profile.UnitRef) {
 		return errors.New("trusted provision unit reference does not bind the configured execution adapter and environment")
 	}
 	return nil
+}
+
+// provisionProfileSatisfies reports whether the trusted profile pins
+// capacity and exactly the placement, image, release and readiness checks
+// the request selected.
+func provisionProfileSatisfies(request provisionRequest, profile ServerProvisionProfile) bool {
+	return provisionCapacityPinned(profile) && provisionPlacementMatches(request, profile) && provisionArtifactsMatch(request, profile)
+}
+
+func provisionCapacityPinned(profile ServerProvisionProfile) bool {
+	return profile.Provider != "" && profile.CapacityGroup != "" && profile.CapacityLimit >= 1 && profile.CapacityGroupLimit >= 1
+}
+
+func provisionPlacementMatches(request provisionRequest, profile ServerProvisionProfile) bool {
+	return profile.RegionID != "" && profile.RegionID == request.RegionID && profile.PlanID != "" && profile.PlanID == request.PlanID
+}
+
+func provisionArtifactsMatch(request provisionRequest, profile ServerProvisionProfile) bool {
+	return provisionImageMatches(request, profile) && provisionReleasePinned(request, profile) && provisionReadinessPinned(profile)
+}
+
+func provisionImageMatches(request provisionRequest, profile ServerProvisionProfile) bool {
+	return isObject(profile.OS) && equalJSON(profile.OS, request.OS) && isObject(profile.Bootstrap) && equalJSON(profile.Bootstrap, request.Bootstrap)
+}
+
+func provisionReleasePinned(request provisionRequest, profile ServerProvisionProfile) bool {
+	return profile.GameReleaseID != "" && profile.GameReleaseID == request.Game.Release && profile.ArtifactURI != "" && len(profile.ArtifactChecksum) != 0
+}
+
+func provisionReadinessPinned(profile ServerProvisionProfile) bool {
+	return profile.ReadinessCheckSetID != "" && len(profile.RequiredChecks) != 0
+}
+
+// provisionUnitBindsServer reports whether the unit reference is an object
+// naming a unit of the server's execution adapter and environment.
+func provisionUnitBindsServer(server store.LogicalServer, raw json.RawMessage) bool {
+	var unit provisionRef
+	if json.Unmarshal(raw, &unit) != nil || !isObject(raw) {
+		return false
+	}
+	return unit.AdapterID == server.ExecutionAdapterID && unit.EnvironmentID == server.EnvironmentID && provisionRefNamed(unit)
+}
+
+// provisionRef is an adapter-owned external resource reference.
+type provisionRef struct {
+	AdapterID     string `json:"adapter_id"`
+	EnvironmentID string `json:"environment_id"`
+	ResourceKind  string `json:"resource_kind"`
+	ExternalID    string `json:"external_id"`
+}
+
+// provisionRefNamed reports whether the reference names a kind and resource.
+func provisionRefNamed(ref provisionRef) bool {
+	return ref.ResourceKind != "" && ref.ExternalID != ""
+}
+
+// provisionRefIs reports whether the reference names a resource of the
+// given adapter, environment and kind.
+func provisionRefIs(ref provisionRef, adapterID, environmentID, kind string) bool {
+	return ref.AdapterID == adapterID && ref.EnvironmentID == environmentID && ref.ResourceKind == kind
 }
 
 func provisionResourceKey(operationID, fingerprint string) string {
@@ -616,7 +665,7 @@ func (w *ServerProvisionWorkflow) observeCreatedCapacity(operation store.Operati
 		return fmt.Errorf("load provider create capacity reservation: %w", err)
 	}
 	instance, ok := decodeProvisionRef(created.InstanceRef)
-	if !ok || instance.AdapterID != request.HostingAdapter || instance.EnvironmentID != operation.Target.EnvironmentID || instance.ResourceKind != "instance" {
+	if !ok || !provisionRefIs(instance, request.HostingAdapter, operation.Target.EnvironmentID, "instance") {
 		return errors.New("provider create output does not identify the expected exact instance")
 	}
 	observedAt, err := time.Parse(time.RFC3339Nano, created.ObservedAt)
@@ -821,8 +870,8 @@ func provisionCreateStepOutput(operation store.OperationRecord) (provisionCreate
 	}
 	var request provisionRequest
 	ref, valid := decodeProvisionRef(output.InstanceRef)
-	if json.Unmarshal(operation.RequestSnapshot.Parameters, &request) != nil || !valid || ref.AdapterID != request.HostingAdapter ||
-		ref.EnvironmentID != operation.Target.EnvironmentID || ref.ResourceKind != "instance" {
+	if json.Unmarshal(operation.RequestSnapshot.Parameters, &request) != nil || !valid ||
+		!provisionRefIs(ref, request.HostingAdapter, operation.Target.EnvironmentID, "instance") {
 		return provisionCreateOutput{}, errors.New("provider create output is not bound to the expected adapter, environment, and instance kind")
 	}
 	return output, nil
@@ -939,22 +988,14 @@ func provisionUnitRunning(operation store.OperationRecord) bool {
 	return err == nil && out.State == "running" && equalJSON(out.UnitRef, stepField(operationStep(operation, provisionStartUnitStep).Input, "unit_ref"))
 }
 
-func decodeProvisionRef(raw json.RawMessage) (struct {
-	AdapterID     string `json:"adapter_id"`
-	EnvironmentID string `json:"environment_id"`
-	ResourceKind  string `json:"resource_kind"`
-	ExternalID    string `json:"external_id"`
-}, bool) {
-	var ref struct {
-		AdapterID     string `json:"adapter_id"`
-		EnvironmentID string `json:"environment_id"`
-		ResourceKind  string `json:"resource_kind"`
-		ExternalID    string `json:"external_id"`
-	}
-	if json.Unmarshal(raw, &ref) != nil || !isObject(raw) || ref.AdapterID == "" || ref.EnvironmentID == "" || ref.ResourceKind == "" || ref.ExternalID == "" {
+// decodeProvisionRef decodes an object reference that names its adapter,
+// environment, kind and resource.
+func decodeProvisionRef(raw json.RawMessage) (provisionRef, bool) {
+	var ref provisionRef
+	if json.Unmarshal(raw, &ref) != nil || !isObject(raw) {
 		return ref, false
 	}
-	return ref, true
+	return ref, ref.AdapterID != "" && ref.EnvironmentID != "" && provisionRefNamed(ref)
 }
 
 func (w *ServerProvisionWorkflow) Reconcile(ctx context.Context, operation store.OperationRecord, step store.OperationStep) (Resolution, error) {
