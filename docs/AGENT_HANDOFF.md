@@ -68,7 +68,7 @@ The owner's goal is a repowise average health of **7–8**. The method:
 4. Several groups share the `internal/workflow` package, so rebase onto `main` before every push and give test helpers a prefix unique to your group.
 5. After all ten merge, ask the owner to re-index repowise, run `get_health` on the changed files, and report the real before and after scores.
 6. Then continue with any file still scoring below 7, worst first.
-7. The earlier handoff reported a complexity checker in progress on `claude/complexity-check`. That branch is not published as of the 2026-11-13 status check above; ask for the agent's local work before starting a replacement. If it lands on `main`, run it before every push.
+7. The complexity checker is in PR #260 on `claude/complexity-check`. Go validation passed on the published head. Review that PR before changing the checker or its CI wiring. If it lands on `main`, run it before every push.
 
 **Latest backup scores:** Local Repowise 0.61.0 measured `server_backup.go` at 10.00 (5.37 on the original base), evidence and observations at 7.43, reconciliation at 8.19, and all other changed production files above 7. Check the score and GitHub Actions on the final branch before merging. Provision and restore are the next backlog candidates.
 
