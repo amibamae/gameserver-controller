@@ -54,7 +54,7 @@ func (w *ServerBackupWorkflow) verifyCompletedBackupDataSet(ctx context.Context,
 		return err
 	}
 	put, err := backupPutOutput(operation, dataSet.DataSetID)
-	if err != nil || !backupCompletionUploadMatches(put, capture) {
+	if err != nil || !backupUploadMatchesCapture(put, capture) {
 		return fmt.Errorf("upload for data set %q does not bind the exact capture and target", dataSet.DataSetID)
 	}
 	transferExpectation := ServerBackupStreamExpectation{
@@ -64,18 +64,18 @@ func (w *ServerBackupWorkflow) verifyCompletedBackupDataSet(ctx context.Context,
 		return err
 	}
 	get, err := backupGetOutput(operation, dataSet.DataSetID)
-	if err != nil || !backupCompletionReadbackMatches(get, put, capture) {
+	if err != nil || !backupReadbackMatchesCapture(get, put, capture) {
 		return fmt.Errorf("storage readback for data set %q does not match the captured bytes", dataSet.DataSetID)
 	}
 	return w.verifyStreams(ctx, operation, backupDataStepID("readback", dataSet.DataSetID), []ServerBackupStreamExpectation{transferExpectation})
 }
 
-func backupCompletionUploadMatches(put backupPutObservation, capture backupCaptureObservation) bool {
+func backupUploadMatchesCapture(put backupPutObservation, capture backupCaptureObservation) bool {
 	return put.UploadState == "uploaded" && put.BytesReceived == capture.SizeBytes &&
 		backupObjectRefMatchesTarget(put.ObjectRef, put.Target)
 }
 
-func backupCompletionReadbackMatches(get backupGetObservation, put backupPutObservation, capture backupCaptureObservation) bool {
+func backupReadbackMatchesCapture(get backupGetObservation, put backupPutObservation, capture backupCaptureObservation) bool {
 	if get.TransferState != "complete" || get.BytesSent == nil || *get.BytesSent != capture.SizeBytes {
 		return false
 	}

@@ -22,6 +22,12 @@ If the repowise tools aren't available, you can measure complexity with a cyclom
 
 ## Current work: raising code health (resume here)
 
+**Backup follow-up (2026-11-13).** Store validation (#254), supervised pilot (#256), and destroy (#257) merged after green CI. GitHub removed their remote branches. Backup PR #258 remains draft. Work in `/private/tmp/gsc-backup-lifecycle` on `codex/refactor-backup-lifecycle`; the shared controller setup checkout has separate uncommitted work.
+
+- Published backup head before the next update: `78b4963`. Local `706537d` separates stream issuance and step input binding, restores the original lifecycle test file, and passed the full Go suite with loopback enabled. Its remaining backup file scored 5.39 locally.
+- Local `bf419e0` separates planning, profile, provider observations, preconditions, evidence, reconciliation, and result construction. New tests pin retry boundaries and object evidence destination binding and passed before and after moving the code. The full Go suite and byte-for-byte protocol manifest comparison passed at this commit. The next evidence pass separates explicit rejections and reuses the existing upload and readback checks. Focused backup tests, vet, and 183 protocol fixtures passed on that pass. Confirm the final full suite and local scores before merging.
+- Use the temporary local Repowise CLI at `/private/tmp/gsc-repowise-venv/bin/repowise` with `health --recompute --format json`. Compare against `/private/tmp/gsc-baseline-d958-health.json` using the same analyzer. Keep `.repowise/` files out of commits. Preserve evidence precedence, exact errors, and reconciliation behavior. Check latest GitHub head and CI before acting.
+
 The owner's goal is a repowise average health of **7–8**. The method:
 - one PR per file group;
 - characterization tests first, green on the old code;
@@ -40,7 +46,7 @@ The owner's goal is a repowise average health of **7–8**. The method:
 - Repo average 5.88 → **6.21**; production average 5.15 → 5.50.
 - Hotspot average 3.94. Repowise deducts for recent churn, and refactors are churn, so this deduction decays over time.
 
-**In progress (round 3): ten agents, one per file group.** Each was told to open one PR, merge it after green CI, and report back. Find their branches with `git ls-remote --heads origin 'claude/r3-*'`, and look for open PRs titled `refactor(...)`.
+**Round 3 backlog.** The branch names below are historical scope labels. Check open PRs and worktrees before taking a scope.
 
 | Branch | Files | Main targets |
 |---|---|---|
@@ -62,14 +68,9 @@ The owner's goal is a repowise average health of **7–8**. The method:
 4. Several groups share the `internal/workflow` package, so rebase onto `main` before every push and give test helpers a prefix unique to your group.
 5. After all ten merge, ask the owner to re-index repowise, run `get_health` on the changed files, and report the real before and after scores.
 6. Then continue with any file still scoring below 7, worst first.
-7. **In progress (Claude session, branch `claude/complexity-check`): a small complexity checker.** The owner asked for it on 2026-11-13. It is `cmd/complexity-check`, built on the standard library's `go/ast` with no new dependencies. It reports functions over the limits (complexity above 15, nesting deeper than 3, conditions with more than 3 boolean operators). A CI step fails only for functions added or changed in a pull request, so the existing over-limit code doesn't block every PR.
-   - If that branch has no merged PR, finish it rather than starting a second checker.
-   - Once it is on `main`, run it before every push.
+7. The earlier handoff reported a complexity checker in progress on `claude/complexity-check`. That branch is not published as of the 2026-11-13 status check above; ask for the agent's local work before starting a replacement. If it lands on `main`, run it before every push.
 
-**Known limits:**
-- A few branches are kept verbatim because no test can reach them; each PR lists them.
-- `ValidateCompletion` in `server_destroy.go` can reuse `destroyRuntimeStoppedOrAbsent`.
-- `capacity_adoption.go` has its own scan loop and deliberately returns a different error.
+**Latest backup scores:** Local Repowise 0.61.0 measured `server_backup.go` at 10.00 (5.37 on the original base), evidence and observations at 7.43, reconciliation at 8.19, and all other changed production files above 7. Check the score and GitHub Actions on the final branch before merging. Provision and restore are the next backlog candidates.
 
 ## Standing rules from the owner
 

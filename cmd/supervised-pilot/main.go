@@ -1,33 +1,22 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"net/netip"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/amibamae/gameserver-controller/internal/boottiming"
 	"github.com/amibamae/gameserver-controller/internal/credential"
 	"github.com/amibamae/gameserver-controller/internal/pilotcapacity"
 	"github.com/amibamae/gameserver-controller/internal/pilotvultr"
-	"github.com/amibamae/gameserver-controller/internal/sshkey"
-	"github.com/amibamae/gameserver-controller/internal/store"
 	"github.com/amibamae/gameserver-controller/internal/vultrapi"
 )
 
@@ -38,25 +27,14 @@ const (
 )
 
 var safeSSHHost = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.@:-]*$`)
-var safeOperationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var safeInvocationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
-var safeStartupScriptDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 var safePilotServerID = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 var safeCredentialRef = regexp.MustCompile(`^systemd-credential://[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
-var safePilotTarget = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}@(production|staging|testing)$`)
 
 const (
 	defaultVultrCredential = credential.SystemdReferenceScheme + "vultr-pilot-api-token"
 	defaultSSHCredential   = credential.SystemdReferenceScheme + "gsc-pilot-ssh-key"
 )
-
-// provisionAccess is what the SSH handoff needs from a new create: the Vultr
-// firewall group, the controller's fixed address, and its SSH key.
-type provisionAccess struct {
-	FirewallGroupID  string
-	ControllerIP     string
-	SSHCredentialRef string
-}
 
 type runtimeSettings struct {
 	stateDBPath string
@@ -175,7 +153,13 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
 		access := provisionAccess{FirewallGroupID: *firewallGroupID, ControllerIP: *controllerIP, SSHCredentialRef: *sshCredentialRef}
-		return provisionVultr(*execute, *confirmCreate, *timeout, policy, statePath, *serverID, *environmentID, *region, *plan, *osID, *hostname, sshKeyIDs, *startupScriptID, *startupScriptSHA256, *credentialRef, *operationID, access, stdout, stderr)
+		return provisionVultr(provisionOptions{
+			execute: *execute, confirmation: *confirmCreate, timeout: *timeout,
+			policy: policy, statePath: statePath, serverID: *serverID, environment: *environmentID,
+			region: *region, plan: *plan, osID: *osID, hostname: *hostname,
+			sshKeyIDs: sshKeyIDs, startupScriptID: *startupScriptID, startupScriptSHA256: *startupScriptSHA256,
+			credentialRef: *credentialRef, operationID: *operationID, access: access,
+		}, stdout, stderr)
 	case "adopt":
 		if err := allowOnlyFlags(flags, "execute", "confirm-adopt", "timeout", "server-id", "environment", "instance-id", "expected-ip", "region", "plan", "os-id", "os-name", "credential-ref", "operation-id"); err != nil {
 			return err
@@ -300,324 +284,6 @@ func usage(w io.Writer) error {
 	return errors.New("an action is required")
 }
 
-func provisionVultr(execute bool, confirmation string, timeout time.Duration, policy pilotcapacity.Policy, statePath, serverID, environment, region, plan, osID, hostname string, sshKeyIDs []string, startupScriptID, startupScriptSHA256, credentialRef, operationID string, access provisionAccess, stdout, stderr io.Writer) error {
-	if timeout <= 0 || timeout > 24*time.Hour {
-		return errors.New("--timeout must be greater than zero and no more than 24h")
-	}
-	if !safePilotServerID.MatchString(serverID) {
-		return errors.New("--server-id must be a lower-case identifier")
-	}
-	if len(sshKeyIDs) == 0 {
-		return errors.New("at least one --ssh-key-id is required so the VM is reachable")
-	}
-	if startupScriptID == "" || !safeStartupScriptDigest.MatchString(startupScriptSHA256) {
-		return errors.New("--startup-script-id and a 64-character lowercase --startup-script-sha256 are required")
-	}
-	if !safeCredentialRef.MatchString(credentialRef) || !safeCredentialRef.MatchString(access.SSHCredentialRef) {
-		return errors.New("--credential-ref and --ssh-credential-ref must use systemd-credential://NAME")
-	}
-	controllerAddress, err := netip.ParseAddr(access.ControllerIP)
-	if err != nil || access.FirewallGroupID == "" {
-		return errors.New("--firewall-group-id and an exact --controller-ip address (not a range) are required so SSH is reachable only from the controller")
-	}
-	if !policy.RuntimeEnforced {
-		return errors.New("capacity policy is not marked for runtime enforcement")
-	}
-	groupID, _, supported := policy.GroupForEnvironment(environment)
-	if !supported {
-		return pilotcapacity.ErrUnsupportedEnvironment
-	}
-	providerOSID, err := vultrapi.ParseOSID(osID)
-	if err != nil {
-		return errors.New("--os-id must be a positive Vultr OS ID")
-	}
-	validation := vultrapi.CreateInstanceRequest{
-		Region: region, Plan: plan, OSID: providerOSID, Label: "gsc-managed-dry-run",
-		Hostname: hostname, SSHKeyIDs: append([]string(nil), sshKeyIDs...), StartupScriptID: startupScriptID,
-		FirewallGroupID: access.FirewallGroupID,
-	}
-	if err := vultrapi.ValidateCreateInstanceRequest(validation); err != nil {
-		return errors.New("region, plan, hostname, SSH key ID, or firewall group ID is invalid")
-	}
-	expectedConfirmation := serverID + "@" + environment
-	if !execute {
-		if confirmation != "" {
-			return errors.New("--confirm-create requires --execute")
-		}
-		if operationID != "" {
-			return errors.New("--operation-id requires --execute")
-		}
-		fmt.Fprintln(stdout, "Dry run: no provider API call, credential read, or capacity reservation was made.")
-		fmt.Fprintf(stdout, "Would create one managed Vultr VM: server=%s environment=%s group=%s region=%s plan=%s os_id=%d\n", serverID, environment, groupID, region, plan, providerOSID)
-		fmt.Fprintf(stdout, "Bootstrap startup script ID: %s\nBootstrap SHA-256: %s\n", startupScriptID, startupScriptSHA256)
-		fmt.Fprintf(stdout, "Firewall group %s must admit SSH only from %s; this is checked before the create.\n", access.FirewallGroupID, controllerAddress)
-		fmt.Fprintln(stdout, "A single-use SSH host key will be generated for this VM; only its public half is stored.")
-		fmt.Fprintf(stdout, "Configured hard limit: %d controller-owned VM(s).\n", policy.MaxInstancesTotal)
-		fmt.Fprintf(stdout, "To create it, add --execute --confirm-create %s.\n", expectedConfirmation)
-		return nil
-	}
-	if confirmation != expectedConfirmation {
-		return fmt.Errorf("Vultr create not started: --confirm-create must exactly match %q", expectedConfirmation)
-	}
-	if operationID == "" {
-		operationID, err = newOperationID()
-		if err != nil {
-			return fmt.Errorf("create operation ID: %w", err)
-		}
-	} else if !safeOperationID.MatchString(operationID) {
-		return errors.New("--operation-id must be 32 lowercase hexadecimal characters")
-	}
-	auditPath, err := defaultAuditPath()
-	if err != nil {
-		return fmt.Errorf("resolve audit log path: %w", err)
-	}
-	auditTarget := serverID + "@" + environment
-	auditDetail := fmt.Sprintf("region=%s plan=%s os_id=%d startup_script_id=%s startup_script_sha256=%s", region, plan, providerOSID, startupScriptID, startupScriptSHA256)
-	if err := appendAuditEvent(auditPath, operationID, "provision_requested", "provision", auditTarget, "vultr.instance.create", auditDetail); err != nil {
-		return fmt.Errorf("Vultr create not started: could not persist the audit event: %w", err)
-	}
-	resolver, err := credential.FromEnvironment()
-	if err != nil {
-		if auditErr := appendAuditEvent(auditPath, operationID, "provision_failed", "provision", auditTarget, "vultr.instance.create", "systemd credential directory unavailable"); auditErr != nil {
-			return fmt.Errorf("load systemd credential directory: %v; audit update also failed: %w", err, auditErr)
-		}
-		return fmt.Errorf("load systemd credential directory: %w", err)
-	}
-	controllerKey, err := controllerPublicKey(resolver, access.SSHCredentialRef)
-	if err != nil {
-		if auditErr := appendAuditEvent(auditPath, operationID, "provision_failed", "provision", auditTarget, "vultr.instance.create", "controller SSH key credential unavailable"); auditErr != nil {
-			return fmt.Errorf("%v; audit update also failed: %w", err, auditErr)
-		}
-		return err
-	}
-	repository, err := store.OpenBolt(statePath)
-	if err != nil {
-		if auditErr := appendAuditEvent(auditPath, operationID, "provision_failed", "provision", auditTarget, "vultr.instance.create", "capacity store unavailable"); auditErr != nil {
-			return fmt.Errorf("open capacity store: %v; audit update also failed: %w", err, auditErr)
-		}
-		return fmt.Errorf("open capacity store: %w", err)
-	}
-	defer repository.Close()
-	service, err := pilotvultr.NewProvisioner(repository, policy, vultrapi.NewClient(nil), resolver, credentialRef)
-	if err != nil {
-		return err
-	}
-	input := pilotvultr.CreateRequest{
-		OperationID: operationID, ServerID: serverID, Environment: environment,
-		Region: region, Plan: plan, OSID: osID, Hostname: hostname,
-		SSHKeyIDs: append([]string(nil), sshKeyIDs...), StartupScriptID: startupScriptID,
-		StartupScriptSHA256: startupScriptSHA256, FirewallGroupID: access.FirewallGroupID,
-		ControllerIP: controllerAddress, ControllerSSHPublicKey: controllerKey,
-	}
-	fmt.Fprintf(stdout, "Operation ID: %s\n", operationID)
-	fmt.Fprintf(stdout, "Submitting capacity-checked Vultr create for %s in %s.\n", serverID, environment)
-	fmt.Fprintln(stdout, "This creates a billable VM; game installation and readiness are not part of this command.")
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	reservation, err := service.Provision(ctx, input)
-	if errors.Is(err, pilotvultr.ErrOutcomeUnknown) {
-		fmt.Fprintf(stderr, "The slot remains occupied. Re-run with --operation-id %s and the same create parameters to reconcile; the service will not resend an uncertain create.\n", operationID)
-	}
-	if err != nil {
-		event := "provision_failed"
-		detail := "create request did not complete"
-		switch {
-		case errors.Is(err, pilotvultr.ErrOutcomeUnknown):
-			event, detail = "outcome_unknown", "provider result requires reconciliation; capacity remains occupied"
-		case errors.Is(err, pilotvultr.ErrProviderRejected):
-			event, detail = "provider_rejected", "provider definitively rejected create; reservation was released"
-		case errors.Is(err, store.ErrCapacityReached), errors.Is(err, store.ErrCapacityOccupied), errors.Is(err, pilotcapacity.ErrUnsupportedEnvironment):
-			event, detail = "provision_rejected", "capacity policy rejected the request before provider dispatch"
-		case errors.Is(err, pilotvultr.ErrSSHKeyMismatch), errors.Is(err, pilotvultr.ErrFirewall), errors.Is(err, pilotvultr.ErrBootstrapScript):
-			event, detail = "provision_rejected", "pre-create check failed; nothing was sent to Vultr"
-		}
-		if auditErr := appendAuditEvent(auditPath, operationID, event, "provision", auditTarget, "vultr.instance.create", detail); auditErr != nil {
-			return fmt.Errorf("provision failed (%v); audit update also failed: %w", err, auditErr)
-		}
-		if errors.Is(err, store.ErrCapacityReached) || errors.Is(err, store.ErrCapacityOccupied) || errors.Is(err, pilotcapacity.ErrUnsupportedEnvironment) {
-			fmt.Fprintf(stderr, "Provision request rejected before provider create. Operation ID: %s\n", operationID)
-		}
-		return err
-	}
-	if err := appendAuditEvent(auditPath, operationID, "provision_confirmed", "provision", auditTarget, "vultr.instance.create", "exact Vultr instance ID and managed label were observed"); err != nil {
-		return fmt.Errorf("Vultr instance %s is present but the audit event could not be persisted: %w", reservation.ProviderInstanceID, err)
-	}
-	fmt.Fprintf(stdout, "Vultr instance %s is confirmed present and counted (capacity state %s).\n", reservation.ProviderInstanceID, reservation.State)
-	fmt.Fprintln(stdout, "Provider presence is confirmed; game readiness is not verified.")
-	fmt.Fprintf(stdout, "Next: gsc-pilot handoff --operation-id %s --wasabi-region <region> verifies the VM's host key, then sends the Wasabi restore credentials.\n", operationID)
-	return nil
-}
-
-// controllerPublicKey derives the controller's SSH public key from its
-// private key credential without keeping the private key.
-func controllerPublicKey(resolver *credential.Resolver, reference string) (string, error) {
-	var public string
-	err := resolver.WithCredential(reference, func(secret []byte) error {
-		key, err := sshkey.ParsePrivateKey(secret)
-		if err != nil {
-			return err
-		}
-		defer clear(key)
-		public = sshkey.AuthorizedKey(key.Public().(ed25519.PublicKey))
-		return nil
-	})
-	if err != nil {
-		return "", errors.New("the controller SSH key credential is missing or is not an unencrypted ed25519 key; create it with controller-setup ssh-key generate")
-	}
-	return public, nil
-}
-
-func showCapacity(policy pilotcapacity.Policy, statePath string, stdout io.Writer) error {
-	if !policy.RuntimeEnforced {
-		return errors.New("capacity policy is not marked for runtime enforcement")
-	}
-	repository, err := store.OpenBolt(statePath)
-	if err != nil {
-		return err
-	}
-	defer repository.Close()
-	reservations, err := repository.ListCapacityReservations()
-	if err != nil {
-		return err
-	}
-	occupied, groupCounts := 0, make(map[string]int)
-	for _, reservation := range reservations {
-		if policy.ReleasedStates[string(reservation.State)] {
-			continue
-		}
-		occupied++
-		groupCounts[reservation.CapacityGroup]++
-	}
-	fmt.Fprintf(stdout, "Managed VM capacity: %d/%d total.\n", occupied, policy.MaxInstancesTotal)
-	groupIDs := make([]string, 0, len(policy.CapacityGroups))
-	for groupID := range policy.CapacityGroups {
-		groupIDs = append(groupIDs, groupID)
-	}
-	sort.Strings(groupIDs)
-	for _, groupID := range groupIDs {
-		group := policy.CapacityGroups[groupID]
-		fmt.Fprintf(stdout, "%s: %d/%d slot(s)\n", groupID, groupCounts[groupID], group.MaxInstances)
-	}
-	if len(reservations) == 0 {
-		fmt.Fprintln(stdout, "No managed VM reservations are recorded.")
-		return nil
-	}
-	fmt.Fprintln(stdout, "OPERATION_ID\tSERVER\tENVIRONMENT\tSTATE\tPROVIDER_INSTANCE_ID\tRESOURCE_LABEL")
-	for _, reservation := range reservations {
-		instanceID := reservation.ProviderInstanceID
-		if instanceID == "" {
-			instanceID = "-"
-		}
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%s\n", reservation.OperationID, reservation.ServerID, reservation.EnvironmentID, reservation.State, instanceID, reservation.ResourceKey)
-	}
-	return nil
-}
-
-func showBootStatus(serverID, environmentID, statePath string, now time.Time, stdout io.Writer) error {
-	if !safePilotServerID.MatchString(serverID) ||
-		(environmentID != "production" && environmentID != "staging" && environmentID != "testing") || now.IsZero() {
-		return errors.New("a valid server ID, environment, and current time are required")
-	}
-	repository, err := store.OpenBolt(statePath)
-	if err != nil {
-		return err
-	}
-	defer repository.Close()
-	reservations, err := repository.ListCapacityReservations()
-	if err != nil {
-		return err
-	}
-	var current *store.CapacityReservation
-	var durations []time.Duration
-	for i := range reservations {
-		reservation := &reservations[i]
-		if reservation.ServerID != serverID || reservation.EnvironmentID != environmentID {
-			continue
-		}
-		if !reservation.ProvisionedAt.IsZero() && !reservation.ReadyAt.IsZero() {
-			if duration := reservation.ReadyAt.Sub(reservation.ProvisionedAt); duration > 0 {
-				durations = append(durations, duration)
-			}
-		}
-		if reservation.State != store.CapacityAbsent && reservation.State != store.CapacityDestroyed {
-			current = reservation
-		}
-	}
-	if current == nil {
-		fmt.Fprintf(stdout, "No controller-owned VM is currently recorded for %s@%s.\n", serverID, environmentID)
-		writeHistoricalBootEstimate(stdout, durations)
-		return nil
-	}
-	if current.State != store.CapacityActive {
-		if !current.ReadyAt.IsZero() {
-			fmt.Fprintf(stdout, "Paper readiness was previously confirmed at %s.\n", current.ReadyAt.UTC().Format(time.RFC3339))
-		}
-		fmt.Fprintf(stdout, "Managed VM state: %s. Current Paper readiness is not confirmed; boot progress is indeterminate.\n", current.State)
-		writeHistoricalBootEstimate(stdout, durations)
-		return nil
-	}
-	if !current.ReadyAt.IsZero() {
-		fmt.Fprintf(stdout, "Paper readiness was confirmed at %s.\n", current.ReadyAt.UTC().Format(time.RFC3339))
-		if !current.ProvisionedAt.IsZero() {
-			fmt.Fprintf(stdout, "Measured provision-to-Paper-ready time: %s.\n", current.ReadyAt.Sub(current.ProvisionedAt).Round(time.Second))
-		}
-		fmt.Fprintln(stdout, "Progress: [####################] 100% (initial boot completed)")
-		return nil
-	}
-	if current.ProvisionedAt.IsZero() {
-		fmt.Fprintln(stdout, "Provider presence is confirmed, but no provisioning timestamp is available; Paper boot progress is indeterminate.")
-		writeHistoricalBootEstimate(stdout, durations)
-		return nil
-	}
-	elapsed := now.Sub(current.ProvisionedAt)
-	if elapsed < 0 {
-		elapsed = 0
-	}
-	fmt.Fprintf(stdout, "Paper readiness is pending. Time since provisioning: %s.\n", elapsed.Round(time.Second))
-	if len(durations) < 3 {
-		fmt.Fprintf(stdout, "Estimate and progress are indeterminate (%d completed boot sample(s); 3 required).\n", len(durations))
-		return nil
-	}
-	estimate, err := boottiming.Estimate(durations, boottiming.DefaultSafetyFactor)
-	if err != nil {
-		fmt.Fprintf(stdout, "Estimate and progress are indeterminate (%d completed boot sample(s)).\n", len(durations))
-		return nil
-	}
-	remaining := estimate - elapsed
-	if remaining < 0 {
-		remaining = 0
-	}
-	percent := boottiming.ProgressPercent(elapsed, estimate, false)
-	fmt.Fprintf(stdout, "Estimated total: %s; estimated time remaining: %s.\n", estimate.Round(time.Second), remaining.Round(time.Second))
-	fmt.Fprintf(stdout, "Progress: %s (advisory; never reaches 100%% before Paper readiness).\n", bootProgressBar(percent))
-	return nil
-}
-
-func writeHistoricalBootEstimate(stdout io.Writer, durations []time.Duration) {
-	if len(durations) < 3 {
-		fmt.Fprintf(stdout, "Historical boot estimate unavailable (%d completed boot sample(s); 3 required).\n", len(durations))
-		return
-	}
-	estimate, err := boottiming.Estimate(durations, boottiming.DefaultSafetyFactor)
-	if err != nil {
-		fmt.Fprintf(stdout, "Historical boot estimate unavailable (%d completed boot sample(s)).\n", len(durations))
-		return
-	}
-	fmt.Fprintf(stdout, "Historical boot estimate: %s (75th percentile plus 25%% buffer; %d samples).\n", estimate.Round(time.Second), len(durations))
-}
-
-func bootProgressBar(percent int) string {
-	const width = 20
-	if percent < 0 {
-		percent = 0
-	}
-	if percent > 99 {
-		percent = 99
-	}
-	filled := percent * width / 100
-	return fmt.Sprintf("[%s%s] %d%%", strings.Repeat("#", filled), strings.Repeat("-", width-filled), percent)
-}
-
 func showStatus(host string, stdout io.Writer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -729,155 +395,6 @@ func rejected(host, operationID, auditPath, reason string, cause error) error {
 		return fmt.Errorf("operation %s rejected: %w; could not record rejection in %s: %v", operationID, cause, auditPath, err)
 	}
 	return fmt.Errorf("operation %s rejected (audit log: %s): %w", operationID, auditPath, cause)
-}
-
-type auditRecord struct {
-	OperationID string `json:"operation_id"`
-	RecordedAt  string `json:"recorded_at"`
-	Event       string `json:"event"`
-	Action      string `json:"action"`
-	Target      string `json:"target"`
-	Service     string `json:"service"`
-	Detail      string `json:"detail,omitempty"`
-}
-
-func newOperationID() (string, error) {
-	value := make([]byte, 16)
-	if _, err := rand.Read(value); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(value), nil
-}
-
-func defaultAuditPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".local", "state", "gsc-pilot", "operations.jsonl"), nil
-}
-
-func appendAuditRecord(path, operationID, event, host, detail string) error {
-	return appendAuditEvent(path, operationID, event, "backup", host, backupUnit, detail)
-}
-
-func appendAuditEvent(path, operationID, event, action, target, service, detail string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	if err := file.Chmod(0o600); err != nil {
-		_ = file.Close()
-		return err
-	}
-	record := auditRecord{
-		OperationID: operationID,
-		RecordedAt:  time.Now().UTC().Format(time.RFC3339Nano),
-		Event:       event,
-		Action:      action,
-		Target:      target,
-		Service:     service,
-		Detail:      detail,
-	}
-	if err := json.NewEncoder(file).Encode(record); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return err
-	}
-	return file.Close()
-}
-
-func showHistory(stdout io.Writer) error {
-	auditPath, err := defaultAuditPath()
-	if err != nil {
-		return fmt.Errorf("resolve audit log path: %w", err)
-	}
-	file, err := os.Open(auditPath)
-	if errors.Is(err, os.ErrNotExist) {
-		fmt.Fprintln(stdout, "No pilot operations have been recorded.")
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("open audit log %s: %w", auditPath, err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-	lineNumber := 0
-	wroteHeader := false
-	for scanner.Scan() {
-		lineNumber++
-		var record auditRecord
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
-			return fmt.Errorf("decode audit log %s line %d: %w", auditPath, lineNumber, err)
-		}
-		recordedAt, err := time.Parse(time.RFC3339Nano, record.RecordedAt)
-		if err != nil {
-			return fmt.Errorf("invalid timestamp in audit log %s line %d", auditPath, lineNumber)
-		}
-		if !validAuditRecord(record) {
-			return fmt.Errorf("invalid audit record in %s line %d", auditPath, lineNumber)
-		}
-		if !wroteHeader {
-			fmt.Fprintln(stdout, "RECORDED_AT\tOPERATION_ID\tACTION\tEVENT\tTARGET\tSERVICE\tDETAIL")
-			wroteHeader = true
-		}
-		detail := "-"
-		if record.Detail != "" {
-			detail = strconv.Quote(record.Detail)
-		}
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			recordedAt.UTC().Format(time.RFC3339Nano), record.OperationID, record.Action,
-			record.Event, record.Target, record.Service, detail)
-	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("read audit log %s: %w", auditPath, err)
-	}
-	if !wroteHeader {
-		fmt.Fprintln(stdout, "No pilot operations have been recorded.")
-	}
-	return nil
-}
-
-func validAuditRecord(record auditRecord) bool {
-	if !safeOperationID.MatchString(record.OperationID) {
-		return false
-	}
-	switch record.Action {
-	case "backup":
-		return record.Service == backupUnit && safeSSHHost.MatchString(record.Target) && validBackupAuditEvent(record.Event)
-	case "adopt":
-		return record.Service == "vultr.instance.adopt" && safePilotTarget.MatchString(record.Target) && (record.Event == "adoption_requested" || record.Event == "adoption_failed" || record.Event == "adoption_confirmed")
-	case "provision":
-		return record.Service == "vultr.instance.create" && safePilotTarget.MatchString(record.Target) && validProvisionAuditEvent(record.Event)
-	default:
-		return false
-	}
-}
-
-func validBackupAuditEvent(event string) bool {
-	switch event {
-	case "rejected", "started", "outcome_unknown", "failed", "service_succeeded", "succeeded":
-		return true
-	default:
-		return false
-	}
-}
-
-func validProvisionAuditEvent(event string) bool {
-	switch event {
-	case "outcome_unknown", "provision_requested", "provision_failed", "provision_rejected", "provider_rejected", "provision_confirmed":
-		return true
-	default:
-		return false
-	}
 }
 
 type unitState struct {
