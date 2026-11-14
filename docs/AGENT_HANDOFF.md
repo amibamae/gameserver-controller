@@ -40,7 +40,7 @@ The owner's goal is a repowise average health of **7–8**. The method:
 - Repo average 5.88 → **6.21**; production average 5.15 → 5.50.
 - Hotspot average 3.94. Repowise deducts for recent churn, and refactors are churn, so this deduction decays over time.
 
-**In progress (round 3): ten agents, one per file group.** Each was told to open one PR, merge it after green CI, and report back. Find their branches with `git ls-remote --heads origin 'claude/r3-*'`, and look for open PRs titled `refactor(...)`.
+**Round 3 status checked against GitHub on 2026-11-13:** `main` is `d958cbb` (PR #253). There are no open PRs and no published `claude/r3-*` or `claude/complexity-check` branches. The list below records the previous agent scopes, not confirmed active work. Agents can still have unpublished local work, so coordinate before taking one of these scopes.
 
 | Branch | Files | Main targets |
 |---|---|---|
@@ -62,9 +62,9 @@ The owner's goal is a repowise average health of **7–8**. The method:
 4. Several groups share the `internal/workflow` package, so rebase onto `main` before every push and give test helpers a prefix unique to your group.
 5. After all ten merge, ask the owner to re-index repowise, run `get_health` on the changed files, and report the real before and after scores.
 6. Then continue with any file still scoring below 7, worst first.
-7. **In progress (Claude session, branch `claude/complexity-check`): a small complexity checker.** The owner asked for it on 2026-11-13. It is `cmd/complexity-check`, built on the standard library's `go/ast` with no new dependencies. It reports functions over the limits (complexity above 15, nesting deeper than 3, conditions with more than 3 boolean operators). A CI step fails only for functions added or changed in a pull request, so the existing over-limit code doesn't block every PR.
-   - If that branch has no merged PR, finish it rather than starting a second checker.
-   - Once it is on `main`, run it before every push.
+7. The earlier handoff reported a complexity checker in progress on `claude/complexity-check`. That branch is not published as of the 2026-11-13 status check above; ask for the agent's local work before starting a replacement. If it lands on `main`, run it before every push.
+
+**Current isolated continuation (2026-11-13):** branch `codex/refactor-logical-server-validation`, worktree `/private/tmp/gsc-health-logical-server-validation`, based on `d958cbb`. The shared checkout on `codex/controller-setup-apply` contains uncommitted controller-setup work; leave it untouched. This continuation owns only `internal/store/logical_servers.go`, its focused validation tests, and this handoff. Characterization tests passed against the original production code before refactoring. The refactor now groups identity comparisons and lifecycle-event validation into named predicates while preserving check order, transitions, and exact errors. The store tests, full `go vet ./...`, `go test ./...`, `gofmt -l .`, `git diff --check`, and `go run ./cmd/protocol-check` pass. Repowise's pre-change score for `internal/store/logical_servers.go` was 3.65 at indexed commit `09ec291e`; the tool cannot score the unpushed worktree, so request a fresh index and verify the changed file scores at least 7 before merging.
 
 **Known limits:**
 - A few branches are kept verbatim because no test can reach them; each PR lists them.

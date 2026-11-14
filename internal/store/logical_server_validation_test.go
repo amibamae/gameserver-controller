@@ -50,10 +50,33 @@ func TestValidatePersistedLogicalServerRules(t *testing.T) {
 		{"instance reference is not an object", func(s *LogicalServer) { s.InstanceRef = json.RawMessage(`"instance-1"`) }, "invalid logical server instance reference"},
 		{"state changed without an event", func(s *LogicalServer) { s.LifecycleEvents = nil }, "lifecycle state changed without a durable state event"},
 		{"event out of sequence", func(s *LogicalServer) { s.LifecycleEvents[0].Sequence = 2 }, "invalid logical server lifecycle event 1"},
+		{"event missing operation ID", func(s *LogicalServer) { s.LifecycleEvents[0].OperationID = "" }, "invalid logical server lifecycle event 1"},
+		{"event missing actor ID", func(s *LogicalServer) { s.LifecycleEvents[0].ActorID = "" }, "invalid logical server lifecycle event 1"},
+		{"event actor ID too long", func(s *LogicalServer) { s.LifecycleEvents[0].ActorID = strings.Repeat("a", 201) }, "invalid logical server lifecycle event 1"},
+		{"event operation type is invalid", func(s *LogicalServer) { s.LifecycleEvents[0].OperationType = "server provision" }, "invalid logical server lifecycle event 1"},
+		{"event missing cause", func(s *LogicalServer) { s.LifecycleEvents[0].Cause = "" }, "invalid logical server lifecycle event 1"},
+		{"event cause too long", func(s *LogicalServer) { s.LifecycleEvents[0].Cause = strings.Repeat("c", 1001) }, "invalid logical server lifecycle event 1"},
+		{"event fingerprint is invalid", func(s *LogicalServer) { s.LifecycleEvents[0].RequestFingerprint = "bad" }, "invalid logical server lifecycle event 1"},
+		{"event from state does not match history", func(s *LogicalServer) {
+			s.LifecycleEvents[0].FromState, s.LifecycleEvents[0].ToState = protocolstate.ServerPreparing, protocolstate.ServerStarting
+			s.LifecycleState = protocolstate.ServerStarting
+		}, "invalid logical server lifecycle event 1"},
+		{"event before creation", func(s *LogicalServer) { s.LifecycleEvents[0].OccurredAt = s.CreatedAt.Add(-time.Second) }, "invalid logical server lifecycle event 1"},
 		{"event after the last update", func(s *LogicalServer) { s.LifecycleEvents[0].OccurredAt = s.UpdatedAt.Add(time.Second) }, "invalid logical server lifecycle event 1"},
+		{"event time moves backwards", func(s *LogicalServer) {
+			first := s.LifecycleEvents[0]
+			second := LogicalServerStateEvent{
+				Sequence: 2, OperationID: "prepare-1", ActorID: first.ActorID, OperationType: first.OperationType,
+				FromState: protocolstate.ServerProvisioning, ToState: protocolstate.ServerPreparing, Cause: first.Cause,
+				RequestFingerprint: first.RequestFingerprint, EvidenceStepIDs: []string{"prepare"}, OccurredAt: first.OccurredAt.Add(-time.Second),
+			}
+			s.LifecycleEvents = append(s.LifecycleEvents, second)
+			s.LifecycleState, s.LastOperationID = protocolstate.ServerPreparing, second.OperationID
+		}, "invalid logical server lifecycle event 2"},
 		{"event with a disallowed transition", func(s *LogicalServer) {
 			s.LifecycleEvents[0].ToState, s.LifecycleState = protocolstate.ServerReady, protocolstate.ServerReady
 		}, "invalid logical server lifecycle event 1 transition"},
+		{"invalid evidence step", func(s *LogicalServer) { s.LifecycleEvents[0].EvidenceStepIDs = []string{""} }, "invalid lifecycle evidence step ID"},
 		{"repeated evidence step", func(s *LogicalServer) { s.LifecycleEvents[0].EvidenceStepIDs = []string{"reserve", "reserve"} }, "duplicate lifecycle evidence step ID"},
 		{"history ends in another state", func(s *LogicalServer) { s.LifecycleState = protocolstate.ServerFailed }, "lifecycle event history does not match current state"},
 		{"last operation not in the history", func(s *LogicalServer) { s.LastOperationID = "other-operation" }, "last operation does not match lifecycle history"},
@@ -85,5 +108,38 @@ func TestValidatePersistedLogicalServerRequiresLastOperationID(t *testing.T) {
 	server.LifecycleState, server.LifecycleEvents, server.LastOperationID = protocolstate.ServerUnprovisioned, nil, ""
 	if err := validatePersistedLogicalServer(server); err == nil || !strings.HasSuffix(err.Error(), "invalid logical server record") {
 		t.Fatalf("validatePersistedLogicalServer error = %v, want an invalid record", err)
+	}
+}
+
+func TestSameLogicalServerIdentityFields(t *testing.T) {
+	base := provisioningLogicalServer()
+	if !sameLogicalServerIdentity(base, base) {
+		t.Fatal("same logical server rejected as the same identity")
+	}
+	tests := []struct {
+		name   string
+		mutate func(*LogicalServer)
+	}{
+		{"server ID", func(s *LogicalServer) { s.ServerID = "server-2" }},
+		{"environment ID", func(s *LogicalServer) { s.EnvironmentID = "production" }},
+		{"display name", func(s *LogicalServer) { s.DisplayName = "Other Server" }},
+		{"hosting profile", func(s *LogicalServer) { s.HostingProfile = "vultr-large" }},
+		{"storage profile", func(s *LogicalServer) { s.StorageProfile = "other-worlds" }},
+		{"game adapter", func(s *LogicalServer) { s.GameAdapterID = "game.other" }},
+		{"release channel", func(s *LogicalServer) { s.ReleaseChannel = "preview" }},
+		{"execution adapter", func(s *LogicalServer) { s.ExecutionAdapterID = "execution.other" }},
+		{"execution profile", func(s *LogicalServer) { s.ExecutionProfile = "other-profile" }},
+		{"network profile", func(s *LogicalServer) { s.NetworkProfile = "network.other" }},
+		{"definition bytes", func(s *LogicalServer) { s.Definition = json.RawMessage(`{ "server_id": "server-1" }`) }},
+		{"creation time", func(s *LogicalServer) { s.CreatedAt = s.CreatedAt.Add(time.Second) }},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			next := base
+			test.mutate(&next)
+			if sameLogicalServerIdentity(base, next) {
+				t.Fatalf("changed %s treated as the same identity", test.name)
+			}
+		})
 	}
 }

@@ -131,12 +131,34 @@ func validateLogicalServer(record LogicalServer) error {
 }
 
 func sameLogicalServerIdentity(current, next LogicalServer) bool {
-	return current.ServerID == next.ServerID && current.EnvironmentID == next.EnvironmentID &&
-		current.DisplayName == next.DisplayName && current.HostingProfile == next.HostingProfile &&
-		current.StorageProfile == next.StorageProfile && current.GameAdapterID == next.GameAdapterID &&
-		current.ReleaseChannel == next.ReleaseChannel && current.ExecutionAdapterID == next.ExecutionAdapterID &&
-		current.ExecutionProfile == next.ExecutionProfile && current.NetworkProfile == next.NetworkProfile &&
-		bytes.Equal(current.Definition, next.Definition) && current.CreatedAt.Equal(next.CreatedAt)
+	return sameLogicalServerPrimaryIdentity(current, next) && sameLogicalServerProfiles(current, next) &&
+		sameLogicalServerDefinition(current, next)
+}
+
+func sameLogicalServerPrimaryIdentity(current, next LogicalServer) bool {
+	return current.ServerID == next.ServerID && current.EnvironmentID == next.EnvironmentID && current.DisplayName == next.DisplayName
+}
+
+func sameLogicalServerProfiles(current, next LogicalServer) bool {
+	return sameLogicalServerHostingStorageProfiles(current, next) && sameLogicalServerGameProfiles(current, next) &&
+		sameLogicalServerExecutionProfiles(current, next)
+}
+
+func sameLogicalServerHostingStorageProfiles(current, next LogicalServer) bool {
+	return current.HostingProfile == next.HostingProfile && current.StorageProfile == next.StorageProfile
+}
+
+func sameLogicalServerGameProfiles(current, next LogicalServer) bool {
+	return current.GameAdapterID == next.GameAdapterID && current.ReleaseChannel == next.ReleaseChannel
+}
+
+func sameLogicalServerExecutionProfiles(current, next LogicalServer) bool {
+	return current.ExecutionAdapterID == next.ExecutionAdapterID && current.ExecutionProfile == next.ExecutionProfile &&
+		current.NetworkProfile == next.NetworkProfile
+}
+
+func sameLogicalServerDefinition(current, next LogicalServer) bool {
+	return bytes.Equal(current.Definition, next.Definition) && current.CreatedAt.Equal(next.CreatedAt)
 }
 
 func equalCanonicalJSON(left, right json.RawMessage) bool {
@@ -155,19 +177,35 @@ func validatePersistedLogicalServer(record LogicalServer) error {
 	if !knownServerState(record.LifecycleState) {
 		return fmt.Errorf("%w: invalid logical server lifecycle state", ErrInvalidRecord)
 	}
-	if record.DesiredState != "" && record.DesiredState != "running" && record.DesiredState != "stopped" && record.DesiredState != "destroyed" {
+	if !logicalServerDesiredStateValid(record.DesiredState) {
 		return fmt.Errorf("%w: invalid logical server desired state", ErrInvalidRecord)
 	}
-	if record.DataGenerationStatus != "known" && record.DataGenerationStatus != "unknown" {
+	if !logicalServerDataGenerationStatusValid(record.DataGenerationStatus) {
 		return fmt.Errorf("%w: invalid logical server data generation status", ErrInvalidRecord)
 	}
-	if record.DataGenerationStatus == "known" && !validIdentifier(record.DataGenerationID, 200) {
+	if !logicalServerKnownGenerationValid(record.DataGenerationStatus, record.DataGenerationID) {
 		return fmt.Errorf("%w: known data generation is missing its ID", ErrInvalidRecord)
 	}
-	if len(record.InstanceRef) != 0 && !isJSONObject(record.InstanceRef) {
+	if !logicalServerInstanceReferenceValid(record.InstanceRef) {
 		return fmt.Errorf("%w: invalid logical server instance reference", ErrInvalidRecord)
 	}
 	return validateLogicalServerStateEvents(record)
+}
+
+func logicalServerDesiredStateValid(state string) bool {
+	return state == "" || state == "running" || state == "stopped" || state == "destroyed"
+}
+
+func logicalServerDataGenerationStatusValid(status string) bool {
+	return status == "known" || status == "unknown"
+}
+
+func logicalServerKnownGenerationValid(status, generationID string) bool {
+	return status != "known" || validIdentifier(generationID, 200)
+}
+
+func logicalServerInstanceReferenceValid(reference json.RawMessage) bool {
+	return len(reference) == 0 || isJSONObject(reference)
 }
 
 // logicalServerFieldsValid requires every identity and profile field to be a
@@ -215,23 +253,8 @@ func validateLogicalServerStateEvents(record LogicalServer) error {
 	state := protocolstate.ServerUnprovisioned
 	previousAt := record.CreatedAt
 	for i, event := range record.LifecycleEvents {
-		if event.Sequence != uint64(i+1) || !validIdentifier(event.OperationID, 200) || event.ActorID == "" || len(event.ActorID) > 200 ||
-			!validQualifiedName(event.OperationType, 160) || event.Cause == "" || len(event.Cause) > 1000 || !validFingerprint(event.RequestFingerprint) ||
-			event.FromState != state || event.OccurredAt.Before(previousAt) || event.OccurredAt.After(record.UpdatedAt) {
-			return fmt.Errorf("%w: invalid logical server lifecycle event %d", ErrInvalidRecord, i+1)
-		}
-		if err := protocolstate.ValidateServerTransition(event.FromState, event.ToState); err != nil {
-			return fmt.Errorf("%w: invalid logical server lifecycle event %d transition", ErrInvalidRecord, i+1)
-		}
-		seen := make(map[string]struct{}, len(event.EvidenceStepIDs))
-		for _, stepID := range event.EvidenceStepIDs {
-			if !validIdentifier(stepID, 200) {
-				return fmt.Errorf("%w: invalid lifecycle evidence step ID", ErrInvalidRecord)
-			}
-			if _, duplicate := seen[stepID]; duplicate {
-				return fmt.Errorf("%w: duplicate lifecycle evidence step ID", ErrInvalidRecord)
-			}
-			seen[stepID] = struct{}{}
+		if err := validateLogicalServerStateEvent(event, i, state, previousAt, record.UpdatedAt); err != nil {
+			return err
 		}
 		state = event.ToState
 		previousAt = event.OccurredAt
@@ -241,6 +264,48 @@ func validateLogicalServerStateEvents(record LogicalServer) error {
 	}
 	if record.LifecycleEvents[len(record.LifecycleEvents)-1].OperationID != record.LastOperationID {
 		return fmt.Errorf("%w: last operation does not match lifecycle history", ErrInvalidRecord)
+	}
+	return nil
+}
+
+func validateLogicalServerStateEvent(event LogicalServerStateEvent, index int, state protocolstate.ServerState, previousAt, updatedAt time.Time) error {
+	if !logicalServerEventSequenceValid(event, index) || !logicalServerEventIdentityValid(event) ||
+		!logicalServerEventDetailsValid(event) || !logicalServerEventPositionValid(event, state, previousAt, updatedAt) {
+		return fmt.Errorf("%w: invalid logical server lifecycle event %d", ErrInvalidRecord, index+1)
+	}
+	if err := protocolstate.ValidateServerTransition(event.FromState, event.ToState); err != nil {
+		return fmt.Errorf("%w: invalid logical server lifecycle event %d transition", ErrInvalidRecord, index+1)
+	}
+	return validateLogicalServerEventEvidence(event)
+}
+
+func logicalServerEventSequenceValid(event LogicalServerStateEvent, index int) bool {
+	return event.Sequence == uint64(index+1)
+}
+
+func logicalServerEventIdentityValid(event LogicalServerStateEvent) bool {
+	return validIdentifier(event.OperationID, 200) && event.ActorID != "" && len(event.ActorID) <= 200
+}
+
+func logicalServerEventDetailsValid(event LogicalServerStateEvent) bool {
+	return validQualifiedName(event.OperationType, 160) && event.Cause != "" && len(event.Cause) <= 1000 &&
+		validFingerprint(event.RequestFingerprint)
+}
+
+func logicalServerEventPositionValid(event LogicalServerStateEvent, state protocolstate.ServerState, previousAt, updatedAt time.Time) bool {
+	return event.FromState == state && !event.OccurredAt.Before(previousAt) && !event.OccurredAt.After(updatedAt)
+}
+
+func validateLogicalServerEventEvidence(event LogicalServerStateEvent) error {
+	seen := make(map[string]struct{}, len(event.EvidenceStepIDs))
+	for _, stepID := range event.EvidenceStepIDs {
+		if !validIdentifier(stepID, 200) {
+			return fmt.Errorf("%w: invalid lifecycle evidence step ID", ErrInvalidRecord)
+		}
+		if _, duplicate := seen[stepID]; duplicate {
+			return fmt.Errorf("%w: duplicate lifecycle evidence step ID", ErrInvalidRecord)
+		}
+		seen[stepID] = struct{}{}
 	}
 	return nil
 }
