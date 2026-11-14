@@ -371,25 +371,31 @@ func containsStepID(steps []OperationStep, stepID string) bool {
 	return false
 }
 
+// validSecretReference requires a bounded reference with a lowercase URI
+// scheme, a bounded purpose and version, and unique bounded permission
+// scopes.
 func validSecretReference(ref SecretReference) bool {
-	if ref.SecretRef == "" || len(ref.SecretRef) > 1024 || ref.Purpose == "" || len(ref.Purpose) > 100 {
+	return validSecretLocation(ref) && len(ref.VersionRef) <= 500 && uniquePermissionScopes(ref.PermissionScope)
+}
+
+func validSecretLocation(ref SecretReference) bool {
+	return validIdentifier(ref.SecretRef, 1024) && validIdentifier(ref.Purpose, 100) && validSecretScheme(ref.SecretRef)
+}
+
+// validSecretScheme requires the text before the first "://" to be a
+// lowercase letter followed by lowercase letters, digits, '+', '.' or '-'.
+func validSecretScheme(secretRef string) bool {
+	separator := strings.Index(secretRef, "://")
+	if separator < 1 || !isLowerLetter(rune(secretRef[0])) {
 		return false
 	}
-	separator := strings.Index(ref.SecretRef, "://")
-	if separator < 1 || ref.SecretRef[0] < 'a' || ref.SecretRef[0] > 'z' {
-		return false
-	}
-	for _, ch := range ref.SecretRef[1:separator] {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '+' && ch != '.' && ch != '-' {
-			return false
-		}
-	}
-	if len(ref.VersionRef) > 500 {
-		return false
-	}
-	seen := make(map[string]struct{}, len(ref.PermissionScope))
-	for _, scope := range ref.PermissionScope {
-		if scope == "" || len(scope) > 160 {
+	return allRunes(secretRef[1:separator], nameRune("+.-"))
+}
+
+func uniquePermissionScopes(scopes []string) bool {
+	seen := make(map[string]struct{}, len(scopes))
+	for _, scope := range scopes {
+		if !validIdentifier(scope, 160) {
 			return false
 		}
 		if _, exists := seen[scope]; exists {
@@ -405,23 +411,36 @@ func validIdentifier(value string, max int) bool {
 }
 
 func validQualifiedName(value string, max int) bool {
-	if len(value) < 2 || len(value) > max || value[0] < 'a' || value[0] > 'z' {
-		return false
-	}
-	for _, ch := range value[1:] {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' {
-			return false
-		}
-	}
-	return true
+	return validLowerName(value, max, ".")
 }
 
 func validCapabilityName(value string, max int) bool {
-	if len(value) < 2 || len(value) > max || value[0] < 'a' || value[0] > 'z' {
+	return validLowerName(value, max, "._-")
+}
+
+// validLowerName requires 2 to max characters: a lowercase letter, then
+// lowercase letters, digits, or the given punctuation.
+func validLowerName(value string, max int, punctuation string) bool {
+	if len(value) < 2 || len(value) > max || !isLowerLetter(rune(value[0])) {
 		return false
 	}
-	for _, ch := range value[1:] {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' && ch != '_' && ch != '-' {
+	return allRunes(value[1:], nameRune(punctuation))
+}
+
+// nameRune accepts lowercase letters, digits, and the given punctuation.
+func nameRune(punctuation string) func(rune) bool {
+	return func(ch rune) bool {
+		return isLowerLetter(ch) || (ch >= '0' && ch <= '9') || strings.ContainsRune(punctuation, ch)
+	}
+}
+
+func isLowerLetter(ch rune) bool {
+	return ch >= 'a' && ch <= 'z'
+}
+
+func allRunes(value string, accept func(rune) bool) bool {
+	for _, ch := range value {
+		if !accept(ch) {
 			return false
 		}
 	}
