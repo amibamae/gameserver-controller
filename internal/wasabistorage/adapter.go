@@ -112,13 +112,9 @@ func (a *Adapter) Descriptor() adapter.Descriptor {
 		}
 	}
 	capability := func(name, schema string, mutating bool, direction string) adapter.Capability {
-		return adapter.Capability{
-			Name: name, Version: contractVersion, Mutating: mutating,
-			InputSchemaURI:      "urn:gameserver-controller:" + version + ":storage:" + schema + "-input",
-			OutputSchemaURI:     "urn:gameserver-controller:" + version + ":storage:" + schema + "-output",
-			Constraints:         map[string]any{"stream_transfer_direction": direction, "maximum_object_bytes": a.config.MaxObjectBytes},
-			RequiredPermissions: []string{},
-		}
+		streamed := plain(name, schema, mutating)
+		streamed.Constraints = map[string]any{"stream_transfer_direction": direction, "maximum_object_bytes": a.config.MaxObjectBytes}
+		return streamed
 	}
 	return adapter.Descriptor{
 		AdapterID: a.config.AdapterID, Category: adapter.CategoryStorage, DisplayName: "Wasabi S3-compatible object storage",
@@ -261,8 +257,14 @@ func addProviderETag(value map[string]any, etag *string) {
 	}
 }
 
+// validTarget reports an object of this adapter's profile inside its
+// bucket and key prefix.
 func (a *Adapter) validTarget(value objectTarget) bool {
-	return value.AdapterID == a.config.AdapterID && value.StorageProfile == a.config.StorageProfileID && value.EnvironmentID == a.config.EnvironmentID && value.Container == a.config.Container && strings.HasPrefix(value.Key, a.config.KeyPrefix)
+	return a.ownProfile(value) && value.Container == a.config.Container && strings.HasPrefix(value.Key, a.config.KeyPrefix)
+}
+
+func (a *Adapter) ownProfile(value objectTarget) bool {
+	return value.AdapterID == a.config.AdapterID && value.StorageProfile == a.config.StorageProfileID && value.EnvironmentID == a.config.EnvironmentID
 }
 
 func (a *Adapter) validRequestEnvironment(request adapter.InvokeRequest) bool {
@@ -274,7 +276,11 @@ func (a *Adapter) validReference(value objectReference) bool {
 }
 
 func validExpected(size int64, expected checksum, maximum int64) bool {
-	return size >= 0 && size <= maximum && expected.Algorithm == "sha256" && len(expected.Digest) == sha256.Size*2 && isHex(expected.Digest)
+	return size >= 0 && size <= maximum && validSHA256(expected)
+}
+
+func validSHA256(expected checksum) bool {
+	return expected.Algorithm == "sha256" && len(expected.Digest) == sha256.Size*2 && isHex(expected.Digest)
 }
 
 func isHex(value string) bool {
@@ -287,17 +293,41 @@ func singleTransfer(request adapter.InvokeRequest, direction string, expectedSiz
 		return capturestream.Reference{}, errors.New("storage transfer requires exactly one stream handle")
 	}
 	transfer := request.Params.RequestContext.StreamTransfers[0]
-	if transfer.Direction != direction || transfer.MaximumBytes < expectedSize || !transfer.ExpiresAt.After(time.Now()) || transfer.ExpiresAt.After(request.Params.RequestContext.Deadline) {
+	if !boundedTransfer(transfer, direction, expectedSize, request.Params.RequestContext.Deadline) {
 		return capturestream.Reference{}, errors.New("storage stream handle does not match the bounded transfer")
 	}
 	return transfer, nil
 }
 
+// boundedTransfer reports a handle in the expected direction, large enough
+// for the object, and live now but not past the operation deadline.
+func boundedTransfer(transfer capturestream.Reference, direction string, expectedSize int64, deadline time.Time) bool {
+	return transfer.Direction == direction && transfer.MaximumBytes >= expectedSize && liveUntil(transfer.ExpiresAt, deadline)
+}
+
+func liveUntil(expiresAt, deadline time.Time) bool {
+	return expiresAt.After(time.Now()) && !expiresAt.After(deadline)
+}
+
 func (a *Adapter) openClient(ctx context.Context, request adapter.InvokeRequest) (s3Client, error) {
-	refs := request.Params.RequestContext.SecretRefs
-	if len(refs) != 2 || !containsSecretRef(refs, a.config.AccessKeyIDRef) || !containsSecretRef(refs, a.config.SecretAccessKeyRef) {
+	if !a.authorizedSecretRefs(request.Params.RequestContext.SecretRefs) {
 		return nil, errors.New("Wasabi credential references are not authorized for this invocation")
 	}
+	client, err := a.resolveClient()
+	if err != nil || client == nil || ctx.Err() != nil {
+		return nil, errors.New("Wasabi credentials are unavailable")
+	}
+	return client, nil
+}
+
+// authorizedSecretRefs reports exactly this profile's two key references.
+func (a *Adapter) authorizedSecretRefs(refs []adapter.SecretReference) bool {
+	return len(refs) == 2 && containsSecretRef(refs, a.config.AccessKeyIDRef) && containsSecretRef(refs, a.config.SecretAccessKeyRef)
+}
+
+// resolveClient builds the S3 client while both key values are resolved;
+// they are not kept beyond the call.
+func (a *Adapter) resolveClient() (s3Client, error) {
 	var client s3Client
 	err := a.credentials.WithCredential(a.config.AccessKeyIDRef, func(access []byte) error {
 		return a.credentials.WithCredential(a.config.SecretAccessKeyRef, func(secret []byte) error {
@@ -308,10 +338,7 @@ func (a *Adapter) openClient(ctx context.Context, request adapter.InvokeRequest)
 			return nil
 		})
 	})
-	if err != nil || client == nil || ctx.Err() != nil {
-		return nil, errors.New("Wasabi credentials are unavailable")
-	}
-	return client, nil
+	return client, err
 }
 
 func containsSecretRef(refs []adapter.SecretReference, reference string) bool {
