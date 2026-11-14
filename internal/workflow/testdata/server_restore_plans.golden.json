@@ -1,0 +1,1582 @@
+{
+  "exact target instance pinned": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "check-restore-compatibility",
+      "step_type": "game.compatibility.check",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.compatibility.check",
+      "capability_version": "1",
+      "input": {
+        "required_check_ids": [
+          "world.compatibility"
+        ],
+        "source_manifest": {
+          "manifest_version": "1",
+          "backup_id": "backup-1",
+          "server_id": "server-1",
+          "environment_id": "staging",
+          "data_generation_id": "generation-source",
+          "created_at": "2026-11-08T10:00:00Z",
+          "source_operation_id": "backup-op",
+          "game": {
+            "adapter_id": "game.paper",
+            "name": "Paper",
+            "version": "1.21.4"
+          },
+          "consistency": {
+            "mode": "offline",
+            "evidence": "stopped"
+          },
+          "objects": [
+            {
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "storage_profile_id": "storage-1",
+                "environment_id": "staging",
+                "container": "backups",
+                "key": "server-1/world.tar",
+                "version_id": "v1"
+              },
+              "size_bytes": 1,
+              "checksum_algorithm": "sha256",
+              "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+            }
+          ]
+        },
+        "target_release": {
+          "game_adapter_id": "game.paper",
+          "game_name": "Paper",
+          "release_id": "paper-1",
+          "game_version": "1.21.4",
+          "targets": [
+            {
+              "os_family": "linux",
+              "architecture": "x86_64"
+            }
+          ],
+          "artifacts": [
+            {
+              "artifact_id": "server-jar",
+              "artifact_uri": "https://example.invalid/paper.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            }
+          ],
+          "runtime_requirements": [
+            {
+              "runtime_id": "java",
+              "version_requirement": "21"
+            }
+          ],
+          "configuration_schema_uri": "https://example.invalid/config.schema.json",
+          "configuration_schema_checksum": {
+            "algorithm": "sha256",
+            "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "data_format": {
+            "format_id": "paper-world",
+            "version": "1"
+          },
+          "required_execution_capabilities": [
+            "systemd"
+          ]
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper"
+        }
+      }
+    },
+    {
+      "step_id": "restore-backup",
+      "step_type": "game.restore",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore",
+      "capability_version": "1",
+      "input": {
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "storage_profile_id": "storage-1",
+              "environment_id": "staging",
+              "container": "backups",
+              "key": "server-1/world.tar",
+              "version_id": "v1"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "world.loaded"
+        ],
+        "source_backup": {
+          "outcome_summary": "Verified backup",
+          "operation_type": "server.backup",
+          "affected_resources": [],
+          "completed_steps": [],
+          "failed_steps": [],
+          "warnings": [],
+          "unresolved_conditions": [],
+          "audit_event_ids": [],
+          "partial": false,
+          "operation_data": {
+            "backup_id": "backup-1",
+            "environment_id": "staging",
+            "data_generation_id": "generation-source",
+            "manifest": {
+              "manifest_version": "1",
+              "backup_id": "backup-1",
+              "server_id": "server-1",
+              "environment_id": "staging",
+              "data_generation_id": "generation-source",
+              "created_at": "2026-11-08T10:00:00Z",
+              "source_operation_id": "backup-op",
+              "game": {
+                "adapter_id": "game.paper",
+                "name": "Paper",
+                "version": "1.21.4"
+              },
+              "consistency": {
+                "mode": "offline",
+                "evidence": "stopped"
+              },
+              "objects": [
+                {
+                  "object_ref": {
+                    "adapter_id": "storage.fake",
+                    "storage_profile_id": "storage-1",
+                    "environment_id": "staging",
+                    "container": "backups",
+                    "key": "server-1/world.tar",
+                    "version_id": "v1"
+                  },
+                  "size_bytes": 1,
+                  "checksum_algorithm": "sha256",
+                  "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+                }
+              ]
+            },
+            "verified_at": "2026-11-08T10:00:00Z",
+            "final_lifecycle_state": "stopped"
+          }
+        },
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op",
+        "target_release_id": "paper-1"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/compatibility_result",
+          "source_step_id": "check-restore-compatibility",
+          "source_pointer": ""
+        }
+      ]
+    },
+    {
+      "step_id": "inspect-restore",
+      "step_type": "game.restore.inspect",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore.inspect",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-1",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/restore_execution_ref",
+          "source_step_id": "restore-backup",
+          "source_pointer": "/restore_execution_ref"
+        }
+      ]
+    }
+  ],
+  "failed replace": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "check-restore-compatibility",
+      "step_type": "game.compatibility.check",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.compatibility.check",
+      "capability_version": "1",
+      "input": {
+        "required_check_ids": [
+          "world.compatibility"
+        ],
+        "source_manifest": {
+          "manifest_version": "1",
+          "backup_id": "backup-1",
+          "server_id": "server-1",
+          "environment_id": "staging",
+          "data_generation_id": "generation-source",
+          "created_at": "2026-11-08T10:00:00Z",
+          "source_operation_id": "backup-op",
+          "game": {
+            "adapter_id": "game.paper",
+            "name": "Paper",
+            "version": "1.21.4"
+          },
+          "consistency": {
+            "mode": "offline",
+            "evidence": "stopped"
+          },
+          "objects": [
+            {
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "storage_profile_id": "storage-1",
+                "environment_id": "staging",
+                "container": "backups",
+                "key": "server-1/world.tar",
+                "version_id": "v1"
+              },
+              "size_bytes": 1,
+              "checksum_algorithm": "sha256",
+              "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+            }
+          ]
+        },
+        "target_release": {
+          "game_adapter_id": "game.paper",
+          "game_name": "Paper",
+          "release_id": "paper-1",
+          "game_version": "1.21.4",
+          "targets": [
+            {
+              "os_family": "linux",
+              "architecture": "x86_64"
+            }
+          ],
+          "artifacts": [
+            {
+              "artifact_id": "server-jar",
+              "artifact_uri": "https://example.invalid/paper.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            }
+          ],
+          "runtime_requirements": [
+            {
+              "runtime_id": "java",
+              "version_requirement": "21"
+            }
+          ],
+          "configuration_schema_uri": "https://example.invalid/config.schema.json",
+          "configuration_schema_checksum": {
+            "algorithm": "sha256",
+            "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "data_format": {
+            "format_id": "paper-world",
+            "version": "1"
+          },
+          "required_execution_capabilities": [
+            "systemd"
+          ]
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper"
+        }
+      }
+    },
+    {
+      "step_id": "restore-backup",
+      "step_type": "game.restore",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore",
+      "capability_version": "1",
+      "input": {
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "storage_profile_id": "storage-1",
+              "environment_id": "staging",
+              "container": "backups",
+              "key": "server-1/world.tar",
+              "version_id": "v1"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "world.loaded"
+        ],
+        "source_backup": {
+          "outcome_summary": "Verified backup",
+          "operation_type": "server.backup",
+          "affected_resources": [],
+          "completed_steps": [],
+          "failed_steps": [],
+          "warnings": [],
+          "unresolved_conditions": [],
+          "audit_event_ids": [],
+          "partial": false,
+          "operation_data": {
+            "backup_id": "backup-1",
+            "environment_id": "staging",
+            "data_generation_id": "generation-source",
+            "manifest": {
+              "manifest_version": "1",
+              "backup_id": "backup-1",
+              "server_id": "server-1",
+              "environment_id": "staging",
+              "data_generation_id": "generation-source",
+              "created_at": "2026-11-08T10:00:00Z",
+              "source_operation_id": "backup-op",
+              "game": {
+                "adapter_id": "game.paper",
+                "name": "Paper",
+                "version": "1.21.4"
+              },
+              "consistency": {
+                "mode": "offline",
+                "evidence": "stopped"
+              },
+              "objects": [
+                {
+                  "object_ref": {
+                    "adapter_id": "storage.fake",
+                    "storage_profile_id": "storage-1",
+                    "environment_id": "staging",
+                    "container": "backups",
+                    "key": "server-1/world.tar",
+                    "version_id": "v1"
+                  },
+                  "size_bytes": 1,
+                  "checksum_algorithm": "sha256",
+                  "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+                }
+              ]
+            },
+            "verified_at": "2026-11-08T10:00:00Z",
+            "final_lifecycle_state": "stopped"
+          }
+        },
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op",
+        "target_release_id": "paper-1"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/compatibility_result",
+          "source_step_id": "check-restore-compatibility",
+          "source_pointer": ""
+        }
+      ]
+    },
+    {
+      "step_id": "inspect-restore",
+      "step_type": "game.restore.inspect",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore.inspect",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-1",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/restore_execution_ref",
+          "source_step_id": "restore-backup",
+          "source_pointer": "/restore_execution_ref"
+        }
+      ]
+    }
+  ],
+  "known empty with start": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "check-restore-compatibility",
+      "step_type": "game.compatibility.check",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.compatibility.check",
+      "capability_version": "1",
+      "input": {
+        "required_check_ids": [
+          "world.compatibility"
+        ],
+        "source_manifest": {
+          "manifest_version": "1",
+          "backup_id": "backup-1",
+          "server_id": "server-1",
+          "environment_id": "staging",
+          "data_generation_id": "generation-source",
+          "created_at": "2026-11-08T10:00:00Z",
+          "source_operation_id": "backup-op",
+          "game": {
+            "adapter_id": "game.paper",
+            "name": "Paper",
+            "version": "1.21.4"
+          },
+          "consistency": {
+            "mode": "offline",
+            "evidence": "stopped"
+          },
+          "objects": [
+            {
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "storage_profile_id": "storage-1",
+                "environment_id": "staging",
+                "container": "backups",
+                "key": "server-1/world.tar",
+                "version_id": "v1"
+              },
+              "size_bytes": 1,
+              "checksum_algorithm": "sha256",
+              "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+            }
+          ]
+        },
+        "target_release": {
+          "game_adapter_id": "game.paper",
+          "game_name": "Paper",
+          "release_id": "paper-1",
+          "game_version": "1.21.4",
+          "targets": [
+            {
+              "os_family": "linux",
+              "architecture": "x86_64"
+            }
+          ],
+          "artifacts": [
+            {
+              "artifact_id": "server-jar",
+              "artifact_uri": "https://example.invalid/paper.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            }
+          ],
+          "runtime_requirements": [
+            {
+              "runtime_id": "java",
+              "version_requirement": "21"
+            }
+          ],
+          "configuration_schema_uri": "https://example.invalid/config.schema.json",
+          "configuration_schema_checksum": {
+            "algorithm": "sha256",
+            "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "data_format": {
+            "format_id": "paper-world",
+            "version": "1"
+          },
+          "required_execution_capabilities": [
+            "systemd"
+          ]
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper"
+        }
+      }
+    },
+    {
+      "step_id": "restore-backup",
+      "step_type": "game.restore",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore",
+      "capability_version": "1",
+      "input": {
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "storage_profile_id": "storage-1",
+              "environment_id": "staging",
+              "container": "backups",
+              "key": "server-1/world.tar",
+              "version_id": "v1"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "world.loaded"
+        ],
+        "source_backup": {
+          "outcome_summary": "Verified backup",
+          "operation_type": "server.backup",
+          "affected_resources": [],
+          "completed_steps": [],
+          "failed_steps": [],
+          "warnings": [],
+          "unresolved_conditions": [],
+          "audit_event_ids": [],
+          "partial": false,
+          "operation_data": {
+            "backup_id": "backup-1",
+            "environment_id": "staging",
+            "data_generation_id": "generation-source",
+            "manifest": {
+              "manifest_version": "1",
+              "backup_id": "backup-1",
+              "server_id": "server-1",
+              "environment_id": "staging",
+              "data_generation_id": "generation-source",
+              "created_at": "2026-11-08T10:00:00Z",
+              "source_operation_id": "backup-op",
+              "game": {
+                "adapter_id": "game.paper",
+                "name": "Paper",
+                "version": "1.21.4"
+              },
+              "consistency": {
+                "mode": "offline",
+                "evidence": "stopped"
+              },
+              "objects": [
+                {
+                  "object_ref": {
+                    "adapter_id": "storage.fake",
+                    "storage_profile_id": "storage-1",
+                    "environment_id": "staging",
+                    "container": "backups",
+                    "key": "server-1/world.tar",
+                    "version_id": "v1"
+                  },
+                  "size_bytes": 1,
+                  "checksum_algorithm": "sha256",
+                  "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+                }
+              ]
+            },
+            "verified_at": "2026-11-08T10:00:00Z",
+            "final_lifecycle_state": "stopped"
+          }
+        },
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op",
+        "target_release_id": "paper-1"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/compatibility_result",
+          "source_step_id": "check-restore-compatibility",
+          "source_pointer": ""
+        }
+      ]
+    },
+    {
+      "step_id": "inspect-restore",
+      "step_type": "game.restore.inspect",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore.inspect",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-1",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/restore_execution_ref",
+          "source_step_id": "restore-backup",
+          "source_pointer": "/restore_execution_ref"
+        }
+      ]
+    },
+    {
+      "step_id": "start-runtime",
+      "step_type": "execution.unit.start",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.start",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper"
+        }
+      }
+    },
+    {
+      "step_id": "verify-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper"
+        }
+      }
+    },
+    {
+      "step_id": "check-readiness",
+      "step_type": "game.readiness.check",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.readiness.check",
+      "capability_version": "1",
+      "input": {
+        "environment_id": "staging",
+        "game_release_id": "paper-1",
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        },
+        "readiness_check_set_id": "paper.checks",
+        "required_checks": [
+          {
+            "check_id": "paper.ready",
+            "check_version": "1"
+          }
+        ],
+        "server_id": "server-1"
+      }
+    }
+  ],
+  "known empty without replace": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "check-restore-compatibility",
+      "step_type": "game.compatibility.check",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.compatibility.check",
+      "capability_version": "1",
+      "input": {
+        "required_check_ids": [
+          "world.compatibility"
+        ],
+        "source_manifest": {
+          "manifest_version": "1",
+          "backup_id": "backup-1",
+          "server_id": "server-1",
+          "environment_id": "staging",
+          "data_generation_id": "generation-source",
+          "created_at": "2026-11-08T10:00:00Z",
+          "source_operation_id": "backup-op",
+          "game": {
+            "adapter_id": "game.paper",
+            "name": "Paper",
+            "version": "1.21.4"
+          },
+          "consistency": {
+            "mode": "offline",
+            "evidence": "stopped"
+          },
+          "objects": [
+            {
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "storage_profile_id": "storage-1",
+                "environment_id": "staging",
+                "container": "backups",
+                "key": "server-1/world.tar",
+                "version_id": "v1"
+              },
+              "size_bytes": 1,
+              "checksum_algorithm": "sha256",
+              "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+            }
+          ]
+        },
+        "target_release": {
+          "game_adapter_id": "game.paper",
+          "game_name": "Paper",
+          "release_id": "paper-1",
+          "game_version": "1.21.4",
+          "targets": [
+            {
+              "os_family": "linux",
+              "architecture": "x86_64"
+            }
+          ],
+          "artifacts": [
+            {
+              "artifact_id": "server-jar",
+              "artifact_uri": "https://example.invalid/paper.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            }
+          ],
+          "runtime_requirements": [
+            {
+              "runtime_id": "java",
+              "version_requirement": "21"
+            }
+          ],
+          "configuration_schema_uri": "https://example.invalid/config.schema.json",
+          "configuration_schema_checksum": {
+            "algorithm": "sha256",
+            "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "data_format": {
+            "format_id": "paper-world",
+            "version": "1"
+          },
+          "required_execution_capabilities": [
+            "systemd"
+          ]
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper"
+        }
+      }
+    },
+    {
+      "step_id": "restore-backup",
+      "step_type": "game.restore",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore",
+      "capability_version": "1",
+      "input": {
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "storage_profile_id": "storage-1",
+              "environment_id": "staging",
+              "container": "backups",
+              "key": "server-1/world.tar",
+              "version_id": "v1"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "world.loaded"
+        ],
+        "source_backup": {
+          "outcome_summary": "Verified backup",
+          "operation_type": "server.backup",
+          "affected_resources": [],
+          "completed_steps": [],
+          "failed_steps": [],
+          "warnings": [],
+          "unresolved_conditions": [],
+          "audit_event_ids": [],
+          "partial": false,
+          "operation_data": {
+            "backup_id": "backup-1",
+            "environment_id": "staging",
+            "data_generation_id": "generation-source",
+            "manifest": {
+              "manifest_version": "1",
+              "backup_id": "backup-1",
+              "server_id": "server-1",
+              "environment_id": "staging",
+              "data_generation_id": "generation-source",
+              "created_at": "2026-11-08T10:00:00Z",
+              "source_operation_id": "backup-op",
+              "game": {
+                "adapter_id": "game.paper",
+                "name": "Paper",
+                "version": "1.21.4"
+              },
+              "consistency": {
+                "mode": "offline",
+                "evidence": "stopped"
+              },
+              "objects": [
+                {
+                  "object_ref": {
+                    "adapter_id": "storage.fake",
+                    "storage_profile_id": "storage-1",
+                    "environment_id": "staging",
+                    "container": "backups",
+                    "key": "server-1/world.tar",
+                    "version_id": "v1"
+                  },
+                  "size_bytes": 1,
+                  "checksum_algorithm": "sha256",
+                  "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+                }
+              ]
+            },
+            "verified_at": "2026-11-08T10:00:00Z",
+            "final_lifecycle_state": "stopped"
+          }
+        },
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op",
+        "target_release_id": "paper-1"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/compatibility_result",
+          "source_step_id": "check-restore-compatibility",
+          "source_pointer": ""
+        }
+      ]
+    },
+    {
+      "step_id": "inspect-restore",
+      "step_type": "game.restore.inspect",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore.inspect",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-1",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/restore_execution_ref",
+          "source_step_id": "restore-backup",
+          "source_pointer": "/restore_execution_ref"
+        }
+      ]
+    }
+  ],
+  "stopped replace": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "check-restore-compatibility",
+      "step_type": "game.compatibility.check",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.compatibility.check",
+      "capability_version": "1",
+      "input": {
+        "required_check_ids": [
+          "world.compatibility"
+        ],
+        "source_manifest": {
+          "manifest_version": "1",
+          "backup_id": "backup-1",
+          "server_id": "server-1",
+          "environment_id": "staging",
+          "data_generation_id": "generation-source",
+          "created_at": "2026-11-08T10:00:00Z",
+          "source_operation_id": "backup-op",
+          "game": {
+            "adapter_id": "game.paper",
+            "name": "Paper",
+            "version": "1.21.4"
+          },
+          "consistency": {
+            "mode": "offline",
+            "evidence": "stopped"
+          },
+          "objects": [
+            {
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "storage_profile_id": "storage-1",
+                "environment_id": "staging",
+                "container": "backups",
+                "key": "server-1/world.tar",
+                "version_id": "v1"
+              },
+              "size_bytes": 1,
+              "checksum_algorithm": "sha256",
+              "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+            }
+          ]
+        },
+        "target_release": {
+          "game_adapter_id": "game.paper",
+          "game_name": "Paper",
+          "release_id": "paper-1",
+          "game_version": "1.21.4",
+          "targets": [
+            {
+              "os_family": "linux",
+              "architecture": "x86_64"
+            }
+          ],
+          "artifacts": [
+            {
+              "artifact_id": "server-jar",
+              "artifact_uri": "https://example.invalid/paper.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            }
+          ],
+          "runtime_requirements": [
+            {
+              "runtime_id": "java",
+              "version_requirement": "21"
+            }
+          ],
+          "configuration_schema_uri": "https://example.invalid/config.schema.json",
+          "configuration_schema_checksum": {
+            "algorithm": "sha256",
+            "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "data_format": {
+            "format_id": "paper-world",
+            "version": "1"
+          },
+          "required_execution_capabilities": [
+            "systemd"
+          ]
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper"
+        }
+      }
+    },
+    {
+      "step_id": "restore-backup",
+      "step_type": "game.restore",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore",
+      "capability_version": "1",
+      "input": {
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "storage_profile_id": "storage-1",
+              "environment_id": "staging",
+              "container": "backups",
+              "key": "server-1/world.tar",
+              "version_id": "v1"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "world.loaded"
+        ],
+        "source_backup": {
+          "outcome_summary": "Verified backup",
+          "operation_type": "server.backup",
+          "affected_resources": [],
+          "completed_steps": [],
+          "failed_steps": [],
+          "warnings": [],
+          "unresolved_conditions": [],
+          "audit_event_ids": [],
+          "partial": false,
+          "operation_data": {
+            "backup_id": "backup-1",
+            "environment_id": "staging",
+            "data_generation_id": "generation-source",
+            "manifest": {
+              "manifest_version": "1",
+              "backup_id": "backup-1",
+              "server_id": "server-1",
+              "environment_id": "staging",
+              "data_generation_id": "generation-source",
+              "created_at": "2026-11-08T10:00:00Z",
+              "source_operation_id": "backup-op",
+              "game": {
+                "adapter_id": "game.paper",
+                "name": "Paper",
+                "version": "1.21.4"
+              },
+              "consistency": {
+                "mode": "offline",
+                "evidence": "stopped"
+              },
+              "objects": [
+                {
+                  "object_ref": {
+                    "adapter_id": "storage.fake",
+                    "storage_profile_id": "storage-1",
+                    "environment_id": "staging",
+                    "container": "backups",
+                    "key": "server-1/world.tar",
+                    "version_id": "v1"
+                  },
+                  "size_bytes": 1,
+                  "checksum_algorithm": "sha256",
+                  "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+                }
+              ]
+            },
+            "verified_at": "2026-11-08T10:00:00Z",
+            "final_lifecycle_state": "stopped"
+          }
+        },
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op",
+        "target_release_id": "paper-1"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/compatibility_result",
+          "source_step_id": "check-restore-compatibility",
+          "source_pointer": ""
+        }
+      ]
+    },
+    {
+      "step_id": "inspect-restore",
+      "step_type": "game.restore.inspect",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore.inspect",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-1",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/restore_execution_ref",
+          "source_step_id": "restore-backup",
+          "source_pointer": "/restore_execution_ref"
+        }
+      ]
+    }
+  ],
+  "stopped replace and start": [
+    {
+      "step_id": "inspect-instance",
+      "step_type": "hosting.instance.inspect",
+      "status": "pending",
+      "adapter_id": "hosting.fake",
+      "capability_name": "hosting.instance.inspect",
+      "capability_version": "1",
+      "input": {
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        }
+      }
+    },
+    {
+      "step_id": "check-restore-compatibility",
+      "step_type": "game.compatibility.check",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.compatibility.check",
+      "capability_version": "1",
+      "input": {
+        "required_check_ids": [
+          "world.compatibility"
+        ],
+        "source_manifest": {
+          "manifest_version": "1",
+          "backup_id": "backup-1",
+          "server_id": "server-1",
+          "environment_id": "staging",
+          "data_generation_id": "generation-source",
+          "created_at": "2026-11-08T10:00:00Z",
+          "source_operation_id": "backup-op",
+          "game": {
+            "adapter_id": "game.paper",
+            "name": "Paper",
+            "version": "1.21.4"
+          },
+          "consistency": {
+            "mode": "offline",
+            "evidence": "stopped"
+          },
+          "objects": [
+            {
+              "object_ref": {
+                "adapter_id": "storage.fake",
+                "storage_profile_id": "storage-1",
+                "environment_id": "staging",
+                "container": "backups",
+                "key": "server-1/world.tar",
+                "version_id": "v1"
+              },
+              "size_bytes": 1,
+              "checksum_algorithm": "sha256",
+              "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+            }
+          ]
+        },
+        "target_release": {
+          "game_adapter_id": "game.paper",
+          "game_name": "Paper",
+          "release_id": "paper-1",
+          "game_version": "1.21.4",
+          "targets": [
+            {
+              "os_family": "linux",
+              "architecture": "x86_64"
+            }
+          ],
+          "artifacts": [
+            {
+              "artifact_id": "server-jar",
+              "artifact_uri": "https://example.invalid/paper.jar",
+              "checksum": {
+                "algorithm": "sha256",
+                "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            }
+          ],
+          "runtime_requirements": [
+            {
+              "runtime_id": "java",
+              "version_requirement": "21"
+            }
+          ],
+          "configuration_schema_uri": "https://example.invalid/config.schema.json",
+          "configuration_schema_checksum": {
+            "algorithm": "sha256",
+            "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "data_format": {
+            "format_id": "paper-world",
+            "version": "1"
+          },
+          "required_execution_capabilities": [
+            "systemd"
+          ]
+        }
+      }
+    },
+    {
+      "step_id": "inspect-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper"
+        }
+      }
+    },
+    {
+      "step_id": "restore-backup",
+      "step_type": "game.restore",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore",
+      "capability_version": "1",
+      "input": {
+        "object_streams": [
+          {
+            "object_ref": {
+              "adapter_id": "storage.fake",
+              "storage_profile_id": "storage-1",
+              "environment_id": "staging",
+              "container": "backups",
+              "key": "server-1/world.tar",
+              "version_id": "v1"
+            }
+          }
+        ],
+        "required_check_ids": [
+          "world.loaded"
+        ],
+        "source_backup": {
+          "outcome_summary": "Verified backup",
+          "operation_type": "server.backup",
+          "affected_resources": [],
+          "completed_steps": [],
+          "failed_steps": [],
+          "warnings": [],
+          "unresolved_conditions": [],
+          "audit_event_ids": [],
+          "partial": false,
+          "operation_data": {
+            "backup_id": "backup-1",
+            "environment_id": "staging",
+            "data_generation_id": "generation-source",
+            "manifest": {
+              "manifest_version": "1",
+              "backup_id": "backup-1",
+              "server_id": "server-1",
+              "environment_id": "staging",
+              "data_generation_id": "generation-source",
+              "created_at": "2026-11-08T10:00:00Z",
+              "source_operation_id": "backup-op",
+              "game": {
+                "adapter_id": "game.paper",
+                "name": "Paper",
+                "version": "1.21.4"
+              },
+              "consistency": {
+                "mode": "offline",
+                "evidence": "stopped"
+              },
+              "objects": [
+                {
+                  "object_ref": {
+                    "adapter_id": "storage.fake",
+                    "storage_profile_id": "storage-1",
+                    "environment_id": "staging",
+                    "container": "backups",
+                    "key": "server-1/world.tar",
+                    "version_id": "v1"
+                  },
+                  "size_bytes": 1,
+                  "checksum_algorithm": "sha256",
+                  "checksum": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+                }
+              ]
+            },
+            "verified_at": "2026-11-08T10:00:00Z",
+            "final_lifecycle_state": "stopped"
+          }
+        },
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op",
+        "target_release_id": "paper-1"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/compatibility_result",
+          "source_step_id": "check-restore-compatibility",
+          "source_pointer": ""
+        }
+      ]
+    },
+    {
+      "step_id": "inspect-restore",
+      "step_type": "game.restore.inspect",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.restore.inspect",
+      "capability_version": "1",
+      "input": {
+        "backup_id": "backup-1",
+        "target": {
+          "environment_id": "staging",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-1"
+          },
+          "server_id": "server-1"
+        },
+        "target_data_generation_id": "restore-restore-op"
+      },
+      "input_bindings": [
+        {
+          "target_pointer": "/restore_execution_ref",
+          "source_step_id": "restore-backup",
+          "source_pointer": "/restore_execution_ref"
+        }
+      ]
+    },
+    {
+      "step_id": "start-runtime",
+      "step_type": "execution.unit.start",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.start",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper"
+        }
+      }
+    },
+    {
+      "step_id": "verify-runtime",
+      "step_type": "execution.unit.inspect",
+      "status": "pending",
+      "adapter_id": "execution.fake",
+      "capability_name": "execution.unit.inspect",
+      "capability_version": "1",
+      "input": {
+        "unit_ref": {
+          "adapter_id": "execution.fake",
+          "environment_id": "staging",
+          "resource_kind": "systemd-unit",
+          "external_id": "paper"
+        }
+      }
+    },
+    {
+      "step_id": "check-readiness",
+      "step_type": "game.readiness.check",
+      "status": "pending",
+      "adapter_id": "game.paper",
+      "capability_name": "game.readiness.check",
+      "capability_version": "1",
+      "input": {
+        "environment_id": "staging",
+        "game_release_id": "paper-1",
+        "instance_ref": {
+          "adapter_id": "hosting.fake",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "vm-1"
+        },
+        "readiness_check_set_id": "paper.checks",
+        "required_checks": [
+          {
+            "check_id": "paper.ready",
+            "check_version": "1"
+          }
+        ],
+        "server_id": "server-1"
+      }
+    }
+  ]
+}
