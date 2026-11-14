@@ -4,19 +4,12 @@
 package pilotvultr
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/netip"
 	"regexp"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/amibamae/gameserver-controller/internal/hosthandoff"
 	"github.com/amibamae/gameserver-controller/internal/pilotcapacity"
@@ -336,62 +329,6 @@ func (p *Provisioner) dispatchAndObserve(ctx context.Context, token []byte, crea
 	return p.reconcile(ctx, token, claimed)
 }
 
-func (p *Provisioner) prepare(request CreateRequest) (vultrapi.CreateInstanceRequest, store.CapacityReservation, error) {
-	if !operationIDPattern.MatchString(request.OperationID) || request.ServerID == "" || request.Environment == "" {
-		return vultrapi.CreateInstanceRequest{}, store.CapacityReservation{}, ErrInvalidRequest
-	}
-	groupID, _, ok := p.policy.GroupForEnvironment(request.Environment)
-	if !ok {
-		return vultrapi.CreateInstanceRequest{}, store.CapacityReservation{}, pilotcapacity.ErrUnsupportedEnvironment
-	}
-	osID, err := vultrapi.ParseOSID(request.OSID)
-	if err != nil {
-		return vultrapi.CreateInstanceRequest{}, store.CapacityReservation{}, ErrInvalidRequest
-	}
-	fingerprint, err := json.Marshal(struct {
-		ServerID            string
-		Environment         string
-		Region              string
-		Plan                string
-		OSID                int
-		Hostname            string
-		SSHKeyIDs           []string
-		StartupScriptID     string `json:",omitempty"`
-		StartupScriptSHA256 string `json:",omitempty"`
-		FirewallGroupID     string `json:",omitempty"`
-	}{
-		ServerID: request.ServerID, Environment: request.Environment,
-		Region: request.Region, Plan: request.Plan, OSID: osID,
-		Hostname: request.Hostname, SSHKeyIDs: request.SSHKeyIDs,
-		StartupScriptID: request.StartupScriptID, StartupScriptSHA256: request.StartupScriptSHA256,
-		FirewallGroupID: request.FirewallGroupID,
-	})
-	if err != nil {
-		return vultrapi.CreateInstanceRequest{}, store.CapacityReservation{}, ErrInvalidRequest
-	}
-	digest := sha256.Sum256(fingerprint)
-	label := "gsc-managed-" + request.OperationID + "-" + hex.EncodeToString(digest[:])
-	tags := []string{"gsc-managed", "gsc-operation-" + request.OperationID}
-	serverDigest := sha256.Sum256([]byte(request.Environment + "\x00" + request.ServerID))
-	tags = append(tags, "gsc-target-"+hex.EncodeToString(serverDigest[:8]))
-	create := vultrapi.CreateInstanceRequest{
-		Region: request.Region, Plan: request.Plan, OSID: osID, Label: label,
-		Hostname: request.Hostname, SSHKeyIDs: append([]string(nil), request.SSHKeyIDs...),
-		StartupScriptID: request.StartupScriptID, FirewallGroupID: request.FirewallGroupID,
-		Tags: tags,
-	}
-	if (request.StartupScriptID != "" && !sha256Pattern.MatchString(request.StartupScriptSHA256)) ||
-		(request.StartupScriptID == "" && request.StartupScriptSHA256 != "") || vultrapi.ValidateCreateInstanceRequest(create) != nil {
-		return vultrapi.CreateInstanceRequest{}, store.CapacityReservation{}, ErrInvalidRequest
-	}
-	reservation := store.CapacityReservation{
-		OperationID: request.OperationID, ServerID: request.ServerID,
-		EnvironmentID: request.Environment, CapacityGroup: groupID,
-		Provider: providerID, ProviderAdapterID: "hosting.vultr", ResourceKey: label,
-	}
-	return create, reservation, nil
-}
-
 func hasBootstrapReference(request CreateRequest) bool {
 	return request.StartupScriptID != "" && request.StartupScriptSHA256 != ""
 }
@@ -417,86 +354,6 @@ func (p *Provisioner) legacyMatch(request CreateRequest, existing store.Capacity
 		}
 	}
 	return CreateRequest{}, vultrapi.CreateInstanceRequest{}, store.CapacityReservation{}, false
-}
-
-// verifyBeforeDispatch runs every check a new create needs before capacity
-// is claimed for dispatch.
-func (p *Provisioner) verifyBeforeDispatch(ctx context.Context, token []byte, create vultrapi.CreateInstanceRequest, request CreateRequest) error {
-	if err := p.verifyStartupScript(ctx, token, create.StartupScriptID, request.StartupScriptSHA256); err != nil {
-		return err
-	}
-	if err := p.verifySSHKeys(ctx, token, request); err != nil {
-		return err
-	}
-	rules, err := p.provider.ListFirewallRules(ctx, token, request.FirewallGroupID)
-	if err != nil {
-		return fmt.Errorf("%w: could not read the firewall group", ErrFirewall)
-	}
-	if err := vultrapi.SSHOnlyFrom(rules, request.ControllerIP); err != nil {
-		return fmt.Errorf("%w: %v", ErrFirewall, err)
-	}
-	return nil
-}
-
-// verifySSHKeys requires exactly one ed25519 key among the create's keys,
-// because the bootstrap installs exactly one, and it must be the controller's.
-func (p *Provisioner) verifySSHKeys(ctx context.Context, token []byte, request CreateRequest) error {
-	controller, err := sshkey.CanonicalAuthorizedKey(request.ControllerSSHPublicKey)
-	if err != nil {
-		return ErrSSHKeyMismatch
-	}
-	ed25519Keys, matches := 0, 0
-	for _, id := range request.SSHKeyIDs {
-		key, err := p.provider.GetSSHKey(ctx, token, id)
-		if err != nil || key.ID != id {
-			return fmt.Errorf("%w: could not read SSH key %s", ErrSSHKeyMismatch, id)
-		}
-		if !strings.HasPrefix(key.PublicKey, sshkey.KeyType+" ") {
-			continue
-		}
-		ed25519Keys++
-		if canonical, err := sshkey.CanonicalAuthorizedKey(key.PublicKey); err == nil && canonical == controller {
-			matches++
-		}
-	}
-	if ed25519Keys != 1 || matches != 1 {
-		return ErrSSHKeyMismatch
-	}
-	return nil
-}
-
-// oneTimeHostKeyUserData is the cloud-config that installs the single-use
-// host key: cloud-init deletes the image's host keys, installs this one, and
-// generates no others.
-func oneTimeHostKeyUserData(public []byte, private []byte) (string, error) {
-	encoded, err := sshkey.MarshalPrivateKey(private, "gsc-one-time-host-key")
-	if err != nil {
-		return "", err
-	}
-	defer clear(encoded)
-	var b strings.Builder
-	b.WriteString("#cloud-config\nssh_deletekeys: true\nssh_genkeytypes: []\nssh_keys:\n  ed25519_private: |\n")
-	for _, line := range strings.Split(strings.TrimSuffix(string(encoded), "\n"), "\n") {
-		b.WriteString("    " + line + "\n")
-	}
-	b.WriteString("  ed25519_public: " + sshkey.AuthorizedKey(public) + " gsc-one-time-host-key\n")
-	return base64.StdEncoding.EncodeToString([]byte(b.String())), nil
-}
-
-func (p *Provisioner) verifyStartupScript(ctx context.Context, token []byte, scriptID, expectedDigest string) error {
-	script, err := p.provider.GetStartupScript(ctx, token, scriptID)
-	if err != nil || script.ID != scriptID || script.Type != "boot" {
-		return ErrBootstrapScript
-	}
-	source, err := base64.StdEncoding.DecodeString(script.Script)
-	if err != nil || len(source) == 0 || len(source) > 1<<20 || !utf8.Valid(source) || bytes.IndexByte(source, 0) >= 0 {
-		return ErrBootstrapScript
-	}
-	digest := sha256.Sum256(source)
-	if hex.EncodeToString(digest[:]) != expectedDigest {
-		return ErrBootstrapScript
-	}
-	return nil
 }
 
 func (p *Provisioner) reconcile(ctx context.Context, token []byte, reservation store.CapacityReservation) (store.CapacityReservation, error) {
