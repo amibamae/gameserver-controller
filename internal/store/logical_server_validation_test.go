@@ -32,11 +32,7 @@ func TestValidatePersistedLogicalServerRules(t *testing.T) {
 	if err := validatePersistedLogicalServer(provisioningLogicalServer()); err != nil {
 		t.Fatalf("valid logical server rejected: %v", err)
 	}
-	tests := []struct {
-		name    string
-		mutate  func(*LogicalServer)
-		message string
-	}{
+	tests := []logicalServerValidationCase{
 		{"missing server ID", func(s *LogicalServer) { s.ServerID = "" }, "invalid logical server record"},
 		{"missing execution profile", func(s *LogicalServer) { s.ExecutionProfile = "" }, "invalid logical server record"},
 		{"oversized network profile", func(s *LogicalServer) { s.NetworkProfile = strings.Repeat("n", 201) }, "invalid logical server record"},
@@ -48,6 +44,12 @@ func TestValidatePersistedLogicalServerRules(t *testing.T) {
 		{"unknown data generation status", func(s *LogicalServer) { s.DataGenerationStatus = "maybe" }, "invalid logical server data generation status"},
 		{"known generation without an ID", func(s *LogicalServer) { s.DataGenerationStatus = "known" }, "known data generation is missing its ID"},
 		{"instance reference is not an object", func(s *LogicalServer) { s.InstanceRef = json.RawMessage(`"instance-1"`) }, "invalid logical server instance reference"},
+	}
+	runLogicalServerValidationCases(t, tests)
+}
+
+func TestValidateLogicalServerLifecycleEventRules(t *testing.T) {
+	tests := []logicalServerValidationCase{
 		{"state changed without an event", func(s *LogicalServer) { s.LifecycleEvents = nil }, "lifecycle state changed without a durable state event"},
 		{"event out of sequence", func(s *LogicalServer) { s.LifecycleEvents[0].Sequence = 2 }, "invalid logical server lifecycle event 1"},
 		{"event missing operation ID", func(s *LogicalServer) { s.LifecycleEvents[0].OperationID = "" }, "invalid logical server lifecycle event 1"},
@@ -81,6 +83,17 @@ func TestValidatePersistedLogicalServerRules(t *testing.T) {
 		{"history ends in another state", func(s *LogicalServer) { s.LifecycleState = protocolstate.ServerFailed }, "lifecycle event history does not match current state"},
 		{"last operation not in the history", func(s *LogicalServer) { s.LastOperationID = "other-operation" }, "last operation does not match lifecycle history"},
 	}
+	runLogicalServerValidationCases(t, tests)
+}
+
+type logicalServerValidationCase struct {
+	name    string
+	mutate  func(*LogicalServer)
+	message string
+}
+
+func runLogicalServerValidationCases(t *testing.T, tests []logicalServerValidationCase) {
+	t.Helper()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			server := provisioningLogicalServer()
