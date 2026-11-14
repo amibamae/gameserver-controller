@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
@@ -119,93 +118,6 @@ func NewServerDestroyWorkflow(servers store.LifecycleOperationStore, adapters ad
 		return nil, errors.New("lifecycle store, adapter registry, schemas, destroy profile, verified backup resolver, and destroy authorizer are required")
 	}
 	return &ServerDestroyWorkflow{servers: servers, adapters: adapters, schemas: schemas, profiles: profiles, backups: backups, authorizer: authorizer}, nil
-}
-
-// BuildPlan pins the exact provider instance, runtime unit, backup, and
-// capability identities before the first dispatch. The request must name a
-// verified backup for the current data generation and an exact-target approval.
-func (w *ServerDestroyWorkflow) BuildPlan(ctx context.Context, operation store.OperationRecord) ([]store.OperationStep, error) {
-	if ctx == nil || w == nil || w.servers == nil || w.adapters == nil || w.schemas == nil || w.profiles == nil || w.backups == nil || w.authorizer == nil {
-		return nil, errors.New("initialized server.destroy workflow and context are required")
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	parameters, err := serverDestroyRequest(operation, w.schemas.ProtocolVersion())
-	if err != nil {
-		return nil, err
-	}
-	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
-	if err != nil {
-		return nil, fmt.Errorf("load logical server for destroy plan: %w", err)
-	}
-	server := stored.Record
-	if err := validateServerDestroyTarget(operation, parameters, server); err != nil {
-		return nil, err
-	}
-	if server.LifecycleState != protocolstate.ServerStopped && server.LifecycleState != protocolstate.ServerFailed {
-		return nil, errors.New("server.destroy requires a stopped or failed logical server")
-	}
-	backup, err := w.verifiedBackup(ctx, server, parameters)
-	if err != nil {
-		return nil, err
-	}
-	if err := w.authorizer.AuthorizeServerDestroy(ctx, operation.ActorID, parameters.ApprovalID, operation, server, backup); err != nil {
-		return nil, fmt.Errorf("authorize exact server.destroy request: %w", err)
-	}
-	profile, err := w.profiles.ResolveServerDestroy(ctx, server)
-	if err != nil {
-		return nil, fmt.Errorf("resolve trusted server destroy profile: %w", err)
-	}
-	if err := validateServerDestroyProfile(server, profile); err != nil {
-		return nil, err
-	}
-
-	version := w.schemas.ProtocolVersion()
-	hostingID := adapterIDFromRef(server.InstanceRef)
-	capabilities := []struct {
-		stepID, adapterID   string
-		category            adapter.Category
-		name, input, output string
-		mutating            bool
-	}{
-		{destroyInspectInstanceStep, hostingID, adapter.CategoryHosting, "hosting.instance.inspect", "hosting:instance-inspect-input", "hosting:instance-inspect-output", false},
-		{destroyInspectRuntimeStep, server.ExecutionAdapterID, adapter.CategoryExecution, "execution.unit.inspect", "execution:systemd-unit-inspect-input", "execution:systemd-unit-inspect-output", false},
-		{destroyProviderStep, hostingID, adapter.CategoryHosting, "hosting.instance.destroy", "hosting:instance-destroy-input", "hosting:instance-destroy-output", true},
-		{destroyVerifyInstanceStep, hostingID, adapter.CategoryHosting, "hosting.instance.inspect", "hosting:instance-inspect-input", "hosting:instance-inspect-output", false},
-	}
-	resolved := make([]adapter.Capability, len(capabilities))
-	for i, required := range capabilities {
-		resolved[i], err = exactCapability(w.adapters, required.adapterID, required.category, required.name,
-			"urn:gameserver-controller:"+version+":"+required.input,
-			"urn:gameserver-controller:"+version+":"+required.output, required.mutating)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	inputs := []any{
-		map[string]any{"instance_ref": server.InstanceRef},
-		map[string]any{"unit_ref": profile.UnitRef},
-		map[string]any{"instance_ref": server.InstanceRef},
-		map[string]any{"instance_ref": server.InstanceRef},
-	}
-	steps := make([]store.OperationStep, len(capabilities))
-	for i, required := range capabilities {
-		encoded, err := json.Marshal(inputs[i])
-		if err != nil {
-			return nil, fmt.Errorf("encode %s input: %w", required.stepID, err)
-		}
-		if err := w.schemas.ValidateJSON(resolved[i].InputSchemaURI, encoded); err != nil {
-			return nil, fmt.Errorf("planned %s input does not match its declared capability schema: %w", required.stepID, err)
-		}
-		steps[i] = store.OperationStep{
-			StepID: required.stepID, StepType: resolved[i].Name, Status: protocolstate.StepPending,
-			AdapterID: required.adapterID, CapabilityName: resolved[i].Name,
-			CapabilityVersion: resolved[i].Version, Input: encoded,
-		}
-	}
-	return steps, nil
 }
 
 func serverDestroyRequest(operation store.OperationRecord, protocolVersion string) (serverDestroyParameters, error) {
