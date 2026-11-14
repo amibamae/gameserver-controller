@@ -73,6 +73,8 @@ Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is cont
 | Codex | `cmd/complexity-check/*`, its CI step | #260 merged | checker runs on PRs |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
 
+**Dropped Claude WIP, kept for reference only:** `claude/r3-server-backup`, `claude/r3-server-destroy`, `claude/r3-supervised-pilot` and `claude/r3-controller-setup` hold unfinished work on Codex-owned files, based on an old `main`. Do not merge them. Codex may read them for ideas or delete them.
+
 **Claude session paused (2026-11-14):** its six round-3 agents stopped on the account's weekly usage limit, which resets 2026-11-19 at 11:00 UTC. Their unfinished work was committed as `wip:` and pushed to the `claude/r3-*` branches above. Those commits are unreviewed, and their tests may not pass. To continue a row:
 1. Check out its branch and rebase onto `main`.
 2. Run every check. Characterization tests must pass on the old code before any refactor commit; check the branch's commit order.
