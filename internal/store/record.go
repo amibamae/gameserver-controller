@@ -163,33 +163,26 @@ func validateBackupInitialState(record OperationRecord) error {
 	return nil
 }
 
+// validateRecordIdentity checks the record's identity fields in a fixed
+// order and reports the first invalid one.
 func validateRecordIdentity(record OperationRecord) error {
-	if !validIdentifier(record.OperationID, 200) {
-		return invalidField("operation_id")
-	}
-	if !validQualifiedName(record.OperationType, 160) {
-		return invalidField("operation_type")
-	}
-	if record.ProtocolVersion == "" || len(record.ProtocolVersion) > 100 {
-		return invalidField("protocol_version")
-	}
-	if len(record.SchemaPackageRevision) > 200 {
-		return invalidField("schema_package_revision")
-	}
-	if !validIdentifier(record.Target.ServerID, 200) || !validIdentifier(record.Target.EnvironmentID, 200) {
-		return invalidField("target")
-	}
-	if record.ActorID == "" || len(record.ActorID) > 200 {
-		return invalidField("actor_id")
-	}
-	if record.CorrelationID != "" && len(record.CorrelationID) > 200 {
-		return invalidField("correlation_id")
-	}
-	if record.IdempotencyKey != "" && !validIdempotencyKey(record.IdempotencyKey) {
-		return invalidField("idempotency_key")
-	}
-	if record.RequestFingerprint != "" && !validFingerprint(record.RequestFingerprint) {
-		return invalidField("request_fingerprint")
+	for _, check := range []struct {
+		field string
+		valid bool
+	}{
+		{"operation_id", validIdentifier(record.OperationID, 200)},
+		{"operation_type", validQualifiedName(record.OperationType, 160)},
+		{"protocol_version", validIdentifier(record.ProtocolVersion, 100)},
+		{"schema_package_revision", len(record.SchemaPackageRevision) <= 200},
+		{"target", validIdentifier(record.Target.ServerID, 200) && validIdentifier(record.Target.EnvironmentID, 200)},
+		{"actor_id", validIdentifier(record.ActorID, 200)},
+		{"correlation_id", len(record.CorrelationID) <= 200},
+		{"idempotency_key", record.IdempotencyKey == "" || validIdempotencyKey(record.IdempotencyKey)},
+		{"request_fingerprint", record.RequestFingerprint == "" || validFingerprint(record.RequestFingerprint)},
+	} {
+		if !check.valid {
+			return invalidField(check.field)
+		}
 	}
 	return nil
 }
@@ -269,42 +262,88 @@ func validateRecordSteps(record OperationRecord) error {
 // validateStepIdentity checks a step's ID, type, status, and attempt count. A
 // server.backup must record its initial lifecycle state before any step runs.
 func validateStepIdentity(record OperationRecord, i int, step OperationStep) error {
-	if record.OperationType == "server.backup" && record.BackupInitialLifecycleState == "" && (step.Attempt != 0 || step.Status == protocolstate.StepRunning || step.Status == protocolstate.StepSucceeded || step.Status == protocolstate.StepWaiting || step.Status == protocolstate.StepOutcomeUnknown) {
+	if backupDispatchedWithoutContext(record, step) {
 		return invalidField("backup_initial_lifecycle_state must precede dispatch")
 	}
-	if !validIdentifier(step.StepID, 200) || !validCapabilityName(step.StepType, 160) || !knownStepStatus(step.Status) || step.Attempt < 0 {
+	if !validStepShape(step) {
 		return invalidField(fmt.Sprintf("steps[%d]", i))
 	}
-	if (step.Status == protocolstate.StepPending && step.Attempt != 0) ||
-		(step.Status != protocolstate.StepPending && step.Status != protocolstate.StepSkipped && step.Status != protocolstate.StepCancelled && step.Attempt == 0) {
+	if !stepAttemptMatchesStatus(step) {
 		return invalidField(fmt.Sprintf("steps[%d].attempt", i))
 	}
 	return nil
+}
+
+// backupDispatchedWithoutContext reports a server.backup step that has been
+// attempted or has run before the backup recorded its initial state.
+func backupDispatchedWithoutContext(record OperationRecord, step OperationStep) bool {
+	return record.OperationType == "server.backup" && record.BackupInitialLifecycleState == "" && stepDispatched(step)
+}
+
+func stepDispatched(step OperationStep) bool {
+	switch step.Status {
+	case protocolstate.StepRunning, protocolstate.StepSucceeded, protocolstate.StepWaiting, protocolstate.StepOutcomeUnknown:
+		return true
+	}
+	return step.Attempt != 0
+}
+
+func validStepShape(step OperationStep) bool {
+	return validIdentifier(step.StepID, 200) && validCapabilityName(step.StepType, 160) && knownStepStatus(step.Status) && step.Attempt >= 0
+}
+
+// stepAttemptMatchesStatus requires a pending step to have no attempt and
+// every step past pending to have one, except a skipped or cancelled step,
+// which may have either.
+func stepAttemptMatchesStatus(step OperationStep) bool {
+	switch step.Status {
+	case protocolstate.StepPending:
+		return step.Attempt == 0
+	case protocolstate.StepSkipped, protocolstate.StepCancelled:
+		return true
+	default:
+		return step.Attempt != 0
+	}
 }
 
 // validateStepInput checks the step's capability identity, its input object,
 // and its input bindings. Resolved input exists only for bound steps and must
 // be persisted before a bound step is dispatched.
 func validateStepInput(_ OperationRecord, i int, step OperationStep) error {
-	if step.CapabilityName != "" && (!validCapabilityName(step.CapabilityName, 160) || step.AdapterID == "" || step.CapabilityVersion == "") {
+	if !stepCapabilityComplete(step) {
 		return invalidField(fmt.Sprintf("steps[%d].capability", i))
 	}
-	if step.CapabilityVersion != "" && (step.AdapterID == "" || step.CapabilityName == "") {
-		return invalidField(fmt.Sprintf("steps[%d].capability", i))
-	}
-	if (step.CapabilityName != "" || len(step.Input) > 0) && !isJSONObject(step.Input) {
+	if stepNeedsObjectInput(step) && !isJSONObject(step.Input) {
 		return invalidField(fmt.Sprintf("steps[%d].input", i))
 	}
 	if len(step.InputBindings) > 0 && (step.CapabilityName == "" || !isJSONObject(step.Input)) {
 		return invalidField(fmt.Sprintf("steps[%d].input_bindings", i))
 	}
-	if len(step.ResolvedInput) > 0 && !isJSONObject(step.ResolvedInput) {
+	return validateStepResolvedInput(i, step)
+}
+
+// stepCapabilityComplete requires a named capability to be valid and to
+// record its adapter and version, and a capability version to have a name.
+func stepCapabilityComplete(step OperationStep) bool {
+	if step.CapabilityName == "" {
+		return step.CapabilityVersion == ""
+	}
+	return validCapabilityName(step.CapabilityName, 160) && step.AdapterID != "" && step.CapabilityVersion != ""
+}
+
+func stepNeedsObjectInput(step OperationStep) bool {
+	return step.CapabilityName != "" || len(step.Input) > 0
+}
+
+func validateStepResolvedInput(i int, step OperationStep) error {
+	bound, resolved := len(step.InputBindings) > 0, len(step.ResolvedInput) > 0
+	if resolved && !isJSONObject(step.ResolvedInput) {
 		return invalidField(fmt.Sprintf("steps[%d].resolved_input", i))
 	}
-	if len(step.InputBindings) == 0 && len(step.ResolvedInput) > 0 {
+	if !bound && resolved {
 		return invalidField(fmt.Sprintf("steps[%d].resolved_input has no bindings", i))
 	}
-	if len(step.InputBindings) > 0 && step.Attempt > 0 && len(step.ResolvedInput) == 0 {
+	if bound && step.Attempt > 0 && !resolved {
 		return invalidField(fmt.Sprintf("steps[%d].resolved_input must be persisted before dispatch", i))
 	}
 	return nil
