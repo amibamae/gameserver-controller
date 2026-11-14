@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -204,58 +203,6 @@ type getInput struct {
 
 type headInput struct {
 	ObjectRef objectReference `json:"object_ref"`
-}
-
-func (a *Adapter) get(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	var input getInput
-	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validReference(input.ObjectRef) || !validExpected(input.ExpectedSizeBytes, input.ExpectedChecksum, a.config.MaxObjectBytes) {
-		return nil, errors.New("invalid object download request")
-	}
-	if a.config.RequireVersionIDs && input.ObjectRef.VersionID == "" {
-		return nil, errors.New("an exact object version is required by this storage profile")
-	}
-	transfer, err := singleTransfer(request, "adapter_to_controller", input.ExpectedSizeBytes)
-	if err != nil {
-		return nil, err
-	}
-	sink, err := request.Params.RequestContext.CreateStream(transfer.TransferID)
-	if err != nil {
-		return nil, errors.New("download stream is unavailable")
-	}
-	defer sink.Close()
-	client, err := a.openClient(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	get := &s3.GetObjectInput{Bucket: aws.String(input.ObjectRef.Container), Key: aws.String(input.ObjectRef.Key)}
-	if input.ObjectRef.VersionID != "" {
-		get.VersionId = aws.String(input.ObjectRef.VersionID)
-	}
-	result, err := client.GetObject(ctx, get)
-	if err != nil {
-		return nil, errors.New("Wasabi object download failed")
-	}
-	defer result.Body.Close()
-	hasher := sha256.New()
-	writer := io.MultiWriter(sink, hasher)
-	count, err := io.Copy(writer, io.LimitReader(result.Body, input.ExpectedSizeBytes+1))
-	if err != nil || count != input.ExpectedSizeBytes {
-		return nil, errors.New("Wasabi object size does not match the backup manifest")
-	}
-	digest := hex.EncodeToString(hasher.Sum(nil))
-	if !strings.EqualFold(digest, input.ExpectedChecksum.Digest) {
-		return nil, errors.New("Wasabi object checksum does not match the backup manifest")
-	}
-	ref := input.ObjectRef
-	ref.VersionID, err = confirmedVersion(input.ObjectRef.VersionID, result.VersionId)
-	if err != nil {
-		return nil, err
-	}
-	if a.missingRequiredVersion(ref.VersionID) {
-		return nil, errors.New("Wasabi object did not resolve to an immutable version")
-	}
-	return map[string]any{"object_ref": ref, "transfer_state": "complete", "bytes_sent": count,
-		"computed_checksum": checksum{Algorithm: "sha256", Digest: digest}, "observed_at": time.Now().UTC().Format(time.RFC3339Nano)}, nil
 }
 
 func (a *Adapter) head(ctx context.Context, request adapter.InvokeRequest) (any, error) {
