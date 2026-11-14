@@ -40,29 +40,50 @@ The owner's goal is a repowise average health of **7–8**. The method:
 - Repo average 5.88 → **6.21**; production average 5.15 → 5.50.
 - Hotspot average 3.94. Repowise deducts for recent churn, and refactors are churn, so this deduction decays over time.
 
-**Round 3 status checked against GitHub on 2026-11-13:** `main` is `d958cbb` (PR #253). At the start of this continuation there were no open PRs and no published `claude/r3-*` or `claude/complexity-check` branches. The list below records the previous agent scopes, not confirmed active work. Agents can still have unpublished local work, so coordinate before taking one of these scopes. The current isolated continuation has since opened draft PR #254.
+**Scores at the re-index of `354ee6a` (2026-11-14), after Codex's #254, #256 and #257:**
+- Repo average **6.26**; production average 5.56.
+- `store/logical_servers.go` 8.47.
+- `cmd/supervised-pilot/provision.go` 8.58; `cmd/supervised-pilot/main.go` 5.37, still with a function at complexity 47.
+- `server_destroy_plan.go` 9.23, `server_destroy_completion.go` 7.95, `server_destroy_reconcile.go` 6.62; `server_destroy.go` still 1.0 at 457 lines.
 
-| Branch | Files | Main targets |
-|---|---|---|
-| `claude/r3-server-backup` | `internal/workflow/server_backup.go`, new `server_backup_*.go` | about 12 long conditions; `ProjectLifecycle` 37, `ValidateCompletion` 34, `ResolveStepInput` 34, `StreamTransfersForStep` 27; split the 2,096-line file |
-| `claude/r3-server-provision` | `internal/workflow/server_provision.go` | `BuildPlan` 43, `ValidateCompletion` 32, `validateProvisionProfile` (a 17-operator condition), `reconcileCreate` |
-| `claude/r3-server-destroy` | `internal/workflow/server_destroy.go` | `BuildPlan` 24, `ValidateCompletion` 23, `matchingDestroyCapacityReservation` 19, long conditions |
-| `claude/r3-server-restore` | `internal/workflow/server_restore.go` | `CheckPreconditions` ~72, `BuildPlan` ~55, `Reconcile` (17% covered), 22% duplication |
-| `claude/r3-server-start-stop` | `internal/workflow/server_start.go`, `server_stop.go` | shared step builders (32% and 37% duplication); both `CheckPreconditions` |
-| `claude/r3-file-stream-broker` | `internal/workflow/file_stream_broker.go` | `IssueStepStreamTransfers` 58 |
-| `claude/r3-store-record-bolt` | `internal/store/record.go`, `bolt.go` | `validateStepChanges` 36, nesting 4; keep transaction boundaries |
-| `claude/r3-controller-setup` | `internal/controllersetup/installer.go`, `cmd/controller-setup/main.go` | 39 and 33; keep the #228 special-mode (setuid/setgid/sticky) check exact |
-| `claude/r3-supervised-pilot` | `cmd/supervised-pilot/main.go` | `provisionVultr` 47; dry-run and confirmation rules must stay exact |
-| `claude/r3-storage-staging` | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | 29 with 17% duplication; 35 |
+### Who owns what (check this before you start anything)
+
+Two agents work on this repository: a Claude session and ChatGPT Codex. The owner split the files on 2026-11-14 so the two don't collide. Only work on files your agent owns. If you need a file another agent owns, ask the owner first, and update this table in the same PR when ownership changes.
+
+| Owner | Files | Branch or PR | Status (2026-11-14) |
+|---|---|---|---|
+| Codex | `internal/workflow/server_backup*.go` | draft #258 `codex/refactor-backup-lifecycle` | in progress |
+| Codex | `internal/workflow/server_destroy*.go` | #257 merged | `server_destroy.go` still 1.0; further work is Codex's |
+| Codex | `cmd/supervised-pilot/*` | #256 merged | `main.go` still 5.37; further work is Codex's |
+| Codex | `internal/controllersetup/installer.go`, `cmd/controller-setup/*` | local branch `codex/controller-setup-apply` | **uncommitted** in Codex's checkout on the owner's Mac; not on GitHub yet |
+| Codex | `docs/ROADMAP.md` estimates | #255 | open |
+| Codex | `internal/store/logical_servers.go` | #254 merged | done (8.47) |
+| Claude | `internal/workflow/server_provision*.go` | `claude/r3-server-provision` | in progress |
+| Claude | `internal/workflow/server_restore*.go` | `claude/r3-server-restore` | in progress |
+| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | `claude/r3-server-start-stop` | in progress |
+| Claude | `internal/workflow/file_stream_broker*.go` | `claude/r3-file-stream-broker` | in progress |
+| Claude | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | in progress |
+| Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | in progress |
+| Claude | `cmd/complexity-check/*`, its CI step | `claude/complexity-check` | in progress |
+| either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
+
+Claude's earlier backup, destroy, supervised-pilot and controller-setup agents were stopped unpublished, so their local work is dropped and those files are Codex's.
+
+**Where Codex's local work lives** (it ran on the owner's Mac; `/private/tmp` is the macOS temp folder, which a reboot can clear):
+- **Worktrees:** `/private/tmp/gsc-backup-lifecycle`, `/private/tmp/gsc-health-server-destroy`, `/private/tmp/gsc-pilot-provision-parallel` and `/private/tmp/gsc-health-logical-server-validation`.
+- **Shared checkout:** the owner's main clone, on branch `codex/controller-setup-apply`, with the uncommitted controller-setup work. `git worktree list` in any of those worktrees prints its path.
+- **To protect that work:** commit it as work in progress on that branch and push it.
 
 **If you take over:**
-1. Group by group, check whether its PR merged. Uncommitted work in the previous agent's sandbox is not on GitHub.
-2. A pushed branch with an open PR is yours to continue: rebase it onto `main`, rerun all checks, and finish it.
-3. A group with no branch is not started. Do it from `main` with the same method.
-4. Several groups share the `internal/workflow` package, so rebase onto `main` before every push and give test helpers a prefix unique to your group.
-5. After all ten merge, ask the owner to re-index repowise, run `get_health` on the changed files, and report the real before and after scores.
-6. Then continue with any file still scoring below 7, worst first.
-7. The earlier handoff reported a complexity checker in progress on `claude/complexity-check`. That branch is not published as of the 2026-11-13 status check above; ask for the agent's local work before starting a replacement. If it lands on `main`, run it before every push.
+1. Fetch, then check open PRs, remote branches and the ownership table above.
+2. For a row your agent owns:
+   - if its PR is open, rebase it onto `main`, rerun all checks, and finish it;
+   - if it has no branch, start from `main` with the same method.
+
+   Uncommitted work in another agent's sandbox is not on GitHub.
+3. Several owned groups share the `internal/workflow` package. Rebase onto `main` before every push, and give test helpers a prefix unique to your group.
+4. After the current rows merge, ask the owner to re-index repowise, run `get_health` on the changed files, and report the real before and after scores. Then continue with any file still below 7, worst first.
+5. When `cmd/complexity-check` is on `main`, run it before every push, for example `go run ./cmd/complexity-check -base origin/main`.
 
 **Current isolated continuation (2026-11-13):** local branch `codex/refactor-logical-server-validation`, worktree `/private/tmp/gsc-health-logical-server-validation`, based on `d958cbb`. Draft PR #254 is open. The shared checkout on `codex/controller-setup-apply` contains uncommitted controller-setup work; leave it untouched. This continuation owns only `internal/store/logical_servers.go`, its focused validation tests, and this handoff. Characterization tests passed against the original production code before refactoring. The refactor now groups identity comparisons and lifecycle-event validation into named predicates while preserving check order, transitions, and exact errors. The store tests, full `go vet ./...`, `go test ./...`, `gofmt -l .`, `git diff --check`, and `go run ./cmd/protocol-check` pass. Comparable local Repowise 0.61.0 recomputes measured the production file at 7.32 before and 9.23 after. The test file stayed at 10.00 after splitting field and lifecycle cases. Check CI on the latest PR head before merging.
 
