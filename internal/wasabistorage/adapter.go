@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -20,7 +19,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 const (
@@ -203,54 +201,6 @@ type getInput struct {
 
 type headInput struct {
 	ObjectRef objectReference `json:"object_ref"`
-}
-
-func (a *Adapter) head(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	var input headInput
-	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validReference(input.ObjectRef) {
-		return nil, errors.New("invalid object inspection request")
-	}
-	client, err := a.openClient(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	head := &s3.HeadObjectInput{Bucket: aws.String(input.ObjectRef.Container), Key: aws.String(input.ObjectRef.Key)}
-	if input.ObjectRef.VersionID != "" {
-		head.VersionId = aws.String(input.ObjectRef.VersionID)
-	}
-	result, err := client.HeadObject(ctx, head)
-	if err != nil {
-		var missing interface{ ErrorCode() string }
-		if errors.As(err, &missing) && (missing.ErrorCode() == "NotFound" || missing.ErrorCode() == "NoSuchKey" || missing.ErrorCode() == "NoSuchVersion") {
-			return map[string]any{"object_ref": input.ObjectRef, "object_state": "absent", "observed_at": time.Now().UTC().Format(time.RFC3339Nano)}, nil
-		}
-		return nil, errors.New("Wasabi object inspection failed")
-	}
-	ref := input.ObjectRef
-	ref.VersionID, err = confirmedVersion(input.ObjectRef.VersionID, result.VersionId)
-	if err != nil {
-		return nil, err
-	}
-	if a.missingRequiredVersion(ref.VersionID) {
-		return nil, errors.New("Wasabi object has no immutable version ID")
-	}
-	value := map[string]any{"object_ref": ref, "object_state": "present", "observed_at": time.Now().UTC().Format(time.RFC3339Nano)}
-	if result.ContentLength != nil {
-		value["size_bytes"] = *result.ContentLength
-	}
-	if result.ETag != nil && *result.ETag != "" {
-		value["provider_etag"] = *result.ETag
-	}
-	if result.LastModified != nil {
-		value["last_modified"] = result.LastModified.UTC().Format(time.RFC3339Nano)
-	}
-	if result.ChecksumType == types.ChecksumTypeFullObject && result.ChecksumSHA256 != nil {
-		decoded, decodeErr := base64.StdEncoding.DecodeString(*result.ChecksumSHA256)
-		if decodeErr == nil && len(decoded) == sha256.Size {
-			value["provider_checksum"] = checksum{Algorithm: "sha256", Digest: hex.EncodeToString(decoded)}
-		}
-	}
-	return value, nil
 }
 
 // confirmedVersion returns the exact version a read observed. A requested
