@@ -1,11 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -15,16 +11,12 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/amibamae/gameserver-controller/internal/boottiming"
 	"github.com/amibamae/gameserver-controller/internal/credential"
 	"github.com/amibamae/gameserver-controller/internal/pilotcapacity"
 	"github.com/amibamae/gameserver-controller/internal/pilotvultr"
-	"github.com/amibamae/gameserver-controller/internal/store"
 	"github.com/amibamae/gameserver-controller/internal/vultrapi"
 )
 
@@ -35,11 +27,9 @@ const (
 )
 
 var safeSSHHost = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.@:-]*$`)
-var safeOperationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var safeInvocationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
 var safePilotServerID = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 var safeCredentialRef = regexp.MustCompile(`^systemd-credential://[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
-var safePilotTarget = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}@(production|staging|testing)$`)
 
 const (
 	defaultVultrCredential = credential.SystemdReferenceScheme + "vultr-pilot-api-token"
@@ -294,157 +284,6 @@ func usage(w io.Writer) error {
 	return errors.New("an action is required")
 }
 
-func showCapacity(policy pilotcapacity.Policy, statePath string, stdout io.Writer) error {
-	if !policy.RuntimeEnforced {
-		return errors.New("capacity policy is not marked for runtime enforcement")
-	}
-	repository, err := store.OpenBolt(statePath)
-	if err != nil {
-		return err
-	}
-	defer repository.Close()
-	reservations, err := repository.ListCapacityReservations()
-	if err != nil {
-		return err
-	}
-	occupied, groupCounts := 0, make(map[string]int)
-	for _, reservation := range reservations {
-		if policy.ReleasedStates[string(reservation.State)] {
-			continue
-		}
-		occupied++
-		groupCounts[reservation.CapacityGroup]++
-	}
-	fmt.Fprintf(stdout, "Managed VM capacity: %d/%d total.\n", occupied, policy.MaxInstancesTotal)
-	groupIDs := make([]string, 0, len(policy.CapacityGroups))
-	for groupID := range policy.CapacityGroups {
-		groupIDs = append(groupIDs, groupID)
-	}
-	sort.Strings(groupIDs)
-	for _, groupID := range groupIDs {
-		group := policy.CapacityGroups[groupID]
-		fmt.Fprintf(stdout, "%s: %d/%d slot(s)\n", groupID, groupCounts[groupID], group.MaxInstances)
-	}
-	if len(reservations) == 0 {
-		fmt.Fprintln(stdout, "No managed VM reservations are recorded.")
-		return nil
-	}
-	fmt.Fprintln(stdout, "OPERATION_ID\tSERVER\tENVIRONMENT\tSTATE\tPROVIDER_INSTANCE_ID\tRESOURCE_LABEL")
-	for _, reservation := range reservations {
-		instanceID := reservation.ProviderInstanceID
-		if instanceID == "" {
-			instanceID = "-"
-		}
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%s\n", reservation.OperationID, reservation.ServerID, reservation.EnvironmentID, reservation.State, instanceID, reservation.ResourceKey)
-	}
-	return nil
-}
-
-func showBootStatus(serverID, environmentID, statePath string, now time.Time, stdout io.Writer) error {
-	if !safePilotServerID.MatchString(serverID) ||
-		(environmentID != "production" && environmentID != "staging" && environmentID != "testing") || now.IsZero() {
-		return errors.New("a valid server ID, environment, and current time are required")
-	}
-	repository, err := store.OpenBolt(statePath)
-	if err != nil {
-		return err
-	}
-	defer repository.Close()
-	reservations, err := repository.ListCapacityReservations()
-	if err != nil {
-		return err
-	}
-	var current *store.CapacityReservation
-	var durations []time.Duration
-	for i := range reservations {
-		reservation := &reservations[i]
-		if reservation.ServerID != serverID || reservation.EnvironmentID != environmentID {
-			continue
-		}
-		if !reservation.ProvisionedAt.IsZero() && !reservation.ReadyAt.IsZero() {
-			if duration := reservation.ReadyAt.Sub(reservation.ProvisionedAt); duration > 0 {
-				durations = append(durations, duration)
-			}
-		}
-		if reservation.State != store.CapacityAbsent && reservation.State != store.CapacityDestroyed {
-			current = reservation
-		}
-	}
-	if current == nil {
-		fmt.Fprintf(stdout, "No controller-owned VM is currently recorded for %s@%s.\n", serverID, environmentID)
-		writeHistoricalBootEstimate(stdout, durations)
-		return nil
-	}
-	if current.State != store.CapacityActive {
-		if !current.ReadyAt.IsZero() {
-			fmt.Fprintf(stdout, "Paper readiness was previously confirmed at %s.\n", current.ReadyAt.UTC().Format(time.RFC3339))
-		}
-		fmt.Fprintf(stdout, "Managed VM state: %s. Current Paper readiness is not confirmed; boot progress is indeterminate.\n", current.State)
-		writeHistoricalBootEstimate(stdout, durations)
-		return nil
-	}
-	if !current.ReadyAt.IsZero() {
-		fmt.Fprintf(stdout, "Paper readiness was confirmed at %s.\n", current.ReadyAt.UTC().Format(time.RFC3339))
-		if !current.ProvisionedAt.IsZero() {
-			fmt.Fprintf(stdout, "Measured provision-to-Paper-ready time: %s.\n", current.ReadyAt.Sub(current.ProvisionedAt).Round(time.Second))
-		}
-		fmt.Fprintln(stdout, "Progress: [####################] 100% (initial boot completed)")
-		return nil
-	}
-	if current.ProvisionedAt.IsZero() {
-		fmt.Fprintln(stdout, "Provider presence is confirmed, but no provisioning timestamp is available; Paper boot progress is indeterminate.")
-		writeHistoricalBootEstimate(stdout, durations)
-		return nil
-	}
-	elapsed := now.Sub(current.ProvisionedAt)
-	if elapsed < 0 {
-		elapsed = 0
-	}
-	fmt.Fprintf(stdout, "Paper readiness is pending. Time since provisioning: %s.\n", elapsed.Round(time.Second))
-	if len(durations) < 3 {
-		fmt.Fprintf(stdout, "Estimate and progress are indeterminate (%d completed boot sample(s); 3 required).\n", len(durations))
-		return nil
-	}
-	estimate, err := boottiming.Estimate(durations, boottiming.DefaultSafetyFactor)
-	if err != nil {
-		fmt.Fprintf(stdout, "Estimate and progress are indeterminate (%d completed boot sample(s)).\n", len(durations))
-		return nil
-	}
-	remaining := estimate - elapsed
-	if remaining < 0 {
-		remaining = 0
-	}
-	percent := boottiming.ProgressPercent(elapsed, estimate, false)
-	fmt.Fprintf(stdout, "Estimated total: %s; estimated time remaining: %s.\n", estimate.Round(time.Second), remaining.Round(time.Second))
-	fmt.Fprintf(stdout, "Progress: %s (advisory; never reaches 100%% before Paper readiness).\n", bootProgressBar(percent))
-	return nil
-}
-
-func writeHistoricalBootEstimate(stdout io.Writer, durations []time.Duration) {
-	if len(durations) < 3 {
-		fmt.Fprintf(stdout, "Historical boot estimate unavailable (%d completed boot sample(s); 3 required).\n", len(durations))
-		return
-	}
-	estimate, err := boottiming.Estimate(durations, boottiming.DefaultSafetyFactor)
-	if err != nil {
-		fmt.Fprintf(stdout, "Historical boot estimate unavailable (%d completed boot sample(s)).\n", len(durations))
-		return
-	}
-	fmt.Fprintf(stdout, "Historical boot estimate: %s (75th percentile plus 25%% buffer; %d samples).\n", estimate.Round(time.Second), len(durations))
-}
-
-func bootProgressBar(percent int) string {
-	const width = 20
-	if percent < 0 {
-		percent = 0
-	}
-	if percent > 99 {
-		percent = 99
-	}
-	filled := percent * width / 100
-	return fmt.Sprintf("[%s%s] %d%%", strings.Repeat("#", filled), strings.Repeat("-", width-filled), percent)
-}
-
 func showStatus(host string, stdout io.Writer) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -556,155 +395,6 @@ func rejected(host, operationID, auditPath, reason string, cause error) error {
 		return fmt.Errorf("operation %s rejected: %w; could not record rejection in %s: %v", operationID, cause, auditPath, err)
 	}
 	return fmt.Errorf("operation %s rejected (audit log: %s): %w", operationID, auditPath, cause)
-}
-
-type auditRecord struct {
-	OperationID string `json:"operation_id"`
-	RecordedAt  string `json:"recorded_at"`
-	Event       string `json:"event"`
-	Action      string `json:"action"`
-	Target      string `json:"target"`
-	Service     string `json:"service"`
-	Detail      string `json:"detail,omitempty"`
-}
-
-func newOperationID() (string, error) {
-	value := make([]byte, 16)
-	if _, err := rand.Read(value); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(value), nil
-}
-
-func defaultAuditPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".local", "state", "gsc-pilot", "operations.jsonl"), nil
-}
-
-func appendAuditRecord(path, operationID, event, host, detail string) error {
-	return appendAuditEvent(path, operationID, event, "backup", host, backupUnit, detail)
-}
-
-func appendAuditEvent(path, operationID, event, action, target, service, detail string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	if err := file.Chmod(0o600); err != nil {
-		_ = file.Close()
-		return err
-	}
-	record := auditRecord{
-		OperationID: operationID,
-		RecordedAt:  time.Now().UTC().Format(time.RFC3339Nano),
-		Event:       event,
-		Action:      action,
-		Target:      target,
-		Service:     service,
-		Detail:      detail,
-	}
-	if err := json.NewEncoder(file).Encode(record); err != nil {
-		_ = file.Close()
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		return err
-	}
-	return file.Close()
-}
-
-func showHistory(stdout io.Writer) error {
-	auditPath, err := defaultAuditPath()
-	if err != nil {
-		return fmt.Errorf("resolve audit log path: %w", err)
-	}
-	file, err := os.Open(auditPath)
-	if errors.Is(err, os.ErrNotExist) {
-		fmt.Fprintln(stdout, "No pilot operations have been recorded.")
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("open audit log %s: %w", auditPath, err)
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
-	lineNumber := 0
-	wroteHeader := false
-	for scanner.Scan() {
-		lineNumber++
-		var record auditRecord
-		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil {
-			return fmt.Errorf("decode audit log %s line %d: %w", auditPath, lineNumber, err)
-		}
-		recordedAt, err := time.Parse(time.RFC3339Nano, record.RecordedAt)
-		if err != nil {
-			return fmt.Errorf("invalid timestamp in audit log %s line %d", auditPath, lineNumber)
-		}
-		if !validAuditRecord(record) {
-			return fmt.Errorf("invalid audit record in %s line %d", auditPath, lineNumber)
-		}
-		if !wroteHeader {
-			fmt.Fprintln(stdout, "RECORDED_AT\tOPERATION_ID\tACTION\tEVENT\tTARGET\tSERVICE\tDETAIL")
-			wroteHeader = true
-		}
-		detail := "-"
-		if record.Detail != "" {
-			detail = strconv.Quote(record.Detail)
-		}
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			recordedAt.UTC().Format(time.RFC3339Nano), record.OperationID, record.Action,
-			record.Event, record.Target, record.Service, detail)
-	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("read audit log %s: %w", auditPath, err)
-	}
-	if !wroteHeader {
-		fmt.Fprintln(stdout, "No pilot operations have been recorded.")
-	}
-	return nil
-}
-
-func validAuditRecord(record auditRecord) bool {
-	if !safeOperationID.MatchString(record.OperationID) {
-		return false
-	}
-	switch record.Action {
-	case "backup":
-		return record.Service == backupUnit && safeSSHHost.MatchString(record.Target) && validBackupAuditEvent(record.Event)
-	case "adopt":
-		return record.Service == "vultr.instance.adopt" && safePilotTarget.MatchString(record.Target) && (record.Event == "adoption_requested" || record.Event == "adoption_failed" || record.Event == "adoption_confirmed")
-	case "provision":
-		return record.Service == "vultr.instance.create" && safePilotTarget.MatchString(record.Target) && validProvisionAuditEvent(record.Event)
-	default:
-		return false
-	}
-}
-
-func validBackupAuditEvent(event string) bool {
-	switch event {
-	case "rejected", "started", "outcome_unknown", "failed", "service_succeeded", "succeeded":
-		return true
-	default:
-		return false
-	}
-}
-
-func validProvisionAuditEvent(event string) bool {
-	switch event {
-	case "outcome_unknown", "provision_requested", "provision_failed", "provision_rejected", "provider_rejected", "provision_confirmed":
-		return true
-	default:
-		return false
-	}
 }
 
 type unitState struct {
