@@ -371,23 +371,40 @@ func validateStepOutcome(_ OperationRecord, i int, step OperationStep) error {
 // validateStepTimes requires step timestamps to fall within the record's
 // lifetime, with completion no earlier than the step's start.
 func validateStepTimes(record OperationRecord, i int, step OperationStep) error {
-	if step.StartedAt != nil && (step.StartedAt.Before(record.CreatedAt) || step.StartedAt.After(record.UpdatedAt)) {
+	if step.StartedAt != nil && !withinRecordLifetime(record, *step.StartedAt) {
 		return invalidField(fmt.Sprintf("steps[%d].started_at", i))
 	}
-	if step.CompletedAt != nil && (step.CompletedAt.Before(record.CreatedAt) || (step.StartedAt != nil && step.CompletedAt.Before(*step.StartedAt)) || step.CompletedAt.After(record.UpdatedAt)) {
+	if step.CompletedAt != nil && !stepCompletionValid(record, step) {
 		return invalidField(fmt.Sprintf("steps[%d].completed_at", i))
 	}
 	return nil
 }
 
+func withinRecordLifetime(record OperationRecord, at time.Time) bool {
+	return !at.Before(record.CreatedAt) && !at.After(record.UpdatedAt)
+}
+
+// stepCompletionValid requires a step's completion to fall within the
+// record's lifetime and no earlier than the step's start.
+func stepCompletionValid(record OperationRecord, step OperationStep) bool {
+	completedAt := *step.CompletedAt
+	return withinRecordLifetime(record, completedAt) && (step.StartedAt == nil || !completedAt.Before(*step.StartedAt))
+}
+
+// inputBindingSteps converts the record's steps to the binding resolver's
+// view of them.
+func inputBindingSteps(steps []OperationStep) []inputbinding.Step {
+	bindingSteps := make([]inputbinding.Step, len(steps))
+	for i, step := range steps {
+		bindingSteps[i] = inputbinding.Step{StepID: step.StepID, Status: string(step.Status), Input: step.Input, Output: step.Output, Binding: step.InputBindings}
+	}
+	return bindingSteps
+}
+
 // validateRecordStepPlan checks the input bindings across steps and that the
 // current step, if set, is one of the record's steps.
 func validateRecordStepPlan(record OperationRecord) error {
-	bindingSteps := make([]inputbinding.Step, len(record.Steps))
-	for i, step := range record.Steps {
-		bindingSteps[i] = inputbinding.Step{StepID: step.StepID, Status: string(step.Status), Input: step.Input, Output: step.Output, Binding: step.InputBindings}
-	}
-	if err := inputbinding.ValidatePlan(bindingSteps); err != nil {
+	if err := inputbinding.ValidatePlan(inputBindingSteps(record.Steps)); err != nil {
 		return invalidField("step input_bindings")
 	}
 	if record.CurrentStepID != nil {
