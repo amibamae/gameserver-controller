@@ -56,6 +56,8 @@ The execution adapter manages a process or workload on a provisioned host. The f
 
 The execution adapter reports service state. The game adapter defines installation, save behavior, readiness, data paths, and version compatibility. See the [execution contract](../protocol/adapters/execution.md).
 
+Operators who need the everyday start/stop/save/drain flow and where each step is handled (execution vs. game adapter vs. proxy bridge) should use the [operator quick reference](OPERATOR_OPERATIONS.md).
+
 ## Game servers
 
 The game adapter defines installation and configuration, runtime needs, health and readiness, persistent paths, backup consistency, compatibility, and migration.
