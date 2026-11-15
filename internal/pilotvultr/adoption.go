@@ -52,21 +52,50 @@ func NewAdopter(repository *store.BoltStore, policy pilotcapacity.Policy, provid
 }
 
 func ValidateAdoptionRequest(request AdoptionRequest) error {
-	ip, err := netip.ParseAddr(request.IP)
-	if !operationIDPattern.MatchString(request.OperationID) || !safeAdoptionID(request.ServerID) || !safeAdoptionID(request.InstanceID) ||
-		err != nil || !ip.Is4() || !ip.IsGlobalUnicast() || ip.IsPrivate() || request.IP != ip.String() ||
-		len(request.OS) < 1 || len(request.OS) > 500 || strings.TrimSpace(request.OS) != request.OS {
+	if !validAdoptionOperationID(request.OperationID) {
 		return ErrInvalidRequest
 	}
-	for _, c := range request.OS {
-		if c < 0x20 || c == 0x7f {
-			return ErrInvalidRequest
-		}
+	if !safeAdoptionID(request.ServerID) {
+		return ErrInvalidRequest
+	}
+	if !safeAdoptionID(request.InstanceID) {
+		return ErrInvalidRequest
+	}
+	if !validAdoptionIP(request.IP) {
+		return ErrInvalidRequest
+	}
+	if !validAdoptionOS(request.OS) {
+		return ErrInvalidRequest
 	}
 	if vultrapi.ValidateCreateInstanceRequest(vultrapi.CreateInstanceRequest{Region: request.Region, Plan: request.Plan, OSID: request.OSID, Label: "adoption-validation"}) != nil {
 		return ErrInvalidRequest
 	}
 	return nil
+}
+
+func validAdoptionOperationID(id string) bool {
+	return operationIDPattern.MatchString(id)
+}
+
+func validAdoptionIP(raw string) bool {
+	ip, err := netip.ParseAddr(raw)
+	return err == nil && isPublicIPv4(ip) && raw == ip.String()
+}
+
+func isPublicIPv4(ip netip.Addr) bool {
+	return ip.Is4() && ip.IsGlobalUnicast() && !ip.IsPrivate()
+}
+
+func validAdoptionOS(os string) bool {
+	if len(os) < 1 || len(os) > 500 || strings.TrimSpace(os) != os {
+		return false
+	}
+	for _, c := range os {
+		if c < 0x20 || c == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func safeAdoptionID(value string) bool {
