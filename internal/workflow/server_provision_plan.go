@@ -78,8 +78,8 @@ func (w *ServerProvisionWorkflow) provisionRuntimesReady() bool {
 
 // isProvisionOperation reports whether the operation is a server.provision
 // for the loaded protocol, with a named target and an object request.
-func isProvisionOperation(operation store.OperationRecord, version string) bool {
-	return operation.OperationType == "server.provision" && operation.ProtocolVersion == version &&
+func (w *ServerProvisionWorkflow) isProvisionOperation(operation store.OperationRecord) bool {
+	return operation.OperationType == "server.provision" && operation.ProtocolVersion == w.schemas.ProtocolVersion() &&
 		provisionTargetNamed(operation.Target) && provisionSnapshotUsable(operation.RequestSnapshot)
 }
 
@@ -130,7 +130,7 @@ func (w *ServerProvisionWorkflow) loadProvisionPlan(ctx context.Context, operati
 // decodeProvisionPlanRequest checks the operation and decodes its request,
 // which must name the operation's target.
 func (w *ServerProvisionWorkflow) decodeProvisionPlanRequest(operation store.OperationRecord) (provisionRequest, error) {
-	if !isProvisionOperation(operation, w.schemas.ProtocolVersion()) {
+	if !w.isProvisionOperation(operation) {
 		return provisionRequest{}, errors.New("server.provision operation and loaded protocol version are required")
 	}
 	var request provisionRequest

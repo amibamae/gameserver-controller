@@ -150,8 +150,33 @@ func TestServerProvisionR3BuildPlanSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read golden (run with -update-provision-plan-golden to create): %v", err)
 	}
-	if !bytes.Equal(got, want) {
+	if !bytes.Equal(got, bytes.ReplaceAll(want, []byte("\r\n"), []byte("\n"))) {
 		t.Fatalf("BuildPlan output differs from %s:\n%s", path, got)
+	}
+}
+
+type provisionVersionTrackingSchemas struct {
+	schemaRuntime
+	versionCalls int
+}
+
+func (s *provisionVersionTrackingSchemas) ProtocolVersion() string {
+	s.versionCalls++
+	return s.schemaRuntime.ProtocolVersion()
+}
+
+func TestServerProvisionBuildPlanRejectsWrongTypeBeforeReadingVersion(t *testing.T) {
+	fixture := newProvisionPlanFixture(t)
+	schemas := &provisionVersionTrackingSchemas{schemaRuntime: fixture.schemas}
+	fixture.workflow.schemas = schemas
+	fixture.operation.OperationType = "server.restore"
+
+	_, err := fixture.workflow.BuildPlan(context.Background(), fixture.operation)
+	if err == nil || err.Error() != "server.provision operation and loaded protocol version are required" {
+		t.Fatalf("BuildPlan error = %v", err)
+	}
+	if schemas.versionCalls != 0 {
+		t.Fatalf("ProtocolVersion called %d times for wrong operation type", schemas.versionCalls)
 	}
 }
 

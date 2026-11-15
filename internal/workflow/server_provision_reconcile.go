@@ -228,9 +228,9 @@ func provisionUnitStartResolution(step store.OperationStep, observed provisionUn
 // provisionReadCapability resolves the adapter's exact read-only capability
 // with the given input and output schemas.
 func (w *ServerProvisionWorkflow) provisionReadCapability(adapterID string, category adapter.Category, name, input, output string) (adapter.Capability, error) {
-	version := w.schemas.ProtocolVersion()
 	return exactCapability(w.adapters, adapterID, category, name,
-		"urn:gameserver-controller:"+version+":"+input, "urn:gameserver-controller:"+version+":"+output, false)
+		"urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":"+input,
+		"urn:gameserver-controller:"+w.schemas.ProtocolVersion()+":"+output, false)
 }
 
 // provisionReadInput encodes a reconciliation input. Marshal cannot fail:
