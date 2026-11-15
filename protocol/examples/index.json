@@ -302,6 +302,14 @@
       "schema_id": "urn:gameserver-controller:0.21.0-draft:hosting:regions-list-output"
     },
     {
+      "path": "monitoring-event-publish-input.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:integrations:monitoring-event-publish-input"
+    },
+    {
+      "path": "monitoring-event-publish-output.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:integrations:monitoring-event-publish-output"
+    },
+    {
       "path": "network-profile.proxy.json",
       "schema_id": "urn:gameserver-controller:0.21.0-draft:integrations:network-profile"
     },
