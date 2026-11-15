@@ -824,7 +824,7 @@ func TestCapacityRefactorRecordCapacityReadyCharacterization(t *testing.T) {
 	t.Run("future ready floors updated time", func(t *testing.T) {
 		repository := openTestStore(t)
 		capacityRefactorActive(t, repository, "op-a", "srv", "vm-a")
-		future := time.Now().UTC().Add(4 * time.Minute)
+		future := time.Now().UTC().Add(5*time.Minute - time.Second)
 		ready, err := repository.RecordCapacityReady("srv", "staging", "vm-a", future)
 		if err != nil || !ready.UpdatedAt.Equal(future) || !ready.ReadyAt.Equal(future) {
 			t.Fatalf("ready = %+v, %v", ready, err)
