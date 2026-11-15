@@ -78,12 +78,12 @@ public final class GscBridgePlugin {
 
   private void start() throws IOException {
     BridgeConfig config = BridgeConfig.parse(new Toml().read(configFile().toFile()));
-    byte[] token = readToken(config.tokenFile());
+    byte[] token = readToken(config.tokenFile(), config.enforceTokenPermissions());
     Clock clock = Clock.systemUTC();
 
     Set<String> staticBackends = new HashSet<>();
     proxy.getAllServers().forEach(server -> staticBackends.add(server.getServerInfo().getName()));
-    if (!config.fallback().isEmpty() && !staticBackends.contains(config.fallback())) {
+    if (config.enforceFallback() && !config.fallback().isEmpty() && !staticBackends.contains(config.fallback())) {
       throw new IllegalArgumentException("routing.fallback must name a server configured in velocity.toml");
     }
     for (String backend : config.joinBackends()) {
@@ -105,9 +105,13 @@ public final class GscBridgePlugin {
     BridgeService service = new BridgeService(config.proxyInstanceId(), backends, sessions, operations, clock, this::saveBackends);
     boolean autoMove = config.autoMove().enabled() && !config.fallback().isEmpty();
     service.advertiseAutoMove(autoMove);
-    http = new BridgeHttpServer(service, token, logger);
+    http = new BridgeHttpServer(service, token, config.enforceLoopbackBind(), logger);
     InetSocketAddress bound = http.start(new InetSocketAddress(config.bind(), config.port()));
     logger.info("GSC bridge listening on {}:{}", bound.getAddress().getHostAddress(), bound.getPort());
+    if (!config.enforceLoopbackBind()) {
+      logger.warn("GSC bridge is not enforcing the loopback bind check; the bridge API may be reachable "
+          + "off host. Make sure the port is firewalled to the controller host only.");
+    }
 
     healthTask = proxy.getScheduler()
         .buildTask(this, () -> checkHealth(operations))
@@ -229,16 +233,22 @@ public final class GscBridgePlugin {
     return file;
   }
 
-  private byte[] readToken(Path file) throws IOException {
-    try {
-      Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(file);
-      if (permissions.contains(PosixFilePermission.OTHERS_READ) || permissions.contains(PosixFilePermission.GROUP_READ)) {
-        throw new IllegalArgumentException("bridge token file must be readable only by its owner");
+  private byte[] readToken(Path file, boolean enforcePermissions) throws IOException {
+    if (!enforcePermissions) {
+      logger.warn("GSC bridge is not enforcing the token file permission check; make sure only the "
+          + "proxy's account can read {}", file);
+    }
+    if (enforcePermissions) {
+      try {
+        Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(file);
+        if (permissions.contains(PosixFilePermission.OTHERS_READ) || permissions.contains(PosixFilePermission.GROUP_READ)) {
+          throw new IllegalArgumentException("bridge token file must be readable only by its owner");
+        }
+      } catch (UnsupportedOperationException e) {
+        // Non-POSIX file system: the permissions cannot be checked here.
+        logger.warn("Cannot check the permissions of the bridge token file on this file system; "
+            + "make sure only the proxy's account can read {}", file);
       }
-    } catch (UnsupportedOperationException e) {
-      // Non-POSIX file system: the permissions cannot be checked here.
-      logger.warn("Cannot check the permissions of the bridge token file on this file system; "
-          + "make sure only the proxy's account can read {}", file);
     }
     byte[] token = new String(Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8).strip()
         .getBytes(java.nio.charset.StandardCharsets.UTF_8);
