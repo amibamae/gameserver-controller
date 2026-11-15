@@ -114,38 +114,78 @@ type ServerDestroyWorkflow struct {
 
 func NewServerDestroyWorkflow(servers store.LifecycleOperationStore, adapters adapterRuntime, schemas schemaRuntime,
 	profiles ServerDestroyProfileResolver, backups ServerDestroyBackupResolver, authorizer ServerDestroyAuthorizer) (*ServerDestroyWorkflow, error) {
-	if servers == nil || adapters == nil || schemas == nil || profiles == nil || backups == nil || authorizer == nil {
+	if !destroyRuntimeDepsConfigured(servers, adapters, schemas, profiles, backups, authorizer) {
 		return nil, errors.New("lifecycle store, adapter registry, schemas, destroy profile, verified backup resolver, and destroy authorizer are required")
 	}
 	return &ServerDestroyWorkflow{servers: servers, adapters: adapters, schemas: schemas, profiles: profiles, backups: backups, authorizer: authorizer}, nil
 }
 
+// destroyRuntimeDepsConfigured reports whether every dependency the destroy
+// workflow needs to run is present.
+func destroyRuntimeDepsConfigured(servers store.LifecycleOperationStore, adapters adapterRuntime, schemas schemaRuntime,
+	profiles ServerDestroyProfileResolver, backups ServerDestroyBackupResolver, authorizer ServerDestroyAuthorizer) bool {
+	if servers == nil || adapters == nil || schemas == nil {
+		return false
+	}
+	if profiles == nil || backups == nil || authorizer == nil {
+		return false
+	}
+	return true
+}
+
 func serverDestroyRequest(operation store.OperationRecord, protocolVersion string) (serverDestroyParameters, error) {
 	var parameters serverDestroyParameters
-	if operation.OperationType != "server.destroy" || operation.ProtocolVersion != protocolVersion || protocolVersion == "" ||
-		operation.Target.ServerID == "" || operation.Target.EnvironmentID == "" || operation.RequestSnapshot.OperationType != "server.destroy" ||
-		!isObject(operation.RequestSnapshot.Parameters) {
+	if !destroyRequestOperationMatches(operation, protocolVersion) {
 		return parameters, errors.New("server.destroy operation and loaded protocol version are required")
 	}
 	if err := json.Unmarshal(operation.RequestSnapshot.Parameters, &parameters); err != nil {
 		return parameters, errors.New("decode server.destroy parameters")
 	}
-	if parameters.BackupProfile == "" || parameters.VerifiedBackupID == "" || parameters.ApprovalID == "" ||
-		len(parameters.ExpectedInstanceRef) == 0 || !isObject(parameters.ExpectedInstanceRef) {
+	if !destroyRequestParametersComplete(parameters) {
 		return parameters, errors.New("server.destroy requires an exact instance, backup profile, verified backup ID, and approval ID")
 	}
 	return parameters, nil
 }
 
+// destroyRequestOperationMatches reports whether the stored operation is a
+// server.destroy that binds the loaded protocol version and a non-empty target.
+func destroyRequestOperationMatches(operation store.OperationRecord, protocolVersion string) bool {
+	if operation.OperationType != "server.destroy" || operation.ProtocolVersion != protocolVersion || protocolVersion == "" {
+		return false
+	}
+	if operation.Target.ServerID == "" || operation.Target.EnvironmentID == "" ||
+		operation.RequestSnapshot.OperationType != "server.destroy" {
+		return false
+	}
+	return isObject(operation.RequestSnapshot.Parameters)
+}
+
+// destroyRequestParametersComplete reports whether the decoded parameters carry
+// the exact instance, backup profile, verified backup ID, and approval ID.
+func destroyRequestParametersComplete(parameters serverDestroyParameters) bool {
+	if parameters.BackupProfile == "" || parameters.VerifiedBackupID == "" || parameters.ApprovalID == "" {
+		return false
+	}
+	return len(parameters.ExpectedInstanceRef) > 0 && isObject(parameters.ExpectedInstanceRef)
+}
+
 func validateServerDestroyTarget(operation store.OperationRecord, parameters serverDestroyParameters, server store.LogicalServer) error {
-	if server.ServerID != operation.Target.ServerID || server.EnvironmentID != operation.Target.EnvironmentID || len(server.InstanceRef) == 0 ||
-		!equalJSON(operation.Target.InstanceRef, server.InstanceRef) || !equalJSON(parameters.ExpectedInstanceRef, server.InstanceRef) {
+	if !destroyTargetMatchesServer(operation, parameters, server) {
 		return store.ErrLogicalServerTargetMismatch
 	}
 	if server.DataGenerationStatus != "known" || server.DataGenerationID == "" {
 		return errors.New("server.destroy requires a known current data generation")
 	}
 	return nil
+}
+
+// destroyTargetMatchesServer reports whether the operation target and the
+// requested instance both identify the exact current logical server.
+func destroyTargetMatchesServer(operation store.OperationRecord, parameters serverDestroyParameters, server store.LogicalServer) bool {
+	if server.ServerID != operation.Target.ServerID || server.EnvironmentID != operation.Target.EnvironmentID || len(server.InstanceRef) == 0 {
+		return false
+	}
+	return equalJSON(operation.Target.InstanceRef, server.InstanceRef) && equalJSON(parameters.ExpectedInstanceRef, server.InstanceRef)
 }
 
 func validateServerDestroyProfile(server store.LogicalServer, profile ServerDestroyProfile) error {
@@ -155,12 +195,26 @@ func validateServerDestroyProfile(server store.LogicalServer, profile ServerDest
 		ResourceKind  string `json:"resource_kind"`
 		ExternalID    string `json:"external_id"`
 	}
-	if err := json.Unmarshal(profile.UnitRef, &ref); err != nil || !isObject(profile.UnitRef) ||
-		ref.AdapterID != server.ExecutionAdapterID || ref.EnvironmentID != server.EnvironmentID ||
-		ref.ResourceKind != "systemd-unit" || ref.ExternalID == "" {
+	if err := json.Unmarshal(profile.UnitRef, &ref); err != nil {
+		return errors.New("trusted destroy profile unit reference does not bind the configured execution adapter and environment")
+	}
+	if !isObject(profile.UnitRef) || !destroyProfileUnitRefBindsServer(ref, server) {
 		return errors.New("trusted destroy profile unit reference does not bind the configured execution adapter and environment")
 	}
 	return nil
+}
+
+// destroyProfileUnitRefBindsServer reports whether a parsed profile unit
+// reference is a systemd unit owned by the server's execution adapter and
+// environment.
+func destroyProfileUnitRefBindsServer(ref struct {
+	AdapterID     string `json:"adapter_id"`
+	EnvironmentID string `json:"environment_id"`
+	ResourceKind  string `json:"resource_kind"`
+	ExternalID    string `json:"external_id"`
+}, server store.LogicalServer) bool {
+	return ref.AdapterID == server.ExecutionAdapterID && ref.EnvironmentID == server.EnvironmentID &&
+		ref.ResourceKind == "systemd-unit" && ref.ExternalID != ""
 }
 
 func (w *ServerDestroyWorkflow) verifiedBackup(ctx context.Context, server store.LogicalServer, parameters serverDestroyParameters) (VerifiedServerBackup, error) {
@@ -168,12 +222,23 @@ func (w *ServerDestroyWorkflow) verifiedBackup(ctx context.Context, server store
 	if err != nil {
 		return VerifiedServerBackup{}, fmt.Errorf("resolve verified backup for server.destroy: %w", err)
 	}
-	if !backup.IntegrityVerified || backup.BackupID != parameters.VerifiedBackupID || backup.ServerID != server.ServerID ||
-		backup.EnvironmentID != server.EnvironmentID || backup.StorageProfile != parameters.BackupProfile ||
-		backup.DataGenerationID != server.DataGenerationID || !equalJSON(backup.SourceInstanceRef, server.InstanceRef) {
+	if !verifiedBackupBindsServer(backup, server, parameters) {
 		return VerifiedServerBackup{}, errors.New("verified backup does not bind the exact server, environment, storage profile, instance, and current data generation")
 	}
 	return backup, nil
+}
+
+// verifiedBackupBindsServer reports whether the resolved backup is the exact
+// verified backup for the server's current data generation and instance.
+func verifiedBackupBindsServer(backup VerifiedServerBackup, server store.LogicalServer, parameters serverDestroyParameters) bool {
+	if !backup.IntegrityVerified || backup.BackupID != parameters.VerifiedBackupID || backup.ServerID != server.ServerID {
+		return false
+	}
+	if backup.EnvironmentID != server.EnvironmentID || backup.StorageProfile != parameters.BackupProfile ||
+		backup.DataGenerationID != server.DataGenerationID {
+		return false
+	}
+	return equalJSON(backup.SourceInstanceRef, server.InstanceRef)
 }
 
 // CheckPreconditions rechecks the exact managed resources before each planned
@@ -363,9 +428,7 @@ func matchingDestroyCapacityReservation(capacityStore serverDestroyCapacityStore
 		if reservation.ServerID != server.ServerID || reservation.EnvironmentID != server.EnvironmentID {
 			continue
 		}
-		if reservation.ProviderInstanceID == instanceID &&
-			(reservation.ProviderAdapterID == "" || reservation.ProviderAdapterID == instanceAdapterID) &&
-			(reservation.State == store.CapacityAbsent || reservation.State == store.CapacityDestroyed) {
+		if destroyedReservationBindsInstance(reservation, instanceAdapterID, instanceID) {
 			if match != nil {
 				return store.CapacityReservation{}, false, errors.New("multiple managed VM reservations match one exact server instance")
 			}
@@ -373,14 +436,11 @@ func matchingDestroyCapacityReservation(capacityStore serverDestroyCapacityStore
 			match = &copyReservation
 			continue
 		}
-		if reservation.State == store.CapacityAbsent || reservation.State == store.CapacityDestroyed {
+		if destroyedCapacityState(reservation) {
 			continue
 		}
-		if reservation.ProviderAdapterID != "" && reservation.ProviderAdapterID != instanceAdapterID {
-			return store.CapacityReservation{}, false, errors.New("managed VM reservation belongs to a different hosting adapter")
-		}
-		if reservation.ProviderInstanceID != instanceID {
-			return store.CapacityReservation{}, false, errors.New("managed VM reservation does not identify the exact server instance")
+		if !reservationIdentifiesServerInstance(reservation, instanceAdapterID, instanceID) {
+			return store.CapacityReservation{}, false, reservationMismatchError(reservation, instanceAdapterID, instanceID)
 		}
 		if match != nil {
 			return store.CapacityReservation{}, false, errors.New("multiple active managed VM reservations match one logical server")
@@ -394,16 +454,66 @@ func matchingDestroyCapacityReservation(capacityStore serverDestroyCapacityStore
 	return *match, true, nil
 }
 
+// destroyedCapacityState reports whether a reservation already reflects a
+// destroyed or absent provider instance.
+func destroyedCapacityState(reservation store.CapacityReservation) bool {
+	return reservation.State == store.CapacityAbsent || reservation.State == store.CapacityDestroyed
+}
+
+// destroyedReservationBindsInstance reports whether a destroyed or absent
+// reservation identifies the exact server instance, allowing it to carry no
+// adapter identity.
+func destroyedReservationBindsInstance(reservation store.CapacityReservation, instanceAdapterID, instanceID string) bool {
+	if !destroyedCapacityState(reservation) {
+		return false
+	}
+	return reservation.ProviderInstanceID == instanceID &&
+		(reservation.ProviderAdapterID == "" || reservation.ProviderAdapterID == instanceAdapterID)
+}
+
+// reservationIdentifiesServerInstance reports whether an active reservation
+// carries the adapter and instance identity of the server being destroyed.
+// An active reservation may omit the adapter only when it identifies no
+// provider at all.
+func reservationIdentifiesServerInstance(reservation store.CapacityReservation, instanceAdapterID, instanceID string) bool {
+	adapterKnown := reservation.ProviderAdapterID != ""
+	adapterMatches := !adapterKnown || reservation.ProviderAdapterID == instanceAdapterID
+	instanceMatches := reservation.ProviderInstanceID == instanceID
+	return adapterMatches && instanceMatches
+}
+
+// reservationMismatchError explains why an active reservation is not the one
+// for this server.
+func reservationMismatchError(reservation store.CapacityReservation, instanceAdapterID, instanceID string) error {
+	if reservation.ProviderAdapterID != "" && reservation.ProviderAdapterID != instanceAdapterID {
+		return errors.New("managed VM reservation belongs to a different hosting adapter")
+	}
+	return errors.New("managed VM reservation does not identify the exact server instance")
+}
+
 func externalInstanceIdentity(raw json.RawMessage) (string, string, error) {
 	var ref struct {
 		AdapterID    string `json:"adapter_id"`
 		ResourceKind string `json:"resource_kind"`
 		ExternalID   string `json:"external_id"`
 	}
-	if !isObject(raw) || json.Unmarshal(raw, &ref) != nil || ref.AdapterID == "" || ref.ResourceKind != "instance" || ref.ExternalID == "" {
+	if err := json.Unmarshal(raw, &ref); err != nil {
+		return "", "", errors.New("managed VM capacity requires an exact provider instance reference")
+	}
+	if !isObject(raw) || !exactInstanceReference(ref) {
 		return "", "", errors.New("managed VM capacity requires an exact provider instance reference")
 	}
 	return ref.AdapterID, ref.ExternalID, nil
+}
+
+// exactInstanceReference reports whether a parsed instance reference names an
+// instance owned by a specific adapter.
+func exactInstanceReference(ref struct {
+	AdapterID    string `json:"adapter_id"`
+	ResourceKind string `json:"resource_kind"`
+	ExternalID   string `json:"external_id"`
+}) bool {
+	return ref.AdapterID != "" && ref.ResourceKind == "instance" && ref.ExternalID != ""
 }
 
 func (w *ServerDestroyWorkflow) ProjectLifecycle(operation store.OperationRecord, current store.StoredLogicalServer) (store.LogicalServer, bool, error) {
@@ -451,14 +561,59 @@ func hasValidServerDestroyResult(operation store.OperationRecord, server store.L
 		} `json:"operation_data"`
 	}
 	var parameters serverDestroyParameters
-	if json.Unmarshal(operation.Result, &result) != nil || json.Unmarshal(operation.RequestSnapshot.Parameters, &parameters) != nil ||
-		result.OperationType != "server.destroy" || !equalJSON(result.OperationData.InstanceRef, server.InstanceRef) ||
-		result.OperationData.VerifiedBackupID != parameters.VerifiedBackupID || result.OperationData.DataGenerationID != server.DataGenerationID ||
-		!result.OperationData.ProviderAbsence || result.OperationData.FinalLifecycleState != string(protocolstate.ServerDestroyed) {
+	if json.Unmarshal(operation.Result, &result) != nil || json.Unmarshal(operation.RequestSnapshot.Parameters, &parameters) != nil {
 		return false
 	}
-	return (len(operation.Target.InstanceRef) == 0 || equalJSON(result.OperationData.InstanceRef, operation.Target.InstanceRef)) &&
-		schemas.ValidateJSON("urn:gameserver-controller:"+schemas.ProtocolVersion()+":operations:server-destroy-result", operation.Result) == nil
+	if !validServerDestroyEvidence(result, server, parameters) {
+		return false
+	}
+	if !validServerDestroyTargetRef(result, operation) {
+		return false
+	}
+	schemaURI := "urn:gameserver-controller:" + schemas.ProtocolVersion() + ":operations:server-destroy-result"
+	return schemas.ValidateJSON(schemaURI, operation.Result) == nil
+}
+
+// validServerDestroyEvidence reports whether the recorded result carries the
+// exact backup, instance, data generation, provider absence, and terminal
+// state that prove destruction.
+func validServerDestroyEvidence(result struct {
+	OperationType string `json:"operation_type"`
+	OperationData struct {
+		InstanceRef         json.RawMessage `json:"instance_ref"`
+		VerifiedBackupID    string          `json:"verified_backup_id"`
+		DataGenerationID    string          `json:"data_generation_id"`
+		ProviderAbsence     bool            `json:"provider_absence_confirmed"`
+		FinalLifecycleState string          `json:"final_lifecycle_state"`
+	} `json:"operation_data"`
+}, server store.LogicalServer, parameters serverDestroyParameters) bool {
+	if result.OperationType != "server.destroy" || !equalJSON(result.OperationData.InstanceRef, server.InstanceRef) ||
+		result.OperationData.VerifiedBackupID != parameters.VerifiedBackupID {
+		return false
+	}
+	if result.OperationData.DataGenerationID != server.DataGenerationID || !result.OperationData.ProviderAbsence ||
+		result.OperationData.FinalLifecycleState != string(protocolstate.ServerDestroyed) {
+		return false
+	}
+	return true
+}
+
+// validServerDestroyTargetRef reports whether the result instance matches the
+// operation target when the target names an instance.
+func validServerDestroyTargetRef(result struct {
+	OperationType string `json:"operation_type"`
+	OperationData struct {
+		InstanceRef         json.RawMessage `json:"instance_ref"`
+		VerifiedBackupID    string          `json:"verified_backup_id"`
+		DataGenerationID    string          `json:"data_generation_id"`
+		ProviderAbsence     bool            `json:"provider_absence_confirmed"`
+		FinalLifecycleState string          `json:"final_lifecycle_state"`
+	} `json:"operation_data"`
+}, operation store.OperationRecord) bool {
+	if len(operation.Target.InstanceRef) == 0 {
+		return true
+	}
+	return equalJSON(result.OperationData.InstanceRef, operation.Target.InstanceRef)
 }
 
 func destroyInstanceStepOutput(operation store.OperationRecord, stepID string, requiredStatus protocolstate.StepStatus) (serverDestroyInstanceInspection, error) {
