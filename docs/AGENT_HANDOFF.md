@@ -72,6 +72,7 @@ Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is cont
 | Claude | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | WIP pushed (12 commits), unfinished; no PR |
 | Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | WIP pushed (10 commits), unfinished; no PR |
 | Codex | `cmd/complexity-check/*`, its CI step | #260 merged | checker runs on PRs |
+| OpenCode | `plugins/velocity/src/**` | `feat/velocity-bridge-disable-start-locks` | **done locally** (2026-11-15): the 3 hard start-up locks (token-file perms, loopback bind, fallback in `velocity.toml`) are now disableable via a `[security]` table — `enforce-token-permissions` (default on), `enforce-loopback-bind` (default on), `enforce-fallback` (default **off**, since the controller registers the fallback backend at runtime). 41 tests green. 4 commits: `4049b0b`→`2cb8b4a`→`29b836e`→`6643885`. Awaiting owner push + PR. |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
 
 **Dropped Claude WIP, kept for reference only:** `claude/r3-server-backup`, `claude/r3-server-destroy`, `claude/r3-supervised-pilot` and `claude/r3-controller-setup` hold unfinished work on Codex-owned files, based on an old `main`. Do not merge them. Codex may read them for ideas or delete them.
