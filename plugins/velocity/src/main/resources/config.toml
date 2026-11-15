@@ -38,3 +38,21 @@ auto-move-interval-seconds = 5
 # hostnames use this list instead of join-backends.
 [routing.forced-hosts]
 # "survival.example.com" = ["paper-main"]
+
+# Start-up safety locks. All are enforced by default. Disable one only when
+# you know why you must: every bypass is logged as a warning at start-up.
+[security]
+# Reject start-up when the token file is readable by group or others.
+# Disable to read a token from a file that cannot be made owner-only.
+enforce-token-permissions = true
+# Reject start-up when bridge.bind is not a loopback address. Disable to
+# expose the bridge API on a non-loopback address; firewall the port to the
+# controller host if you do.
+enforce-loopback-bind = true
+# Reject start-up when routing.fallback names a server that is not already
+# in velocity.toml. Off by default because the controller registers managed
+# backends (including the fallback) at runtime through the bridge API, so the
+# server does not need to exist in velocity.toml at start-up. Enable it for
+# static deployments where every server must exist in velocity.toml before
+# the proxy starts.
+enforce-fallback = false
