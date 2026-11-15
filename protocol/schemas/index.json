@@ -307,6 +307,14 @@
       "id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-output"
     },
     {
+      "path": "hosting/network-inspect-input.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:hosting:network-inspect-input"
+    },
+    {
+      "path": "hosting/network-inspect-output.schema.json",
+      "id": "urn:gameserver-controller:0.21.0-draft:hosting:network-inspect-output"
+    },
+    {
       "path": "hosting/os-offerings-list-input.schema.json",
       "id": "urn:gameserver-controller:0.21.0-draft:hosting:os-offerings-list-input"
     },

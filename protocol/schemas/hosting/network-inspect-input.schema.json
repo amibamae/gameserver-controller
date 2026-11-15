@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:network-inspect-input",
+  "title": "Hosting network inspect input",
+  "description": "Inspect addresses and network attachments for one exact provider instance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["instance_ref"],
+  "properties": {
+    "instance_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref",
+      "properties": {"resource_kind": {"const": "instance"}}
+    }
+  }
+}
