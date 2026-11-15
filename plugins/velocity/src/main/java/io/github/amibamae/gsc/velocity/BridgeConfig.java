@@ -22,7 +22,10 @@ record BridgeConfig(
     String fallback,
     boolean fallbackOnKick,
     Duration healthCheckInterval,
-    AutoMover.Settings autoMove) {
+    AutoMover.Settings autoMove,
+    boolean enforceTokenPermissions,
+    boolean enforceLoopbackBind,
+    boolean enforceFallback) {
 
   static BridgeConfig parse(Toml toml) {
     Toml bridge = toml.getTable("bridge");
@@ -30,7 +33,19 @@ record BridgeConfig(
     if (bridge == null || routing == null) {
       throw new IllegalArgumentException("config.toml needs [bridge] and [routing] sections");
     }
-    InetAddress bind = loopbackBind(bridge);
+    // The controller registers managed backends at runtime through the bridge
+    // API, so the fallback does not have to exist in velocity.toml at start-up.
+    // The lock is off by default; enable it for static deployments where every
+    // server is in velocity.toml and must be checked before the proxy starts.
+    Toml security = toml.getTable("security");
+    boolean enforceTokenPermissions = security == null || security.getBoolean("enforce-token-permissions", true);
+    boolean enforceLoopbackBind = security == null
+        ? true
+        : security.getBoolean("enforce-loopback-bind", true);
+    boolean enforceFallback = security == null
+        ? false
+        : security.getBoolean("enforce-fallback", false);
+    InetAddress bind = loopbackBind(bridge, enforceLoopbackBind);
     long port = bounded(bridge, "port", 25580L, 1, 65535, "bridge.port is out of range");
     String tokenFile = bridge.getString("token-file", "");
     if (tokenFile.isEmpty()) {
@@ -52,21 +67,22 @@ record BridgeConfig(
     AutoMover.Settings autoMove = new AutoMover.Settings(routing.getBoolean("auto-move", true), (int) batch,
         Duration.ofSeconds(interval), AutoMover.Settings.DEFAULT.retryAfter());
     return new BridgeConfig(bind, (int) port, Path.of(tokenFile), instance, join, forced, fallback,
-        routing.getBoolean("fallback-on-kick", true), Duration.ofSeconds(health), autoMove);
+        routing.getBoolean("fallback-on-kick", true), Duration.ofSeconds(health), autoMove,
+        enforceTokenPermissions, enforceLoopbackBind, enforceFallback);
   }
 
-  /** The bridge listens only on a loopback IP address. */
-  private static InetAddress loopbackBind(Toml bridge) {
+  /** Resolves {@code bridge.bind}; rejects non-loopback addresses unless disabled. */
+  private static InetAddress loopbackBind(Toml bridge, boolean enforceLoopback) {
     InetAddress bind;
     try {
       bind = InetAddress.getByName(bridge.getString("bind", "127.0.0.1"));
     } catch (UnknownHostException e) {
       throw new IllegalArgumentException("bridge.bind must be an IP address");
     }
-    if (!bind.isLoopbackAddress()) {
-      throw new IllegalArgumentException("bridge.bind must be a loopback address");
+    if (!enforceLoopback || bind.isLoopbackAddress()) {
+      return bind;
     }
-    return bind;
+    throw new IllegalArgumentException("bridge.bind must be a loopback address");
   }
 
   /** Reads an integer setting and rejects it with message outside [min, max]. */
