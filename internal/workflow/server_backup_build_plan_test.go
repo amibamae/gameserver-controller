@@ -82,7 +82,9 @@ func TestServerBackupBuildPlanSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(got, want) {
+	// Normalize line endings so the comparison is stable on Windows, where
+	// core.autocrlf may check the LF golden out as CRLF.
+	if !bytes.Equal(got, normalizeLineEndings(want)) {
 		t.Fatalf("planned steps differ from %s; rerun with -update-backup-plan-golden only for an intended change", path)
 	}
 }
@@ -163,6 +165,19 @@ func TestServerBackupBuildPlanRefusals(t *testing.T) {
 	if _, err := workflow.BuildPlan(cancelled, operation); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled context = %v", err)
 	}
+}
+
+// normalizeLineEndings collapses CRLF to LF so golden comparisons are stable
+// on Windows, where core.autocrlf may check the LF golden out as CRLF.
+func normalizeLineEndings(data []byte) []byte {
+	out := make([]byte, 0, len(data))
+	for i := 0; i < len(data); i++ {
+		if data[i] == '\r' && i+1 < len(data) && data[i+1] == '\n' {
+			i++
+		}
+		out = append(out, data[i])
+	}
+	return out
 }
 
 func errText(err error) string {

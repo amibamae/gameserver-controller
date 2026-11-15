@@ -70,7 +70,9 @@ func TestServerRestoreR3BuildPlanSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(got, want) {
+	// Normalize line endings so the comparison is stable on Windows, where
+	// core.autocrlf may check the LF golden out as CRLF.
+	if !bytes.Equal(got, normalizeLineEndings(want)) {
 		t.Fatalf("planned steps differ from %s; rerun with -update-restore-r3-plan-golden only for an intended change", path)
 	}
 }
