@@ -175,6 +175,9 @@ func (w *ServerRestoreWorkflow) restorePlanRequest(ctx context.Context, operatio
 	if err := ctx.Err(); err != nil {
 		return serverRestoreParameters{}, err
 	}
+	if !restoreOperationIdentifiesRestore(operation) {
+		return serverRestoreParameters{}, errors.New("server.restore operation and loaded protocol version are required")
+	}
 	if !restoreOperationPlannable(operation, w.schemas.ProtocolVersion()) {
 		return serverRestoreParameters{}, errors.New("server.restore operation and loaded protocol version are required")
 	}
@@ -192,10 +195,16 @@ func (w *ServerRestoreWorkflow) restoreDependenciesReady() bool {
 	return w.profiles != nil && w.backups != nil && w.authorizer != nil
 }
 
+// restoreOperationIdentifiesRestore checks only the operation type fields so
+// the wrong operation is refused before any protocol version lookup.
+func restoreOperationIdentifiesRestore(operation store.OperationRecord) bool {
+	return operation.OperationType == "server.restore" && operation.RequestSnapshot.OperationType == "server.restore"
+}
+
 // restoreOperationPlannable reports whether operation is a server.restore of
 // the loaded protocol version naming a server, environment and parameters.
 func restoreOperationPlannable(operation store.OperationRecord, version string) bool {
-	identified := operation.OperationType == "server.restore" && operation.ProtocolVersion == version && operation.RequestSnapshot.OperationType == "server.restore"
+	identified := operation.ProtocolVersion == version && restoreOperationIdentifiesRestore(operation)
 	return identified && operation.Target.ServerID != "" && operation.Target.EnvironmentID != "" && isObject(operation.RequestSnapshot.Parameters)
 }
 
@@ -1339,30 +1348,59 @@ func restoreBackupID(operation store.OperationRecord) string {
 }
 
 func hasValidRestoreResult(operation store.OperationRecord, server store.LogicalServer, schemas schemaRuntime) bool {
-	var result struct {
-		OperationType string `json:"operation_type"`
-		OperationData struct {
-			BackupID   string          `json:"backup_id"`
-			Instance   json.RawMessage `json:"target_instance_ref"`
-			Generation string          `json:"data_generation_id"`
-			Verified   bool            `json:"restore_verified"`
-			Final      string          `json:"final_lifecycle_state"`
-			Assertion  json.RawMessage `json:"readiness_assertion"`
-		} `json:"operation_data"`
-	}
 	parameters, err := restoreRequest(operation, schemas.ProtocolVersion())
-	if err != nil || json.Unmarshal(operation.Result, &result) != nil || result.OperationType != "server.restore" || result.OperationData.BackupID != parameters.BackupID ||
-		!equalJSON(result.OperationData.Instance, server.InstanceRef) || result.OperationData.Generation != restoreDataGeneration(operation.OperationID) || !result.OperationData.Verified {
+	if err != nil {
 		return false
 	}
-	if parameters.StartAfterRestore && (result.OperationData.Final != string(protocolstate.ServerReady) || !isObject(result.OperationData.Assertion) ||
-		schemas.ValidateJSON("urn:gameserver-controller:"+schemas.ProtocolVersion()+":lifecycle:readiness-assertion", result.OperationData.Assertion) != nil) {
+	var result struct {
+		OperationType string            `json:"operation_type"`
+		OperationData restoreResultData `json:"operation_data"`
+	}
+	if json.Unmarshal(operation.Result, &result) != nil {
 		return false
 	}
-	if !parameters.StartAfterRestore && result.OperationData.Final != string(protocolstate.ServerStopped) {
+	if result.OperationType != "server.restore" {
+		return false
+	}
+	data := result.OperationData
+	if !restoreResultBindsOperation(data, operation, parameters.BackupID) {
+		return false
+	}
+	if !restoreResultManifestBound(data, server) {
+		return false
+	}
+	if parameters.StartAfterRestore {
+		if !restoreResultReadinessBound(data, schemas) {
+			return false
+		}
+	} else if data.Final != string(protocolstate.ServerStopped) {
 		return false
 	}
 	return schemas.ValidateJSON("urn:gameserver-controller:"+schemas.ProtocolVersion()+":operations:server-restore-result", operation.Result) == nil
+}
+
+type restoreResultData struct {
+	BackupID   string          `json:"backup_id"`
+	Instance   json.RawMessage `json:"target_instance_ref"`
+	Generation string          `json:"data_generation_id"`
+	Verified   bool            `json:"restore_verified"`
+	Final      string          `json:"final_lifecycle_state"`
+	Assertion  json.RawMessage `json:"readiness_assertion"`
+}
+
+func restoreResultBindsOperation(data restoreResultData, operation store.OperationRecord, backupID string) bool {
+	return data.BackupID == backupID && data.Generation == restoreDataGeneration(operation.OperationID) && data.Verified
+}
+
+func restoreResultManifestBound(data restoreResultData, server store.LogicalServer) bool {
+	return equalJSON(data.Instance, server.InstanceRef)
+}
+
+func restoreResultReadinessBound(data restoreResultData, schemas schemaRuntime) bool {
+	if data.Final != string(protocolstate.ServerReady) || !isObject(data.Assertion) {
+		return false
+	}
+	return schemas.ValidateJSON("urn:gameserver-controller:"+schemas.ProtocolVersion()+":lifecycle:readiness-assertion", data.Assertion) == nil
 }
 
 var _ Definition = (*ServerRestoreWorkflow)(nil)
