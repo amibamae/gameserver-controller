@@ -125,6 +125,17 @@ Claude's earlier backup, destroy, supervised-pilot and controller-setup agents w
 ## Where things stand
 
 - **`main`:** check `git log`. Everything below is merged. For the code-health work, #179–#252, see "Current work" above.
+
+### Operator quick reference: start / stop / save / drain (docs, 2026-11-15)
+
+New operator-facing quick reference so a server operator can start, stop, save, or drain without re-reading the protocol. Docs-only; no protocol, schema, or code change, so no manifest regeneration.
+
+- Branch `feat/operator-quickref-start-stop-save-drain` (from `origin/main` at `01141ec`), commit `d31618f`, **not pushed or merged**.
+- Files: new `docs/OPERATOR_OPERATIONS.md`; cross-link in `docs/ADAPTER_CONTRACTS.md`; index entry in `README.md`.
+- Invariants documented: start/stop are execution-adapter operations (`execution.unit.start` / `execution.unit.graceful_stop`); save is a game-adapter operation (`game.save.request`) with **no standalone standard operation** (it is a step inside `server.stop` and the `server.backup` consistency capture); drain is the proxy-bridge route `POST /v1/backends/{backend_id}/drain`; `server.stop` combines drain + save + graceful stop with defaults `drain=true`, `force=false` (force requires `approval_id`). The Velocity plugin exposes no start/stop/save route and never will.
+- Gates passed on the branch: `go vet`, `go run ./cmd/protocol-check` (162 schemas / 135 examples / 183 fixtures), `go run ./cmd/complexity-check -base origin/main` (clean), `go run ./cmd/config-check validate` (valid). The four `cmd/controller` TLS-permission test failures are pre-existing on this Windows host, not caused by this docs-only change.
+- Next step for the owner: review and merge as a docs-only PR (no CI gate for docs-only here).
+
   - All 12 draft PRs rebased and merged (#106, #108, #110, #112–#119, #121).
   - #158–#160 (another session): Velocity adapter and bridge plugin, Cloudflare DNS adapter, per-server `network` config, billing-aware scaling policy.
   - #161: README refresh, Wasabi operations, `jsonrpc-stdio-v1` process transport, controller runtime.
