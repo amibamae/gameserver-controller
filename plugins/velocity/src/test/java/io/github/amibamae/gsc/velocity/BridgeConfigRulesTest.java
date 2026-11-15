@@ -1,7 +1,9 @@
 package io.github.amibamae.gsc.velocity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.moandjiezana.toml.Toml;
 import java.util.List;
@@ -42,6 +44,26 @@ class BridgeConfigRulesTest {
     for (Case c : cases) {
       assertEquals(c.message(), rejection(c.toml()), c.toml());
     }
+  }
+
+  @Test
+  void loopbackBindCanBeDisabled() {
+    String toml = "[bridge]\nbind = \"192.0.2.1\"\n" + VALID_BRIDGE + "[routing]\n[security]\nenforce-loopback-bind = false\n";
+    BridgeConfig config = BridgeConfig.parse(new Toml().read(toml));
+    assertEquals("192.0.2.1", config.bind().getHostAddress());
+    assertFalse(config.enforceLoopbackBind());
+    // The same bind is still rejected while the lock is explicitly on.
+    assertEquals("bridge.bind must be a loopback address", rejection(toml.replace("false", "true")));
+  }
+
+  @Test
+  void securityDefaultsKeepTheLocksOn() {
+    // enforce-fallback is off by default: the controller registers the
+    // fallback backend at runtime through the bridge API.
+    BridgeConfig config = BridgeConfig.parse(new Toml().read("[bridge]\n" + VALID_BRIDGE + "[routing]\n"));
+    assertTrue(config.enforceTokenPermissions());
+    assertTrue(config.enforceLoopbackBind());
+    assertFalse(config.enforceFallback());
   }
 
   @Test
