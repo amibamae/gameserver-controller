@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -89,30 +90,28 @@ func sameObjectRefSet(left, right []any) bool {
 	if len(left) != len(right) {
 		return false
 	}
-	leftSet, rightSet := make(map[string]bool, len(left)), make(map[string]bool, len(right))
-	for _, value := range left {
-		encoded, err := json.Marshal(value)
-		if err != nil || leftSet[string(encoded)] {
-			return false
-		}
-		leftSet[string(encoded)] = true
-	}
-	for _, value := range right {
-		encoded, err := json.Marshal(value)
-		if err != nil || rightSet[string(encoded)] {
-			return false
-		}
-		rightSet[string(encoded)] = true
-	}
-	if len(leftSet) != len(rightSet) {
+	leftSet, ok := objectRefKeys(left)
+	if !ok {
 		return false
 	}
-	for key := range leftSet {
-		if !rightSet[key] {
-			return false
+	rightSet, ok := objectRefKeys(right)
+	return ok && maps.Equal(leftSet, rightSet)
+}
+
+func objectRefKeys(refs []any) (map[string]struct{}, bool) {
+	keys := make(map[string]struct{}, len(refs))
+	for _, value := range refs {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return nil, false
 		}
+		key := string(encoded)
+		if _, exists := keys[key]; exists {
+			return nil, false
+		}
+		keys[key] = struct{}{}
 	}
-	return true
+	return keys, true
 }
 
 func sameStringSet(left, right []any) bool {
