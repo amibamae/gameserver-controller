@@ -66,6 +66,7 @@ The first deployment uses provider-supported Debian images and reviewed, version
 - [Architecture](docs/ARCHITECTURE.md)
 - [Core design](docs/CORE_DESIGN.md)
 - [Adapter contracts](docs/ADAPTER_CONTRACTS.md)
+- [Operator quick reference (start / stop / save / drain)](docs/OPERATOR_OPERATIONS.md)
 - [Configuration and secret references](docs/CONFIGURATION.md)
 - [Durable workflow engine](docs/WORKFLOW_ENGINE.md)
 - [Secret management](docs/SECRET_MANAGEMENT.md)

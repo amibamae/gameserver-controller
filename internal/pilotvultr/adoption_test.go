@@ -30,6 +30,103 @@ func adoptionInput() AdoptionRequest {
 	return AdoptionRequest{OperationID: strings.Repeat("a", 32), ServerID: "example-server", Environment: "production",
 		InstanceID: "example-instance", IP: "203.0.113.10", Region: "example-region", Plan: "example-plan", OSID: 123, OS: "Example Linux"}
 }
+
+func TestValidateAdoptionRequestRejectsInvalidIdentityAndIPFields(t *testing.T) {
+	base := adoptionInput()
+	cases := []struct {
+		name    string
+		mutate  func(*AdoptionRequest)
+		wantErr error
+	}{
+		{name: "valid request", mutate: func(*AdoptionRequest) {}, wantErr: nil},
+		{name: "missing operation ID", mutate: func(r *AdoptionRequest) { r.OperationID = "" }, wantErr: ErrInvalidRequest},
+		{name: "uppercase operation ID", mutate: func(r *AdoptionRequest) { r.OperationID = strings.Repeat("A", 32) }, wantErr: ErrInvalidRequest},
+		{name: "short operation ID", mutate: func(r *AdoptionRequest) { r.OperationID = strings.Repeat("a", 31) }, wantErr: ErrInvalidRequest},
+		{name: "long operation ID", mutate: func(r *AdoptionRequest) { r.OperationID = strings.Repeat("a", 33) }, wantErr: ErrInvalidRequest},
+		{name: "server ID too short", mutate: func(r *AdoptionRequest) { r.ServerID = "" }, wantErr: ErrInvalidRequest},
+		{name: "server ID too long", mutate: func(r *AdoptionRequest) { r.ServerID = strings.Repeat("s", 201) }, wantErr: ErrInvalidRequest},
+		{name: "server ID bad character", mutate: func(r *AdoptionRequest) { r.ServerID = "server space" }, wantErr: ErrInvalidRequest},
+		{name: "server ID allowed punctuation", mutate: func(r *AdoptionRequest) { r.ServerID = "S-0_a.9" }, wantErr: nil},
+		{name: "instance ID too long", mutate: func(r *AdoptionRequest) { r.InstanceID = strings.Repeat("i", 201) }, wantErr: ErrInvalidRequest},
+		{name: "instance ID bad character", mutate: func(r *AdoptionRequest) { r.InstanceID = "instance:1" }, wantErr: ErrInvalidRequest},
+		{name: "empty IP", mutate: func(r *AdoptionRequest) { r.IP = "" }, wantErr: ErrInvalidRequest},
+		{name: "IPv6 IP", mutate: func(r *AdoptionRequest) { r.IP = "2001:db8::10" }, wantErr: ErrInvalidRequest},
+		{name: "loopback IP", mutate: func(r *AdoptionRequest) { r.IP = "127.0.0.1" }, wantErr: ErrInvalidRequest},
+		{name: "link-local IP", mutate: func(r *AdoptionRequest) { r.IP = "169.254.1.1" }, wantErr: ErrInvalidRequest},
+		{name: "private IP", mutate: func(r *AdoptionRequest) { r.IP = "10.1.2.3" }, wantErr: ErrInvalidRequest},
+		{name: "broadcast IP", mutate: func(r *AdoptionRequest) { r.IP = "255.255.255.255" }, wantErr: ErrInvalidRequest},
+		{name: "unspecified IP", mutate: func(r *AdoptionRequest) { r.IP = "0.0.0.0" }, wantErr: ErrInvalidRequest},
+		{name: "normalized IP text", mutate: func(r *AdoptionRequest) { r.IP = "203.0.113.10 " }, wantErr: ErrInvalidRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := base
+			tc.mutate(&request)
+			if err := ValidateAdoptionRequest(request); !errors.Is(err, tc.wantErr) {
+				t.Fatalf("ValidateAdoptionRequest(%#v) error = %v, want %v", request, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateAdoptionRequestRejectsInvalidOperatingSystemFields(t *testing.T) {
+	base := adoptionInput()
+	cases := []struct {
+		name string
+		os   string
+	}{
+		{name: "empty OS", os: ""},
+		{name: "OS too long", os: strings.Repeat("O", 501)},
+		{name: "leading whitespace", os: " Example Linux"},
+		{name: "trailing whitespace", os: "Example Linux "},
+		{name: "internal tab", os: "Example\tLinux"},
+		{name: "control character", os: "Example\x01Linux"},
+		{name: "delete character", os: "Example\x7fLinux"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := base
+			request.OS = tc.os
+			if err := ValidateAdoptionRequest(request); !errors.Is(err, ErrInvalidRequest) {
+				t.Fatalf("ValidateAdoptionRequest(%q) error = %v, want %v", tc.os, err, ErrInvalidRequest)
+			}
+		})
+	}
+}
+
+func TestValidateAdoptionRequestAccepts500CharacterOSBoundary(t *testing.T) {
+	request := adoptionInput()
+	request.OS = strings.Repeat("O", 500)
+	if err := ValidateAdoptionRequest(request); err != nil {
+		t.Fatalf("ValidateAdoptionRequest error = %v, want nil (500 chars is the allowed boundary)", err)
+	}
+}
+
+func TestValidateAdoptionRequestRejectsInvalidIdentityFieldsFromVultrAPI(t *testing.T) {
+	base := adoptionInput()
+	cases := []struct {
+		name   string
+		mutate func(*AdoptionRequest)
+	}{
+		{name: "empty region", mutate: func(r *AdoptionRequest) { r.Region = "" }},
+		{name: "region too long", mutate: func(r *AdoptionRequest) { r.Region = strings.Repeat("r", 201) }},
+		{name: "empty plan", mutate: func(r *AdoptionRequest) { r.Plan = "" }},
+		{name: "plan too long", mutate: func(r *AdoptionRequest) { r.Plan = strings.Repeat("p", 201) }},
+		{name: "non-positive OSID", mutate: func(r *AdoptionRequest) { r.OSID = 0 }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			request := base
+			tc.mutate(&request)
+			err := ValidateAdoptionRequest(request)
+			// vultrapi.ValidateCreateInstanceRequest failures are wrapped and
+			// re-returned as pilotvultr.ErrInvalidRequest by the adoption validator.
+			if !errors.Is(err, ErrInvalidRequest) {
+				t.Fatalf("ValidateAdoptionRequest(%#v) error = %v, want %v", request, err, ErrInvalidRequest)
+			}
+		})
+	}
+}
 func adoptionInstance(r AdoptionRequest) vultrapi.Instance {
 	return vultrapi.Instance{ID: r.InstanceID, MainIP: r.IP, Region: r.Region, Plan: r.Plan, OSID: r.OSID, OS: r.OS, Label: "existing-example"}
 }

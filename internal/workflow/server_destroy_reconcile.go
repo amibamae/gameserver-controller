@@ -190,8 +190,7 @@ func optionalExactCapability(registry adapterRuntime, adapterID string, category
 func (w *ServerDestroyWorkflow) inspectProviderForReconciliation(ctx context.Context, operation store.OperationRecord, destroyStep store.OperationStep, instanceRef json.RawMessage) (serverDestroyInstanceInspection, time.Time, error) {
 	var observed serverDestroyInstanceInspection
 	inspect := operationStep(operation, destroyInspectInstanceStep)
-	if inspect.StepID == "" || inspect.CapabilityName != "hosting.instance.inspect" || inspect.AdapterID != destroyStep.AdapterID ||
-		inspect.CapabilityVersion == "" || !stepBindsRef(inspect.Input, "instance_ref", instanceRef) {
+	if !destroyReconciliationInspectStepValid(inspect, destroyStep, instanceRef) {
 		return observed, time.Time{}, errors.New("destroy reconciliation has no exact-instance inspection step")
 	}
 	capability, err := exactCapability(w.adapters, inspect.AdapterID, adapter.CategoryHosting, inspect.CapabilityName,
@@ -201,8 +200,10 @@ func (w *ServerDestroyWorkflow) inspectProviderForReconciliation(ctx context.Con
 		return observed, time.Time{}, errors.New("destroy reconciliation inspection capability changed")
 	}
 	output, at, err := w.invokeReadOnly(ctx, operation, destroyStep, capability, inspect.Input, "destroy-inspect")
-	if err != nil || w.schemas.ValidateJSON(capability.OutputSchemaURI, output) != nil || json.Unmarshal(output, &observed) != nil ||
-		!equalJSON(observed.InstanceRef, instanceRef) || !observationIsFreshForStep(observed.ObservedAt, destroyStep) {
+	if err != nil || w.schemas.ValidateJSON(capability.OutputSchemaURI, output) != nil || json.Unmarshal(output, &observed) != nil {
+		return serverDestroyInstanceInspection{}, time.Time{}, errors.New("destroy reconciliation inspection is stale or not bound to the exact instance")
+	}
+	if !equalJSON(observed.InstanceRef, instanceRef) || !observationIsFreshForStep(observed.ObservedAt, destroyStep) {
 		return serverDestroyInstanceInspection{}, time.Time{}, errors.New("destroy reconciliation inspection is stale or not bound to the exact instance")
 	}
 	return observed, at, nil
@@ -231,4 +232,14 @@ func (w *ServerDestroyWorkflow) invokeReadOnly(ctx context.Context, operation st
 		return nil, time.Time{}, err
 	}
 	return append(json.RawMessage(nil), response.Result.Output...), response.Result.ObservedAt, nil
+}
+
+// destroyReconciliationInspectStepValid reports whether the planned inspection
+// step is an exact-instance inspection issued through the same adapter as the
+// destroy step.
+func destroyReconciliationInspectStepValid(inspect store.OperationStep, destroyStep store.OperationStep, instanceRef json.RawMessage) bool {
+	if inspect.StepID == "" || inspect.CapabilityName != "hosting.instance.inspect" || inspect.AdapterID != destroyStep.AdapterID {
+		return false
+	}
+	return inspect.CapabilityVersion != "" && stepBindsRef(inspect.Input, "instance_ref", instanceRef)
 }
