@@ -46,19 +46,27 @@ func evaluateLifecycleReplacementIdentity(pkg *protocolPackage, fixture map[stri
 	if err := pkg.validateSchema(serverSchemaID, replacement); err != nil {
 		return nil, fmt.Errorf("replacement server does not match schema: %w", err)
 	}
-	previousRef, replacementRef := previous["instance_ref"], replacement["instance_ref"]
 	identityPreserved := previous["server_id"] == replacement["server_id"] && previous["environment_id"] == replacement["environment_id"]
 	previousDestroyed := stringValue(previous, "lifecycle_state") == "destroyed"
-	replacementInstanceDistinct := previousRef != nil && replacementRef != nil && !reflect.DeepEqual(previousRef, replacementRef)
-	generationRotated := previous["data_generation_id"] != nil && replacement["data_generation_id"] != nil && previous["data_generation_id"] != replacement["data_generation_id"]
+	replacementInstanceDistinct := distinctLifecycleInstanceRefs(previous["instance_ref"], replacement["instance_ref"])
+	generationRotated := rotatedLifecycleGeneration(previous["data_generation_id"], replacement["data_generation_id"])
 	reprovisionPermitted := protocolstate.CanTransitionServer(protocolstate.ServerDestroyed, protocolstate.ServerProvisioning)
+	safeToReprovision := previousDestroyed && reprovisionPermitted
 	return map[string]any{
 		"previous_server_schema_valid": true, "replacement_server_schema_valid": true,
 		"logical_identity_preserved": identityPreserved, "previous_instance_destroyed": previousDestroyed,
 		"replacement_instance_distinct": replacementInstanceDistinct, "data_generation_rotated": generationRotated,
 		"reprovision_transition_permitted": reprovisionPermitted,
-		"replacement_safe":                 identityPreserved && previousDestroyed && replacementInstanceDistinct && generationRotated && reprovisionPermitted,
+		"replacement_safe":                 safeToReprovision && identityPreserved && replacementInstanceDistinct && generationRotated,
 	}, nil
+}
+
+func distinctLifecycleInstanceRefs(previous, replacement any) bool {
+	return previous != nil && replacement != nil && !reflect.DeepEqual(previous, replacement)
+}
+
+func rotatedLifecycleGeneration(previous, replacement any) bool {
+	return previous != nil && replacement != nil && previous != replacement
 }
 
 // evaluateTransportStorageProfile evaluates the conformance fixtures
