@@ -66,9 +66,7 @@ jobs:
       - name: Validate declarative pilot policy
         run: go run ./cmd/pilot-capacity-check
       - name: Check complexity of changed functions
-        # Fails only for functions this pull request adds or changes that
-        # exceed the CLAUDE.md limits; existing code is not checked.
+        # The default PR checkout is a merge commit. Its first parent is the
+        # exact base tested, even if the target branch advances during CI.
         if: github.event_name == 'pull_request'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: go run ./cmd/complexity-check -base "origin/$BASE_REF"
+        run: go run ./cmd/complexity-check -base 'HEAD^1'
