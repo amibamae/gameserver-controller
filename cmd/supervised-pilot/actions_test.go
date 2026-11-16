@@ -20,32 +20,7 @@ func TestEveryActionIsDispatched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var dispatched []string
-	ast.Inspect(file, func(node ast.Node) bool {
-		fn, ok := node.(*ast.FuncDecl)
-		if !ok || fn.Name.Name != "runWithSettings" {
-			return true
-		}
-		ast.Inspect(fn.Body, func(node ast.Node) bool {
-			switch n := node.(type) {
-			case *ast.SwitchStmt:
-				if tag, ok := n.Tag.(*ast.Ident); ok && tag.Name == "action" {
-					for _, clause := range n.Body.List {
-						for _, expr := range clause.(*ast.CaseClause).List {
-							dispatched = append(dispatched, stringLiteral(t, expr))
-						}
-					}
-				}
-			case *ast.BinaryExpr:
-				// history is handled before the switch: if action == "history".
-				if ident, ok := n.X.(*ast.Ident); ok && ident.Name == "action" && n.Op == token.EQL {
-					dispatched = append(dispatched, stringLiteral(t, n.Y))
-				}
-			}
-			return true
-		})
-		return false
-	})
+	dispatched := dispatchedPilotActions(t, file)
 	var listed []string
 	for _, action := range pilotActions {
 		listed = append(listed, action.name)
@@ -55,6 +30,44 @@ func TestEveryActionIsDispatched(t *testing.T) {
 	if !slices.Equal(dispatched, listed) {
 		t.Fatalf("runWithSettings dispatches %v, pilotActions lists %v", dispatched, listed)
 	}
+}
+
+func dispatchedPilotActions(t *testing.T, file *ast.File) []string {
+	t.Helper()
+	var dispatched []string
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "runWithSettings" {
+			continue
+		}
+		ast.Inspect(fn.Body, func(node ast.Node) bool {
+			switch expr := node.(type) {
+			case *ast.SwitchStmt:
+				dispatched = appendSwitchActions(t, dispatched, expr)
+			case *ast.BinaryExpr:
+				// history is handled before the switch: if action == "history".
+				if ident, ok := expr.X.(*ast.Ident); ok && ident.Name == "action" && expr.Op == token.EQL {
+					dispatched = append(dispatched, stringLiteral(t, expr.Y))
+				}
+			}
+			return true
+		})
+	}
+	return dispatched
+}
+
+func appendSwitchActions(t *testing.T, actions []string, statement *ast.SwitchStmt) []string {
+	t.Helper()
+	tag, ok := statement.Tag.(*ast.Ident)
+	if !ok || tag.Name != "action" {
+		return actions
+	}
+	for _, clause := range statement.Body.List {
+		for _, expr := range clause.(*ast.CaseClause).List {
+			actions = append(actions, stringLiteral(t, expr))
+		}
+	}
+	return actions
 }
 
 func stringLiteral(t *testing.T, expr ast.Expr) string {
