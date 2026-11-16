@@ -63,6 +63,11 @@ func TestBackupContextCaptureIsDurableIdempotentAndImmutable(t *testing.T) {
 	if _, err := s.UpdateOperation(captured.Revision, next); !errors.Is(err, ErrImmutableFields) {
 		t.Fatalf("metadata rewrite error = %v", err)
 	}
+	assertRestartedBackupContext(t, s, op.Record.OperationID)
+}
+
+func assertRestartedBackupContext(t *testing.T, s *BoltStore, operationID string) {
+	t.Helper()
 	path := s.db.Path()
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
@@ -71,8 +76,12 @@ func TestBackupContextCaptureIsDurableIdempotentAndImmutable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer reopened.Close()
-	loaded, err := reopened.GetOperation(op.Record.OperationID)
+	defer func() {
+		if err := reopened.Close(); err != nil {
+			t.Errorf("close reopened store: %v", err)
+		}
+	}()
+	loaded, err := reopened.GetOperation(operationID)
 	if err != nil || loaded.Record.BackupInitialLifecycleState != protocolstate.ServerStopped {
 		t.Fatalf("restarted capture = %#v, %v", loaded, err)
 	}
@@ -117,26 +126,19 @@ func TestBackupContextRejectsCaptureAfterDispatch(t *testing.T) {
 }
 
 func TestBackupContextRejectsChangedTargetAndMissingLock(t *testing.T) {
-	for _, scenario := range []string{"target", "lock"} {
-		t.Run(scenario, func(t *testing.T) {
+	scenarios := []struct {
+		name   string
+		change func(*bolt.Tx) error
+	}{
+		{"target", replaceBackupContextInstance},
+		{"lock", func(tx *bolt.Tx) error {
+			return tx.Bucket(locksBucket).Delete([]byte(LogicalServerLockScope("staging", "server-1")))
+		}},
+	}
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
 			s, op := backupContextFixture(t)
-			if err := s.db.Update(func(tx *bolt.Tx) error {
-				if scenario == "lock" {
-					return tx.Bucket(locksBucket).Delete([]byte(LogicalServerLockScope("staging", "server-1")))
-				}
-				bucket := tx.Bucket(logicalServersBucket)
-				key := logicalServerKey("staging", "server-1")
-				var server StoredLogicalServer
-				if err := json.Unmarshal(bucket.Get(key), &server); err != nil {
-					return err
-				}
-				server.Record.InstanceRef = json.RawMessage(`{"adapter_id":"hosting.fake","environment_id":"staging","resource_kind":"instance","external_id":"replacement"}`)
-				encoded, err := json.Marshal(server)
-				if err != nil {
-					return err
-				}
-				return bucket.Put(key, encoded)
-			}); err != nil {
+			if err := s.db.Update(scenario.change); err != nil {
 				t.Fatal(err)
 			}
 			if _, err := s.CaptureBackupInitialState(op.Record.OperationID, op.Revision); err == nil {
@@ -148,4 +150,19 @@ func TestBackupContextRejectsChangedTargetAndMissingLock(t *testing.T) {
 			}
 		})
 	}
+}
+
+func replaceBackupContextInstance(tx *bolt.Tx) error {
+	bucket := tx.Bucket(logicalServersBucket)
+	key := logicalServerKey("staging", "server-1")
+	var server StoredLogicalServer
+	if err := json.Unmarshal(bucket.Get(key), &server); err != nil {
+		return err
+	}
+	server.Record.InstanceRef = json.RawMessage(`{"adapter_id":"hosting.fake","environment_id":"staging","resource_kind":"instance","external_id":"replacement"}`)
+	encoded, err := json.Marshal(server)
+	if err != nil {
+		return err
+	}
+	return bucket.Put(key, encoded)
 }

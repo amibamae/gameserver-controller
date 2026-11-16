@@ -23,11 +23,8 @@ final class HttpConfigurator {
   /**
    * Creates an HTTP/HTTPS server configured with the given TLS material.
    */
-  static HttpConfigurator fromTlsMaterial(Material material, boolean tlsEnabled) {
-    if (!tlsEnabled) {
-      return null;
-    }
-
+  static HttpConfigurator fromTlsMaterial(Material material) {
+    // TLS is always enabled when material is provided (per requirements)
     try {
       SSLContext context = SSLContext.getInstance("TLS");
       // Initialize with key managers and trust managers for mTLS

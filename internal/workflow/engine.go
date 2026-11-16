@@ -1089,23 +1089,22 @@ func currentStepIndex(record store.OperationRecord) int {
 }
 
 func activeStepIndex(record store.OperationRecord) int {
-	if record.CurrentStepID != nil {
-		for index := range record.Steps {
-			if record.Steps[index].StepID == *record.CurrentStepID {
-				switch record.Steps[index].Status {
-				case protocolstate.StepRunning, protocolstate.StepWaiting, protocolstate.StepOutcomeUnknown:
-					return index
-				}
-			}
-		}
-	}
+	firstActive := -1
 	for index := range record.Steps {
-		switch record.Steps[index].Status {
+		step := &record.Steps[index]
+		switch step.Status {
 		case protocolstate.StepRunning, protocolstate.StepWaiting, protocolstate.StepOutcomeUnknown:
+		default:
+			continue
+		}
+		if record.CurrentStepID == nil || step.StepID == *record.CurrentStepID {
 			return index
 		}
+		if firstActive < 0 {
+			firstActive = index
+		}
 	}
-	return -1
+	return firstActive
 }
 
 func firstPendingStep(record store.OperationRecord) int {

@@ -22,7 +22,13 @@ func mustResolve(t *testing.T, settings Settings) Policy {
 
 func TestDefaultsUseMinutes58To59OfEveryHour(t *testing.T) {
 	policy := mustResolve(t, Settings{})
-	if policy.BillingIncrement != time.Hour || policy.WindowStart != 58*time.Minute || policy.WindowEnd != 59*time.Minute || !policy.BillingAware {
+	wantPolicy := Policy{
+		BillingIncrement: time.Hour,
+		WindowStart:      58 * time.Minute,
+		WindowEnd:        59 * time.Minute,
+		BillingAware:     true,
+	}
+	if policy != wantPolicy {
 		t.Fatalf("defaults = %+v", policy)
 	}
 	cases := map[float64]bool{0: false, 30: false, 57.9: false, 58: true, 58.5: true, 59: false, 60: false, 118: true, 118.99: true, 119: false, 178.2: true}
@@ -46,23 +52,21 @@ func TestScaleDownWaitsForTheWindowAfterIdleTime(t *testing.T) {
 	}
 	// Idle since minute 10: idle long enough at 40, but the paid hour runs
 	// to 60, so wait for minute 58.
-	decision := policy.ScaleDown(created, at(40), at(10), idle)
-	if decision.Allowed || !decision.NotBefore.Equal(at(58)) {
-		t.Fatalf("idle but early: %+v", decision)
-	}
+	assertScaleDownDelay(t, policy.ScaleDown(created, at(40), at(10), idle), at(58), "idle but early")
 	if decision := policy.ScaleDown(created, at(58.2), at(10), idle); !decision.Allowed {
 		t.Fatalf("in window: %+v", decision)
 	}
 	// Idle since minute 40: not idle long enough by the first window, so
 	// the next chance is minute 118.
-	decision = policy.ScaleDown(created, at(58.2), at(40), idle)
-	if decision.Allowed || !decision.NotBefore.Equal(at(118)) {
-		t.Fatalf("not idle long enough: %+v", decision)
-	}
+	assertScaleDownDelay(t, policy.ScaleDown(created, at(58.2), at(40), idle), at(118), "not idle long enough")
 	// Idle time ends inside a window: check again exactly then.
-	decision = policy.ScaleDown(created, at(50), at(28.5), idle)
-	if decision.Allowed || !decision.NotBefore.Equal(at(58.5)) {
-		t.Fatalf("idle ends in window: %+v", decision)
+	assertScaleDownDelay(t, policy.ScaleDown(created, at(50), at(28.5), idle), at(58.5), "idle ends in window")
+}
+
+func assertScaleDownDelay(t *testing.T, decision Decision, notBefore time.Time, scenario string) {
+	t.Helper()
+	if decision.Allowed || !decision.NotBefore.Equal(notBefore) {
+		t.Fatalf("%s: %+v", scenario, decision)
 	}
 }
 

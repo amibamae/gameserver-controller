@@ -145,18 +145,24 @@ func (u createCase) outcomeChecks(dispatchAllowed, outputValid bool) createOutco
 	operationBound := u.operationBound()
 	o := createOutcome{bound: u.resultBound(operationBound)}
 	outcome := stringValue(u.output, "outcome")
-	o.confirmed = dispatchAllowed && outputValid && o.bound && (outcome == "created" || outcome == "unchanged")
-	uncertain := outcome == "accepted" || outcome == "outcome_unknown"
 	inspection := u.inspectionFacts()
-	// Reconciliation and retry need a dispatched, valid, bound, uncertain
-	// result whose follow-up inspection names this unit.
-	inspectable := dispatchAllowed && outputValid && o.bound && uncertain && inspection.bound
 	resolvedState := stringValue(u.resolved, "state")
-	o.reconciled = inspectable && inspection.showsDefinitionInstalled() && resolvedState == "completed"
-	o.retryPermitted = inspectable && inspection.state == "absent" && resolvedState == "no_effect"
-	o.operatorRequired = dispatchAllowed && uncertain && (!operationBound || inspection.unresolved())
-	o.mustInspect = stringValue(u.existing, "state") == "unknown" ||
-		(dispatchAllowed && (!outputValid || !o.bound || (uncertain && !o.reconciled && !o.retryPermitted)))
+
+	o.mustInspect = stringValue(u.existing, "state") == "unknown"
+	if !dispatchAllowed {
+		return o
+	}
+
+	validResult := outputValid && o.bound
+	o.mustInspect = o.mustInspect || !validResult
+	switch outcome {
+	case "created", "unchanged":
+		o.confirmed = validResult
+	case "accepted", "outcome_unknown":
+		o.reconciled, o.retryPermitted = inspection.reconcile(validResult, resolvedState)
+		o.operatorRequired = !operationBound || inspection.unresolved()
+		o.mustInspect = o.mustInspect || !(o.reconciled || o.retryPermitted)
+	}
 	return o
 }
 
@@ -173,6 +179,16 @@ func (u createCase) inspectionFacts() createInspection {
 		definitionMatches: u.inspection["release_id"] == u.request["release_id"] && reflect.DeepEqual(u.inspection["definition_checksum"], u.checksum),
 		state:             stringValue(u.inspection, "state"),
 	}
+}
+
+// reconcile confirms installation or permits retry only for a valid result
+// with an inspection bound to the requested unit.
+func (i createInspection) reconcile(validResult bool, resolvedState string) (confirmed, retryPermitted bool) {
+	if !validResult || !i.bound {
+		return false, false
+	}
+	return i.showsDefinitionInstalled() && resolvedState == "completed",
+		i.state == "absent" && resolvedState == "no_effect"
 }
 
 // showsDefinitionInstalled: the unit exists (stopped or running) with this
