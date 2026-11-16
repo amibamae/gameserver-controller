@@ -44,6 +44,23 @@ func loadAdapterDirectory(dir string) ([]AdapterProfile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", AdapterDirectoryName, err)
 	}
+	names, err := adapterProfileFileNames(entries)
+	if err != nil {
+		return nil, err
+	}
+	profiles := make([]AdapterProfile, 0, len(names))
+	for _, name := range names {
+		profile, err := readAdapterFile(filepath.Join(dir, name))
+		if err != nil {
+			return nil, fmt.Errorf("%s/%s: %w", AdapterDirectoryName, name, err)
+		}
+		profile.Source = name
+		profiles = append(profiles, profile)
+	}
+	return profiles, nil
+}
+
+func adapterProfileFileNames(entries []fs.DirEntry) ([]string, error) {
 	names := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		name := entry.Name()
@@ -56,16 +73,7 @@ func loadAdapterDirectory(dir string) ([]AdapterProfile, error) {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	profiles := make([]AdapterProfile, 0, len(names))
-	for _, name := range names {
-		profile, err := readAdapterFile(filepath.Join(dir, name))
-		if err != nil {
-			return nil, fmt.Errorf("%s/%s: %w", AdapterDirectoryName, name, err)
-		}
-		profile.Source = name
-		profiles = append(profiles, profile)
-	}
-	return profiles, nil
+	return names, nil
 }
 
 func readAdapterFile(path string) (AdapterProfile, error) {
@@ -91,6 +99,10 @@ func readAdapterFile(path string) (AdapterProfile, error) {
 	if err != nil || len(data) > maxAdapterFileBytes {
 		return AdapterProfile{}, errors.New("cannot be read")
 	}
+	return decodeAdapterProfile(data)
+}
+
+func decodeAdapterProfile(data []byte) (AdapterProfile, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	decoder.KnownFields(true)
 	var profile AdapterProfile
