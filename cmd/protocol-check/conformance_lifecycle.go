@@ -46,19 +46,27 @@ func evaluateLifecycleReplacementIdentity(pkg *protocolPackage, fixture map[stri
 	if err := pkg.validateSchema(serverSchemaID, replacement); err != nil {
 		return nil, fmt.Errorf("replacement server does not match schema: %w", err)
 	}
-	previousRef, replacementRef := previous["instance_ref"], replacement["instance_ref"]
 	identityPreserved := previous["server_id"] == replacement["server_id"] && previous["environment_id"] == replacement["environment_id"]
 	previousDestroyed := stringValue(previous, "lifecycle_state") == "destroyed"
-	replacementInstanceDistinct := previousRef != nil && replacementRef != nil && !reflect.DeepEqual(previousRef, replacementRef)
-	generationRotated := previous["data_generation_id"] != nil && replacement["data_generation_id"] != nil && previous["data_generation_id"] != replacement["data_generation_id"]
+	replacementInstanceDistinct := distinctLifecycleInstanceRefs(previous["instance_ref"], replacement["instance_ref"])
+	generationRotated := rotatedLifecycleGeneration(previous["data_generation_id"], replacement["data_generation_id"])
 	reprovisionPermitted := protocolstate.CanTransitionServer(protocolstate.ServerDestroyed, protocolstate.ServerProvisioning)
+	safeToReprovision := previousDestroyed && reprovisionPermitted
 	return map[string]any{
 		"previous_server_schema_valid": true, "replacement_server_schema_valid": true,
 		"logical_identity_preserved": identityPreserved, "previous_instance_destroyed": previousDestroyed,
 		"replacement_instance_distinct": replacementInstanceDistinct, "data_generation_rotated": generationRotated,
 		"reprovision_transition_permitted": reprovisionPermitted,
-		"replacement_safe":                 identityPreserved && previousDestroyed && replacementInstanceDistinct && generationRotated && reprovisionPermitted,
+		"replacement_safe":                 safeToReprovision && identityPreserved && replacementInstanceDistinct && generationRotated,
 	}, nil
+}
+
+func distinctLifecycleInstanceRefs(previous, replacement any) bool {
+	return previous != nil && replacement != nil && !reflect.DeepEqual(previous, replacement)
+}
+
+func rotatedLifecycleGeneration(previous, replacement any) bool {
+	return previous != nil && replacement != nil && previous != replacement
 }
 
 // evaluateTransportStorageProfile evaluates the conformance fixtures
@@ -83,12 +91,7 @@ func evaluateTransportStorageProfile(pkg *protocolPackage, fixture map[string]an
 	profile := "local-unix-stream-v1"
 	profileNegotiated := stringValue(offer, "profile") == profile && selected == profile
 	profileDeclared := contains(arrayValue(descriptor, "stream_transport_profiles"), profile)
-	hasPut, hasGet := false, false
-	for _, raw := range arrayValue(descriptor, "capabilities") {
-		name := stringValue(asObject(raw), "name")
-		hasPut = hasPut || name == "storage.object.put"
-		hasGet = hasGet || name == "storage.object.get"
-	}
+	hasPut, hasGet := advertisedStorageStreamCapabilities(descriptor)
 	storageStreamCapabilitiesAccepted := (!hasPut && !hasGet) || profileNegotiated && profileDeclared
 	return map[string]any{
 		"initialization_valid":                 true,
@@ -99,6 +102,15 @@ func evaluateTransportStorageProfile(pkg *protocolPackage, fixture map[string]an
 		"storage_get_advertised":               hasGet,
 		"storage_stream_capabilities_accepted": storageStreamCapabilitiesAccepted,
 	}, nil
+}
+
+func advertisedStorageStreamCapabilities(descriptor map[string]any) (hasPut, hasGet bool) {
+	for _, raw := range arrayValue(descriptor, "capabilities") {
+		name := stringValue(asObject(raw), "name")
+		hasPut = hasPut || name == "storage.object.put"
+		hasGet = hasGet || name == "storage.object.get"
+	}
+	return hasPut, hasGet
 }
 
 // evaluateSafetyDestroyBlocked evaluates the conformance fixtures

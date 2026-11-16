@@ -123,13 +123,21 @@ func invokeRefactorStream(h *captureHarness, r adapter.InvokeRequest, data strin
 	return err
 }
 
+type authorizationFailureCase struct {
+	name    string
+	setup   func(*captureHarness) (context.Context, string)
+	message string
+}
+
 func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
+	runAuthorizationRejectionCases(t, durableAuthorizationFailures())
+	runAuthorizationRejectionCases(t, targetAuthorizationFailures())
+	runAuthorizationRejectionCases(t, destinationAndInstanceAuthorizationFailures())
+}
+
+func durableAuthorizationFailures() []authorizationFailureCase {
 	stepIDPointer := func(id string) *string { return &id }
-	tests := []struct {
-		name    string
-		setup   func(*captureHarness) (context.Context, string)
-		message string
-	}{
+	return []authorizationFailureCase{
 		{"nil context", func(h *captureHarness) (context.Context, string) {
 			var ctx context.Context
 			return ctx, h.descriptor.AdapterID
@@ -183,6 +191,11 @@ func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
 			h.records.lock.Scope = "other-scope"
 			return context.Background(), h.descriptor.AdapterID
 		}, "capture requires the durable server lock"},
+	}
+}
+
+func targetAuthorizationFailures() []authorizationFailureCase {
+	return []authorizationFailureCase{
 		{"input targets another server", func(h *captureHarness) (context.Context, string) {
 			h.setInput(func(input map[string]any) { input["target"].(map[string]any)["server_id"] = "other-server" })
 			return context.Background(), h.descriptor.AdapterID
@@ -191,6 +204,11 @@ func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
 			h.setInput(func(input map[string]any) { input["target"].(map[string]any)["environment_id"] = "production" })
 			return context.Background(), h.descriptor.AdapterID
 		}, "capture target does not match durable operation"},
+	}
+}
+
+func destinationAndInstanceAuthorizationFailures() []authorizationFailureCase {
+	return []authorizationFailureCase{
 		{"destination without a transfer ID", func(h *captureHarness) (context.Context, string) {
 			reference := invokeRefactorDestination(time.Minute)
 			reference.TransferID = ""
@@ -220,9 +238,7 @@ func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
 		}, "capture destination is not a valid controller-bound stream"},
 		{"destination already claimed", func(h *captureHarness) (context.Context, string) {
 			invokeRefactorExternal(h, invokeRefactorDestination(time.Minute))
-			if _, err := h.request.Params.RequestContext.CreateStream("workflow-transfer"); err != nil {
-				h.t.Fatal(err)
-			}
+			preclaimTestCaptureDestination(h)
 			return context.Background(), h.descriptor.AdapterID
 		}, "capture destination is not a valid controller-bound stream"},
 		{"instance reference is not an instance", func(h *captureHarness) (context.Context, string) {
@@ -237,14 +253,14 @@ func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
 			return context.Background(), h.descriptor.AdapterID
 		}, "invalid capture instance"},
 	}
+}
+
+func runAuthorizationRejectionCases(t *testing.T, tests []authorizationFailureCase) {
+	t.Helper()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			h, counting := invokeRefactorHarness(t)
-			ctx, adapterID := test.setup(h)
-			_, err := h.runtime().Invoke(ctx, adapterID, h.request)
-			if err == nil || err.Error() != test.message {
-				t.Fatalf("Invoke error = %v, want %q", err, test.message)
-			}
+			err := invokeAuthorizationFailure(t, h, test)
 			if invokeRefactorSideEffects(err) {
 				t.Fatalf("authorization failure %v was reported as possibly side-effecting", err)
 			}
@@ -256,14 +272,32 @@ func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
 	}
 }
 
+func invokeAuthorizationFailure(t *testing.T, h *captureHarness, test authorizationFailureCase) error {
+	t.Helper()
+	ctx, adapterID := test.setup(h)
+	_, err := h.runtime().Invoke(ctx, adapterID, h.request)
+	if err == nil || err.Error() != test.message {
+		t.Fatalf("Invoke error = %v, want %q", err, test.message)
+	}
+	return err
+}
+
 // TestInvokeRefactorAuthorizeCheckOrder breaks two adjacent checks at once
 // and requires the earlier check's message.
 func TestInvokeRefactorAuthorizeCheckOrder(t *testing.T) {
-	tests := []struct {
-		name    string
-		setup   func(*captureHarness) (context.Context, string)
-		message string
-	}{
+	for _, test := range authorizationCheckOrderCases() {
+		t.Run(test.name, func(t *testing.T) {
+			h, counting := invokeRefactorHarness(t)
+			invokeAuthorizationFailure(t, h, test)
+			if counting.opened != 0 || h.called {
+				t.Fatalf("rejected capture opened staging %d times, called=%v", counting.opened, h.called)
+			}
+		})
+	}
+}
+
+func authorizationCheckOrderCases() []authorizationFailureCase {
+	return []authorizationFailureCase{
 		{"context before operation", func(h *captureHarness) (context.Context, string) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
@@ -311,19 +345,6 @@ func TestInvokeRefactorAuthorizeCheckOrder(t *testing.T) {
 			return context.Background(), h.descriptor.AdapterID
 		}, "capture destination is not a valid controller-bound stream"},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			h, counting := invokeRefactorHarness(t)
-			ctx, adapterID := test.setup(h)
-			_, err := h.runtime().Invoke(ctx, adapterID, h.request)
-			if err == nil || err.Error() != test.message {
-				t.Fatalf("Invoke error = %v, want %q", err, test.message)
-			}
-			if counting.opened != 0 || h.called {
-				t.Fatalf("rejected capture opened staging %d times, called=%v", counting.opened, h.called)
-			}
-		})
-	}
 }
 
 func TestInvokeRefactorAuthorizeAcceptsBoundaries(t *testing.T) {
@@ -360,14 +381,21 @@ func TestInvokeRefactorAuthorizeAcceptsBoundaries(t *testing.T) {
 	}
 }
 
+type captureSetupFailureCase struct {
+	name        string
+	setup       func(*captureHarness, *invokeRefactorStaging)
+	message     string
+	sideEffects bool
+	discarded   bool
+}
+
 func TestInvokeRefactorStagingAndStreamSetup(t *testing.T) {
-	tests := []struct {
-		name        string
-		setup       func(*captureHarness, *invokeRefactorStaging)
-		message     string
-		sideEffects bool
-		discarded   bool
-	}{
+	runCaptureSetupFailureCases(t, stagingOpenFailures())
+	runCaptureSetupFailureCases(t, streamSetupFailures())
+}
+
+func stagingOpenFailures() []captureSetupFailureCase {
+	return []captureSetupFailureCase{
 		{"staging needs reconciliation", func(h *captureHarness, s *invokeRefactorStaging) {
 			s.err = ErrStagingNeedsReconciliation
 		}, invokeRefactorUncertainText, true, false},
@@ -381,44 +409,68 @@ func TestInvokeRefactorStagingAndStreamSetup(t *testing.T) {
 		{"staging returns no stage", func(h *captureHarness, s *invokeRefactorStaging) {
 			s.nilStage = true
 		}, "capture staging is unavailable", false, false},
+	}
+}
+
+func streamSetupFailures() []captureSetupFailureCase {
+	return []captureSetupFailureCase{
 		{"destination claimed before dispatch", func(h *captureHarness, s *invokeRefactorStaging) {
 			invokeRefactorExternal(h, invokeRefactorDestination(time.Minute))
-			s.onOpen = func() { _, _ = h.request.Params.RequestContext.CreateStream("workflow-transfer") }
+			s.onOpen = func() { preclaimTestCaptureDestination(h) }
 		}, "capture destination could not be claimed", false, true},
 		{"destination claimed and cleanup fails", func(h *captureHarness, s *invokeRefactorStaging) {
 			invokeRefactorExternal(h, invokeRefactorDestination(time.Minute))
-			s.onOpen = func() { _, _ = h.request.Params.RequestContext.CreateStream("workflow-transfer") }
+			s.onOpen = func() { preclaimTestCaptureDestination(h) }
 			h.sink.failDiscard = true
 		}, "capture staging cleanup failed before dispatch", false, true},
 		{"stream cannot be issued", func(h *captureHarness, s *invokeRefactorStaging) {
-			s.onOpen = func() {
-				_, _, _ = h.broker.IssueTracked(h.scope, 8, time.Now().Add(time.Minute), time.Now().Add(time.Minute), io.Discard)
-			}
+			s.onOpen = func() { fillTestCaptureBroker(h) }
 		}, "capture stream could not be issued", false, true},
 		{"stream cannot be issued and cleanup fails", func(h *captureHarness, s *invokeRefactorStaging) {
-			s.onOpen = func() {
-				_, _, _ = h.broker.IssueTracked(h.scope, 8, time.Now().Add(time.Minute), time.Now().Add(time.Minute), io.Discard)
-			}
+			s.onOpen = func() { fillTestCaptureBroker(h) }
 			h.sink.failDiscard = true
 		}, "capture staging cleanup failed before dispatch", false, true},
 	}
+}
+
+func preclaimTestCaptureDestination(h *captureHarness) {
+	h.t.Helper()
+	if _, err := h.request.Params.RequestContext.CreateStream("workflow-transfer"); err != nil {
+		h.t.Fatalf("claim capture destination during staging open: %v", err)
+	}
+}
+
+func fillTestCaptureBroker(h *captureHarness) {
+	h.t.Helper()
+	if _, _, err := h.broker.IssueTracked(h.scope, 8, time.Now().Add(time.Minute), time.Now().Add(time.Minute), io.Discard); err != nil {
+		h.t.Fatalf("fill capture broker during staging open: %v", err)
+	}
+}
+
+func runCaptureSetupFailureCases(t *testing.T, tests []captureSetupFailureCase) {
+	t.Helper()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			h, counting := invokeRefactorHarness(t)
-			test.setup(h, counting)
-			response, err := h.runtime().Invoke(context.Background(), h.descriptor.AdapterID, h.request)
-			if err == nil || err.Error() != test.message {
-				t.Fatalf("Invoke error = %v, want %q", err, test.message)
-			}
-			if invokeRefactorSideEffects(err) != test.sideEffects {
-				t.Fatalf("side effects = %v, want %v", invokeRefactorSideEffects(err), test.sideEffects)
-			}
-			if counting.opened != 1 || h.called || h.sink.sealed || h.sink.discarded != test.discarded {
-				t.Fatalf("opened=%d called=%v sealed=%v discarded=%v", counting.opened, h.called, h.sink.sealed, h.sink.discarded)
-			}
-			if response.Result.Output != nil || response.Result.Outcome != "" {
-				t.Fatalf("failed setup returned a response: %+v", response)
-			}
+			assertCaptureSetupFailure(t, test)
 		})
+	}
+}
+
+func assertCaptureSetupFailure(t *testing.T, test captureSetupFailureCase) {
+	t.Helper()
+	h, counting := invokeRefactorHarness(t)
+	test.setup(h, counting)
+	response, err := h.runtime().Invoke(context.Background(), h.descriptor.AdapterID, h.request)
+	if err == nil || err.Error() != test.message {
+		t.Fatalf("Invoke error = %v, want %q", err, test.message)
+	}
+	if invokeRefactorSideEffects(err) != test.sideEffects {
+		t.Fatalf("side effects = %v, want %v", invokeRefactorSideEffects(err), test.sideEffects)
+	}
+	if counting.opened != 1 || h.called || h.sink.sealed || h.sink.discarded != test.discarded {
+		t.Fatalf("opened=%d called=%v sealed=%v discarded=%v", counting.opened, h.called, h.sink.sealed, h.sink.discarded)
+	}
+	if response.Result.Output != nil || response.Result.Outcome != "" {
+		t.Fatalf("failed setup returned a response: %+v", response)
 	}
 }
