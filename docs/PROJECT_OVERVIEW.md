@@ -370,9 +370,80 @@ The example configuration file at
 [configs/controller.example.yaml](../configs/controller.example.yaml) is
 documented line by line in [docs/CONFIGURATION.md](CONFIGURATION.md).
 
+### Setting limits for a server
+
+Operators control when and how a server scales through per-server `lifecycle`
+settings. These are the knobs that matter day to day:
+
+**`idle_shutdown`** (implemented) – the minimum amount of time a server must be
+idle before the controller will shut it down. While the server is running, the
+controller only starts or stops servers inside the billing decision window
+(default: minutes 58–59 of each running hour), so a server that idles at minute
+50 will not be destroyed until the next window opens. If the plan's hourly
+cost is below `ignore_billing_below_hourly_cost`, the window is ignored and the
+server scales down as soon as it is idle. Both cost values are optional; set
+them in the provider account's currency to the cost of the plan the server
+actually runs on.
+
+```yaml
+lifecycle:
+  idle_shutdown: 15m
+  scaling:
+    billing_increment: 1h                # default
+    decision_window_start: 58m           # default
+    decision_window_end: 59m             # default
+    ignore_billing_below_hourly_cost: "0.005"  # optional
+```
+
+**`migration_targets`** (planned; validator rejects until accepted) – controls
+how many migration target servers may run alongside a live server at the same
+time. A migration target is the new server a world migration moves to; it runs
+side by side with the live server until the handover completes. Set
+`enabled: false` to prevent migration targets entirely. `max_servers: 0`
+removes the concurrency limit.
+
+```yaml
+# controller-level default (planned)
+controller:
+  capacity:
+    migration_targets:
+      enabled: true
+      max_servers: 1
+
+# per-server override (planned)
+lifecycle:
+  migration_targets:
+    enabled: true
+    max_servers: 1
+```
+
+**`scaling.vertical`** (planned; validator rejects until accepted) – turns on
+vertical auto-scaling for one server. When enabled, the controller moves the
+server one rung at a time through a plan ladder (cheapest first) via a
+migration to a migration target server. A manual scaling command pauses
+auto-scaling for that server until it completes.
+
+```yaml
+lifecycle:
+  scaling:
+    vertical:
+      enabled: true
+      plans:
+        - vc2-1c-2gb
+        - vc2-2c-4gb
+        - vc2-4c-8gb
+```
+
+> **Note:** The planned options (`migration_targets`, `scaling.vertical`) are
+> documented in CONFIGURATION.md so operators can plan for them, but adding
+> them to a configuration file today will make it fail validation. The
+> controller runtime does not schedule idle shutdowns yet; the validator
+> checks the policy, not the execution.
+
 **Deep link:** [docs/CONFIGURATION.md](CONFIGURATION.md) – the full v1 schema
-reference, including the network profile, scaling policy, billing policy, and
-secret reference syntax.
+reference, including the network profile, scaling and billing policy, backup
+schedule and retention, the planned vertical-scaling options, and the secret
+reference syntax.
 
 ---
 
