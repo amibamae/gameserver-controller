@@ -2,6 +2,7 @@ package io.github.amibamae.gsc.velocity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.moandjiezana.toml.Toml;
@@ -25,6 +26,9 @@ class BridgeConfigAndStoreTest {
       assertEquals(Duration.ofSeconds(5), config.healthCheckInterval());
       assertTrue(config.joinBackends().isEmpty());
       assertEquals(AutoMover.Settings.DEFAULT, config.autoMove(), "default: move 5 waiting players every 5 seconds");
+      assertTrue(config.enforceTokenPermissions());
+      assertTrue(config.enforceLoopbackBind());
+      assertFalse(config.enforceFallback(), "default: the controller registers the fallback backend at runtime");
     }
   }
 

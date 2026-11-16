@@ -88,7 +88,7 @@ class BridgeHttpServerTest {
   @BeforeEach
   void start() throws Exception {
     BridgeService service = new BridgeService("velocity-edge-001", backends, sessions, proxy, clock, () -> saves++);
-    server = new BridgeHttpServer(service, TOKEN.getBytes(StandardCharsets.UTF_8), NOPLogger.NOP_LOGGER);
+    server = new BridgeHttpServer(service, TOKEN.getBytes(StandardCharsets.UTF_8), true, NOPLogger.NOP_LOGGER);
     InetSocketAddress bound = server.start(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0));
     base = URI.create("http://127.0.0.1:" + bound.getPort());
   }
@@ -221,8 +221,35 @@ class BridgeHttpServerTest {
   @Test
   void refusesNonLoopbackBind() {
     BridgeService service = new BridgeService("p", backends, sessions, proxy, clock, () -> {});
-    BridgeHttpServer other = new BridgeHttpServer(service, TOKEN.getBytes(StandardCharsets.UTF_8), NOPLogger.NOP_LOGGER);
+    BridgeHttpServer other = new BridgeHttpServer(service, TOKEN.getBytes(StandardCharsets.UTF_8), true, NOPLogger.NOP_LOGGER);
     assertThrows(IllegalArgumentException.class, () -> other.start(new InetSocketAddress("0.0.0.0", 0)));
-    assertThrows(IllegalArgumentException.class, () -> new BridgeHttpServer(service, "short".getBytes(StandardCharsets.UTF_8), NOPLogger.NOP_LOGGER));
+    assertThrows(IllegalArgumentException.class, () -> new BridgeHttpServer(service, "short".getBytes(StandardCharsets.UTF_8), true, NOPLogger.NOP_LOGGER));
+  }
+
+  @Test
+  void pinsNonLoopbackRejectionMessage() {
+    BridgeService service = new BridgeService("p", backends, sessions, proxy, clock, () -> {});
+    BridgeHttpServer other = new BridgeHttpServer(service, TOKEN.getBytes(StandardCharsets.UTF_8), true, NOPLogger.NOP_LOGGER);
+    IllegalArgumentException failure =
+        assertThrows(IllegalArgumentException.class, () -> other.start(new InetSocketAddress("0.0.0.0", 0)));
+    assertEquals("bridge must bind to a loopback address", failure.getMessage());
+  }
+
+  @Test
+  void allowsNonLoopbackBindWhenDisabled() throws Exception {
+    // With the lock disabled the 0.0.0.0 address the previous test rejects is
+    // accepted; the server must start and report the address it bound.
+    BridgeService service = new BridgeService("p", backends, sessions, proxy, clock, () -> {});
+    BridgeHttpServer other = new BridgeHttpServer(service, TOKEN.getBytes(StandardCharsets.UTF_8), false, NOPLogger.NOP_LOGGER);
+    try {
+      InetSocketAddress bound = other.start(new InetSocketAddress("0.0.0.0", 0));
+      // The OS may report the bound address as the IPv6 wildcard (::) instead
+      // of 0.0.0.0; both are "bind to all interfaces", so assert the intent:
+      // the server bound somewhere that is NOT a loopback address.
+      assertFalse(bound.getAddress().isLoopbackAddress());
+      assertTrue(bound.getAddress().isAnyLocalAddress());
+    } finally {
+      other.stop();
+    }
   }
 }

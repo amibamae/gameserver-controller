@@ -27,21 +27,26 @@ final class BridgeHttpServer {
   private final BridgeService service;
   private final byte[] token;
   private final Logger logger;
+  private final boolean enforceLoopback;
   private HttpServer server;
   private ExecutorService executor;
 
-  BridgeHttpServer(BridgeService service, byte[] token, Logger logger) {
+  BridgeHttpServer(BridgeService service, byte[] token, boolean enforceLoopback, Logger logger) {
     if (token.length < 16) {
       throw new IllegalArgumentException("bridge token must be at least 16 bytes");
     }
     this.service = service;
     this.token = ("Bearer " + new String(token, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
+    this.enforceLoopback = enforceLoopback;
     this.logger = logger;
   }
 
-  /** Starts listening. The address must be a loopback address. */
+  /**
+   * Starts listening. The address must be a loopback address unless the
+   * loopback check is disabled in the plugin configuration.
+   */
   synchronized InetSocketAddress start(InetSocketAddress address) throws IOException {
-    if (address.getAddress() == null || !address.getAddress().isLoopbackAddress()) {
+    if (enforceLoopback && (address.getAddress() == null || !address.getAddress().isLoopbackAddress())) {
       throw new IllegalArgumentException("bridge must bind to a loopback address");
     }
     server = HttpServer.create(address, 16);
