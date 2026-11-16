@@ -117,17 +117,13 @@ func (s *BoltStore) UpdateHostHandoff(operationID string, change func(*HostHando
 		if err := change(&next); err != nil {
 			return err
 		}
-		if next.OperationID != current.OperationID || next.OneTimeHostKey != current.OneTimeHostKey ||
-			!next.CreatedAt.Equal(current.CreatedAt) || !next.ExpiresAt.Equal(current.ExpiresAt) ||
-			(current.InstanceID != "" && next.InstanceID != current.InstanceID) ||
-			(current.State == hosthandoff.Rotated && (next.State != hosthandoff.Rotated || next.PinnedHostKey != current.PinnedHostKey)) ||
-			(current.UserDataReplaced && !next.UserDataReplaced) || (current.BootstrapReady && !next.BootstrapReady) ||
-			(current.CredentialsSent && !next.CredentialsSent) || (current.SecurityFinalized && !next.SecurityFinalized) ||
-			(current.RestoreStarted && !next.RestoreStarted) {
-			return fmt.Errorf("%w: forbidden host key handoff change", ErrInvalidRecord)
+		// Check for forbidden changes to immutable fields
+		if err := checkImmutableFields(current, next); err != nil {
+			return err
 		}
-		if next.CredentialsSent && next.State != hosthandoff.Rotated {
-			return fmt.Errorf("%w: credentials recorded as sent before the host key was pinned", ErrInvalidRecord)
+		// Validate state transition and progress flag monotonicity
+		if err := validateStateAndProgress(current, next); err != nil {
+			return err
 		}
 		next.UpdatedAt = time.Now().UTC()
 		if err := putHostHandoff(tx, next); err != nil {
@@ -137,6 +133,49 @@ func (s *BoltStore) UpdateHostHandoff(operationID string, change func(*HostHando
 		return nil
 	})
 	return result, err
+}
+
+// checkImmutableFields validates that the operation ID, host key, times, and instance ID never change.
+func checkImmutableFields(current, next HostHandoffRecord) error {
+	if next.OperationID != current.OperationID {
+		return fmt.Errorf("%w: operation ID cannot change", ErrInvalidRecord)
+	}
+	if next.OneTimeHostKey != current.OneTimeHostKey {
+		return fmt.Errorf("%w: one-time host key cannot change", ErrInvalidRecord)
+	}
+	if !next.CreatedAt.Equal(current.CreatedAt) || !next.ExpiresAt.Equal(current.ExpiresAt) {
+		return fmt.Errorf("%w: host key timestamps cannot change", ErrInvalidRecord)
+	}
+	if current.InstanceID != "" && next.InstanceID != current.InstanceID {
+		return fmt.Errorf("%w: instance ID once recorded cannot change", ErrInvalidRecord)
+	}
+	if current.State == hosthandoff.Rotated && (next.State != hosthandoff.Rotated || next.PinnedHostKey != current.PinnedHostKey) {
+		return fmt.Errorf("%w: when rotated, state and pinned key cannot change", ErrInvalidRecord)
+	}
+	return nil
+}
+
+// validateStateAndProgress ensures progress flags only turn on once and credentials can't be sent before rotation.
+func validateStateAndProgress(current, next HostHandoffRecord) error {
+	if current.UserDataReplaced && !next.UserDataReplaced {
+		return fmt.Errorf("%w: userdata replaced flag never turns off", ErrInvalidRecord)
+	}
+	if current.BootstrapReady && !next.BootstrapReady {
+		return fmt.Errorf("%w: bootstrap ready flag never turns off", ErrInvalidRecord)
+	}
+	if current.CredentialsSent && !next.CredentialsSent {
+		return fmt.Errorf("%w: credentials sent flag never turns off", ErrInvalidRecord)
+	}
+	if current.SecurityFinalized && !next.SecurityFinalized {
+		return fmt.Errorf("%w: security finalized flag never turns off", ErrInvalidRecord)
+	}
+	if current.RestoreStarted && !next.RestoreStarted {
+		return fmt.Errorf("%w: restore started flag never turns off", ErrInvalidRecord)
+	}
+	if next.CredentialsSent && next.State != hosthandoff.Rotated {
+		return fmt.Errorf("%w: credentials recorded as sent before the host key was pinned", ErrInvalidRecord)
+	}
+	return nil
 }
 
 func putHostHandoff(tx *bolt.Tx, record HostHandoffRecord) error {
