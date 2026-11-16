@@ -86,7 +86,7 @@ func TestVendoredOpenAPISchemaResourcesArePresent(t *testing.T) {
 		"oas-3.2-dialect-2026-02-26.json",
 		"oas-3.2-meta-2026-02-26.json",
 	} {
-		if _, err := openAPISchemaFiles.ReadFile(filepath.Join("openapi-schema", name)); err != nil {
+		if _, err := openAPISchemaFiles.ReadFile("openapi-schema/" + name); err != nil {
 			t.Fatalf("read embedded resource %s: %v", name, err)
 		}
 	}
