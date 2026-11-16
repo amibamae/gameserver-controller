@@ -109,51 +109,90 @@ func New(config Config, protocolVersion string, credentials CredentialResolver, 
 }
 
 func newAdapter(config Config, protocolVersion string, credentials CredentialResolver, httpClient *http.Client, apiBase string, now func() time.Time) (*Adapter, error) {
+	if err := validateAdapterConfig(config, protocolVersion, credentials, now); err != nil {
+		return nil, err
+	}
+	records, err := normalizeManagedRecords(config.ZoneName, config.Records)
+	if err != nil {
+		return nil, err
+	}
+	provider, err := newDNSClient(apiBase, config.ZoneID, httpClient)
+	if err != nil {
+		return nil, err
+	}
+	return &Adapter{
+		config:          config,
+		zoneRef:         ResourceRef{AdapterID: config.AdapterID, EnvironmentID: config.EnvironmentID, ResourceKind: zoneResourceKind, ExternalID: config.ZoneID},
+		records:         records,
+		protocolVersion: protocolVersion,
+		credentials:     credentials,
+		client:          provider,
+		now:             now,
+	}, nil
+}
+
+func validateAdapterConfig(config Config, protocolVersion string, credentials CredentialResolver, now func() time.Time) error {
 	if !adapterIDPattern.MatchString(config.AdapterID) || config.EnvironmentID == "" || len(config.EnvironmentID) > 200 {
-		return nil, errors.New("an integration adapter ID and environment are required")
+		return errors.New("an integration adapter ID and environment are required")
 	}
 	if !zoneIDPattern.MatchString(config.ZoneID) || !validHostname(config.ZoneName) {
-		return nil, errors.New("a Cloudflare zone ID and zone name are required")
+		return errors.New("a Cloudflare zone ID and zone name are required")
 	}
 	if !strings.HasPrefix(config.APITokenRef, credential.SystemdReferenceScheme) || credentials == nil {
-		return nil, errors.New("the Cloudflare API token must be a systemd credential reference")
+		return errors.New("the Cloudflare API token must be a systemd credential reference")
 	}
 	if protocolVersion == "" || now == nil {
-		return nil, errors.New("protocol version is required")
+		return errors.New("protocol version is required")
 	}
-	if len(config.Records) == 0 {
+	return nil
+}
+
+func normalizeManagedRecords(zone string, source map[string]ManagedRecord) (map[string]ManagedRecord, error) {
+	if len(source) == 0 {
 		return nil, errors.New("at least one managed record is required")
 	}
-	records := make(map[string]ManagedRecord, len(config.Records))
-	for name, record := range config.Records {
+	records := make(map[string]ManagedRecord, len(source))
+	for name, record := range source {
 		name = strings.ToLower(strings.TrimSuffix(name, "."))
-		if !validHostname(name) || (name != config.ZoneName && !strings.HasSuffix(name, "."+config.ZoneName)) {
+		if !validHostname(name) || (name != zone && !strings.HasSuffix(name, "."+zone)) {
 			return nil, errors.New("managed records must be valid names inside the zone")
 		}
-		if len(record.Purposes) == 0 {
-			return nil, errors.New("each managed record needs at least one purpose")
-		}
-		normalized := ManagedRecord{Purposes: append([]Purpose(nil), record.Purposes...), Fallback: map[string][]string{}}
-		for _, purpose := range record.Purposes {
-			switch purpose {
-			case PurposeBackendAddress, PurposeDirectJoin:
-			case PurposeFallback:
-				if len(record.Fallback) == 0 {
-					return nil, errors.New("fallback records need configured fallback values")
-				}
-			default:
-				return nil, errors.New("record purpose must be backend_address, direct_join, or fallback")
-			}
-		}
-		for recordType, values := range record.Fallback {
-			canonical, ok := canonicalValues(recordType, values)
-			if !ok || len(canonical) == 0 {
-				return nil, errors.New("fallback values must be IP addresses matching the record type")
-			}
-			normalized.Fallback[recordType] = canonical
+		normalized, err := normalizeManagedRecord(record)
+		if err != nil {
+			return nil, err
 		}
 		records[name] = normalized
 	}
+	return records, nil
+}
+
+func normalizeManagedRecord(record ManagedRecord) (ManagedRecord, error) {
+	if len(record.Purposes) == 0 {
+		return ManagedRecord{}, errors.New("each managed record needs at least one purpose")
+	}
+	normalized := ManagedRecord{Purposes: append([]Purpose(nil), record.Purposes...), Fallback: map[string][]string{}}
+	for _, purpose := range record.Purposes {
+		switch purpose {
+		case PurposeBackendAddress, PurposeDirectJoin:
+		case PurposeFallback:
+			if len(record.Fallback) == 0 {
+				return ManagedRecord{}, errors.New("fallback records need configured fallback values")
+			}
+		default:
+			return ManagedRecord{}, errors.New("record purpose must be backend_address, direct_join, or fallback")
+		}
+	}
+	for recordType, values := range record.Fallback {
+		canonical, ok := canonicalValues(recordType, values)
+		if !ok || len(canonical) == 0 {
+			return ManagedRecord{}, errors.New("fallback values must be IP addresses matching the record type")
+		}
+		normalized.Fallback[recordType] = canonical
+	}
+	return normalized, nil
+}
+
+func newDNSClient(apiBase, zoneID string, httpClient *http.Client) (*client, error) {
 	base, err := url.Parse(apiBase)
 	if err != nil || base.Scheme != "https" && !(base.Scheme == "http" && base.Hostname() == "127.0.0.1") {
 		return nil, errors.New("Cloudflare API base must be HTTPS")
@@ -166,15 +205,7 @@ func newAdapter(config Config, protocolVersion string, credentials CredentialRes
 		httpCopy.Timeout = defaultRequestTimeout
 	}
 	httpCopy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &Adapter{
-		config:          config,
-		zoneRef:         ResourceRef{AdapterID: config.AdapterID, EnvironmentID: config.EnvironmentID, ResourceKind: zoneResourceKind, ExternalID: config.ZoneID},
-		records:         records,
-		protocolVersion: protocolVersion,
-		credentials:     credentials,
-		client:          &client{base: strings.TrimSuffix(apiBase, "/"), zoneID: config.ZoneID, http: &httpCopy},
-		now:             now,
-	}, nil
+	return &client{base: strings.TrimSuffix(apiBase, "/"), zoneID: zoneID, http: &httpCopy}, nil
 }
 
 // ZoneRef returns the zone reference callers put in record targets.
