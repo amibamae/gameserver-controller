@@ -10,45 +10,55 @@ const dnsRecordUpsertOutputSchemaID = "urn:gameserver-controller:0.21.0-draft:in
 
 func evaluateDNSRecordUpsert(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
 	input := asObject(fixture["input"])
-	evaluations := make([]any, 0, len(arrayValue(input, "evaluations")))
-	for _, rawEvaluation := range arrayValue(input, "evaluations") {
-		evaluation := asObject(rawEvaluation)
-		request := asObject(evaluation["request"])
-		response := asObject(evaluation["response"])
-		requestValid := pkg.validateSchema(dnsRecordUpsertInputSchemaID, request) == nil
-		responseValid := pkg.validateSchema(dnsRecordUpsertOutputSchemaID, response) == nil
-		recordBound := reflect.DeepEqual(request["record"], response["record"])
-		environment := stringValue(request, "environment_id")
-		zone := asObject(asObject(request["record"])["zone_ref"])
-		environmentConsistent := environment != "" && stringValue(zone, "environment_id") == environment
-		if instance, ok := request["instance_ref"].(map[string]any); ok {
-			environmentConsistent = environmentConsistent && stringValue(instance, "environment_id") == environment
-		}
-		purpose := stringValue(request, "purpose")
-		readinessRequired := purpose == "direct_join"
-		readinessSatisfied := !readinessRequired
-		if readinessRequired {
-			readinessSatisfied = dnsReadinessCurrent(evaluation, request)
-		}
-		changePermitted := requestValid && environmentConsistent && readinessSatisfied
-		valuesConfirmed := responseValid && stringValue(response, "request_outcome") == "confirmed" &&
-			stringValue(response, "observation_state") == "present" &&
-			sameStringSet(arrayValue(request, "values"), arrayValue(response, "values")) &&
-			reflect.DeepEqual(request["ttl_seconds"], response["ttl_seconds"])
-		evaluations = append(evaluations, map[string]any{
-			"case_id":                stringValue(evaluation, "case_id"),
-			"request_schema_valid":   requestValid,
-			"response_schema_valid":  responseValid,
-			"record_bound":           recordBound,
-			"environment_consistent": environmentConsistent,
-			"readiness_required":     readinessRequired,
-			"readiness_satisfied":    readinessSatisfied,
-			"change_permitted":       changePermitted,
-			"values_confirmed":       valuesConfirmed,
-			"record_usable":          changePermitted && recordBound && valuesConfirmed,
-		})
+	cases := arrayValue(input, "evaluations")
+	evaluations := make([]any, 0, len(cases))
+	for _, rawEvaluation := range cases {
+		evaluations = append(evaluations, evaluateDNSRecordUpsertCase(pkg, asObject(rawEvaluation)))
 	}
 	return map[string]any{"evaluations": evaluations}, nil
+}
+
+func evaluateDNSRecordUpsertCase(pkg *protocolPackage, evaluation map[string]any) map[string]any {
+	request := asObject(evaluation["request"])
+	response := asObject(evaluation["response"])
+	requestValid := pkg.validateSchema(dnsRecordUpsertInputSchemaID, request) == nil
+	responseValid := pkg.validateSchema(dnsRecordUpsertOutputSchemaID, response) == nil
+	recordBound := reflect.DeepEqual(request["record"], response["record"])
+	environmentConsistent := dnsRecordEnvironmentConsistent(request)
+	readinessRequired := stringValue(request, "purpose") == "direct_join"
+	readinessSatisfied := !readinessRequired || dnsReadinessCurrent(evaluation, request)
+	changePermitted := requestValid && environmentConsistent && readinessSatisfied
+	valuesConfirmed := responseValid && dnsRecordValuesConfirmed(request, response)
+	return map[string]any{
+		"case_id":                stringValue(evaluation, "case_id"),
+		"request_schema_valid":   requestValid,
+		"response_schema_valid":  responseValid,
+		"record_bound":           recordBound,
+		"environment_consistent": environmentConsistent,
+		"readiness_required":     readinessRequired,
+		"readiness_satisfied":    readinessSatisfied,
+		"change_permitted":       changePermitted,
+		"values_confirmed":       valuesConfirmed,
+		"record_usable":          changePermitted && recordBound && valuesConfirmed,
+	}
+}
+
+func dnsRecordEnvironmentConsistent(request map[string]any) bool {
+	environment := stringValue(request, "environment_id")
+	zone := asObject(asObject(request["record"])["zone_ref"])
+	if environment == "" || stringValue(zone, "environment_id") != environment {
+		return false
+	}
+	instance, ok := request["instance_ref"].(map[string]any)
+	return !ok || stringValue(instance, "environment_id") == environment
+}
+
+func dnsRecordValuesConfirmed(request, response map[string]any) bool {
+	if stringValue(response, "request_outcome") != "confirmed" || stringValue(response, "observation_state") != "present" {
+		return false
+	}
+	return sameStringSet(arrayValue(request, "values"), arrayValue(response, "values")) &&
+		reflect.DeepEqual(request["ttl_seconds"], response["ttl_seconds"])
 }
 
 // dnsReadinessCurrent checks that a direct-join assertion is bound to the
