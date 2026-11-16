@@ -68,7 +68,7 @@ public class TlsMaterialManager {
     try {
       X509Certificate cert = loadCertificate(certFile);
       
-      Instant expiry = ((X509Certificate)cert).getNotAfter().toInstant();
+      Instant expiry = cert.getNotAfter().toInstant();
       if (expiry.isBefore(Instant.now())) {
         throw new IllegalArgumentException("Certificate has expired: " + expiry);
       }
