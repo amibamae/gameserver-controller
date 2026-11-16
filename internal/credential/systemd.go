@@ -86,7 +86,10 @@ func (r *Resolver) Path(reference string) (string, error) {
 	}
 	path := filepath.Join(r.directory, name)
 	info, err := os.Lstat(path)
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || info.Size() == 0 || info.Size() > maxCredentialBytes {
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return "", ErrCredentialUnavailable
+	}
+	if size := info.Size(); size == 0 || size > maxCredentialBytes {
 		return "", ErrCredentialUnavailable
 	}
 	return path, nil
@@ -112,15 +115,8 @@ func (r *Resolver) read(name string) ([]byte, error) {
 	}
 	defer file.Close()
 
-	opened, err := file.Stat()
-	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(before, opened) {
-		return nil, ErrCredentialUnavailable
-	}
-	after, err := os.Lstat(path)
-	if err != nil || !after.Mode().IsRegular() || !os.SameFile(before, after) || !os.SameFile(opened, after) {
-		return nil, ErrCredentialUnavailable
-	}
-	if opened.Size() > maxCredentialBytes {
+	opened, err := verifyCredentialFileIdentity(path, file, before)
+	if err != nil || opened.Size() > maxCredentialBytes {
 		return nil, ErrCredentialUnavailable
 	}
 	value, err := io.ReadAll(io.LimitReader(file, maxCredentialBytes+1))
@@ -129,6 +125,23 @@ func (r *Resolver) read(name string) ([]byte, error) {
 		return nil, ErrCredentialUnavailable
 	}
 	return value, nil
+}
+
+// verifyCredentialFileIdentity checks that the opened file and the current
+// path both still identify the regular file observed before opening.
+func verifyCredentialFileIdentity(path string, file *os.File, before os.FileInfo) (os.FileInfo, error) {
+	opened, err := file.Stat()
+	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(before, opened) {
+		return nil, ErrCredentialUnavailable
+	}
+	after, err := os.Lstat(path)
+	if err != nil || !after.Mode().IsRegular() {
+		return nil, ErrCredentialUnavailable
+	}
+	if !os.SameFile(before, after) || !os.SameFile(opened, after) {
+		return nil, ErrCredentialUnavailable
+	}
+	return opened, nil
 }
 
 func zero(value []byte) {
