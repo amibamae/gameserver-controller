@@ -42,16 +42,21 @@ func collectBootSamples(reservations []store.CapacityReservation, serverID, envi
 		if reservation.ServerID != serverID || reservation.EnvironmentID != environmentID {
 			continue
 		}
-		if !reservation.ProvisionedAt.IsZero() && !reservation.ReadyAt.IsZero() {
-			if duration := reservation.ReadyAt.Sub(reservation.ProvisionedAt); duration > 0 {
-				durations = append(durations, duration)
-			}
+		if duration := completedBootDuration(reservation); duration > 0 {
+			durations = append(durations, duration)
 		}
 		if reservation.State != store.CapacityAbsent && reservation.State != store.CapacityDestroyed {
 			current = reservation
 		}
 	}
 	return current, durations
+}
+
+func completedBootDuration(reservation *store.CapacityReservation) time.Duration {
+	if reservation.ProvisionedAt.IsZero() || reservation.ReadyAt.IsZero() {
+		return 0
+	}
+	return reservation.ReadyAt.Sub(reservation.ProvisionedAt)
 }
 
 type bootTarget struct {
