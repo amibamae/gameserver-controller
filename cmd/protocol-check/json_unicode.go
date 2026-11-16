@@ -13,41 +13,48 @@ func validateJSONUnicode(data []byte) error {
 	}
 	inString := false
 	for i := 0; i < len(data); i++ {
-		if !inString {
-			if data[i] == '"' {
-				inString = true
-			}
-			continue
-		}
-		switch data[i] {
-		case '"':
-			inString = false
-		case 0x5c:
-			if i+1 >= len(data) || data[i+1] != 'u' {
-				i++
-				continue
-			}
-			unit, err := jsonUnicodeCodeUnit(data, i+2)
+		switch {
+		case data[i] == '"':
+			inString = !inString
+		case inString && data[i] == '\\':
+			trailing, err := jsonEscapeTrailingBytes(data[i:])
 			if err != nil {
 				return err
 			}
-			if unit >= 0xD800 && unit <= 0xDBFF {
-				if i+12 > len(data) || data[i+6] != 0x5c || data[i+7] != 'u' {
-					return fmt.Errorf("unpaired high surrogate")
-				}
-				low, err := jsonUnicodeCodeUnit(data, i+8)
-				if err != nil || low < 0xDC00 || low > 0xDFFF {
-					return fmt.Errorf("unpaired high surrogate")
-				}
-				i += 11
-			} else if unit >= 0xDC00 && unit <= 0xDFFF {
-				return fmt.Errorf("unpaired low surrogate")
-			} else {
-				i += 5
-			}
+			i += trailing
 		}
 	}
 	return nil
+}
+
+// jsonEscapeTrailingBytes takes data starting at a backslash and counts the
+// bytes after it consumed by the escape, including a required surrogate pair.
+func jsonEscapeTrailingBytes(escape []byte) (int, error) {
+	if len(escape) < 2 || escape[1] != 'u' {
+		return 1, nil
+	}
+	unit, err := jsonUnicodeCodeUnit(escape, 2)
+	if err != nil {
+		return 0, err
+	}
+	if unit < 0xD800 || unit > 0xDFFF {
+		return 5, nil
+	}
+	if unit >= 0xDC00 {
+		return 0, fmt.Errorf("unpaired low surrogate")
+	}
+	if !hasLowSurrogate(escape) {
+		return 0, fmt.Errorf("unpaired high surrogate")
+	}
+	return 11, nil
+}
+
+func hasLowSurrogate(pair []byte) bool {
+	if len(pair) < 12 || pair[6] != '\\' || pair[7] != 'u' {
+		return false
+	}
+	low, err := jsonUnicodeCodeUnit(pair, 8)
+	return err == nil && low >= 0xDC00 && low <= 0xDFFF
 }
 
 func jsonUnicodeCodeUnit(data []byte, start int) (uint64, error) {
