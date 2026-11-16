@@ -15,42 +15,80 @@ func (c *Client) ListInstances(ctx context.Context, token []byte) ([]Instance, e
 	ids, cursors := map[string]bool{}, map[string]bool{}
 	cursor, total := "", -1
 	for page := 0; page < maximumPages; page++ {
-		query := url.Values{"per_page": {"100"}}
-		if cursor != "" {
-			query.Set("cursor", cursor)
-		}
-		response, err := c.request(ctx, token, http.MethodGet, "instances", query, nil, false)
+		observation, err := c.readInventoryPage(ctx, token, cursor)
 		if err != nil {
 			return nil, err
 		}
-		var envelope instanceListEnvelope
-		if decodeJSON(response, &envelope) != nil || envelope.Instances == nil || envelope.Meta == nil || envelope.Meta.Total == nil || envelope.Meta.Links == nil || envelope.Meta.Links.Next == nil {
-			return nil, ErrInvalidResponse
+		total, err = observation.validateTotal(total)
+		if err != nil {
+			return nil, err
 		}
-		if total == -1 {
-			total = *envelope.Meta.Total
+		instances, err = appendInventoryInstances(instances, observation.instances, ids)
+		if err != nil {
+			return nil, err
 		}
-		if total < 0 || total > maximumPages*100 || total != *envelope.Meta.Total || len(envelope.Instances) > 100 {
-			return nil, ErrInvalidResponse
-		}
-		for _, instance := range envelope.Instances {
-			if !validResourceID(instance.ID) || ids[instance.ID] {
-				return nil, ErrInvalidResponse
-			}
-			ids[instance.ID] = true
-			instances = append(instances, instance)
-		}
-		cursor = *envelope.Meta.Links.Next
+		cursor = observation.next
 		if cursor == "" {
 			if len(instances) != total {
 				return nil, ErrInvalidResponse
 			}
 			return instances, nil
 		}
-		if len(envelope.Instances) == 0 || len(instances) >= total || len(cursor) > 2048 || cursors[cursor] {
+		if !observation.canContinue(len(instances), total, cursors) {
 			return nil, ErrInvalidResponse
 		}
 		cursors[cursor] = true
 	}
 	return nil, ErrInvalidResponse
+}
+
+type inventoryPage struct {
+	instances []Instance
+	total     int
+	next      string
+}
+
+func (c *Client) readInventoryPage(ctx context.Context, token []byte, cursor string) (inventoryPage, error) {
+	query := url.Values{"per_page": {"100"}}
+	if cursor != "" {
+		query.Set("cursor", cursor)
+	}
+	response, err := c.request(ctx, token, http.MethodGet, "instances", query, nil, false)
+	if err != nil {
+		return inventoryPage{}, err
+	}
+	var envelope instanceListEnvelope
+	if decodeJSON(response, &envelope) != nil || envelope.Instances == nil || !hasInventoryMetadata(envelope.Meta) {
+		return inventoryPage{}, ErrInvalidResponse
+	}
+	return inventoryPage{instances: envelope.Instances, total: *envelope.Meta.Total, next: *envelope.Meta.Links.Next}, nil
+}
+
+func hasInventoryMetadata(meta *instanceListMeta) bool {
+	return meta != nil && meta.Total != nil && meta.Links != nil && meta.Links.Next != nil
+}
+
+func (page inventoryPage) validateTotal(previous int) (int, error) {
+	if previous == -1 {
+		previous = page.total
+	}
+	if previous < 0 || previous > maximumPages*100 || previous != page.total || len(page.instances) > 100 {
+		return 0, ErrInvalidResponse
+	}
+	return previous, nil
+}
+
+func (page inventoryPage) canContinue(observed, total int, seenCursors map[string]bool) bool {
+	return len(page.instances) > 0 && observed < total && len(page.next) <= 2048 && !seenCursors[page.next]
+}
+
+func appendInventoryInstances(instances, next []Instance, seenIDs map[string]bool) ([]Instance, error) {
+	for _, instance := range next {
+		if !validResourceID(instance.ID) || seenIDs[instance.ID] {
+			return nil, ErrInvalidResponse
+		}
+		seenIDs[instance.ID] = true
+		instances = append(instances, instance)
+	}
+	return instances, nil
 }
