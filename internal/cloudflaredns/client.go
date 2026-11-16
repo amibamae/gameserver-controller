@@ -57,10 +57,17 @@ type client struct {
 	http   *http.Client
 }
 
+type apiRequest struct {
+	method string
+	path   string
+	body   any
+}
+
 func (c *client) records(ctx context.Context, token []byte, name, recordType string) ([]dnsRecord, error) {
 	query := url.Values{"name": {name}, "type": {recordType}, "per_page": {"100"}}
+	request := apiRequest{method: http.MethodGet, path: "/dns_records?" + query.Encode()}
 	var envelope apiEnvelope
-	if err := c.do(ctx, token, http.MethodGet, "/dns_records?"+query.Encode(), nil, &envelope); err != nil {
+	if err := c.do(ctx, token, request, &envelope); err != nil {
 		return nil, err
 	}
 	var records []dnsRecord
@@ -81,50 +88,63 @@ func (c *client) records(ctx context.Context, token []byte, name, recordType str
 func (c *client) create(ctx context.Context, token []byte, record dnsRecord) error {
 	record.ID = ""
 	record.Comment = recordComment
-	return c.do(ctx, token, http.MethodPost, "/dns_records", record, &apiEnvelope{})
+	return c.do(ctx, token, apiRequest{method: http.MethodPost, path: "/dns_records", body: record}, &apiEnvelope{})
 }
 
 func (c *client) patch(ctx context.Context, token []byte, id string, ttl int) error {
 	if !recordIDPattern.MatchString(id) {
 		return errRefused
 	}
-	return c.do(ctx, token, http.MethodPatch, "/dns_records/"+id, map[string]any{"ttl": ttl, "proxied": false}, &apiEnvelope{})
+	request := apiRequest{method: http.MethodPatch, path: "/dns_records/" + id, body: map[string]any{"ttl": ttl, "proxied": false}}
+	return c.do(ctx, token, request, &apiEnvelope{})
 }
 
 func (c *client) delete(ctx context.Context, token []byte, id string) error {
 	if !recordIDPattern.MatchString(id) {
 		return errRefused
 	}
-	return c.do(ctx, token, http.MethodDelete, "/dns_records/"+id, nil, &apiEnvelope{})
+	return c.do(ctx, token, apiRequest{method: http.MethodDelete, path: "/dns_records/" + id}, &apiEnvelope{})
 }
 
-func (c *client) do(ctx context.Context, token []byte, method, path string, body any, envelope *apiEnvelope) error {
-	var payload io.Reader
-	if body != nil {
-		encoded, err := json.Marshal(body)
-		if err != nil {
-			return errRefused
-		}
-		payload = bytes.NewReader(encoded)
-	}
-	request, err := http.NewRequestWithContext(ctx, method, c.base+"/zones/"+c.zoneID+path, payload)
+func (c *client) do(ctx context.Context, token []byte, spec apiRequest, envelope *apiEnvelope) error {
+	request, err := c.newRequest(ctx, token, spec)
 	if err != nil {
-		return errRefused
-	}
-	value := bytes.TrimSpace(token)
-	if len(value) == 0 || bytes.ContainsAny(value, "\r\n\t ") {
-		return errRefused
-	}
-	request.Header.Set("Authorization", "Bearer "+string(value))
-	request.Header.Set("Accept", "application/json")
-	if body != nil {
-		request.Header.Set("Content-Type", "application/json")
+		return err
 	}
 	response, err := c.http.Do(request)
 	if err != nil {
 		return errUncertain
 	}
 	defer response.Body.Close()
+	return decodeAPIResponse(response, envelope)
+}
+
+func (c *client) newRequest(ctx context.Context, token []byte, spec apiRequest) (*http.Request, error) {
+	var payload io.Reader
+	if spec.body != nil {
+		encoded, err := json.Marshal(spec.body)
+		if err != nil {
+			return nil, errRefused
+		}
+		payload = bytes.NewReader(encoded)
+	}
+	request, err := http.NewRequestWithContext(ctx, spec.method, c.base+"/zones/"+c.zoneID+spec.path, payload)
+	if err != nil {
+		return nil, errRefused
+	}
+	value := bytes.TrimSpace(token)
+	if len(value) == 0 || bytes.ContainsAny(value, "\r\n\t ") {
+		return nil, errRefused
+	}
+	request.Header.Set("Authorization", "Bearer "+string(value))
+	request.Header.Set("Accept", "application/json")
+	if spec.body != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	return request, nil
+}
+
+func decodeAPIResponse(response *http.Response, envelope *apiEnvelope) error {
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
 	if err != nil || len(data) > maxResponseBytes {
 		return errUncertain
