@@ -236,11 +236,12 @@ func describeDataSets(dataSets []any) ([]any, map[string]map[string]bool, bool) 
 // backslash and no empty, "." or ".." segment.
 func safeRelativePath(rawPath any) bool {
 	pathValue, ok := rawPath.(string)
-	if !ok || pathValue == "" || strings.HasPrefix(pathValue, "/") || strings.Contains(pathValue, "\\") {
+	if !ok || strings.Contains(pathValue, "\\") {
 		return false
 	}
 	for _, segment := range strings.Split(pathValue, "/") {
-		if segment == "" || segment == "." || segment == ".." {
+		switch segment {
+		case "", ".", "..":
 			return false
 		}
 	}

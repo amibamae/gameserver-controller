@@ -32,19 +32,9 @@ func evaluateExecutionUnitStartStop(pkg *protocolPackage, fixture map[string]any
 	fixtureID := stringValue(fixture, "fixture_id")
 	input := asObject(fixture["input"])
 	executionInput, executionOutput := asObject(input["execution_input"]), asObject(input["execution_output"])
-	inputSchemaID, outputSchemaID := "", ""
-	if strings.HasPrefix(fixtureID, "execution.unit.start.") {
-		inputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-start-input"
-		outputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-start-output"
-	} else {
-		inputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-graceful-stop-input"
-		outputSchemaID = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-graceful-stop-output"
-	}
-	if err := pkg.validateSchema(inputSchemaID, executionInput); err != nil {
-		return nil, fmt.Errorf("execution input does not match schema: %w", err)
-	}
-	if err := pkg.validateSchema(outputSchemaID, executionOutput); err != nil {
-		return nil, fmt.Errorf("execution output does not match schema: %w", err)
+	isStart := strings.HasPrefix(fixtureID, "execution.unit.start.")
+	if err := validateExecutionStartStopSchemas(pkg, isStart, executionInput, executionOutput); err != nil {
+		return nil, err
 	}
 	unitRef := asObject(executionInput["unit_ref"])
 	resultUnitRef := asObject(executionOutput["unit_ref"])
@@ -56,7 +46,7 @@ func evaluateExecutionUnitStartStop(pkg *protocolPackage, fixture map[string]any
 		stringValue(asObject(operationRef), "environment_id") == stringValue(unitRef, "environment_id")
 	unknown := outcome == "outcome_unknown"
 	resultRequiresInspection := !unitBound || unknown
-	startSucceeded := strings.HasPrefix(fixtureID, "execution.unit.start.") && unitBound && outcome == "completed" && state == "running"
+	unitCompleted := unitBound && outcome == "completed"
 	return map[string]any{
 		"schemas_valid":                     true,
 		"unit_bound":                        unitBound,
@@ -68,9 +58,24 @@ func evaluateExecutionUnitStartStop(pkg *protocolPackage, fixture map[string]any
 		"reconciliation_required":           resultRequiresInspection,
 		"result_requires_inspection":        resultRequiresInspection,
 		"retry_without_inspection":          false,
-		"successful_start_claim_accepted":   startSucceeded,
-		"termination_confirmed":             unitBound && outcome == "completed" && state == "stopped",
+		"successful_start_claim_accepted":   isStart && unitCompleted && state == "running",
+		"termination_confirmed":             unitCompleted && state == "stopped",
 	}, nil
+}
+
+func validateExecutionStartStopSchemas(pkg *protocolPackage, isStart bool, executionInput, executionOutput map[string]any) error {
+	unitAction := "graceful-stop"
+	if isStart {
+		unitAction = "start"
+	}
+	schemaPrefix := "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-" + unitAction
+	if err := pkg.validateSchema(schemaPrefix+"-input", executionInput); err != nil {
+		return fmt.Errorf("execution input does not match schema: %w", err)
+	}
+	if err := pkg.validateSchema(schemaPrefix+"-output", executionOutput); err != nil {
+		return fmt.Errorf("execution output does not match schema: %w", err)
+	}
+	return nil
 }
 
 // evaluateExecutionUnitForceStop evaluates the conformance fixtures
@@ -84,30 +89,46 @@ func evaluateExecutionUnitForceStop(pkg *protocolPackage, fixture map[string]any
 		return map[string]any{"schemas_valid": false, "approval_required": forceStopInput["approval_id"] == nil, "dispatch_allowed": false, "termination_confirmed": false}, nil
 	}
 	preconditions := asObject(fixture["core_preconditions"])
-	approvalValid := boolValue(preconditions, "approval_valid")
-	dispatchAllowed := approvalValid
+	dispatchAllowed := boolValue(preconditions, "approval_valid")
 	output := asObject(input["force_stop_output"])
-	outputPresent := len(output) > 0
-	targetBound, terminationConfirmed, acceptedNotComplete, mustInspect := false, false, false, false
-	if outputPresent {
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-force-stop-output", output); err != nil {
-			return nil, fmt.Errorf("force-stop output does not match schema: %w", err)
-		}
-		targetBound = reflect.DeepEqual(asObject(forceStopInput["unit_ref"]), asObject(output["unit_ref"]))
-		outcome := stringValue(output, "outcome")
-		state := stringValue(output, "state")
-		terminationConfirmed = dispatchAllowed && targetBound && outcome == "completed" && state == "stopped"
-		acceptedNotComplete = outcome == "accepted" && !terminationConfirmed
-		mustInspect = !targetBound || outcome == "outcome_unknown"
+	result, err := assessForceStopResult(pkg, forceStopInput, output, dispatchAllowed)
+	if err != nil {
+		return nil, err
 	}
 	return map[string]any{
 		"schemas_valid":             true,
 		"approval_required":         true,
 		"dispatch_allowed":          dispatchAllowed,
-		"target_bound":              targetBound,
-		"termination_confirmed":     terminationConfirmed,
-		"accepted_not_complete":     acceptedNotComplete,
-		"must_inspect_before_retry": mustInspect,
+		"target_bound":              result.targetBound,
+		"termination_confirmed":     result.terminationConfirmed,
+		"accepted_not_complete":     result.acceptedNotComplete,
+		"must_inspect_before_retry": result.mustInspect,
+	}, nil
+}
+
+type forceStopResult struct {
+	targetBound          bool
+	terminationConfirmed bool
+	acceptedNotComplete  bool
+	mustInspect          bool
+}
+
+func assessForceStopResult(pkg *protocolPackage, input, output map[string]any, dispatchAllowed bool) (forceStopResult, error) {
+	if len(output) == 0 {
+		return forceStopResult{}, nil
+	}
+	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-force-stop-output", output); err != nil {
+		return forceStopResult{}, fmt.Errorf("force-stop output does not match schema: %w", err)
+	}
+	targetBound := reflect.DeepEqual(asObject(input["unit_ref"]), asObject(output["unit_ref"]))
+	outcome := stringValue(output, "outcome")
+	state := stringValue(output, "state")
+	terminationConfirmed := dispatchAllowed && targetBound && outcome == "completed" && state == "stopped"
+	return forceStopResult{
+		targetBound:          targetBound,
+		terminationConfirmed: terminationConfirmed,
+		acceptedNotComplete:  outcome == "accepted" && !terminationConfirmed,
+		mustInspect:          !targetBound || outcome == "outcome_unknown",
 	}, nil
 }
 
@@ -139,16 +160,9 @@ func evaluateExecutionLogsHealthDeleteSafety(pkg *protocolPackage, fixture map[s
 	if err != nil {
 		return nil, err
 	}
-	var totalBytes int64
-	for i, rawLine := range arrayValue(logsOutput, "lines") {
-		line, ok := rawLine.(string)
-		if !ok {
-			return nil, fmt.Errorf("log lines must be strings")
-		}
-		totalBytes += int64(len([]byte(line)))
-		if i > 0 {
-			totalBytes++
-		}
+	totalBytes, err := executionLogBytes(arrayValue(logsOutput, "lines"))
+	if err != nil {
+		return nil, err
 	}
 	return map[string]any{
 		"schemas_valid": true, "unit_targets_bound": logsBound && healthBound && deleteBound,
@@ -156,4 +170,19 @@ func evaluateExecutionLogsHealthDeleteSafety(pkg *protocolPackage, fixture map[s
 		"unknown_health_not_healthy": stringValue(healthOutput, "health") == "unknown",
 		"persistent_data_preserved":  boolValue(deleteOutput, "persistent_data_preserved"),
 	}, nil
+}
+
+func executionLogBytes(lines []any) (int64, error) {
+	var totalBytes int64
+	for i, rawLine := range lines {
+		line, ok := rawLine.(string)
+		if !ok {
+			return 0, fmt.Errorf("log lines must be strings")
+		}
+		totalBytes += int64(len(line))
+		if i > 0 {
+			totalBytes++
+		}
+	}
+	return totalBytes, nil
 }

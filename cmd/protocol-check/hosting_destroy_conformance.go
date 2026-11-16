@@ -48,18 +48,10 @@ func evaluateHostingInstanceDestroyApproval(pkg *protocolPackage, fixture map[st
 	approvalCurrent := approvalCurrentAt(approval, stringValue(fixture, "evaluation_time"))
 	approvalApproverPresent := stringValue(approval, "approval_id") != "" && stringValue(approval, "approver_id") != ""
 	approvalBound := requestBindingMatches && approvalScopeMatches && approvalCurrent && approvalApproverPresent
-	allowed := boolValue(preconditions, "authorization_valid") && approvalBound &&
-		boolValue(preconditions, "backup_verified") && boolValue(preconditions, "backup_generation_matches") &&
-		boolValue(preconditions, "instance_stopped")
-	output := asObject(input["destroy_output"])
-	outputPresent := len(output) > 0
-	targetBound, confirmed := false, false
-	if outputPresent {
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:instance-destroy-output", output); err != nil {
-			return nil, fmt.Errorf("hosting destroy output does not match schema: %w", err)
-		}
-		targetBound = reflect.DeepEqual(target, asObject(output["instance_ref"]))
-		confirmed = allowed && targetBound && stringValue(output, "outcome") == "completed" && stringValue(output, "state") == "destroyed"
+	allowed := destroyDispatchAllowed(preconditions, approvalBound)
+	output, err := checkHostingDestroyOutput(pkg, target, asObject(input["destroy_output"]), allowed)
+	if err != nil {
+		return nil, err
 	}
 	providerCalls := 0
 	if allowed {
@@ -74,8 +66,8 @@ func evaluateHostingInstanceDestroyApproval(pkg *protocolPackage, fixture map[st
 		"approval_bound":            approvalBound,
 		"destroy_dispatch_allowed":  allowed,
 		"provider_destroy_calls":    providerCalls,
-		"target_bound":              targetBound,
-		"destruction_confirmed":     confirmed,
+		"target_bound":              output.targetBound,
+		"destruction_confirmed":     output.confirmed,
 	}, nil
 }
 
@@ -126,21 +118,11 @@ func evaluateHostingInstanceDestroy(pkg *protocolPackage, fixture map[string]any
 		return nil, fmt.Errorf("hosting destroy input does not match schema: %w", err)
 	}
 	preconditions := asObject(fixture["core_preconditions"])
-	allowed := boolValue(preconditions, "authorization_valid") && boolValue(preconditions, "backup_verified") &&
-		boolValue(preconditions, "backup_generation_matches") && boolValue(preconditions, "instance_stopped")
-	output := asObject(input["destroy_output"])
-	outputPresent := len(output) > 0
-	targetBound, confirmed, unknownRequiresInspection, resultRequiresInspection := false, false, false, false
-	outcome, state := "", ""
-	if outputPresent {
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:instance-destroy-output", output); err != nil {
-			return nil, fmt.Errorf("hosting destroy output does not match schema: %w", err)
-		}
-		targetBound = reflect.DeepEqual(asObject(destroyInput["instance_ref"]), asObject(output["instance_ref"]))
-		outcome, state = stringValue(output, "outcome"), stringValue(output, "state")
-		confirmed = allowed && targetBound && outcome == "completed" && state == "destroyed"
-		unknownRequiresInspection = outcome == "outcome_unknown"
-		resultRequiresInspection = !targetBound || unknownRequiresInspection
+	allowed := destroyDispatchAllowed(preconditions, true)
+	target := asObject(destroyInput["instance_ref"])
+	output, err := checkHostingDestroyOutput(pkg, target, asObject(input["destroy_output"]), allowed)
+	if err != nil {
+		return nil, err
 	}
 	destroyCalls := 0
 	if allowed {
@@ -150,9 +132,42 @@ func evaluateHostingInstanceDestroy(pkg *protocolPackage, fixture map[string]any
 		"schemas_valid":               true,
 		"destroy_dispatch_allowed":    allowed,
 		"provider_destroy_calls":      destroyCalls,
-		"target_bound":                targetBound,
-		"destruction_confirmed":       confirmed,
-		"unknown_requires_inspection": unknownRequiresInspection,
-		"result_requires_inspection":  resultRequiresInspection,
+		"target_bound":                output.targetBound,
+		"destruction_confirmed":       output.confirmed,
+		"unknown_requires_inspection": output.unknownRequiresInspection,
+		"result_requires_inspection":  output.resultRequiresInspection,
+	}, nil
+}
+
+func destroyDispatchAllowed(preconditions map[string]any, approvalSatisfied bool) bool {
+	authorized := boolValue(preconditions, "authorization_valid") && approvalSatisfied
+	return authorized &&
+		boolValue(preconditions, "backup_verified") && boolValue(preconditions, "backup_generation_matches") &&
+		boolValue(preconditions, "instance_stopped")
+}
+
+type hostingDestroyOutputChecks struct {
+	targetBound               bool
+	confirmed                 bool
+	unknownRequiresInspection bool
+	resultRequiresInspection  bool
+}
+
+func checkHostingDestroyOutput(pkg *protocolPackage, target, output map[string]any, allowed bool) (hostingDestroyOutputChecks, error) {
+	if len(output) == 0 {
+		return hostingDestroyOutputChecks{}, nil
+	}
+	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:hosting:instance-destroy-output", output); err != nil {
+		return hostingDestroyOutputChecks{}, fmt.Errorf("hosting destroy output does not match schema: %w", err)
+	}
+	targetBound := reflect.DeepEqual(target, asObject(output["instance_ref"]))
+	outcome, state := stringValue(output, "outcome"), stringValue(output, "state")
+	destroyed := outcome == "completed" && state == "destroyed"
+	unknown := outcome == "outcome_unknown"
+	return hostingDestroyOutputChecks{
+		targetBound:               targetBound,
+		confirmed:                 allowed && targetBound && destroyed,
+		unknownRequiresInspection: unknown,
+		resultRequiresInspection:  !targetBound || unknown,
 	}, nil
 }
