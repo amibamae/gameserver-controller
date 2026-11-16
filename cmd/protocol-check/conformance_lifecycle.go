@@ -91,12 +91,7 @@ func evaluateTransportStorageProfile(pkg *protocolPackage, fixture map[string]an
 	profile := "local-unix-stream-v1"
 	profileNegotiated := stringValue(offer, "profile") == profile && selected == profile
 	profileDeclared := contains(arrayValue(descriptor, "stream_transport_profiles"), profile)
-	hasPut, hasGet := false, false
-	for _, raw := range arrayValue(descriptor, "capabilities") {
-		name := stringValue(asObject(raw), "name")
-		hasPut = hasPut || name == "storage.object.put"
-		hasGet = hasGet || name == "storage.object.get"
-	}
+	hasPut, hasGet := advertisedStorageStreamCapabilities(descriptor)
 	storageStreamCapabilitiesAccepted := (!hasPut && !hasGet) || profileNegotiated && profileDeclared
 	return map[string]any{
 		"initialization_valid":                 true,
@@ -107,6 +102,15 @@ func evaluateTransportStorageProfile(pkg *protocolPackage, fixture map[string]an
 		"storage_get_advertised":               hasGet,
 		"storage_stream_capabilities_accepted": storageStreamCapabilitiesAccepted,
 	}, nil
+}
+
+func advertisedStorageStreamCapabilities(descriptor map[string]any) (hasPut, hasGet bool) {
+	for _, raw := range arrayValue(descriptor, "capabilities") {
+		name := stringValue(asObject(raw), "name")
+		hasPut = hasPut || name == "storage.object.put"
+		hasGet = hasGet || name == "storage.object.get"
+	}
+	return hasPut, hasGet
 }
 
 // evaluateSafetyDestroyBlocked evaluates the conformance fixtures
