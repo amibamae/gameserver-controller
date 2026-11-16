@@ -14,64 +14,70 @@ func init() {
 
 // evaluateIntegrationProxyRegisterExpiredReadinessRejected evaluates the integration.proxy.register.expired-readiness-rejected conformance fixture.
 func evaluateIntegrationProxyRegisterExpiredReadinessRejected(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
-	input := asObject(fixture["input"])
-	registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
-	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
-		return nil, fmt.Errorf("register input does not match schema: %w", err)
-	}
-	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
-		return nil, fmt.Errorf("register output does not match schema: %w", err)
-	}
-	requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
-	bound := reflect.DeepEqual(requestTarget, registerOutput["target"]) &&
-		assertionNamesTarget(requestTarget, requestTarget["instance_ref"], assertion, assertion["instance_ref"])
-	current, err := parseTime(stringValue(input, "validation_time"))
+	registration, err := checkProxyRegistration(pkg, asObject(fixture["input"]))
 	if err != nil {
 		return nil, err
 	}
-	expires, err := parseTime(stringValue(assertion, "expires_at"))
-	if err != nil {
-		return nil, err
-	}
-	readinessCurrent := bound && current.Before(expires)
-	rejected := stringValue(registerOutput, "request_outcome") == "rejected" &&
-		stringValue(registerOutput, "registration_state") == "unregistered" &&
-		stringValue(registerOutput, "routability") == "not_routable"
+	rejected := registration.outcome == "rejected" &&
+		registration.state == "unregistered" && registration.routability == "not_routable"
 	return map[string]any{
-		"schemas_valid": true, "target_bound": bound, "readiness_current": readinessCurrent,
-		"registration_rejected": rejected, "routing_permitted": readinessCurrent && stringValue(registerOutput, "routability") == "routable",
+		"schemas_valid":         true,
+		"target_bound":          registration.targetBound,
+		"readiness_current":     registration.readinessCurrent,
+		"registration_rejected": rejected,
+		"routing_permitted":     registration.readinessCurrent && registration.routability == "routable",
 	}, nil
 }
 
 // evaluateIntegrationProxyRegisterAcceptedIsNotRoutable evaluates the integration.proxy.register.accepted-is-not-routable conformance fixture.
 func evaluateIntegrationProxyRegisterAcceptedIsNotRoutable(pkg *protocolPackage, fixture map[string]any) (map[string]any, error) {
-	input := asObject(fixture["input"])
+	registration, err := checkProxyRegistration(pkg, asObject(fixture["input"]))
+	if err != nil {
+		return nil, err
+	}
+	confirmed := registration.outcome == "confirmed"
+	routable := registration.routability == "routable"
+	routingPermitted := registration.readinessCurrent && confirmed && registration.state == "registered" && routable
+	return map[string]any{
+		"schemas_valid":          true,
+		"target_bound":           registration.targetBound,
+		"readiness_current":      registration.readinessCurrent,
+		"registration_confirmed": confirmed,
+		"accepted_not_routable":  registration.outcome != "accepted" || !routable,
+		"routing_permitted":      routingPermitted,
+	}, nil
+}
+
+type proxyRegistrationChecks struct {
+	targetBound, readinessCurrent bool
+	outcome, state, routability   string
+}
+
+func checkProxyRegistration(pkg *protocolPackage, input map[string]any) (proxyRegistrationChecks, error) {
 	registerInput, registerOutput := asObject(input["register_input"]), asObject(input["register_output"])
 	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-input", registerInput); err != nil {
-		return nil, fmt.Errorf("register input does not match schema: %w", err)
+		return proxyRegistrationChecks{}, fmt.Errorf("register input does not match schema: %w", err)
 	}
 	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:integrations:proxy-backend-register-output", registerOutput); err != nil {
-		return nil, fmt.Errorf("register output does not match schema: %w", err)
+		return proxyRegistrationChecks{}, fmt.Errorf("register output does not match schema: %w", err)
 	}
 	requestTarget, assertion := asObject(registerInput["target"]), asObject(registerInput["readiness_assertion"])
 	bound := reflect.DeepEqual(requestTarget, registerOutput["target"]) &&
 		assertionNamesTarget(requestTarget, requestTarget["instance_ref"], assertion, assertion["instance_ref"])
 	current, err := parseTime(stringValue(input, "validation_time"))
 	if err != nil {
-		return nil, err
+		return proxyRegistrationChecks{}, err
 	}
 	expires, err := parseTime(stringValue(assertion, "expires_at"))
 	if err != nil {
-		return nil, err
+		return proxyRegistrationChecks{}, err
 	}
-	readinessCurrent := bound && current.Before(expires)
-	confirmed := stringValue(registerOutput, "request_outcome") == "confirmed"
-	routingPermitted := readinessCurrent && confirmed &&
-		stringValue(registerOutput, "registration_state") == "registered" &&
-		stringValue(registerOutput, "routability") == "routable"
-	return map[string]any{
-		"schemas_valid": true, "target_bound": bound, "readiness_current": readinessCurrent,
-		"registration_confirmed": confirmed, "accepted_not_routable": stringValue(registerOutput, "request_outcome") != "accepted" || stringValue(registerOutput, "routability") != "routable", "routing_permitted": routingPermitted,
+	return proxyRegistrationChecks{
+		targetBound:      bound,
+		readinessCurrent: bound && current.Before(expires),
+		outcome:          stringValue(registerOutput, "request_outcome"),
+		state:            stringValue(registerOutput, "registration_state"),
+		routability:      stringValue(registerOutput, "routability"),
 	}, nil
 }
 
