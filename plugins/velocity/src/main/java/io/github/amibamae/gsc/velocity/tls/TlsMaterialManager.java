@@ -73,11 +73,24 @@ public class TlsMaterialManager {
         throw new IllegalArgumentException("Certificate has expired: " + expiry);
       }
 
-      return new Material(cert); // Key not validated yet - placeholder for now
+      // Load CA bundle for client cert validation (if exists)
+      String caBundlePath = null;
+      if (caPath != null && caPath.toFile().exists()) {
+        caBundlePath = loadCaBundle(caPath.toFile());
+      }
+
+      return new Material(cert, caBundlePath); // Key not validated yet - placeholder for now
     } catch (Exception e) {
       System.err.println("Failed to validate TLS material: " + e.getMessage());
       return null;
     }
+  }
+
+  /** Loads CA bundle for client certificate validation. */
+  private String loadCaBundle(File caFile) throws IOException {
+    // Simplified: just return the path for now
+    // In production, this would read and parse the CA bundle
+    return caFile.getAbsolutePath();
   }
 
   private X509Certificate loadCertificate(File file) throws CertificateException, IOException {
@@ -101,11 +114,16 @@ public class TlsMaterialManager {
   /** Holds TLS material - key may be null on initial load until fully validated. */
   public static class Material {
     private final X509Certificate cert;
+    private final String caBundlePath;
     
-    private Material(X509Certificate cert) {
+    Material(X509Certificate cert, String caBundlePath) {
       this.cert = cert;
+      this.caBundlePath = caBundlePath;
     }
     
     public X509Certificate getCert() { return cert; }
+    
+    /** CA bundle path for client certificate validation. */
+    public String getCaBundlePath() { return caBundlePath; }
   }
 }
