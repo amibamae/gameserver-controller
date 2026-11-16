@@ -62,6 +62,7 @@ The first deployment uses provider-supported Debian images and reviewed, version
 
 ## Start here
 
+- [Project overview (newcomer guide)](docs/PROJECT_OVERVIEW.md)
 - [Roadmap and current status](docs/ROADMAP.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Core design](docs/CORE_DESIGN.md)
