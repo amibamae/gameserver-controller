@@ -20,40 +20,28 @@ impl Schemas {
     /// format keywords are asserted.
     pub fn load(root: &Path) -> Result<Schemas, String> {
         let index = read_json(root, "protocol/schemas/index.json")?;
-        
-        // Batch all filesystem reads outside the loop to avoid N+1 I/O calls
-        let schema_entries: Vec<(String, Json)> = index
-            .items("schemas")
-            .filter_map(|entry| {
-                let (Some(path), Some(id)) = (entry.str("path"), entry.str("id")) else {
-                    return None;
-                };
-                let schema_path = format!("protocol/schemas/{path}");
-                match read_json(root, &schema_path) {
-                    Ok(schema) => Some((id.to_string(), schema)),
-                    Err(e) => return Some((id.to_string(), Json::new(None))), // keep original error handling
-                }
-            })
-            .collect();
-        
+        let mut resources = Vec::new();
+        for entry in index.items("schemas") {
+            let (Some(path), Some(id)) = (entry.str("path"), entry.str("id")) else {
+                return Err("schema index entry needs path and id".into());
+            };
+            let schema = read_json(root, &format!("protocol/schemas/{path}"))?;
+            if schema.str("$id") != Some(id) {
+                return Err(format!("{path}: $id does not match the index"));
+            }
+            resources.push((id.to_string(), schema.to_serde()));
+        }
         let registry = Registry::new()
-            .extend(schema_entries.iter().filter_map(|(id, schema)| {
-                if id.is_empty() {
-                    return None;
-                }
-                Some((
+            .extend(resources.iter().map(|(id, schema)| {
+                (
                     id.as_str(),
                     jsonschema::Resource::from_contents(schema.clone()),
-                ))
+                )
             }))
             .and_then(|builder| builder.prepare())
             .map_err(|err| format!("schema registry: {err}"))?;
-        
         let mut validators = HashMap::new();
-        for (id, _) in &schema_entries {
-            if id.is_empty() {
-                continue;
-            }
+        for (id, _) in &resources {
             let validator = jsonschema::options()
                 .with_draft(Draft::Draft202012)
                 .should_validate_formats(true)
@@ -79,26 +67,14 @@ impl Schemas {
     /// Validates every example listed in protocol/examples/index.json.
     pub fn check_examples(&self, root: &Path) -> Result<usize, String> {
         let index = read_json(root, "protocol/examples/index.json")?;
-        
-        // Batch all filesystem reads outside the loop to avoid N+1 I/O calls
-        let example_entries: Vec<(String, String, Json)> = index
-            .items("examples")
-            .filter_map(|entry| {
-                let (Some(path), Some(schema_id)) = (entry.str("path"), entry.str("schema_id")) else {
-                    return None;
-                };
-                let example_path = format!("protocol/examples/{path}");
-                match read_json(root, &example_path) {
-                    Ok(example) => Some((path.to_string(), schema_id.to_string(), example)),
-                    Err(e) => return None, // skip invalid examples silently
-                }
-            })
-            .collect();
-        
         let mut count = 0;
-        for (path, schema_id, example) in &example_entries {
-            if !self.valid(schema_id.as_str(), &example) {
-                return Err(format!("example {} is not valid against {}", path, schema_id));
+        for entry in index.items("examples") {
+            let (Some(path), Some(id)) = (entry.str("path"), entry.str("schema_id")) else {
+                return Err("example index entry needs path and schema_id".into());
+            };
+            let example = read_json(root, &format!("protocol/examples/{path}"))?;
+            if !self.valid(id, &example) {
+                return Err(format!("example {path} is not valid against {id}"));
             }
             count += 1;
         }
