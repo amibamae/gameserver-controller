@@ -1,6 +1,6 @@
 # Agent handoff
 
-Written 2026-11-11, last updated 2026-11-15. It is for another AI agent (Claude, ChatGPT Codex or another) or a human taking over when the previous session can't continue, for example after a usage limit. It reflects the state at the time of writing, so check `git log`, open PRs and remote branches before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`).
+Written 2026-11-11, last updated 2026-11-16. It is for another AI agent (Claude, ChatGPT Codex or another) or a human taking over when the previous session can't continue, for example after a usage limit. It reflects the state at the time of writing, so check `git log`, open PRs and remote branches before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`).
 
 Read [CLAUDE.md](../CLAUDE.md) first. Its rules are standing requirements from the project owner and apply to every agent, whatever tool runs it. [AGENTS.md](../AGENTS.md) points here for tools that read that file instead.
 
