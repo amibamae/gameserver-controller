@@ -23,25 +23,13 @@ func evaluateNetworkProfileRequirements(pkg *protocolPackage, fixture map[string
 		profile := asObject(evaluation["network_profile"])
 		environment := stringValue(evaluation, "environment_id")
 		required := referenceNetworkRequirements(profile)
-		adapters := map[string]map[string]bool{}
-		adapterEnvironment := map[string]string{}
-		for _, rawAdapter := range arrayValue(evaluation, "registered_adapters") {
-			registered := asObject(rawAdapter)
-			id := stringValue(registered, "adapter_id")
-			adapterEnvironment[id] = stringValue(registered, "environment_id")
-			adapters[id] = map[string]bool{}
-			for _, capability := range arrayValue(registered, "capabilities") {
-				if name, ok := capability.(string); ok {
-					adapters[id][name] = true
-				}
-			}
-		}
+		adapters := networkAdaptersByID(arrayValue(evaluation, "registered_adapters"))
 		roleAdapter := map[string]string{"proxy": stringValue(profile, "proxy_adapter_id"), "dns": stringValue(profile, "dns_adapter_id")}
 		missing := []map[string]string{}
 		for _, requirement := range required {
 			id := roleAdapter[requirement["role"]]
-			capabilities, registered := adapters[id]
-			if !registered || adapterEnvironment[id] != environment || !referenceSatisfies(capabilities, requirement["capability"]) {
+			adapter, registered := adapters[id]
+			if !registered || adapter.environment != environment || !referenceSatisfies(adapter.capabilities, requirement["capability"]) {
 				missing = append(missing, requirement)
 			}
 		}
@@ -54,6 +42,30 @@ func evaluateNetworkProfileRequirements(pkg *protocolPackage, fixture map[string
 		})
 	}
 	return map[string]any{"evaluations": evaluations}, nil
+}
+
+type networkProfileAdapter struct {
+	environment  string
+	capabilities map[string]bool
+}
+
+func networkAdaptersByID(registrations []any) map[string]networkProfileAdapter {
+	adapters := make(map[string]networkProfileAdapter, len(registrations))
+	for _, raw := range registrations {
+		registration := asObject(raw)
+		capabilities := map[string]bool{}
+		for _, rawCapability := range arrayValue(registration, "capabilities") {
+			if name, ok := rawCapability.(string); ok {
+				capabilities[name] = true
+			}
+		}
+		// Later registrations replace both the environment and capabilities.
+		adapters[stringValue(registration, "adapter_id")] = networkProfileAdapter{
+			environment:  stringValue(registration, "environment_id"),
+			capabilities: capabilities,
+		}
+	}
+	return adapters
 }
 
 func referenceNetworkRequirements(profile map[string]any) []map[string]string {

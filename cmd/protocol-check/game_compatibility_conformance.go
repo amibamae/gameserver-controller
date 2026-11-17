@@ -48,14 +48,15 @@ func evaluateGameCompatibilityCheck(pkg *protocolPackage, fixture map[string]any
 // environment and data generation, read from backup), the source game
 // adapter and version, and the target release.
 func compatibilityNames(compatibility, backup, sourceGame, targetRelease map[string]any) bool {
-	return stringValue(compatibility, "backup_id") == stringValue(backup, "backup_id") &&
+	backupMatches := stringValue(compatibility, "backup_id") == stringValue(backup, "backup_id") &&
 		stringValue(compatibility, "environment_id") == stringValue(backup, "environment_id") &&
-		stringValue(compatibility, "data_generation_id") == stringValue(backup, "data_generation_id") &&
-		stringValue(compatibility, "source_game_adapter_id") == stringValue(sourceGame, "adapter_id") &&
-		stringValue(compatibility, "source_game_version") == stringValue(sourceGame, "version") &&
-		stringValue(compatibility, "target_game_adapter_id") == stringValue(targetRelease, "game_adapter_id") &&
+		stringValue(compatibility, "data_generation_id") == stringValue(backup, "data_generation_id")
+	sourceMatches := stringValue(compatibility, "source_game_adapter_id") == stringValue(sourceGame, "adapter_id") &&
+		stringValue(compatibility, "source_game_version") == stringValue(sourceGame, "version")
+	targetMatches := stringValue(compatibility, "target_game_adapter_id") == stringValue(targetRelease, "game_adapter_id") &&
 		stringValue(compatibility, "target_release_id") == stringValue(targetRelease, "release_id") &&
 		stringValue(compatibility, "target_game_version") == stringValue(targetRelease, "game_version")
+	return backupMatches && sourceMatches && targetMatches
 }
 
 // deriveCompatibility: the check set is complete when there is exactly one
@@ -68,6 +69,11 @@ func deriveCompatibility(required, results []any) (bool, string) {
 	for _, rawID := range required {
 		requested[rawID.(string)] = true
 	}
+	observed, complete := indexCompatibilityResults(requested, results)
+	return compatibilityStatus(requested, observed, complete)
+}
+
+func indexCompatibilityResults(requested map[string]bool, results []any) (map[string]string, bool) {
 	observed := make(map[string]string)
 	complete := len(results) == len(requested)
 	for _, rawResult := range results {
@@ -81,13 +87,13 @@ func deriveCompatibility(required, results []any) (bool, string) {
 		}
 		observed[checkID] = stringValue(result, "result")
 	}
+	return observed, complete
+}
+
+func compatibilityStatus(requested map[string]bool, observed map[string]string, complete bool) (bool, string) {
 	hasIncompatible, hasUnknown, hasMigration := false, false, false
 	for checkID := range requested {
-		result, exists := observed[checkID]
-		if !exists {
-			complete = false
-		}
-		switch result {
+		switch observed[checkID] {
 		case "compatible":
 		case "migration_required":
 			hasMigration = true
