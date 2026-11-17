@@ -18,13 +18,11 @@ func evaluateProxyBackendInspect(pkg *protocolPackage, fixture map[string]any) (
 		responseValid := pkg.validateSchema(proxyBackendInspectOutputSchemaID, response) == nil
 		requestTarget := asObject(request["target"])
 		responseTarget := asObject(response["target"])
-		requestInstance := asObject(requestTarget["instance_ref"])
-		responseInstance := asObject(responseTarget["instance_ref"])
 		targetBound := reflect.DeepEqual(request["target"], response["target"])
-		environmentConsistent := stringValue(requestTarget, "environment_id") != "" &&
-			stringValue(requestTarget, "environment_id") == stringValue(requestInstance, "environment_id") &&
-			stringValue(responseTarget, "environment_id") == stringValue(responseInstance, "environment_id")
-		routingPermitted := requestValid && responseValid && targetBound && environmentConsistent &&
+		environmentConsistent := proxyBackendTargetsMatchInstanceEnvironments(requestTarget, responseTarget)
+		schemasValid := requestValid && responseValid
+		bindingValid := targetBound && environmentConsistent
+		routingPermitted := schemasValid && bindingValid &&
 			stringValue(response, "registration_state") == "registered" &&
 			stringValue(response, "routability") == "routable"
 		evaluations = append(evaluations, map[string]any{
@@ -37,6 +35,15 @@ func evaluateProxyBackendInspect(pkg *protocolPackage, fixture map[string]any) (
 		})
 	}
 	return map[string]any{"evaluations": evaluations}, nil
+}
+
+func proxyBackendTargetsMatchInstanceEnvironments(requestTarget, responseTarget map[string]any) bool {
+	requestEnvironment := stringValue(requestTarget, "environment_id")
+	requestInstance := asObject(requestTarget["instance_ref"])
+	responseInstance := asObject(responseTarget["instance_ref"])
+	return requestEnvironment != "" &&
+		requestEnvironment == stringValue(requestInstance, "environment_id") &&
+		stringValue(responseTarget, "environment_id") == stringValue(responseInstance, "environment_id")
 }
 
 func init() {

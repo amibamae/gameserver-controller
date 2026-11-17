@@ -14,22 +14,9 @@ func evaluateExecutionHealthDiagnostics(pkg *protocolPackage, fixture map[string
 		schemasValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-health-inspect-input", request) == nil &&
 			pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-health-inspect-output", response) == nil
 		unitBound := reflect.DeepEqual(request["unit_ref"], response["unit_ref"])
-		lines := make([]string, 0)
-		for _, rawLine := range arrayValue(response, "safe_diagnostics") {
-			line, ok := rawLine.(string)
-			if ok {
-				lines = append(lines, line)
-			}
-		}
-		text := strings.Join(lines, "\n")
 		probes := arrayValue(evaluation, "redaction_probes")
-		probesAbsent := len(probes) > 0
-		for _, rawProbe := range probes {
-			probe, ok := rawProbe.(string)
-			if !ok || probe == "" || strings.Contains(text, probe) {
-				probesAbsent = false
-			}
-		}
+		diagnostics := safeDiagnosticText(arrayValue(response, "safe_diagnostics"))
+		probesAbsent := len(probes) > 0 && executionLogProbesAbsent(diagnostics, probes)
 		accepted := schemasValid && unitBound && probesAbsent
 		evaluations = append(evaluations, map[string]any{
 			"case_id":                 stringValue(evaluation, "case_id"),
@@ -41,6 +28,16 @@ func evaluateExecutionHealthDiagnostics(pkg *protocolPackage, fixture map[string
 		})
 	}
 	return map[string]any{"evaluations": evaluations}, nil
+}
+
+func safeDiagnosticText(diagnostics []any) string {
+	lines := make([]string, 0, len(diagnostics))
+	for _, raw := range diagnostics {
+		if line, ok := raw.(string); ok {
+			lines = append(lines, line)
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func init() {
