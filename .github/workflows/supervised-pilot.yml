@@ -22,6 +22,9 @@ on:
       - "go.mod"
       - "go.sum"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
