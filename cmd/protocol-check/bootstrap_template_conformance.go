@@ -18,8 +18,8 @@ func evaluateBootstrapTemplateContent(fixture map[string]any) (map[string]any, e
 
 	// Check for required template content
 	templateContents := []struct {
-		pattern    string
-		required   bool
+		pattern  string
+		required bool
 	}{
 		{"mcrcon", true},
 		{"/usr/local/bin/mcrcon", true},
@@ -36,7 +36,7 @@ func evaluateBootstrapTemplateContent(fixture map[string]any) (map[string]any, e
 	hasMissingSection := false
 	for _, section := range templateContents {
 		contentPresent := strings.Contains(renderedBootstrap, section.pattern)
-		
+
 		if !contentPresent && section.required {
 			if _, exists := result["missing_required_section"]; !exists {
 				result["missing_required_section"] = section.pattern

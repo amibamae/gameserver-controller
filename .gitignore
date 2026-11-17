@@ -1,0 +1,21 @@
+# OpenCode personal configuration (local settings)
+.opencode/
+
+# Binary files and compiled artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# IDE specific files
+.vscode/
+.idea/
+*~
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Node modules (if applicable)
+node_modules/

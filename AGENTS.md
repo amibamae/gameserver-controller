@@ -65,3 +65,4 @@ Follow these rules unless the owner explicitly instructs otherwise.
 
 - Keep one focused task per session and update [docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md) when work stops mid-stream, so the next agent can resume.
 - Keep the local, untracked `.opencode/WORK_PROGRESS.md` current (completed work, current task, blockers, next steps) and never commit it.
+- See [.opencode/AGENT_ORCHESTRATION.md](.opencode/AGENT_ORCHESTRATION.md) for the seven-agent team documentation, responsibilities, skill loading, and coordination patterns.
