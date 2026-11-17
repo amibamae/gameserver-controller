@@ -47,6 +47,7 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 	minecraftPort := flags.Uint("minecraft-port", 0, "Minecraft server port")
 	voicePort := flags.Uint("voice-chat-port", 0, "voice chat port")
 	wasabiPath := flags.String("wasabi-remote-path", "", "Wasabi bucket or bucket/prefix used by the bootstrap")
+	vultrPlan := flags.String("plan", "", "Vultr server plan (e.g., vc2-1-0150, vc4-1-0150, vc8-1-0150)")
 	credentialRef := flags.String("credential-ref", defaultCredential, "systemd credential reference for the Vultr API token")
 	timeout := flags.Duration("timeout", 30*time.Second, "maximum time for the Vultr API call")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -58,7 +59,7 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
 	}
-	if err := allowFlags(flags, "execute", "confirm-upload", "name", "controller-ip", "minecraft-port", "voice-chat-port", "wasabi-remote-path", "credential-ref", "timeout"); err != nil {
+	if err := allowFlags(flags, "execute", "confirm-upload", "name", "controller-ip", "minecraft-port", "voice-chat-port", "wasabi-remote-path", "plan", "credential-ref", "timeout"); err != nil {
 		return err
 	}
 	if !safeScriptName.MatchString(*name) {
@@ -68,8 +69,9 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 		return errors.New("ports must be between 1 and 65535")
 	}
 	settings := bootstrap.Settings{
-		ControllerIP: *controllerIP, MinecraftPort: uint16(*minecraftPort),
+		ControllerIP:   *controllerIP, MinecraftPort: uint16(*minecraftPort),
 		VoiceChatPort: uint16(*voicePort), WasabiRemotePath: *wasabiPath,
+		Plan:           *vultrPlan,
 	}
 	script, err := bootstrap.Render(settings)
 	if err != nil {

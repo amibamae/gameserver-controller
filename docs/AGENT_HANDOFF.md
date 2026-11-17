@@ -225,3 +225,36 @@ Keep new schemas in `0.21.0-draft` until R14.
   - Recording stores that log every write in order: `internal/workflow/engine_advance_test.go`.
   - For `cmd/protocol-check`, a byte-identical comparison of every evaluator's output across all 183 fixtures before and after.
 - **Repowise:** health scores come from the repowise MCP tools (`get_health`, `get_risk`, `setup_status` for the indexed commit). The owner triggers re-indexes; scores are only real after a re-index of the current `main`. The `refactoring_targets` pagination in `get_health` repeats the same 25 entries, so rank functions with a local complexity count instead.
+
+### PaperMC & systemd investigation (2026-11-16)
+
+Completed systematic investigation of systemd integration patterns for PaperMC server deployments:
+
+1. **Startup script flow** (`cmd/vultr-bootstrap/main.go`):
+   - Creates Vultr startup scripts via `StartupScriptRequest{Name, Type, Script}`
+   - Schema: ID (resource ref), Name (255 chars max), Type ("boot"|"pxe"), Script (base64-encoded, max 1 MiB UTF-8)
+   - Validation rejects null bytes, non-UTF-8, and oversized scripts
+
+2. **Systemd unit files** (`scripts/bootstrap/minecraft-debian.sh.tmpl`):
+   - `minecraft-restore.service`: One-shot oneshot service to restore from Wasabi (RemainAfterExit=yes)
+   - `minecraft-vanilla.service`: Main Minecraft Paper server, depends on restore completing
+   - `mcrcon.socket` + `mcrcon.service`: Socket activation for secure localhost RCON (25577)
+   - **No dedicated health check unit** - uses protocol-level unit inspection
+
+3. **Volume mounting pattern**:
+   - External Wasabi S3 storage, not block volumes
+   - rclone configuration written via `internal/pilothandoff/handoff.go`
+   - Restore script downloads from cloud; sync uploads to cloud on shutdown
+   - Cold starts: restore from Wasabi → start server
+
+4. **Health check implementation**:
+   - Protocol schemas for unit inspection, start/stop, force-stop, logs-read, health-inspect, delete
+   - No systemd health socket in bootstrap; uses `systemctl is-active` and journal logs
+   - Schema validation ensures consistent state reporting across adapters
+
+5. **Systemd credential integration**:
+   - All secrets use `systemd-credential://NAME` reference scheme
+   - Credentials stored encrypted in `/run/systemd/credentials/`
+   - Scope: Vultr API tokens, Wasabi credentials, SSH private keys
+
+Report saved to `INVESTIGATION_REPORT.md` with full code paths, example shapes, and behavioral patterns.

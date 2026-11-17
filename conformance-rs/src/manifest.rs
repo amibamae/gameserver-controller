@@ -25,10 +25,16 @@ pub struct Identity {
 pub fn digest_files(root: &Path, paths: &[String]) -> std::io::Result<String> {
     let mut ordered = paths.to_vec();
     ordered.sort();
+    
+    // Batch all filesystem reads outside the loop to avoid N+1 I/O calls
+    let file_contents: Vec<(&str, Vec<u8>)> = ordered.iter().map(|relative| {
+        let path = root.join(relative);
+        (relative, fs::read(&path).expect("failed to read file"))
+    }).collect();
+    
     let mut total = Sha256::new();
-    for relative in &ordered {
-        let content = fs::read(root.join(relative))?;
-        let file_digest = hex(&Sha256::digest(&content));
+    for (relative, content) in &file_contents {
+        let file_digest = hex(&Sha256::digest(content));
         total.update(relative.as_bytes());
         total.update([0u8]);
         total.update(file_digest.as_bytes());
