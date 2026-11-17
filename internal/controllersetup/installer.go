@@ -174,27 +174,26 @@ func renderServiceUnit(value config.Config, layout Layout) string {
 // accepted for idempotency; differing files are preserved and cause failure.
 // It reloads systemd but never enables or starts the service.
 func ApplyInstallBundle(ctx context.Context, root string, host Host, bundle InstallBundle, operations InstallerHost) error {
-	if ctx == nil || operations == nil {
+	if checkNilContextAndOperations(ctx, operations) != nil {
 		return errors.New("installer context and host operations are required")
 	}
 	if err := ctx.Err(); err != nil {
 		return errors.New("installation was canceled")
 	}
-	if host.OSReleaseID != "debian" || !host.Systemd {
+	if checkDebianSystemdHost(host) != nil {
 		return errors.New("installation requires a supported Debian/systemd host")
 	}
-	if !filepath.IsAbs(root) {
+	if checkInstallationRootAbsolute(root) != nil {
 		return errors.New("installation root must be absolute")
 	}
-	if !filepath.IsAbs(bundle.StateDir) || filepath.Clean(bundle.StateDir) != bundle.StateDir || len(bundle.Files) == 0 || len(bundle.Directories) == 0 {
+	if err := checkInstallationBundleComplete(bundle); err != nil {
 		return errors.New("installation bundle is incomplete or contains an invalid state directory")
 	}
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return errors.New("resolve installation root")
 	}
-	rootInfo, err := os.Lstat(root)
-	if err != nil || !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
+	if checkInstallationRootExists(root) != nil {
 		return errors.New("installation root must be an existing real directory")
 	}
 	for _, dir := range bundle.Directories {
@@ -268,6 +267,47 @@ func ApplyInstallBundle(ctx context.Context, root string, host Host, bundle Inst
 		rollbackFiles(created)
 		_ = operations.DaemonReload(ctx)
 		return errors.New("systemd daemon reload failed; newly installed files were removed")
+	}
+	return nil
+}
+
+// checkNilContextAndOperations returns an error if context or operations are nil.
+func checkNilContextAndOperations(ctx context.Context, operations InstallerHost) error {
+	if ctx == nil || operations == nil {
+		return errors.New("installer context and host operations are required")
+	}
+	return nil
+}
+
+// checkDebianSystemdHost returns an error if host is not a Debian systemd machine.
+func checkDebianSystemdHost(host Host) error {
+	if host.OSReleaseID != "debian" || !host.Systemd {
+		return errors.New("installation requires a supported Debian/systemd host")
+	}
+	return nil
+}
+
+// checkInstallationRootAbsolute returns an error if root is not absolute.
+func checkInstallationRootAbsolute(root string) error {
+	if !filepath.IsAbs(root) {
+		return errors.New("installation root must be absolute")
+	}
+	return nil
+}
+
+// checkInstallationBundleComplete returns an error if bundle.StateDir is invalid or empty.
+func checkInstallationBundleComplete(bundle InstallBundle) error {
+	if !filepath.IsAbs(bundle.StateDir) || filepath.Clean(bundle.StateDir) != bundle.StateDir || len(bundle.Files) == 0 || len(bundle.Directories) == 0 {
+		return errors.New("installation bundle is incomplete or contains an invalid state directory")
+	}
+	return nil
+}
+
+// checkInstallationRootExists returns an error if root is not an existing real directory.
+func checkInstallationRootExists(root string) error {
+	rootInfo, err := os.Lstat(root)
+	if err != nil || !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
+		return errors.New("installation root must be an existing real directory")
 	}
 	return nil
 }
