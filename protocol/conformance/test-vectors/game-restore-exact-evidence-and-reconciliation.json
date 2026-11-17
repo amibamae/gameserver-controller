@@ -1,0 +1,654 @@
+{
+  "fixture_id": "game.restore.exact-evidence-and-reconciliation",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "game.restore",
+  "purpose": "An ordinary restore must retain exact backup and target identity, rotate the data generation, and keep unknown execution blocked until exact inspection supplies all required passing checks.",
+  "input": {
+    "restore_request": {
+      "source_backup": {
+        "outcome_summary": "Backup uploaded and verified for the exact source data generation.",
+        "operation_type": "server.backup",
+        "affected_resources": [
+          {
+            "adapter_id": "hosting.example",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "instance-paper-source-010"
+          }
+        ],
+        "completed_steps": [
+          {
+            "step_id": "verify-backup",
+            "step_type": "storage.backup.verify",
+            "summary": "All manifest objects were verified."
+          }
+        ],
+        "failed_steps": [],
+        "warnings": [],
+        "unresolved_conditions": [],
+        "audit_event_ids": [
+          "audit-backup-010"
+        ],
+        "partial": false,
+        "operation_data": {
+          "backup_id": "backup-compat-010",
+          "environment_id": "staging",
+          "data_generation_id": "generation-010",
+          "manifest": {
+            "manifest_version": "1",
+            "backup_id": "backup-compat-010",
+            "server_id": "minecraft-test",
+            "environment_id": "staging",
+            "data_generation_id": "generation-010",
+            "source_instance_ref": {
+              "adapter_id": "hosting.example",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "instance-paper-source-010"
+            },
+            "created_at": "2026-11-06T08:30:00Z",
+            "source_operation_id": "operation-backup-010",
+            "game": {
+              "adapter_id": "game.minecraft-paper",
+              "name": "Minecraft Java Edition",
+              "version": "paper-1.21.4-r1",
+              "world_format": "paper-world-v1"
+            },
+            "consistency": {
+              "mode": "offline",
+              "evidence": "Runtime stopped after a confirmed game save."
+            },
+            "objects": [
+              {
+                "size_bytes": 4096,
+                "checksum_algorithm": "sha256",
+                "checksum": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "object_ref": {
+                  "adapter_id": "storage.s3-compatible",
+                  "storage_profile_id": "staging-backups",
+                  "environment_id": "staging",
+                  "container": "game-backups",
+                  "key": "minecraft-test/backup-compat-010/world.tar.zst",
+                  "version_id": "object-v010"
+                }
+              }
+            ]
+          },
+          "verified_at": "2026-11-06T08:31:00Z",
+          "final_lifecycle_state": "stopped"
+        }
+      },
+      "compatibility_result": {
+        "backup_id": "backup-compat-010",
+        "environment_id": "staging",
+        "data_generation_id": "generation-010",
+        "source_game_adapter_id": "game.minecraft-paper",
+        "source_game_version": "paper-1.21.4-r1",
+        "target_game_adapter_id": "game.minecraft-paper",
+        "target_release_id": "paper-1.21.5-r1",
+        "target_game_version": "paper-1.21.5-r1",
+        "compatibility_status": "compatible",
+        "observed_at": "2026-11-06T08:32:00Z",
+        "check_results": [
+          {
+            "check_id": "world.format",
+            "check_version": "1",
+            "result": "compatible",
+            "observed_at": "2026-11-06T08:31:00Z"
+          },
+          {
+            "check_id": "target.release",
+            "check_version": "1",
+            "result": "compatible",
+            "observed_at": "2026-11-06T08:31:10Z"
+          }
+        ]
+      },
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-target-011"
+        }
+      },
+      "target_release_id": "paper-1.21.5-r1",
+      "target_data_generation_id": "generation-restore-011",
+      "required_check_ids": [
+        "world.integrity",
+        "world.metadata"
+      ],
+      "object_streams": [
+        {
+          "object_ref": {
+            "adapter_id": "storage.s3-compatible",
+            "storage_profile_id": "staging-backups",
+            "environment_id": "staging",
+            "container": "game-backups",
+            "key": "minecraft-test/backup-compat-010/world.tar.zst",
+            "version_id": "object-v010"
+          }
+        }
+      ]
+    },
+    "restore_output": {
+      "backup_id": "backup-compat-010",
+      "environment_id": "staging",
+      "source_data_generation_id": "generation-010",
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-target-011"
+        }
+      },
+      "target_data_generation_id": "generation-restore-011",
+      "restore_execution_ref": {
+        "adapter_id": "game.minecraft-paper",
+        "environment_id": "staging",
+        "resource_kind": "restore-execution",
+        "external_id": "restore-execution-011"
+      },
+      "outcome": "restored",
+      "observed_at": "2026-11-06T08:34:00Z",
+      "validation_checks": [
+        {
+          "check_id": "world.integrity",
+          "result": "pass",
+          "observed_at": "2026-11-06T08:34:00Z"
+        },
+        {
+          "check_id": "world.metadata",
+          "result": "pass",
+          "observed_at": "2026-11-06T08:34:00Z"
+        }
+      ]
+    },
+    "inspect_request": {
+      "backup_id": "backup-compat-010",
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-target-011"
+        }
+      },
+      "target_data_generation_id": "generation-restore-011",
+      "restore_execution_ref": {
+        "adapter_id": "game.minecraft-paper",
+        "environment_id": "staging",
+        "resource_kind": "restore-execution",
+        "external_id": "restore-execution-011"
+      }
+    },
+    "inspect_output": {
+      "backup_id": "backup-compat-010",
+      "environment_id": "staging",
+      "source_data_generation_id": "generation-010",
+      "target": {
+        "server_id": "minecraft-test",
+        "environment_id": "staging",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "resource_kind": "instance",
+          "external_id": "instance-paper-target-011"
+        }
+      },
+      "target_data_generation_id": "generation-restore-011",
+      "restore_execution_ref": {
+        "adapter_id": "game.minecraft-paper",
+        "environment_id": "staging",
+        "resource_kind": "restore-execution",
+        "external_id": "restore-execution-011"
+      },
+      "outcome": "restored",
+      "observed_at": "2026-11-06T08:34:10Z",
+      "validation_checks": [
+        {
+          "check_id": "world.integrity",
+          "result": "pass",
+          "observed_at": "2026-11-06T08:34:00Z"
+        },
+        {
+          "check_id": "world.metadata",
+          "result": "pass",
+          "observed_at": "2026-11-06T08:34:00Z"
+        }
+      ]
+    },
+    "evaluations": [
+      {
+        "case_id": "exact-restore"
+      },
+      {
+        "case_id": "source-generation-reused",
+        "request_overrides": {
+          "target_data_generation_id": "generation-010"
+        },
+        "output_overrides": {
+          "target_data_generation_id": "generation-010"
+        }
+      },
+      {
+        "case_id": "wrong-backup-and-source-generation",
+        "output_overrides": {
+          "backup_id": "backup-other-example",
+          "source_data_generation_id": "generation-unrelated"
+        }
+      },
+      {
+        "case_id": "wrong-instance",
+        "output_overrides": {
+          "target": {
+            "instance_ref": {
+              "external_id": "instance-wrong-example"
+            }
+          }
+        }
+      },
+      {
+        "case_id": "staging-backup-cannot-restore-production",
+        "request_overrides": {
+          "target": {
+            "environment_id": "production",
+            "instance_ref": {
+              "environment_id": "production"
+            }
+          }
+        },
+        "output_overrides": {
+          "target": {
+            "environment_id": "production",
+            "instance_ref": {
+              "environment_id": "production"
+            }
+          },
+          "environment_id": "production",
+          "restore_execution_ref": {
+            "environment_id": "production"
+          }
+        }
+      },
+      {
+        "case_id": "duplicate-checks",
+        "output_overrides": {
+          "validation_checks": [
+            {
+              "check_id": "world.integrity",
+              "result": "pass",
+              "observed_at": "2026-11-06T08:34:00Z"
+            },
+            {
+              "check_id": "world.integrity",
+              "result": "pass",
+              "observed_at": "2026-11-06T08:34:00Z"
+            }
+          ]
+        }
+      },
+      {
+        "case_id": "missing-check",
+        "output_overrides": {
+          "validation_checks": [
+            {
+              "check_id": "world.integrity",
+              "result": "pass",
+              "observed_at": "2026-11-06T08:34:00Z"
+            }
+          ]
+        }
+      },
+      {
+        "case_id": "failed-check",
+        "output_overrides": {
+          "validation_checks": [
+            {
+              "check_id": "world.integrity",
+              "result": "pass",
+              "observed_at": "2026-11-06T08:34:00Z"
+            },
+            {
+              "check_id": "world.metadata",
+              "result": "fail",
+              "observed_at": "2026-11-06T08:34:00Z"
+            }
+          ]
+        }
+      },
+      {
+        "case_id": "unknown-requires-inspection",
+        "output_overrides": {
+          "outcome": "outcome_unknown"
+        }
+      },
+      {
+        "case_id": "exact-inspection-confirms-restore",
+        "output_overrides": {
+          "outcome": "outcome_unknown"
+        },
+        "inspect": true
+      },
+      {
+        "case_id": "inspection-is-still-unknown",
+        "output_overrides": {
+          "outcome": "outcome_unknown"
+        },
+        "inspect": true,
+        "inspect_output_overrides": {
+          "outcome": "outcome_unknown"
+        }
+      },
+      {
+        "case_id": "inspection-request-names-other-execution",
+        "output_overrides": {
+          "outcome": "outcome_unknown"
+        },
+        "inspect": true,
+        "inspect_request_overrides": {
+          "restore_execution_ref": {
+            "external_id": "other-restore-execution"
+          }
+        }
+      },
+      {
+        "case_id": "inspection-output-names-other-execution",
+        "output_overrides": {
+          "outcome": "outcome_unknown"
+        },
+        "inspect": true,
+        "inspect_output_overrides": {
+          "restore_execution_ref": {
+            "external_id": "other-restore-execution"
+          }
+        }
+      },
+      {
+        "case_id": "inspection-cannot-confirm-rejected-restore",
+        "output_overrides": {
+          "outcome": "rejected"
+        },
+        "inspect": true
+      },
+      {
+        "case_id": "unknown-reference-outside-target-environment",
+        "output_overrides": {
+          "outcome": "outcome_unknown",
+          "restore_execution_ref": {
+            "environment_id": "production"
+          }
+        }
+      },
+      {
+        "case_id": "invalid-restore-request",
+        "request_overrides": {
+          "target_data_generation_id": []
+        }
+      },
+      {
+        "case_id": "invalid-inspect-request",
+        "output_overrides": {
+          "outcome": "outcome_unknown"
+        },
+        "inspect": true,
+        "inspect_request_overrides": {
+          "restore_execution_ref": {
+            "resource_kind": []
+          }
+        }
+      },
+      {
+        "case_id": "invalid-inspect-response",
+        "output_overrides": {
+          "outcome": "outcome_unknown"
+        },
+        "inspect": true,
+        "inspect_output_overrides": {
+          "validation_checks": []
+        }
+      }
+    ]
+  },
+  "expected": {
+    "evaluations": {
+      "exact-restore": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": false,
+        "restore_completion_supported": true,
+        "inspection_has_exact_reference": false
+      },
+      "source-generation-reused": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": false,
+        "restore_evidence_bound": true,
+        "inspection_required": false,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": false
+      },
+      "wrong-backup-and-source-generation": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": false,
+        "inspection_required": false,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": false
+      },
+      "wrong-instance": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": false,
+        "inspection_required": false,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": false
+      },
+      "staging-backup-cannot-restore-production": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": false,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": false,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": false
+      },
+      "duplicate-checks": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": false,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": false
+      },
+      "missing-check": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": false,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": false
+      },
+      "failed-check": {
+        "request_schema_valid": true,
+        "output_schema_valid": false,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": false,
+        "inspection_required": false,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": false
+      },
+      "unknown-requires-inspection": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": true,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": true
+      },
+      "exact-inspection-confirms-restore": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": true,
+        "restore_completion_supported": false,
+        "inspection": {
+          "request_schema_valid": true,
+          "output_schema_valid": true,
+          "request_bound": true,
+          "evidence_bound": true,
+          "restore_completion_supported": true
+        },
+        "inspection_has_exact_reference": true
+      },
+      "inspection-is-still-unknown": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": true,
+        "restore_completion_supported": false,
+        "inspection": {
+          "request_schema_valid": true,
+          "output_schema_valid": true,
+          "request_bound": true,
+          "evidence_bound": true,
+          "restore_completion_supported": false
+        },
+        "inspection_has_exact_reference": true
+      },
+      "inspection-request-names-other-execution": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": true,
+        "restore_completion_supported": false,
+        "inspection": {
+          "request_schema_valid": true,
+          "output_schema_valid": true,
+          "request_bound": false,
+          "evidence_bound": false,
+          "restore_completion_supported": false
+        },
+        "inspection_has_exact_reference": true
+      },
+      "inspection-output-names-other-execution": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": true,
+        "restore_completion_supported": false,
+        "inspection": {
+          "request_schema_valid": true,
+          "output_schema_valid": true,
+          "request_bound": true,
+          "evidence_bound": false,
+          "restore_completion_supported": false
+        },
+        "inspection_has_exact_reference": true
+      },
+      "inspection-cannot-confirm-rejected-restore": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": false,
+        "restore_completion_supported": false,
+        "inspection": {
+          "request_schema_valid": true,
+          "output_schema_valid": true,
+          "request_bound": true,
+          "evidence_bound": true,
+          "restore_completion_supported": false
+        },
+        "inspection_has_exact_reference": false
+      },
+      "unknown-reference-outside-target-environment": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": false,
+        "inspection_required": true,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": false
+      },
+      "invalid-restore-request": {
+        "request_schema_valid": false,
+        "output_schema_valid": true,
+        "source_scope_matches": false,
+        "target_generation_is_new": false,
+        "restore_evidence_bound": false,
+        "inspection_required": false,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": false
+      },
+      "invalid-inspect-request": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": true,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": true,
+        "inspection": {
+          "request_schema_valid": false,
+          "output_schema_valid": true,
+          "request_bound": false,
+          "evidence_bound": false,
+          "restore_completion_supported": false
+        }
+      },
+      "invalid-inspect-response": {
+        "request_schema_valid": true,
+        "output_schema_valid": true,
+        "source_scope_matches": true,
+        "target_generation_is_new": true,
+        "restore_evidence_bound": true,
+        "inspection_required": true,
+        "restore_completion_supported": false,
+        "inspection_has_exact_reference": true,
+        "inspection": {
+          "request_schema_valid": true,
+          "output_schema_valid": false,
+          "request_bound": true,
+          "evidence_bound": false,
+          "restore_completion_supported": false
+        }
+      }
+    }
+  },
+  "side_effect_expectation": "An unknown restore retains the target data and is never reapplied automatically."
+}

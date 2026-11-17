@@ -204,6 +204,9 @@ func TestValidateExamplesReportsEachProblem(t *testing.T) {
 		{"schema URI not local", func(t *testing.T) {
 			replaceCapabilities(t, filepath.Join(dir, descriptor), `[{"input_schema_uri":"urn:missing","output_schema_uri":"urn:missing"}]`)
 		}, descriptor + ": capability 0 input_schema_uri does not resolve in the local schema registry"},
+		{"output schema URI not local", func(t *testing.T) {
+			replaceCapabilities(t, filepath.Join(dir, descriptor), `[{"input_schema_uri":"urn:gameserver-controller:`+pkg.version+`:common:external-resource-ref","output_schema_uri":"urn:missing"}]`)
+		}, descriptor + ": capability 0 output_schema_uri does not resolve in the local schema registry"},
 		{"example breaks its schema", func(t *testing.T) { write(t, filepath.Join(dir, descriptor), `{}`) }, descriptor + ": "},
 	} {
 		t.Run(test.name, func(t *testing.T) {
