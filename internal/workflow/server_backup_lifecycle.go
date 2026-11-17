@@ -77,15 +77,7 @@ func (w *ServerBackupWorkflow) projectBackupCapture(operation store.OperationRec
 		return next, true, nil
 	}
 	if operation.Status == protocolstate.OperationSucceeded {
-		if backupResumeAfterBackup(operation) {
-			return store.LogicalServer{}, false, errors.New("resumed backup cannot succeed before lifecycle enters starting")
-		}
-		if !hasValidBackupResult(operation.Result, operation, next, w.schemas, protocolstate.ServerStopped) {
-			return store.LogicalServer{}, false, errors.New("terminal server.backup result lacks exact stopped-state manifest evidence")
-		}
-		next.LifecycleState = protocolstate.ServerStopped
-		next.DesiredState = "stopped"
-		return next, true, nil
+		return w.projectSuccessfulBackupCapture(operation, next)
 	}
 	if backupOperationUnsuccessful(operation.Status) {
 		if start.Attempt > 0 || backupFinalStopUncertain(operation) {
@@ -98,6 +90,18 @@ func (w *ServerBackupWorkflow) projectBackupCapture(operation store.OperationRec
 		return next, true, nil
 	}
 	return next, false, nil
+}
+
+func (w *ServerBackupWorkflow) projectSuccessfulBackupCapture(operation store.OperationRecord, next store.LogicalServer) (store.LogicalServer, bool, error) {
+	if backupResumeAfterBackup(operation) {
+		return store.LogicalServer{}, false, errors.New("resumed backup cannot succeed before lifecycle enters starting")
+	}
+	if !hasValidBackupResult(operation.Result, operation, next, w.schemas, protocolstate.ServerStopped) {
+		return store.LogicalServer{}, false, errors.New("terminal server.backup result lacks exact stopped-state manifest evidence")
+	}
+	next.LifecycleState = protocolstate.ServerStopped
+	next.DesiredState = "stopped"
+	return next, true, nil
 }
 
 func projectBackupStarting(operation store.OperationRecord, next store.LogicalServer) (store.LogicalServer, bool, error) {
