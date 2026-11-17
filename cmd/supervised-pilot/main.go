@@ -56,7 +56,11 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) error {
-	return runWithSettings(args, stdout, stderr, runtimeSettings{})
+	err := runWithSettings(args, stdout, stderr, runtimeSettings{})
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	return err
 }
 
 func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSettings) error {
@@ -229,9 +233,6 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 // parseFlags parses command-line flags and returns an error if parsing fails or extra args remain.
 func parseFlags(flags *flag.FlagSet, args []string) error {
 	if err := flags.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return nil
-		}
 		return err
 	}
 	if flags.NArg() != 0 {

@@ -1,0 +1,18 @@
+{
+  "fixture_id": "storage.object.size-mismatch-blocks-restore",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "storage.object.verify_checksum",
+  "purpose": "Matching digests do not permit restoring an object whose size differs from its manifest.",
+  "input": {
+    "expected_size_bytes": 1024,
+    "actual_size_bytes": 1023,
+    "expected_checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "actual_checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "expected": {
+    "verified": false,
+    "restore_allowed": false,
+    "verification_reason": "size_mismatch"
+  },
+  "side_effect_expectation": "none"
+}

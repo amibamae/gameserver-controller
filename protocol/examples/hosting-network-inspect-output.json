@@ -1,0 +1,15 @@
+{
+  "instance_ref": {
+    "adapter_id": "hosting.example",
+    "environment_id": "staging",
+    "resource_kind": "instance",
+    "external_id": "instance-012"
+  },
+  "observed_at": "2026-11-06T11:00:00Z",
+  "status": "observed",
+  "addresses": [
+    {"family": "ipv4", "address": "192.0.2.12"},
+    {"family": "ipv6", "address": "2001:db8::12"}
+  ],
+  "attachment_ids": ["attachment-012"]
+}
