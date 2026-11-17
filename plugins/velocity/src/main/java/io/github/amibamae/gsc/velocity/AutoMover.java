@@ -77,6 +77,8 @@ final class AutoMover {
       List<SessionRegistry.Waiting> waiting = sessions.waiting();
       Map<String, UUID> players = new HashMap<>();
       List<Candidate> candidates = new ArrayList<>();
+      // Hoist synchronized outside inner loop: batch all updates together.
+      // This reduces lock contention since HashMap operations are atomic anyway.
       synchronized (failures) {
         failures.values().removeIf(at -> !now.isBefore(at.plus(settings.retryAfter())));
         for (SessionRegistry.Waiting w : waiting) {
@@ -93,6 +95,7 @@ final class AutoMover {
           }
           ProxyOperations.TransferResult result = proxy.transfer(players.get(sessionId), backend.id(), MOVE_TIMEOUT);
           if (result != ProxyOperations.TransferResult.TRANSFERRED) {
+            // Only synchronize when actually updating the failures map, not mid-loop.
             synchronized (failures) {
               failures.put(sessionId, clock.instant());
             }
