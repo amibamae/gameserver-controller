@@ -68,18 +68,23 @@ func cloudflareRecords(value config.Config, profileID string) map[string]cloudfl
 			}
 		}
 		if network.JoinMode == "direct_dns" {
-			fallback := map[string][]string{}
-			for recordType, values := range network.FallbackRecords {
-				fallback[recordType] = append([]string(nil), values...)
-				sort.Strings(fallback[recordType])
-			}
-			records[strings.ToLower(network.JoinHostname)] = cloudflaredns.ManagedRecord{
-				Purposes: []cloudflaredns.Purpose{cloudflaredns.PurposeDirectJoin, cloudflaredns.PurposeFallback},
-				Fallback: fallback,
-			}
+			records[strings.ToLower(network.JoinHostname)] = cloudflareFallbackRecord(network.FallbackRecords)
 		}
 	}
 	return records
+}
+
+func cloudflareFallbackRecord(valuesByType map[string][]string) cloudflaredns.ManagedRecord {
+	fallback := make(map[string][]string, len(valuesByType))
+	for recordType, values := range valuesByType {
+		sorted := append([]string(nil), values...)
+		sort.Strings(sorted)
+		fallback[recordType] = sorted
+	}
+	return cloudflaredns.ManagedRecord{
+		Purposes: []cloudflaredns.Purpose{cloudflaredns.PurposeDirectJoin, cloudflaredns.PurposeFallback},
+		Fallback: fallback,
+	}
 }
 
 func buildCloudflare(value config.Config, profile config.AdapterProfile, protocolVersion string, credentials credentialResolver) (*cloudflaredns.Adapter, error) {
