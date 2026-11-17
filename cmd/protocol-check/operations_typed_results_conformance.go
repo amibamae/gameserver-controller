@@ -125,16 +125,21 @@ func typedBackupResultBound(operation map[string]any) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("backup readiness assertion: %w", err)
 	}
-	return stringValue(target, "server_id") == stringValue(manifest, "server_id") &&
+	identityBound := stringValue(target, "server_id") == stringValue(manifest, "server_id") &&
 		stringValue(target, "environment_id") == stringValue(data, "environment_id") &&
-		stringValue(data, "environment_id") == stringValue(manifest, "environment_id") &&
-		stringValue(data, "backup_id") == stringValue(manifest, "backup_id") &&
-		stringValue(data, "data_generation_id") == stringValue(manifest, "data_generation_id") &&
-		stringValue(asObject(target["instance_ref"]), "environment_id") == stringValue(target, "environment_id") &&
-		reflect.DeepEqual(target["instance_ref"], manifest["source_instance_ref"]) &&
-		(parameters["expected_instance_ref"] == nil ||
-			reflect.DeepEqual(asObject(parameters["expected_instance_ref"]), asObject(manifest["source_instance_ref"]))) &&
-		readinessBound, nil
+		stringValue(data, "environment_id") == stringValue(manifest, "environment_id")
+	backupBound := stringValue(data, "backup_id") == stringValue(manifest, "backup_id") &&
+		stringValue(data, "data_generation_id") == stringValue(manifest, "data_generation_id")
+	return identityBound && backupBound && backupSourceResultMatches(target, parameters, manifest) && readinessBound, nil
+}
+
+func backupSourceResultMatches(target, parameters, manifest map[string]any) bool {
+	if stringValue(asObject(target["instance_ref"]), "environment_id") != stringValue(target, "environment_id") ||
+		!reflect.DeepEqual(target["instance_ref"], manifest["source_instance_ref"]) {
+		return false
+	}
+	return parameters["expected_instance_ref"] == nil ||
+		reflect.DeepEqual(asObject(parameters["expected_instance_ref"]), asObject(manifest["source_instance_ref"]))
 }
 
 // typedRestore is what a restore result proves.
@@ -157,22 +162,29 @@ func typedRestoreResult(operation, backupOperation map[string]any, backupResultB
 		return typedRestore{}, fmt.Errorf("restore readiness assertion: %w", err)
 	}
 	var result typedRestore
-	result.backupOwnerBound = backupResultBound &&
-		stringValue(parameters, "backup_id") == stringValue(manifest, "backup_id") &&
-		stringValue(target, "server_id") == stringValue(manifest, "server_id") &&
-		stringValue(target, "environment_id") == stringValue(manifest, "environment_id") &&
-		stringValue(backupOperation, "status") == "succeeded" &&
-		stringValue(backupData, "verified_at") != ""
+	result.backupOwnerBound = backupResultBound && restoreBackupOwnerMatches(target, parameters, manifest, backupOperation, backupData)
 	result.dataGenerationRotated = stringValue(data, "data_generation_id") != "" &&
 		stringValue(data, "data_generation_id") != stringValue(manifest, "data_generation_id")
-	result.resultBound = result.backupOwnerBound && result.dataGenerationRotated &&
-		stringValue(target, "environment_id") == stringValue(asObject(target["instance_ref"]), "environment_id") &&
-		stringValue(parameters, "backup_id") == stringValue(data, "backup_id") &&
-		reflect.DeepEqual(target["instance_ref"], data["target_instance_ref"]) &&
-		(parameters["target_instance_ref"] == nil ||
-			reflect.DeepEqual(asObject(parameters["target_instance_ref"]), asObject(data["target_instance_ref"]))) &&
-		readinessBound
+	generationBound := result.backupOwnerBound && result.dataGenerationRotated
+	result.resultBound = generationBound && restoreTargetResultMatches(target, parameters, data) && readinessBound
 	return result, nil
+}
+
+func restoreBackupOwnerMatches(target, parameters, manifest, operation, data map[string]any) bool {
+	backupMatches := stringValue(parameters, "backup_id") == stringValue(manifest, "backup_id") &&
+		stringValue(target, "server_id") == stringValue(manifest, "server_id") &&
+		stringValue(target, "environment_id") == stringValue(manifest, "environment_id")
+	return backupMatches && stringValue(operation, "status") == "succeeded" && stringValue(data, "verified_at") != ""
+}
+
+func restoreTargetResultMatches(target, parameters, data map[string]any) bool {
+	if stringValue(target, "environment_id") != stringValue(asObject(target["instance_ref"]), "environment_id") ||
+		stringValue(parameters, "backup_id") != stringValue(data, "backup_id") ||
+		!reflect.DeepEqual(target["instance_ref"], data["target_instance_ref"]) {
+		return false
+	}
+	return parameters["target_instance_ref"] == nil ||
+		reflect.DeepEqual(asObject(parameters["target_instance_ref"]), asObject(data["target_instance_ref"]))
 }
 
 // typedDestroyResultBound: a destroy result names the expected instance,
