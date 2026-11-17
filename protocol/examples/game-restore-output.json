@@ -1,0 +1,31 @@
+{
+  "backup_id": "backup-compat-010",
+  "environment_id": "staging",
+  "source_data_generation_id": "generation-010",
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-target-011"
+    }
+  },
+  "target_data_generation_id": "generation-restore-011",
+  "restore_execution_ref": {
+    "adapter_id": "game.minecraft-paper",
+    "environment_id": "staging",
+    "resource_kind": "restore-execution",
+    "external_id": "restore-execution-011"
+  },
+  "outcome": "restored",
+  "observed_at": "2026-11-06T08:34:00Z",
+  "validation_checks": [
+    {
+      "check_id": "world.integrity",
+      "result": "pass",
+      "observed_at": "2026-11-06T08:34:00Z"
+    }
+  ]
+}

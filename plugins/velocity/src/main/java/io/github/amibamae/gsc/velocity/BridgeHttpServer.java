@@ -6,8 +6,9 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import io.github.amibamae.gsc.velocity.tls.HttpConfigurator;
-import io.github.amibamae.gsc.velocity.tls.TlsMaterialManager;
+import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsParameters;
+import com.sun.net.httpserver.HttpsServer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -17,6 +18,8 @@ import java.security.MessageDigest;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import org.slf4j.Logger;
 
 /**
@@ -30,20 +33,16 @@ final class BridgeHttpServer {
   private final byte[] token;
   private final Logger logger;
   private final boolean enforceLoopback;
-  private HttpConfigurator configurator; // Can be null for plain HTTP or contain SSL context
+  private final SSLContext tlsContext;
   private HttpServer server;
   private ExecutorService executor;
 
-  /**
-   * Creates a BridgeHttpServer that may optionally support TLS.
-   * @param service The bridge service to route requests to
-   * @param token The bearer token bytes (without "Bearer " prefix)
-   * @param enforceLoopback Whether to require loopback binding
-   * @param logger Logger for warnings and errors
-   * @param tlsMaterial Optional TLS material from TlsMaterialManager, null for plain HTTP
-   */
-  BridgeHttpServer(BridgeService service, byte[] token, boolean enforceLoopback, Logger logger, 
-                   TlsMaterialManager.Material tlsMaterial) {
+  BridgeHttpServer(BridgeService service, byte[] token, boolean enforceLoopback, Logger logger) {
+    this(service, token, enforceLoopback, logger, null);
+  }
+
+  BridgeHttpServer(BridgeService service, byte[] token, boolean enforceLoopback, Logger logger,
+                   SSLContext tlsContext) {
     if (token.length < 16) {
       throw new IllegalArgumentException("bridge token must be at least 16 bytes");
     }
@@ -51,55 +50,39 @@ final class BridgeHttpServer {
     this.token = ("Bearer " + new String(token, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
     this.enforceLoopback = enforceLoopback;
     this.logger = logger;
-
-    // Wire up TLS if provided
-    if (tlsMaterial != null) {
-      try {
-        this.configurator = HttpConfigurator.fromTlsMaterial(tlsMaterial);
-      } catch (RuntimeException e) {
-        logger.error("Failed to initialize TLS: {}", e.getMessage());
-        throw new RuntimeException("Cannot start bridge server", e);
-      }
-    }
+    this.tlsContext = tlsContext;
   }
 
-  /**
-   * Starts listening on the given address.
-   * If this server has TLS configured, it will use HTTPS; otherwise plain HTTP.
-   * The address must be a loopback address unless the loopback check is disabled in the plugin configuration.
-   */
   synchronized InetSocketAddress start(InetSocketAddress address) throws IOException {
     if (enforceLoopback && (address.getAddress() == null || !address.getAddress().isLoopbackAddress())) {
       throw new IllegalArgumentException("bridge must bind to a loopback address");
     }
-
-    // Create executor service (same for HTTP and HTTPS)
+    server = createServer(address);
     executor = Executors.newFixedThreadPool(4, runnable -> {
       Thread thread = new Thread(runnable, "gsc-bridge-http");
       thread.setDaemon(true);
       return thread;
     });
-
-    if (configurator != null) {
-      // TLS-enabled: use HttpConfigurator to start HTTPS server
-      logger.debug("Starting HTTPS server for Velocity bridge");
-      this.configurator.start(server, address.getPort());
-    } else {
-      // Plain HTTP
-      logger.debug("Starting plain HTTP server for Velocity bridge");
-      server = HttpServer.create(address, 16);
-      server.setExecutor(executor);
-    }
-
+    server.setExecutor(executor);
     server.createContext("/v1/", this::handle);
     server.start();
-    
-    if (configurator == null) {
-      return server.getAddress();
-    } else {
-      // For HTTPS, return the bound address from HttpsServer
-      return new InetSocketAddress("127.0.0.1", server.getPort());
+    return server.getAddress();
+  }
+
+  private HttpServer createServer(InetSocketAddress address) throws IOException {
+    if (tlsContext == null) {
+      return HttpServer.create(address, 16);
     }
+    HttpsServer https = HttpsServer.create(address, 16);
+    https.setHttpsConfigurator(new HttpsConfigurator(tlsContext) {
+      @Override
+      public void configure(HttpsParameters connection) {
+        SSLParameters parameters = tlsContext.getDefaultSSLParameters();
+        parameters.setNeedClientAuth(true);
+        connection.setSSLParameters(parameters);
+      }
+    });
+    return https;
   }
 
   synchronized void stop() {
