@@ -16,7 +16,7 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
-import io.github.amibamae.gsc.velocity.tls.TlsMaterialManager;
+import io.github.amibamae.gsc.velocity.tls.SslContextBuilder;
 import io.github.amibamae.gsc.velocity.BackendRegistry.Backend;
 import java.io.IOException;
 import java.io.InputStream;
@@ -80,6 +80,11 @@ public final class GscBridgePlugin {
   private void start() throws IOException {
     BridgeConfig config = BridgeConfig.parse(new Toml().read(configFile().toFile()));
     byte[] token = readToken(config.tokenFile(), config.enforceTokenPermissions());
+    BridgeConfig.Tls tls = config.tls();
+    var tlsContext = tls.enabled() ? SslContextBuilder.build(tls.certFile(), tls.keyFile(), tls.controllerCaFile()) : null;
+    if (!tls.enabled()) {
+      logger.warn("Velocity bridge TLS is disabled by configuration");
+    }
     Clock clock = Clock.systemUTC();
 
     Set<String> staticBackends = new HashSet<>();
@@ -106,20 +111,8 @@ public final class GscBridgePlugin {
     BridgeService service = new BridgeService(config.proxyInstanceId(), backends, sessions, operations, clock, this::saveBackends);
     boolean autoMove = config.autoMove().enabled() && !config.fallback().isEmpty();
     service.advertiseAutoMove(autoMove);
-    
-    // Create TLS material manager if TLS is enabled
-    TlsMaterialManager.Material tlsMaterial = null;
-    if (config.tls().enabled()) {
-      try {
-        TlsMaterialManager manager = new TlsMaterialManager(
-            config.tls().certFile(), config.tls().keyFile(), config.tls().controllerCaFile());
-        tlsMaterial = manager.get(); // May return null on first load until files validated
-      } catch (Exception e) {
-        logger.warn("Failed to initialize TLS material manager: {}", e.getMessage());
-        tlsMaterial = null; // Fall back to plain HTTP if TLS fails to load
-      }
-    }
-    http = new BridgeHttpServer(service, token, config.enforceLoopbackBind(), logger, tlsMaterial);
+
+    http = new BridgeHttpServer(service, token, config.enforceLoopbackBind(), logger, tlsContext);
     InetSocketAddress bound = http.start(new InetSocketAddress(config.bind(), config.port()));
     logger.info("GSC bridge listening on {}:{}", bound.getAddress().getHostAddress(), bound.getPort());
     if (!config.enforceLoopbackBind()) {

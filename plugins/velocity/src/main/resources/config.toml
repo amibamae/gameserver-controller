@@ -59,10 +59,8 @@ enforce-fallback = false
 
 # TLS for the bridge API. On by default: the plugin terminates TLS and checks
 # the controller's client certificate against controller-ca-file (mTLS). The
-# bearer token in [bridge] is still required on top of that. Rotation is
-# hot: the files are re-read and swapped at run time, so renewing a
-# certificate never restarts the proxy. See docs/TLS_RUNBOOK.md of the
-# gameserver-controller repository for how to create the certificates.
+# bearer token in [bridge] is still required. The plugin reads these files
+# at startup. Restart Velocity after replacing the certificates or key.
 [tls]
 # Terminate TLS on the bridge port. Setting this to false disables the TLS
 # layer entirely and logs a warning at start-up; the bearer token still
@@ -72,7 +70,7 @@ enabled = true
 # Absolute path to the server certificate (PEM). A public CA certificate
 # (e.g. Let's Encrypt) or a manual one both work.
 cert-file = "/etc/gsc/velocity-bridge.crt"
-# Absolute path to the matching server private key (PEM).
+# Absolute path to the matching unencrypted PKCS#8 server private key (PEM).
 key-file = "/etc/gsc/velocity-bridge.key"
 # Absolute path to the CA bundle (PEM, one or more certificates) that signed
 # the controller's client certificate. Usually the offline root CA from the
