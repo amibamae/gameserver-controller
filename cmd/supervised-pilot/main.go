@@ -157,6 +157,28 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if err != nil {
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
+<<<<<<< HEAD
+=======
+		return doProvision(provisionOptions{
+			execute: *execute, confirmation: *confirmCreate, timeout: *timeout,
+			policy: policy, statePath: statePath, serverID: *serverID, environment: *environmentID,
+			region: *region, plan: *plan, osID: *osID, hostname: *hostname,
+			sshKeyIDs: sshKeyIDs, startupScriptID: *startupScriptID, startupScriptSHA256: *startupScriptSHA256,
+			credentialRef: *credentialRef, operationID: *operationID, access: provisionAccess{FirewallGroupID: *firewallGroupID, ControllerIP: *controllerIP, SSHCredentialRef: *sshCredentialRef},
+		}, stdout, stderr)
+	case "adopt":
+		if err := allowOnlyFlags(flags, "execute", "confirm-adopt", "timeout", "server-id", "environment", "instance-id", "expected-ip", "region", "plan", "os-id", "os-name", "credential-ref", "operation-id"); err != nil {
+			return err
+		}
+		policy, err := pilotcapacity.LoadEmbeddedPolicy()
+		if err != nil {
+			return fmt.Errorf("load embedded capacity policy: %w", err)
+		}
+		statePath, err := settings.capacityStatePath()
+		if err != nil {
+			return fmt.Errorf("resolve capacity state path: %w", err)
+		}
+>>>>>>> 517273cadf80f92a710b6bde0a9176ea1f7be322
 		providerOSID, err := vultrapi.ParseOSID(*osID)
 		if err != nil {
 			return fmt.Errorf("parse Vultr OS ID: %w", err)
@@ -243,6 +265,7 @@ func doStatus(host string, stdout io.Writer) error {
 }
 
 // doBackup runs a backup operation on a Minecraft server.
+<<<<<<< HEAD
 func doBackup(host, hostStr string, execute bool, confirmHost string, timeout time.Duration, stdout, stderr io.Writer) error {
 	return backup(hostStr, execute, confirmHost, timeout, stdout, stderr)
 }
@@ -253,6 +276,15 @@ func doProvision(opts provisionOptions) (stdout io.Writer, stderr io.Writer, ret
 		return nil, nil, fmt.Errorf("validate provisioning access: %w", err)
 	}
 	return pilotvultr.Provision(*opts, stdout, stderr), stdout, stderr, nil
+=======
+func doBackup(host string, execute bool, confirmHost string, timeout time.Duration, stdout, stderr io.Writer) error {
+	return backup(host, execute, confirmHost, timeout, stdout, stderr)
+}
+
+// doProvision provisions a new Vultr VM for a Minecraft server.
+func doProvision(opts provisionOptions, stdout, stderr io.Writer) error {
+	return provisionVultr(opts, stdout, stderr)
+>>>>>>> 517273cadf80f92a710b6bde0a9176ea1f7be322
 }
 
 // doAdoptVultr adopts an existing Vultr instance for local management.

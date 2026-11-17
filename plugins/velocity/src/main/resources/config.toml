@@ -56,3 +56,26 @@ enforce-loopback-bind = true
 # static deployments where every server must exist in velocity.toml before
 # the proxy starts.
 enforce-fallback = false
+
+# TLS for the bridge API. On by default: the plugin terminates TLS and checks
+# the controller's client certificate against controller-ca-file (mTLS). The
+# bearer token in [bridge] is still required on top of that. Rotation is
+# hot: the files are re-read and swapped at run time, so renewing a
+# certificate never restarts the proxy. See docs/TLS_RUNBOOK.md of the
+# gameserver-controller repository for how to create the certificates.
+[tls]
+# Terminate TLS on the bridge port. Setting this to false disables the TLS
+# layer entirely and logs a warning at start-up; the bearer token still
+# applies. Keep it true unless you can firewall the port to the controller
+# host and accept the loss of certificate checking.
+enabled = true
+# Absolute path to the server certificate (PEM). A public CA certificate
+# (e.g. Let's Encrypt) or a manual one both work.
+cert-file = "/etc/gsc/velocity-bridge.crt"
+# Absolute path to the matching server private key (PEM).
+key-file = "/etc/gsc/velocity-bridge.key"
+# Absolute path to the CA bundle (PEM, one or more certificates) that signed
+# the controller's client certificate. Usually the offline root CA from the
+# TLS runbook. While rotating that CA, keep the old and new roots in the same
+# file until the rotation is finished.
+controller-ca-file = "/etc/gsc/velocity-bridge-controller-ca.pem"

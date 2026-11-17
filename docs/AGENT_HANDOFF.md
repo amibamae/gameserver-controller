@@ -77,7 +77,16 @@ Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is cont
 
 **Next up (2026-11-16):** complete the Rust conformance-rs I/O-in-loop fix for schemas.rs once MSVC is available, then commit and push with Go fixes.
 
+<<<<<<< HEAD
 ### Rust I/O-in-loop fix (completed)
+=======
+- **Transport:** built-in TLS + mTLS + bearer token, all at once. The plugin terminates TLS and verifies the controller's client certificate against a CA bundle; the bearer token stays as per-request defense in depth. The owner provisions the server certificate (Let's Encrypt, any provider, or manual); client certificates come from a small owner-run offline CA (a handful of openssl commands, ~90-day expiry).
+- **Keys at the edge:** the plugin's server key never leaves the proxy machine and the controller only ever sees the public certificate; the controller's client key stays in its credential accessor, like the token.
+- **Topology B (optional terminator):** controller → TLS → terminator → TLS → plugin. The inner hop must be re-encrypted end to end; a plain-HTTP inner hop is forbidden and must be stated as unsafe in the docs, because it voids the plugin's mTLS check.
+- **Config:** a `[tls]` table in the plugin's `config.toml` with `tls-cert`, `tls-key`, and `controller-ca` paths. File-content checks and permission checks follow the existing start-up-lock / bypass-flag pattern from the current branch.
+- **Hot rotation (owner requirement, high availability):** the certificate, key, and CA are re-read from disk without a restart. A `TlsMaterialManager` watches the paths, validates a new set atomically (parse, key matches certificate, expiry, permissions), and swaps the `SSLContext`/`HttpsConfigurator` on the already-listening `HttpServer` with a single `setHttpsConfigurator` call; existing connections finish on the old material. A bad or world-readable new file is rejected and the last good material is kept. Rotation has a zero-downtime overlap window: during a swap the plugin accepts the union of old and new CA anchors (and the controller may present either old or new client certificate) until the operator removes the old material; a failed rotation is therefore always recoverable. The Go client rotates the same way: its transport's `GetClientCertificate` callback re-reads the keypair per handshake and the CA bundle is re-read alongside it. Let's Encrypt auto-renewal is just "certbot writes the files, the plugin notices".
+- **Scope:** plugin `[tls]` table + `TlsMaterialManager` with start-up and per-swap permission checks; Go client client-cert transport (cert/key from the credential accessor, CA file re-read); docs — `docs/PROXY_BRIDGE_API.md` (topologies A and B with the no-plain-inner-hop rule), `docs/CONFIGURATION.md` (TLS setup and rotation procedure). Tests: certificate/key permission checks, mTLS accept/reject, rotation keeps an existing connection working, a corrupted new file leaves the old material in place.
+>>>>>>> 517273cadf80f92a710b6bde0a9176ea1f7be322
 
 Fixed two functions in `conformance-rs/src/schemas.rs` that had N+1 filesystem reads:
 

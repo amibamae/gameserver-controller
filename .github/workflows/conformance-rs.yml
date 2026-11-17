@@ -26,7 +26,7 @@ jobs:
         working-directory: conformance-rs
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install the pinned Rust toolchain
         # rustup is preinstalled on GitHub-hosted runners; rust-toolchain.toml
         # pins the version and components.
