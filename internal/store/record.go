@@ -371,31 +371,108 @@ func containsStepID(steps []OperationStep, stepID string) bool {
 	return false
 }
 
-func validSecretReference(ref SecretReference) bool {
-	if ref.SecretRef == "" || len(ref.SecretRef) > 1024 || ref.Purpose == "" || len(ref.Purpose) > 100 {
+// validSecretScheme checks that the scheme portion of a secret reference
+// contains only allowed characters (alphanumeric, +.-) and does not exceed max length.
+func validSecretScheme(scheme string) bool {
+	if len(scheme) == 0 {
 		return false
 	}
-	separator := strings.Index(ref.SecretRef, "://")
-	if separator < 1 || ref.SecretRef[0] < 'a' || ref.SecretRef[0] > 'z' {
+	if scheme[0] < 'a' || scheme[0] > 'z' {
 		return false
 	}
-	for _, ch := range ref.SecretRef[1:separator] {
+	for _, ch := range scheme {
 		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '+' && ch != '.' && ch != '-' {
 			return false
 		}
 	}
-	if len(ref.VersionRef) > 500 {
+	return true
+}
+
+// validSecretReferenceURL checks that the URL portion of a secret reference is well-formed.
+func validSecretReferenceURL(url string) bool {
+	if url == "" || len(url) > 1024 {
 		return false
 	}
-	seen := make(map[string]struct{}, len(ref.PermissionScope))
-	for _, scope := range ref.PermissionScope {
-		if scope == "" || len(scope) > 160 {
+	separator := strings.Index(url, "://")
+	if separator < 1 {
+		return false
+	}
+	scheme := url[:separator]
+	if !validSecretScheme(scheme) {
+		return false
+	}
+	return true
+}
+
+// validSecretReferencePurpose checks that the purpose field is non-empty and within length limits.
+func validSecretReferencePurpose(purpose string) bool {
+	if purpose == "" || len(purpose) > 100 {
+		return false
+	}
+	return true
+}
+
+// validSecretReferenceVersionRef checks that the version reference is within length limits.
+func validSecretReferenceVersionRef(versionRef string) bool {
+	if len(versionRef) > 500 {
+		return false
+	}
+	return true
+}
+
+// validatePermissionScope ensures a permission scope entry is non-empty and within length limits.
+func validatePermissionScope(scope string) bool {
+	return len(scope) > 0 && len(scope) <= 160
+}
+
+// validateUniquePermissionScopes ensures all scopes are distinct and non-empty.
+func validateUniquePermissionScopes(scopes []string) bool {
+	if len(scopes) == 0 {
+		return true
+	}
+	seen := make(map[string]struct{}, len(scopes))
+	for _, s := range scopes {
+		if !validatePermissionScope(s) {
 			return false
 		}
-		if _, exists := seen[scope]; exists {
+		if _, exists := seen[s]; exists {
 			return false
 		}
-		seen[scope] = struct{}{}
+		seen[s] = struct{}{}
+	}
+	return true
+}
+
+// validSecretReference validates a secret reference against all constraints.
+func validSecretReference(ref SecretReference) bool {
+	if !validSecretReferenceURL(ref.SecretRef) {
+		return false
+	}
+	if !validSecretReferencePurpose(ref.Purpose) {
+		return false
+	}
+	if !validSecretReferenceVersionRef(ref.VersionRef) {
+		return false
+	}
+	return validateUniquePermissionScopes(ref.PermissionScope)
+}
+
+// validSecretScope checks a single permission scope entry.
+func validSecretScope(scope string) bool {
+	return len(scope) > 0 && len(scope) <= 160
+}
+
+// uniqueScopes ensures all scopes in a set are distinct and non-empty.
+func uniqueScopes(scopes []string) bool {
+	seen := make(map[string]struct{}, len(scopes))
+	for _, s := range scopes {
+		if s == "" {
+			return false
+		}
+		if _, exists := seen[s]; exists {
+			return false
+		}
+		seen[s] = struct{}{}
 	}
 	return true
 }

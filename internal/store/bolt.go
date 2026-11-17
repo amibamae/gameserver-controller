@@ -634,6 +634,105 @@ func requireOperationLock(tx *bolt.Tx, operationID, requiredScope string) error 
 	return nil
 }
 
+// checkTerminalStatus returns an error if the operation status is terminal.
+func checkTerminalStatus(status protocolstate.OperationStatus) error {
+	if protocolstate.IsTerminalOperation(status) {
+		return ErrTerminalOperation
+	}
+	return nil
+}
+
+// checkRevision ensures the expected revision matches the current one.
+func checkRevision(currentRevision, expectedRevision uint64) error {
+	if currentRevision != expectedRevision {
+		return ErrRevisionConflict
+	}
+	return nil
+}
+
+// verifyRequestFields ensures the request fields have not changed.
+func verifyRequestFields(current, next OperationRecord) error {
+	if !sameAcceptedRequest(current, next) {
+		return ErrImmutableFields
+	}
+	return nil
+}
+
+// validateStatusTransition checks if a status transition is valid according to the protocol.
+func validateStatusTransition(from, to protocolstate.OperationStatus) error {
+	if from != to {
+		return protocolstate.ValidateOperationTransition(from, to)
+	}
+	return nil
+}
+
+// prepareUpdateTimestamps initializes timestamps for an updated operation record.
+func prepareUpdateTimestamps(current StoredOperation, next OperationRecord, now time.Time) (OperationRecord, error) {
+	if next.Steps == nil {
+		next.Steps = []OperationStep{}
+	}
+	now = monotonicTimestamp(current.Record.UpdatedAt, now)
+
+	next.CreatedAt = current.Record.CreatedAt
+	next.UpdatedAt = now
+	next.StartedAt = current.Record.StartedAt
+	if next.StartedAt == nil && next.Status == protocolstate.OperationRunning {
+		startedAt := now
+		next.StartedAt = &startedAt
+	}
+	next.Steps = updateStepTimestamps(current.Record.Steps, next.Steps, now)
+	if protocolstate.IsTerminalOperation(next.Status) {
+		completedAt := now
+		next.CompletedAt = &completedAt
+	} else {
+		next.CompletedAt = nil
+	}
+
+	return next, nil
+}
+
+// validateUpdateResult checks validation of the updated record before storage.
+func validateUpdateResult(next OperationRecord) error {
+	if err := validateRecord(next); err != nil {
+		return err
+	}
+	if err := validateTerminalOutcome(next); err != nil {
+		return err
+	}
+	return nil
+}
+
+// releaseLocksForTerminalOperation releases all locks for a terminal operation.
+func releaseLocksForTerminalOperation(tx *bolt.Tx, next OperationRecord) error {
+	if protocolstate.IsTerminalOperation(next.Status) {
+		if err := releaseOperationLocks(tx, next.OperationID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkRevisionExhaustion ensures we haven't exceeded revision limits.
+func checkRevisionExhaustion(current StoredOperation) error {
+	if current.Revision == ^uint64(0) {
+		return fmt.Errorf("%w: revision exhausted", ErrInvalidRecord)
+	}
+	return nil
+}
+
+// marshalAndUpdate encodes and persists the updated operation record.
+func marshalAndUpdate(bucket *bolt.Bucket, next OperationRecord, revision uint64) (StoredOperation, error) {
+	updated := StoredOperation{Record: next, Revision: revision}
+	encoded, err := json.Marshal(operationEnvelope{Revision: updated.Revision, Record: updated.Record})
+	if err != nil {
+		return StoredOperation{}, fmt.Errorf("encode operation record: %w", err)
+	}
+	if err := bucket.Put([]byte(next.OperationID), encoded); err != nil {
+		return StoredOperation{}, err
+	}
+	return updated, nil
+}
+
 func updateOperationTx(tx *bolt.Tx, expectedRevision uint64, next OperationRecord) (StoredOperation, error) {
 	bucket := tx.Bucket(operationsBucket)
 	value := bucket.Get([]byte(next.OperationID))
@@ -683,8 +782,10 @@ func updateOperationTx(tx *bolt.Tx, expectedRevision uint64, next OperationRecor
 	if err := validateTerminalOutcome(next); err != nil {
 		return StoredOperation{}, err
 	}
-	if err := releaseTerminalLocks(tx, next); err != nil {
-		return StoredOperation{}, err
+	if protocolstate.IsTerminalOperation(next.Status) {
+		if err := releaseOperationLocks(tx, next.OperationID); err != nil {
+			return StoredOperation{}, err
+		}
 	}
 	if current.Revision == ^uint64(0) {
 		return StoredOperation{}, fmt.Errorf("%w: revision exhausted", ErrInvalidRecord)
@@ -775,42 +876,6 @@ func decodeEnvelope(value []byte) (StoredOperation, error) {
 		return StoredOperation{}, fmt.Errorf("%w: invalid terminal operation: %v", ErrCorruptStore, err)
 	}
 	return StoredOperation{Record: envelope.Record, Revision: envelope.Revision}, nil
-}
-
-// checkRevision verifies the stored revision matches expected.
-func checkRevision(currentRevision, expectedRevision uint64) error {
-	if currentRevision != expectedRevision {
-		return ErrRevisionConflict
-	}
-	return nil
-}
-
-// checkTerminalStatus returns an error if the operation status is terminal.
-func checkTerminalStatus(status protocolstate.OperationStatus) error {
-	if protocolstate.IsTerminalOperation(status) {
-		return ErrTerminalOperation
-	}
-	return nil
-}
-
-// validateStatusTransition checks if the status change is valid per protocol.
-func validateStatusTransition(from, to protocolstate.OperationStatus) error {
-	if from != to {
-		if err := protocolstate.ValidateOperationTransition(from, to); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// releaseTerminalLocks releases locks for terminal operations.
-func releaseTerminalLocks(tx *bolt.Tx, next OperationRecord) error {
-	if protocolstate.IsTerminalOperation(next.Status) {
-		if err := releaseOperationLocks(tx, next.OperationID); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func sameAcceptedRequest(current, next OperationRecord) bool {

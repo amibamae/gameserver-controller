@@ -871,13 +871,34 @@ func capacityObservationConsistent(r CapacityReservation) bool {
 // capacityObservationMatchesReservation requires the observation to be for
 // the reservation's provider resource, no earlier than its creation, with a
 // valid instance ID when present and one that agrees with the reservation's.
-func capacityObservationMatchesReservation(r CapacityReservation, observation CapacityProviderObservation) bool {
-	if observation.Provider != r.Provider || observation.ResourceKey != r.ResourceKey || observation.ObservedAt.Before(r.CreatedAt) ||
-		(observation.State == "present" && !validCapacityIdentifier(observation.ProviderInstanceID, 240)) {
-		return false
+// capacityObservationProviderMatches requires the observation to be for this provider and resource key, observed after or at creation time.
+func capacityObservationProviderMatches(r CapacityReservation, observation CapacityProviderObservation) bool {
+	return observation.Provider == r.Provider && observation.ResourceKey == r.ResourceKey &&
+		!observation.ObservedAt.Before(r.CreatedAt)
+}
+
+// capacityObservationInstanceIDValid checks that the provider instance ID in the observation is valid when set.
+func capacityObservationInstanceIDValid(observation CapacityProviderObservation) bool {
+	return observation.ProviderInstanceID == "" || validCapacityIdentifier(observation.ProviderInstanceID, 240)
+}
+
+// capacityObservationInstanceMatches requires the instance IDs to match when either is set in reservation or observation.
+func capacityObservationInstanceMatches(r CapacityReservation, observation CapacityProviderObservation) bool {
+	if r.ProviderInstanceID == "" && observation.ProviderInstanceID == "" {
+		return true
 	}
-	return observation.ProviderInstanceID == "" || (validCapacityIdentifier(observation.ProviderInstanceID, 240) &&
-		(r.ProviderInstanceID == "" || r.ProviderInstanceID == observation.ProviderInstanceID))
+	if r.ProviderInstanceID != "" || observation.ProviderInstanceID != "" {
+		return validCapacityIdentifier(observation.ProviderInstanceID, 240) &&
+			(r.ProviderInstanceID == "" || r.ProviderInstanceID == observation.ProviderInstanceID)
+	}
+	return true
+}
+
+// capacityObservationMatchesReservation validates that an observation matches a capacity reservation.
+func capacityObservationMatchesReservation(r CapacityReservation, observation CapacityProviderObservation) bool {
+	return capacityObservationProviderMatches(r, observation) &&
+		capacityObservationInstanceIDValid(observation) &&
+		capacityObservationInstanceMatches(r, observation)
 }
 
 // capacityObservationProvisionOrdered allows a provisioning time only on a

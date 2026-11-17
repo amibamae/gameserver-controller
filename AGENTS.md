@@ -63,5 +63,6 @@ Follow these rules unless the owner explicitly instructs otherwise.
 
 ## Context management
 
+- **Before starting substantial repository work, read `.opencode/AGENT_ORCHESTRATION.md`.** The primary Build agent should use native OpenCode subagents for suitable independent tasks. Do not claim parallel execution unless independent child sessions were actually created.
 - Keep one focused task per session and update [docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md) when work stops mid-stream, so the next agent can resume.
 - Keep the local, untracked `.opencode/WORK_PROGRESS.md` current (completed work, current task, blockers, next steps) and never commit it.
