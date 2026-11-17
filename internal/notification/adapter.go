@@ -61,7 +61,8 @@ type Adapter struct {
 
 // New returns a notifier adapter.
 func New(config Config, protocolVersion string) (*Adapter, error) {
-	if config.AdapterID == "" || config.EnvironmentID == "" || config.SecretRef == "" || config.Sender == nil || config.Credentials == nil {
+	hasDestination := config.AdapterID != "" && config.EnvironmentID != "" && config.SecretRef != ""
+	if !hasDestination || config.Sender == nil || config.Credentials == nil {
 		return nil, errors.New("notifier adapter ID, environment, secret reference, sender, and credentials are required")
 	}
 	return &Adapter{config: config, protocolVersion: protocolVersion, now: time.Now}, nil
@@ -100,31 +101,44 @@ func (a *Adapter) Invoke(ctx context.Context, request adapter.InvokeRequest) (ad
 	if !authorized(request.Params.RequestContext.SecretRefs, a.config.SecretRef) {
 		return adapter.InvokeResponse{}, errors.New("the notifier credential reference is not authorized for this invocation")
 	}
-	var input struct {
-		Event Event `json:"event"`
-	}
-	if err := json.Unmarshal(request.Params.Input, &input); err != nil {
-		return adapter.InvokeResponse{}, errors.New("could not decode the notification event")
-	}
-	if input.Event.EnvironmentID != a.config.EnvironmentID {
-		return adapter.InvokeResponse{}, errors.New("the event is for another environment")
-	}
-	outcome := integrationmonitor.Unknown
-	err := a.config.Credentials.WithCredential(a.config.SecretRef, func(secret []byte) error {
-		outcome = a.config.Sender.Send(ctx, input.Event, secret)
-		return nil
-	})
+	event, err := a.decodeEvent(request.Params.Input)
 	if err != nil {
-		// The credential could not be read, so nothing was sent.
-		outcome = integrationmonitor.Rejected
+		return adapter.InvokeResponse{}, err
 	}
-	encoded, err := json.Marshal(map[string]any{"event_id": input.Event.EventID, "outcome": outcome, "observed_at": a.now().UTC()})
+	outcome := a.deliverEvent(ctx, event)
+	encoded, err := json.Marshal(map[string]any{"event_id": event.EventID, "outcome": outcome, "observed_at": a.now().UTC()})
 	if err != nil {
 		return adapter.InvokeResponse{}, errors.New("could not encode the notification result")
 	}
 	return adapter.InvokeResponse{JSONRPC: "2.0", ID: request.ID, Result: adapter.InvokeResult{
 		Outcome: adapter.OutcomeCompleted, Output: encoded, ObservedAt: a.now().UTC(),
 	}}, nil
+}
+
+func (a *Adapter) decodeEvent(raw json.RawMessage) (Event, error) {
+	var input struct {
+		Event Event `json:"event"`
+	}
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return Event{}, errors.New("could not decode the notification event")
+	}
+	if input.Event.EnvironmentID != a.config.EnvironmentID {
+		return Event{}, errors.New("the event is for another environment")
+	}
+	return input.Event, nil
+}
+
+func (a *Adapter) deliverEvent(ctx context.Context, event Event) string {
+	outcome := integrationmonitor.Unknown
+	err := a.config.Credentials.WithCredential(a.config.SecretRef, func(secret []byte) error {
+		outcome = a.config.Sender.Send(ctx, event, secret)
+		return nil
+	})
+	if err != nil {
+		// The credential could not be read, so nothing was sent.
+		outcome = integrationmonitor.Rejected
+	}
+	return outcome
 }
 
 func authorized(refs []adapter.SecretReference, reference string) bool {
