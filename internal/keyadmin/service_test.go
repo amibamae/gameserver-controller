@@ -36,19 +36,10 @@ func (a *testAuthorizer) AuthorizeRevoke(_ context.Context, requester, keyID str
 }
 
 func TestServiceIssueUsesTrustedRequesterAndBoundedLifetime(t *testing.T) {
-	manager, db := newManager(t)
-	defer db.Close()
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	authorizer := &testAuthorizer{issueAllowed: true}
-	service, err := NewService(manager, authorizer, func() time.Time { return now })
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := IssueRequest{
-		ActorID: "automation", Audience: "controller-one",
-		Scopes:   []authkey.Scope{{Permission: "server.inspect", Environment: "staging", Resource: "test-server"}},
-		Lifetime: 24 * time.Hour,
-	}
+	service, manager := newTestService(t, authorizer, func() time.Time { return now })
+	request := testIssueRequest(24 * time.Hour)
 	issued, err := service.Issue(context.Background(), "uid-1001", request)
 	if err != nil {
 		t.Fatal(err)
@@ -59,23 +50,13 @@ func TestServiceIssueUsesTrustedRequesterAndBoundedLifetime(t *testing.T) {
 	if authorizer.requester != "uid-1001" || authorizer.requested.ActorID != request.ActorID || authorizer.requested.Scopes[0] != request.Scopes[0] {
 		t.Fatalf("authorizer did not receive requester and requested scopes: %#v", authorizer)
 	}
-	if _, err := manager.Authenticate(issued.Secret, request.Audience, now.Add(time.Minute)); err != nil {
-		t.Fatalf("issued key did not authenticate: %v", err)
-	}
-	if _, err := manager.Authenticate(issued.Secret, request.Audience, issued.ExpiresAt); !errors.Is(err, authkey.ErrUnauthenticated) {
-		t.Fatalf("issued key remained valid after expiry: %v", err)
-	}
+	assertIssuedKeyLifetime(t, manager, issued, request.Audience, now)
 }
 
 func TestServiceRejectsUnauthorizedIssueAndRevoke(t *testing.T) {
-	manager, db := newManager(t)
-	defer db.Close()
 	authorizer := &testAuthorizer{}
-	service, err := NewService(manager, authorizer, time.Now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := IssueRequest{ActorID: "automation", Audience: "controller-one", Scopes: []authkey.Scope{{Permission: "server.inspect", Environment: "staging", Resource: "test-server"}}, Lifetime: time.Hour}
+	service, _ := newTestService(t, authorizer, time.Now)
+	request := testIssueRequest(time.Hour)
 	if _, err := service.Issue(context.Background(), "uid-1001", request); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("unauthorized issue was not rejected generically: %v", err)
 	}
@@ -85,14 +66,9 @@ func TestServiceRejectsUnauthorizedIssueAndRevoke(t *testing.T) {
 }
 
 func TestServiceRejectsMissingRequesterAndInvalidLifetime(t *testing.T) {
-	manager, db := newManager(t)
-	defer db.Close()
 	authorizer := &testAuthorizer{issueAllowed: true}
-	service, err := NewService(manager, authorizer, time.Now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := IssueRequest{ActorID: "automation", Audience: "controller-one", Scopes: []authkey.Scope{{Permission: "server.inspect", Environment: "staging", Resource: "test-server"}}, Lifetime: time.Hour}
+	service, _ := newTestService(t, authorizer, time.Now)
+	request := testIssueRequest(time.Hour)
 	if _, err := service.Issue(context.Background(), "", request); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("missing requester was not denied: %v", err)
 	}
@@ -105,15 +81,10 @@ func TestServiceRejectsMissingRequesterAndInvalidLifetime(t *testing.T) {
 }
 
 func TestServiceRevokeUsesTrustedRequester(t *testing.T) {
-	manager, db := newManager(t)
-	defer db.Close()
 	now := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	authorizer := &testAuthorizer{issueAllowed: true, revokeAllowed: true}
-	service, err := NewService(manager, authorizer, func() time.Time { return now })
-	if err != nil {
-		t.Fatal(err)
-	}
-	issued, err := service.Issue(context.Background(), "uid-1001", IssueRequest{ActorID: "automation", Audience: "controller-one", Scopes: []authkey.Scope{{Permission: "server.inspect", Environment: "staging", Resource: "test-server"}}, Lifetime: time.Hour})
+	service, manager := newTestService(t, authorizer, func() time.Time { return now })
+	issued, err := service.Issue(context.Background(), "uid-1001", testIssueRequest(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,16 +99,43 @@ func TestServiceRevokeUsesTrustedRequester(t *testing.T) {
 	}
 }
 
-func newManager(t *testing.T) (*authkey.Manager, *store.BoltStore) {
+func assertIssuedKeyLifetime(t *testing.T, manager *authkey.Manager, issued authkey.IssuedKey, audience string, now time.Time) {
+	t.Helper()
+	if _, err := manager.Authenticate(issued.Secret, audience, now.Add(time.Minute)); err != nil {
+		t.Fatalf("issued key did not authenticate: %v", err)
+	}
+	if _, err := manager.Authenticate(issued.Secret, audience, issued.ExpiresAt); !errors.Is(err, authkey.ErrUnauthenticated) {
+		t.Fatalf("issued key remained valid after expiry: %v", err)
+	}
+}
+
+func testIssueRequest(lifetime time.Duration) IssueRequest {
+	return IssueRequest{
+		ActorID:  "automation",
+		Audience: "controller-one",
+		Scopes:   []authkey.Scope{{Permission: "server.inspect", Environment: "staging", Resource: "test-server"}},
+		Lifetime: lifetime,
+	}
+}
+
+func newTestService(t *testing.T, authorizer *testAuthorizer, clock func() time.Time) (*Service, *authkey.Manager) {
 	t.Helper()
 	db, err := store.OpenBolt(filepath.Join(t.TempDir(), "controller.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close test store: %v", err)
+		}
+	})
 	manager, err := authkey.NewManager(db)
 	if err != nil {
-		_ = db.Close()
 		t.Fatal(err)
 	}
-	return manager, db
+	service, err := NewService(manager, authorizer, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return service, manager
 }
