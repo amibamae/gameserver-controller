@@ -25,13 +25,11 @@ type Monitor struct {
 	now     func() time.Time
 	sleep   func(context.Context, time.Duration) bool
 	wg      sync.WaitGroup
-	// semaphore limits concurrent targets to prevent resource exhaustion
-	semaphore chan struct{}
 }
 
 // New returns a monitor. publish receives every event in order per target.
 func New(policy Policy, targets []Target, publish func(Event)) *Monitor {
-	return &Monitor{policy: policy, targets: targets, publish: publish, now: time.Now, sleep: sleepContext, semaphore: make(chan struct{}, 10)}
+	return &Monitor{policy: policy, targets: targets, publish: publish, now: time.Now, sleep: sleepContext}
 }
 
 // Start launches one probe loop per target until ctx ends.
@@ -40,16 +38,7 @@ func (m *Monitor) Start(ctx context.Context) {
 		m.wg.Add(1)
 		go func() {
 			defer m.wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-m.semaphore:
-					defer func() { m.semaphore <- struct{}{} }()
-					m.run(ctx, target)
-					return
-				}
-			}
+			m.run(ctx, target)
 		}()
 	}
 }

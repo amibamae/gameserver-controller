@@ -1,0 +1,22 @@
+{
+  "unit_ref": {
+    "adapter_id": "execution.systemd",
+    "environment_id": "staging",
+    "resource_kind": "systemd-unit",
+    "external_id": "paper-server"
+  },
+  "state": "running",
+  "observed_at": "2026-11-07T19:30:00Z",
+  "release_ref": "paper-1.21.11-build-3",
+  "runtime_id": "paper-runtime-017",
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-test-001"
+    }
+  }
+}

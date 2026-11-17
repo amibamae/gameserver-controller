@@ -28,6 +28,7 @@ import java.time.Clock;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
 
 /**
@@ -80,6 +81,7 @@ public final class GscBridgePlugin {
   private void start() throws IOException {
     BridgeConfig config = BridgeConfig.parse(new Toml().read(configFile().toFile()));
     byte[] token = readToken(config.tokenFile(), config.enforceTokenPermissions());
+    SSLContext tlsContext = bridgeTlsContext(config.tls());
     Clock clock = Clock.systemUTC();
 
     Set<String> staticBackends = new HashSet<>();
@@ -106,20 +108,8 @@ public final class GscBridgePlugin {
     BridgeService service = new BridgeService(config.proxyInstanceId(), backends, sessions, operations, clock, this::saveBackends);
     boolean autoMove = config.autoMove().enabled() && !config.fallback().isEmpty();
     service.advertiseAutoMove(autoMove);
-    
-    // Create TLS material manager if TLS is enabled
-    TlsMaterialManager.Material tlsMaterial = null;
-    if (config.tls().enabled()) {
-      try {
-        TlsMaterialManager manager = new TlsMaterialManager(
-            config.tls().certFile(), config.tls().keyFile(), config.tls().controllerCaFile());
-        tlsMaterial = manager.get(); // May return null on first load until files validated
-      } catch (Exception e) {
-        logger.warn("Failed to initialize TLS material manager: {}", e.getMessage());
-        tlsMaterial = null; // Fall back to plain HTTP if TLS fails to load
-      }
-    }
-    http = new BridgeHttpServer(service, token, config.enforceLoopbackBind(), logger, tlsMaterial);
+
+    http = new BridgeHttpServer(service, token, config.enforceLoopbackBind(), logger, tlsContext);
     InetSocketAddress bound = http.start(new InetSocketAddress(config.bind(), config.port()));
     logger.info("GSC bridge listening on {}:{}", bound.getAddress().getHostAddress(), bound.getPort());
     if (!config.enforceLoopbackBind()) {
@@ -140,6 +130,14 @@ public final class GscBridgePlugin {
           .schedule();
       logger.info("Moving waiting players automatically: {} every {} seconds", config.autoMove().batchSize(), config.autoMove().interval().toSeconds());
     }
+  }
+
+  private SSLContext bridgeTlsContext(BridgeConfig.Tls settings) throws IOException {
+    if (settings.enabled()) {
+      return TlsMaterialManager.load(settings.certFile(), settings.keyFile(), settings.controllerCaFile());
+    }
+    logger.warn("Velocity bridge TLS is disabled; the bridge will use plaintext HTTP.");
+    return null;
   }
 
   private void stop() {
