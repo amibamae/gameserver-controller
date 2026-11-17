@@ -97,19 +97,9 @@ func PruneCandidates(backups []Backup, keepLast uint64) ([]Backup, error) {
 	if keepLast == 0 {
 		return nil, nil
 	}
-	verified := make([]Backup, 0, len(backups))
-	seen := make(map[string]struct{}, len(backups))
-	for _, backup := range backups {
-		if backup.ID == "" || backup.CreatedAt.IsZero() {
-			return nil, errors.New("backup inventory requires an ID and creation time")
-		}
-		if _, exists := seen[backup.ID]; exists {
-			return nil, fmt.Errorf("backup inventory repeats ID %q", backup.ID)
-		}
-		seen[backup.ID] = struct{}{}
-		if backup.Verified {
-			verified = append(verified, backup)
-		}
+	verified, err := verifiedBackupInventory(backups)
+	if err != nil {
+		return nil, err
 	}
 	if uint64(len(verified)) <= keepLast {
 		return nil, nil
@@ -133,4 +123,22 @@ func PruneCandidates(backups []Backup, keepLast uint64) ([]Backup, error) {
 		}
 	}
 	return candidates, nil
+}
+
+func verifiedBackupInventory(backups []Backup) ([]Backup, error) {
+	verified := make([]Backup, 0, len(backups))
+	seen := make(map[string]struct{}, len(backups))
+	for _, backup := range backups {
+		if backup.ID == "" || backup.CreatedAt.IsZero() {
+			return nil, errors.New("backup inventory requires an ID and creation time")
+		}
+		if _, exists := seen[backup.ID]; exists {
+			return nil, fmt.Errorf("backup inventory repeats ID %q", backup.ID)
+		}
+		seen[backup.ID] = struct{}{}
+		if backup.Verified {
+			verified = append(verified, backup)
+		}
+	}
+	return verified, nil
 }

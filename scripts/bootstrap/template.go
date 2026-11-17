@@ -20,6 +20,32 @@ var (
 	pathPart           = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$`)
 )
 
+// VultrPlan constants map plan name to RAM for heap configuration.
+const (
+	vultrVC2  = 2 * 1024 * 1024 * 1024  // 2 GiB
+	vultrVC4  = 4 * 1024 * 1024 * 1024  // 4 GiB
+	vultrVC6  = 6 * 1024 * 1024 * 1024  // 6 GiB
+	vultrVC8  = 8 * 1024 * 1024 * 1024  // 8 GiB
+	vultrVC10 = 10 * 1024 * 1024 * 1024 // 10 GiB
+	vultrVC11 = 11 * 1024 * 1024 * 1024 // 11 GiB
+	vultrVC12 = 12 * 1024 * 1024 * 1024 // 12 GiB
+	vultrVC16 = 16 * 1024 * 1024 * 1024 // 16 GiB
+	vultrVC32 = 32 * 1024 * 1024 * 1024 // 32 GiB
+)
+
+// vultrPlanToRAM maps plan name to RAM in bytes.
+var vultrPlanToRAM = map[string]uint64{
+	"vc2-1-0150":  vultrVC2,
+	"vc4-1-0150":  vultrVC4,
+	"vc6-1-0150":  vultrVC6,
+	"vc8-1-0150":  vultrVC8,
+	"vc10-1-0150": vultrVC10,
+	"vc11-1-0150": vultrVC11,
+	"vc12-1-0150": vultrVC12,
+	"vc16-1-0150": vultrVC16,
+	"vc32-1-0150": vultrVC32,
+}
+
 // Settings contains deployment values that are intentionally absent from the
 // checked-in bootstrap template.
 type Settings struct {
@@ -27,6 +53,7 @@ type Settings struct {
 	MinecraftPort    uint16
 	VoiceChatPort    uint16
 	WasabiRemotePath string
+	Plan             string
 }
 
 // Render validates settings and returns a complete bootstrap script.
@@ -38,11 +65,23 @@ func Render(settings Settings) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read embedded bootstrap template: %w", err)
 	}
+
+	// Get heap values from plan; default to 2GB min/max if plan unknown.
+	planRAM, ok := vultrPlanToRAM[settings.Plan]
+	if !ok || planRAM == 0 {
+		planRAM = vultrVC2 // fallback to vc2 size
+	}
+	// Use 50% of plan RAM for min heap, same as max for simplicity.
+	heapMin := int(planRAM / 2)
+	heapMax := int(planRAM)
+
 	values := map[string]string{
 		"@@CONTROLLER_IP@@":      settings.ControllerIP,
 		"@@MINECRAFT_PORT@@":     strconv.Itoa(int(settings.MinecraftPort)),
 		"@@VOICE_CHAT_PORT@@":    strconv.Itoa(int(settings.VoiceChatPort)),
 		"@@WASABI_REMOTE_PATH@@": settings.WasabiRemotePath,
+		"@@JAVA_HEAP_MIN@@":      strconv.Itoa(heapMin),
+		"@@JAVA_HEAP_MAX@@":      strconv.Itoa(heapMax),
 	}
 	result := string(template)
 	for marker, value := range values {
@@ -72,6 +111,9 @@ func (s Settings) Validate() error {
 	path := s.WasabiRemotePath
 	if !pathPart.MatchString(path) || strings.Contains(path, "..") || strings.Contains(path, "//") || strings.HasPrefix(path, "/") || strings.HasSuffix(path, "/") {
 		return fmt.Errorf("%w: Wasabi remote path must be a bucket name with an optional safe prefix", ErrInvalidSettings)
+	}
+	if s.Plan == "" {
+		return fmt.Errorf("%w: Vultr plan must be specified (e.g., vc2-1-0150, vc4-1-0150)", ErrInvalidSettings)
 	}
 	return nil
 }
