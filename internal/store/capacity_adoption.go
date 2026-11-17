@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/netip"
 	"time"
 
@@ -52,7 +53,8 @@ func validateCapacityAdoption(a CapacityAdoption) error {
 // in one transaction. Callers must verify the provider observation and operator
 // approval first. A failed transaction leaves no reservation behind.
 func (s *BoltStore) AdoptCapacity(request CapacityReservation, evidence CapacityAdoption, totalLimit, groupLimit int) (CapacityReservation, error) {
-	if validateCapacityReservationRequest(request) != nil || validateCapacityAdoption(evidence) != nil || totalLimit < 1 || groupLimit < 1 {
+	// Validate inputs before entering transaction
+	if err := validateAdoptCapacityInputs(request, evidence, totalLimit, groupLimit); err != nil {
 		return CapacityReservation{}, ErrInvalidRecord
 	}
 	var result CapacityReservation
@@ -67,9 +69,24 @@ func (s *BoltStore) AdoptCapacity(request CapacityReservation, evidence Capacity
 	return result, nil
 }
 
+// validateAdoptCapacityInputs performs all pre-transaction validation.
+func validateAdoptCapacityInputs(request CapacityReservation, evidence CapacityAdoption, totalLimit, groupLimit int) error {
+	if err := validateCapacityReservationRequest(request); err != nil {
+		return err
+	}
+	if err := validateCapacityAdoption(evidence); err != nil {
+		return err
+	}
+	if totalLimit < 1 || groupLimit < 1 {
+		return fmt.Errorf("%w: limits must be positive", ErrInvalidRecord)
+	}
+	return nil
+}
+
+// adoptCapacityTx handles the transactional logic: reserve capacity and either activate or conflict-check.
 func adoptCapacityTx(tx *bolt.Tx, request CapacityReservation, evidence CapacityAdoption, totalLimit, groupLimit int) (CapacityReservation, error) {
 	bucket := tx.Bucket(capacityReservationsBucket)
-	if err := checkAdoptedProviderInstance(bucket, request, evidence.InstanceID); err != nil {
+	if err := checkProviderInstanceUniqueness(bucket, request, evidence.InstanceID); err != nil {
 		return CapacityReservation{}, err
 	}
 	current, created, err := reserveCapacityTx(tx, request, totalLimit, groupLimit)
@@ -85,8 +102,8 @@ func adoptCapacityTx(tx *bolt.Tx, request CapacityReservation, evidence Capacity
 	return current, nil
 }
 
-func checkAdoptedProviderInstance(bucket *bolt.Bucket, request CapacityReservation, instanceID string) error {
-	// The same provider ID cannot occupy two independently named slots.
+// checkProviderInstanceUniqueness ensures the same provider ID cannot occupy two independently named slots.
+func checkProviderInstanceUniqueness(bucket *bolt.Bucket, request CapacityReservation, instanceID string) error {
 	cursor := bucket.Cursor()
 	for key, value := cursor.First(); key != nil; key, value = cursor.Next() {
 		current, err := decodeCapacityReservation(value)
@@ -96,6 +113,7 @@ func checkAdoptedProviderInstance(bucket *bolt.Bucket, request CapacityReservati
 		if string(key) != current.OperationID {
 			return ErrCorruptStore
 		}
+		// Conflict if a non-released reservation from the same provider owns this instance ID and has a different operation ID
 		if current.OperationID != request.OperationID && !capacityStateReleased(current.State) && current.Provider == request.Provider && current.ProviderInstanceID == instanceID {
 			return ErrCapacityConflict
 		}
@@ -103,6 +121,7 @@ func checkAdoptedProviderInstance(bucket *bolt.Bucket, request CapacityReservati
 	return nil
 }
 
+// activateAdoptedCapacity records the exact observed identity and occupied capacity.
 func activateAdoptedCapacity(bucket *bolt.Bucket, current CapacityReservation, evidence CapacityAdoption) (CapacityReservation, error) {
 	current.State = CapacityActive
 	current.ProviderInstanceID = evidence.InstanceID
@@ -126,6 +145,12 @@ func activateAdoptedCapacity(bucket *bolt.Bucket, current CapacityReservation, e
 	return current, nil
 }
 
+// sameAdoptionIdentity compares all identity fields of the adoption evidence.
 func sameAdoptionIdentity(a, b CapacityAdoption) bool {
-	return a.InstanceID == b.InstanceID && a.IP == b.IP && a.Region == b.Region && a.Plan == b.Plan && a.OSID == b.OSID && a.OS == b.OS
+	return a.InstanceID == b.InstanceID &&
+		a.IP == b.IP &&
+		a.Region == b.Region &&
+		a.Plan == b.Plan &&
+		a.OSID == b.OSID &&
+		a.OS == b.OS
 }

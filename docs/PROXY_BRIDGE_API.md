@@ -24,8 +24,10 @@ bridge only performs the proxy actions and reports what it observes.
   from a file on the proxy host and from a systemd credential on the
   controller host. It is never passed on a command line or logged.
 - Version 1 listens on a loopback address only (the controller and proxy run
-  on the same host). Clients refuse plain HTTP to a non-loopback host. A
-  later version can add TLS for remote proxies.
+  on the same host). Clients refuse plain HTTP to a non-loopback host. 
+  Topology A: controller → TLS → plugin (direct mTLS with bearer token).
+  Topology B: controller → TLS → terminator → TLS → plugin; the inner hop must be re-encrypted end to end; a plain-HTTP inner hop is forbidden and unsafe because it voids the plugin's mTLS check.
+  Remote proxies add TLS termination at the edge; see [CONFIGURATION.md](../docs/CONFIGURATION.md) for TLS file setup and rotation procedure.
 - Responses are at most 1 MiB. Clients use short timeouts and treat a
   timeout on a mutating call as an unknown outcome.
 
