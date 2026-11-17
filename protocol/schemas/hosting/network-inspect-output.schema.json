@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:hosting:network-inspect-output",
+  "title": "Hosting network inspect output",
+  "description": "Timestamped network inventory for the exact instance. Unknown inventory is distinct from an observed empty inventory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["instance_ref", "observed_at", "status"],
+  "properties": {
+    "instance_ref": {
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref",
+      "properties": {"resource_kind": {"const": "instance"}}
+    },
+    "observed_at": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["observed", "unknown"]},
+    "addresses": {
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["family", "address"],
+        "properties": {
+          "family": {"enum": ["ipv4", "ipv6"]},
+          "address": {"type": "string"}
+        },
+        "if": {"properties": {"family": {"const": "ipv4"}}},
+        "then": {"properties": {"address": {"format": "ipv4"}}},
+        "else": {"properties": {"address": {"format": "ipv6"}}}
+      }
+    },
+    "attachment_ids": {
+      "description": "Opaque provider attachment IDs scoped to the instance's adapter and environment.",
+      "type": "array",
+      "maxItems": 256,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1, "maxLength": 1024}
+    }
+  },
+  "if": {"properties": {"status": {"const": "observed"}}},
+  "then": {"required": ["addresses", "attachment_ids"]},
+  "else": {"properties": {"addresses": false, "attachment_ids": false}}
+}
