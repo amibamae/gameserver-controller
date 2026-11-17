@@ -59,7 +59,7 @@ These run in GitHub Actions workflows and are not distributed with the project o
 
 All GitHub Actions used in [.github/workflows/](.github/workflows/) are MIT licensed:
 
-- **GitHub Actions** (all MIT, Copyright (c) 2018 GitHub, Inc. and contributors): [`actions/checkout@v4`](https://github.com/actions/checkout), [`actions/setup-go@v5`](https://github.com/actions/setup-go), [`actions/setup-java@v4`](https://github.com/actions/setup-java). Text: [licenses/github-actions-LICENSE](licenses/github-actions-LICENSE).
+- **GitHub Actions** (all MIT, Copyright (c) 2018 GitHub, Inc. and contributors): [`actions/checkout@v7`](https://github.com/actions/checkout), [`actions/setup-go@v7`](https://github.com/actions/setup-go), [`actions/setup-java@v4`](https://github.com/actions/setup-java). Text: [licenses/github-actions-LICENSE](licenses/github-actions-LICENSE).
 - **`gradle/actions/setup-gradle@v4`**: MIT, Copyright (c) 2023 Gradle Inc. ([LICENSE](https://github.com/gradle/actions/blob/v4/LICENSE)). Later major versions bundle a proprietary "Enhanced Caching" component (`gradle-actions-caching`) under Gradle's own terms and enable it by default. The `v4` tag has no such component or license file, and this project uses version 4 in [`velocity-plugin.yml`](.github/workflows/velocity-plugin.yml). Verify before upgrading.
 
 ### Eclipse Temurin JDK 21

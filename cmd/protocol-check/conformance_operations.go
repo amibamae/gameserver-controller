@@ -48,35 +48,35 @@ func evaluateOperationsAuthenticationClientSessionExpiry(pkg *protocolPackage, f
 // operations.cancellation.before-dispatch, operations.cancellation.unknown-after-dispatch.
 func evaluateOperationsCancellation(fixture map[string]any) (map[string]any, error) {
 	initial := asObject(fixture["initial"])
-	cancellationRequested := boolValue(fixture, "cancellation_requested")
-	dispatchRecorded := boolValue(initial, "dispatch_recorded")
-	providerResponseReceived := boolValue(initial, "provider_response_received")
-	operationStatus, stepStatus := "", ""
-	cancelled, cancellationApplied, reconciliationRequired := false, false, false
-	resourceLockRetained := false
-	completedSteps := arrayValue(initial, "completed_step_ids")
-	if cancellationRequested && !dispatchRecorded && !boolValue(initial, "external_effect_possible") {
-		operationStatus, stepStatus = "cancelled", "cancelled"
-		cancelled, cancellationApplied = true, true
-	} else if cancellationRequested && dispatchRecorded && !providerResponseReceived {
-		operationStatus, stepStatus = "reconciling", "outcome_unknown"
-		reconciliationRequired = true
-		resourceLockRetained = boolValue(initial, "resource_lock_held")
-	} else {
+	operationStatus, stepStatus := operationCancellationStatuses(initial)
+	if !boolValue(fixture, "cancellation_requested") || operationStatus == "" {
 		return nil, fmt.Errorf("cancellation fixture must describe an undispatched step or a dispatched step with unknown outcome")
 	}
+	cancelled := operationStatus == "cancelled"
+	reconciliationRequired := operationStatus == "reconciling"
 	return map[string]any{
-		"cancellation_request_recorded": cancellationRequested,
-		"cancellation_applied":          cancellationApplied,
+		"cancellation_request_recorded": true,
+		"cancellation_applied":          cancelled,
 		"cancelled":                     cancelled,
 		"operation_status":              operationStatus,
 		"step_status":                   stepStatus,
 		"reconciliation_required":       reconciliationRequired,
 		"retry_without_reconciliation":  false,
 		"additional_provider_calls":     0,
-		"resource_lock_retained":        resourceLockRetained,
-		"completed_step_ids_preserved":  completedSteps,
+		"resource_lock_retained":        reconciliationRequired && boolValue(initial, "resource_lock_held"),
+		"completed_step_ids_preserved":  arrayValue(initial, "completed_step_ids"),
 	}, nil
+}
+
+func operationCancellationStatuses(initial map[string]any) (operationStatus, stepStatus string) {
+	if boolValue(initial, "dispatch_recorded") {
+		if !boolValue(initial, "provider_response_received") {
+			return "reconciling", "outcome_unknown"
+		}
+	} else if !boolValue(initial, "external_effect_possible") {
+		return "cancelled", "cancelled"
+	}
+	return "", ""
 }
 
 // evaluateOperationsReconcileUnknownCreateOutcome evaluates the operations.reconcile.unknown-create-outcome conformance fixture.
@@ -117,10 +117,7 @@ func evaluateOperationsRecoveryRestartPreservesLock(fixture map[string]any) (map
 	if lock["owner_operation_id"] != ownerID {
 		return nil, fmt.Errorf("recovery lock must belong to the non-terminal operation")
 	}
-	conflicts := request["resource_kind"] == lock["resource_kind"] &&
-		request["environment_id"] == lock["environment_id"] &&
-		request["resource_id"] == lock["resource_id"]
-	if !conflicts || request["authorized"] != true {
+	if !matchesRecoveryLockResource(request, lock) || request["authorized"] != true {
 		return nil, fmt.Errorf("conflicting request must be authorized and target the locked resource")
 	}
 	return map[string]any{
@@ -132,4 +129,10 @@ func evaluateOperationsRecoveryRestartPreservesLock(fixture map[string]any) (map
 		"new_operation_created":          false,
 		"side_effect_dispatch_count":     0,
 	}, nil
+}
+
+func matchesRecoveryLockResource(request, lock map[string]any) bool {
+	return request["resource_kind"] == lock["resource_kind"] &&
+		request["environment_id"] == lock["environment_id"] &&
+		request["resource_id"] == lock["resource_id"]
 }
