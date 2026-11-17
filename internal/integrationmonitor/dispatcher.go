@@ -74,18 +74,19 @@ type Dispatcher struct {
 	timeout      time.Duration
 	sleep        func(context.Context, time.Duration) bool
 
-	mu      sync.Mutex
-	queues  map[string][]Event
-	wake    map[string]chan struct{}
-	started bool
-	wg      sync.WaitGroup
+	mu       sync.Mutex
+	queues   map[string][]Event
+	wake     map[string]chan struct{}
+	started  bool
+	wg       sync.WaitGroup
+	errgroup *sync.Once // ensures workers stop after first context cancel
 }
 
 // NewDispatcher returns a dispatcher. Start must be called before events are
 // delivered; events published earlier wait in the queues.
 func NewDispatcher(invoker Invoker, destinations []Destination, log Logger) *Dispatcher {
 	d := &Dispatcher{invoker: invoker, destinations: destinations, log: log, timeout: 30 * time.Second, sleep: sleepContext,
-		queues: map[string][]Event{}, wake: map[string]chan struct{}{}}
+		queues: map[string][]Event{}, wake: map[string]chan struct{}{}, errgroup: new(sync.Once)}
 	for _, destination := range destinations {
 		d.wake[destination.AdapterID] = make(chan struct{}, 1)
 	}
@@ -96,18 +97,18 @@ func NewDispatcher(invoker Invoker, destinations []Destination, log Logger) *Dis
 func (d *Dispatcher) Publish(event Event) {
 	d.log("integration event", map[string]any{"event_id": event.EventID, "event_type": event.EventType, "severity": event.Severity,
 		"adapter_id": event.AdapterID, "environment_id": event.EnvironmentID, "occurred_at": event.OccurredAt, "summary": event.Summary})
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	for _, destination := range d.destinations {
 		if !destination.wants(event) {
 			continue
 		}
-		d.mu.Lock()
 		queue := append(d.queues[destination.AdapterID], event)
 		if len(queue) > queueLimit {
 			d.log("notification dropped: queue full", map[string]any{"adapter_id": destination.AdapterID, "event_id": queue[0].EventID})
 			queue = queue[1:]
 		}
 		d.queues[destination.AdapterID] = queue
-		d.mu.Unlock()
 		select {
 		case d.wake[destination.AdapterID] <- struct{}{}:
 		default:

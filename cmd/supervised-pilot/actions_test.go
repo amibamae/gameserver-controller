@@ -114,3 +114,11 @@ func TestUsagePrintsEveryAction(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpReturnsBeforeDispatch(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := run([]string{"status", "--help"}, &stdout, &stderr)
+	if err != nil || stdout.Len() != 0 || !strings.Contains(stderr.String(), "Usage of gsc-pilot status:") {
+		t.Fatalf("run status --help returned %v, stdout %q, stderr %q", err, stdout.String(), stderr.String())
+	}
+}
