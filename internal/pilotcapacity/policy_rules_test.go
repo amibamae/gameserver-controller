@@ -83,13 +83,8 @@ func TestPolicyRulesRejectUnsafeDocuments(t *testing.T) {
 }
 
 func TestPolicyRulesAcceptDeclarativeAndEmbeddedPolicies(t *testing.T) {
-	policy, err := policyWith(t, func(map[string]any) {})
-	if err != nil || !policy.RuntimeEnforced || policy.MaxInstancesTotal != 2 || len(policy.CapacityGroups) != 2 {
-		t.Fatalf("embedded policy = %+v, %v", policy, err)
-	}
-	if !policy.ReleasedStates["absent"] || !policy.ReleasedStates["destroyed"] || len(policy.ReleasedStates) != 2 {
-		t.Fatalf("released states = %v, want absent and destroyed", policy.ReleasedStates)
-	}
+	assertEmbeddedPolicyRules(t)
+
 	declarative, err := policyWith(t, func(d map[string]any) {
 		object(d, "enforcement")["mode"] = "declarative"
 		object(d, "enforcement")["runtime_enforced"] = false
@@ -103,5 +98,16 @@ func TestPolicyRulesAcceptDeclarativeAndEmbeddedPolicies(t *testing.T) {
 	})
 	if err != nil || reordered.MaxInstancesTotal != 2 {
 		t.Fatalf("release states in another order: %+v, %v", reordered, err)
+	}
+}
+
+func assertEmbeddedPolicyRules(t *testing.T) {
+	t.Helper()
+	policy, err := policyWith(t, func(map[string]any) {})
+	if err != nil || !policy.RuntimeEnforced || policy.MaxInstancesTotal != 2 || len(policy.CapacityGroups) != 2 {
+		t.Fatalf("embedded policy = %+v, %v", policy, err)
+	}
+	if !policy.ReleasedStates["absent"] || !policy.ReleasedStates["destroyed"] || len(policy.ReleasedStates) != 2 {
+		t.Fatalf("released states = %v, want absent and destroyed", policy.ReleasedStates)
 	}
 }
