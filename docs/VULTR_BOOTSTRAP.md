@@ -8,10 +8,10 @@ in memory, and creates a new Vultr startup script. It does not update or delete
 existing startup scripts and does not create a VM.
 
 The command requires the controller IP (the controller's public IPv4 address,
-or a public IPv4 CIDR no broader than `/16`), two distinct valid ports, and a
-safe Wasabi bucket or prefix. The rendered firewall allows Minecraft and voice
-chat traffic only from the controller IP, and the security finalizer restricts
-SSH to it as well. It defaults
+or a public IPv4 CIDR no broader than `/16`), two distinct valid ports, the Vultr
+plan used to size the Minecraft heap, and a safe Wasabi bucket or prefix. The rendered firewall allows
+Minecraft and voice chat traffic only from the controller IP, and the security
+finalizer restricts SSH to it as well. It defaults
 to a dry run. A dry run prints the startup-script name,
 SHA-256 digest, and rendered size. It does not read the Vultr credential or
 call the provider. Review the checked-in template and the deployment settings
@@ -23,6 +23,7 @@ gsc-bootstrap upload \
   --controller-ip <controller-public-ipv4-or-cidr> \
   --minecraft-port <port> \
   --voice-chat-port <port> \
+  --plan <vultr-plan> \
   --wasabi-remote-path <bucket-or-bucket-prefix>
 ```
 

@@ -60,7 +60,6 @@ These run in GitHub Actions workflows and are not distributed with the project o
 All GitHub Actions used in [.github/workflows/](.github/workflows/) are MIT licensed:
 
 - **GitHub Actions** (all MIT, Copyright (c) 2018 GitHub, Inc. and contributors): [`actions/checkout@v7`](https://github.com/actions/checkout), [`actions/setup-go@v7`](https://github.com/actions/setup-go), [`actions/setup-java@v4`](https://github.com/actions/setup-java). Text: [licenses/github-actions-LICENSE](licenses/github-actions-LICENSE).
-- **`gradle/actions/setup-gradle@v4`**: MIT, Copyright (c) 2023 Gradle Inc. ([LICENSE](https://github.com/gradle/actions/blob/v4/LICENSE)). Later major versions bundle a proprietary "Enhanced Caching" component (`gradle-actions-caching`) under Gradle's own terms and enable it by default. The `v4` tag has no such component or license file, and this project uses version 4 in [`velocity-plugin.yml`](.github/workflows/velocity-plugin.yml). Verify before upgrading.
 
 ### Eclipse Temurin JDK 21
 
@@ -68,7 +67,7 @@ Installed by `actions/setup-java` with `distribution: temurin`: GNU GPL v2 with 
 
 ### Gradle
 
-**Gradle 8.14.3**, pinned in `.github/workflows/velocity-plugin.yml`: Apache-2.0, by Gradle Inc. ([LICENSE](https://github.com/gradle/gradle/blob/v8.14.3/LICENSE)).
+**Gradle and Gradle Wrapper 8.14.3**, pinned in [`gradle-wrapper.properties`](plugins/velocity/gradle/wrapper/gradle-wrapper.properties): Apache-2.0, by Gradle Inc. ([upstream license](https://github.com/gradle/gradle/blob/v8.14.3/LICENSE), [license text](licenses/gradle-LICENSE)).
 
 ## Debian packages installed on pilot VMs
 
@@ -201,15 +200,16 @@ The build uses the Rust toolchain (rustc and cargo, MIT OR Apache-2.0, by the Ru
 | `bit-set` | 0.8.0 | Apache-2.0 OR MIT | Alexis Beingessner | [source](https://github.com/contain-rs/bit-set) |  |
 | `bit-vec` | 0.8.0 | Apache-2.0 OR MIT | Alexis Beingessner | [source](https://github.com/contain-rs/bit-vec) |  |
 | `bitflags` | 2.13.2 | MIT OR Apache-2.0 | The Rust Project Developers | [source](https://github.com/bitflags/bitflags) |  |
-| `block-buffer` | 0.10.4 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/utils) |  |
+| `block-buffer` | 0.12.1 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/utils) |  |
 | `borrow-or-share` | 0.2.4 | MIT-0 | Scallop Ye | [source](https://github.com/yescallop/borrow-or-share) |  |
 | `bumpalo` | 3.20.3 | MIT OR Apache-2.0 | Nick Fitzgerald | [source](https://github.com/fitzgen/bumpalo) | non-Linux targets only; not built in CI |
 | `bytecount` | 0.6.9 | Apache-2.0/MIT | Andre Bogus, Joshua Landau | [source](https://github.com/llogiq/bytecount) |  |
 | `cfg-if` | 1.0.5 | MIT OR Apache-2.0 | Alex Crichton | [source](https://github.com/rust-lang/cfg-if) |  |
-| `cpufeatures` | 0.2.17 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/utils) |  |
-| `crypto-common` | 0.1.7 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/traits) |  |
+| `const-oid` | 0.10.3 | Apache-2.0 OR MIT | RustCrypto Developers | [source](https://github.com/RustCrypto/formats) |  |
+| `cpufeatures` | 0.3.1 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/utils) |  |
+| `crypto-common` | 0.2.2 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/traits) |  |
 | `data-encoding` | 2.11.1 | MIT | see repository | [source](https://github.com/ia0/data-encoding) |  |
-| `digest` | 0.10.7 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/traits) |  |
+| `digest` | 0.11.3 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/traits) |  |
 | `email_address` | 0.2.9 | MIT | Simon Johnston | [source](https://github.com/johnstonskj/rust-email_address) |  |
 | `equivalent` | 1.0.3 | Apache-2.0 OR MIT | see repository | [source](https://github.com/indexmap-rs/equivalent) |  |
 | `fancy-regex` | 0.20.2 | MIT | Raph Levien, Robin Stocker, Keith Hall | [source](https://github.com/fancy-regex/fancy-regex) |  |
@@ -220,11 +220,12 @@ The build uses the Rust toolchain (rustc and cargo, MIT OR Apache-2.0, by the Ru
 | `getrandom` | 0.3.4 | MIT OR Apache-2.0 | The Rand Project Developers | [source](https://github.com/rust-random/getrandom) |  |
 | `hashbrown` | 0.17.1 | MIT OR Apache-2.0 | see repository | [source](https://github.com/rust-lang/hashbrown) |  |
 | `heck` | 0.5.0 | MIT OR Apache-2.0 | see repository | [source](https://github.com/withoutboats/heck) |  |
+| `hybrid-array` | 0.4.15 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/hybrid-array) |  |
 | `itoa` | 1.0.19 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/itoa) |  |
 | `js-sys` | 0.3.107 | MIT OR Apache-2.0 | The wasm-bindgen Developers | [source](https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys) | non-Linux targets only; not built in CI |
-| `jsonschema` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) |  |
-| `jsonschema-regex` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) | no license file in the published crate; license from crate metadata |
-| `jsonschema-value` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) | no license file in the published crate; license from crate metadata |
+| `jsonschema` | 0.61.2 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) |  |
+| `jsonschema-regex` | 0.61.2 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) | no license file in the published crate; license from crate metadata |
+| `jsonschema-value` | 0.61.2 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) | no license file in the published crate; license from crate metadata |
 | `libc` | 0.2.191 | MIT OR Apache-2.0 | see repository | [source](https://github.com/rust-lang/libc) |  |
 | `lock_api` | 0.4.14 | MIT OR Apache-2.0 | Amanieu d'Antras | [source](https://github.com/Amanieu/parking_lot) |  |
 | `memchr` | 2.8.3 | Unlicense OR MIT | Andrew Gallant, bluss | [source](https://github.com/BurntSushi/memchr) |  |
@@ -248,7 +249,7 @@ The build uses the Rust toolchain (rustc and cargo, MIT OR Apache-2.0, by the Ru
 | `redox_syscall` | 0.5.18 | MIT | Jeremy Soller | [source](https://gitlab.redox-os.org/redox-os/syscall) | non-Linux targets only; not built in CI |
 | `ref-cast` | 1.0.27 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/ref-cast) |  |
 | `ref-cast-impl` | 1.0.27 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/ref-cast) |  |
-| `referencing` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) |  |
+| `referencing` | 0.61.2 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) |  |
 | `regex` | 1.13.1 | MIT OR Apache-2.0 | The Rust Project Developers, Andrew Gallant | [source](https://github.com/rust-lang/regex) |  |
 | `regex-automata` | 0.4.18 | MIT OR Apache-2.0 | The Rust Project Developers, Andrew Gallant | [source](https://github.com/rust-lang/regex) |  |
 | `regex-syntax` | 0.8.11 | MIT OR Apache-2.0 | The Rust Project Developers, Andrew Gallant | [source](https://github.com/rust-lang/regex) |  |
@@ -259,7 +260,7 @@ The build uses the Rust toolchain (rustc and cargo, MIT OR Apache-2.0, by the Ru
 | `serde_core` | 1.0.229 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay | [source](https://github.com/serde-rs/serde) |  |
 | `serde_derive` | 1.0.229 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay | [source](https://github.com/serde-rs/serde) |  |
 | `serde_json` | 1.0.154 | MIT OR Apache-2.0 | see repository | [source](https://github.com/serde-rs/json) |  |
-| `sha2` | 0.10.9 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/hashes) |  |
+| `sha2` | 0.11.1 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/hashes) |  |
 | `smallvec` | 1.16.5 | MIT OR Apache-2.0 | The Servo Project Developers | [source](https://github.com/servo/rust-smallvec) |  |
 | `strum` | 0.28.0 | MIT | Peter Glotfelty | [source](https://github.com/Peternator7/strum) |  |
 | `strum_macros` | 0.28.0 | MIT | Peter Glotfelty | [source](https://github.com/Peternator7/strum) |  |
