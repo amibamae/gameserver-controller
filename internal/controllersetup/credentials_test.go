@@ -37,31 +37,36 @@ func TestSetEncryptedCredentialInstallsPrivateCiphertextAndZerosInput(t *testing
 	if encryptor.calls != 1 || encryptor.name != "example-vultr-api-token" || string(encryptor.plaintext) != "synthetic-provider-key" {
 		t.Fatalf("unexpected encryption call: %+v", encryptor)
 	}
-	for _, value := range secret {
-		if value != 0 {
-			t.Fatal("plaintext buffer was not cleared")
-		}
-	}
-	info, err := os.Stat(filepath.Join(directory, encryptor.name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("credential mode = %o, want 600", info.Mode().Perm())
-	}
-	dirInfo, err := os.Stat(directory)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dirInfo.Mode().Perm() != 0o700 {
-		t.Fatalf("directory mode = %o, want 700", dirInfo.Mode().Perm())
-	}
-	content, err := os.ReadFile(filepath.Join(directory, encryptor.name))
+	assertClearedCredentialBuffer(t, secret, "plaintext buffer was not cleared")
+	path := filepath.Join(directory, encryptor.name)
+	assertCredentialMode(t, path, "credential", 0o600)
+	assertCredentialMode(t, directory, "directory", 0o700)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(string(content), "synthetic-provider-key") {
 		t.Fatal("plaintext was stored instead of ciphertext")
+	}
+}
+
+func assertClearedCredentialBuffer(t *testing.T, secret []byte, failureMessage string) {
+	t.Helper()
+	for _, value := range secret {
+		if value != 0 {
+			t.Fatal(failureMessage)
+		}
+	}
+}
+
+func assertCredentialMode(t *testing.T, path, label string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("%s mode = %o, want %o", label, got, want)
 	}
 }
 
@@ -81,11 +86,7 @@ func TestSetEncryptedCredentialRequiresExplicitReplacement(t *testing.T) {
 	if readErr != nil || string(content) != "old-ciphertext" {
 		t.Fatalf("existing credential changed: content=%q err=%v", content, readErr)
 	}
-	for _, value := range secret {
-		if value != 0 {
-			t.Fatal("plaintext buffer was not cleared after refusal")
-		}
-	}
+	assertClearedCredentialBuffer(t, secret, "plaintext buffer was not cleared after refusal")
 }
 
 func TestSetEncryptedCredentialReplacementIsAtomicOnEncryptionFailure(t *testing.T) {
