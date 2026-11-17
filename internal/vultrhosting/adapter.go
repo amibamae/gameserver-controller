@@ -17,20 +17,20 @@ import (
 )
 
 const (
-_adapterID          = "vultrhosting"
-_adapterCategory    = adapter.CategoryHosting
-_adapterDisplayName = "Vultr Hosting Adapter"
-_implVersion        = "0.1.0"
-_protocolVersion    = "0.21.0-draft"
-_capabilitiesPrefix = "hosting."
+	_adapterID          = "vultrhosting"
+	_adapterCategory    = adapter.CategoryHosting
+	_adapterDisplayName = "Vultr Hosting Adapter"
+	_implVersion        = "0.1.0"
+	_protocolVersion    = "0.21.0-draft"
+	_capabilitiesPrefix = "hosting."
 )
 
 var (
-	ErrContextExpired       = errors.New("context expired")
-	ErrBearerTokenMissing   = errors.New("bearer token is required")
-	ErrInstanceNotFound     = errors.New("instance not found on provider")
-	ErrCreateInFlight       = errors.New("create operation already in flight")
-	ErrStartNotSupported    = errors.New("start not supported for this instance type")
+	ErrContextExpired     = errors.New("context expired")
+	ErrBearerTokenMissing = errors.New("bearer token is required")
+	ErrInstanceNotFound   = errors.New("instance not found on provider")
+	ErrCreateInFlight     = errors.New("create operation already in flight")
+	ErrStartNotSupported  = errors.New("start not supported for this instance type")
 )
 
 // VultrHostingAdapter implements adapter.Implementation for Vultr hosting
@@ -58,9 +58,9 @@ func (a *VultrHostingAdapter) Descriptor() adapter.Descriptor {
 				OutputSchemaURI:     "urn:gameserver-controller:" + _protocolVersion + ":hosting:instance-create-output",
 				RequiredPermissions: []string{"vultr:instances:create"},
 				Constraints: map[string]any{
-					"provider":       "vultr",
-					"api_version":    "2",
-					"auth_type":      "bearer",
+					"provider":    "vultr",
+					"api_version": "2",
+					"auth_type":   "bearer",
 				},
 			},
 			{
@@ -71,14 +71,14 @@ func (a *VultrHostingAdapter) Descriptor() adapter.Descriptor {
 				OutputSchemaURI:     "urn:gameserver-controller:" + _protocolVersion + ":hosting:instance-start-output",
 				RequiredPermissions: []string{"vultr:instances:start"},
 				Constraints: map[string]any{
-					"provider":   "vultr",
+					"provider":    "vultr",
 					"api_version": "2",
 				},
 			},
 		},
 		Constraints: map[string]any{
-			"provider":      "vultr",
-			"auth_method":   "bearer_token",
+			"provider":       "vultr",
+			"auth_method":    "bearer_token",
 			"credential_ref": "/etc/systemd/credentials/vultr.api-token",
 		},
 	}
@@ -140,13 +140,13 @@ func (a *VultrHostingAdapter) handleCreate(ctx context.Context, request adapter.
 
 	// Call Vultr API to create instance
 	instance, err := a.client.CreateInstance(ctx, a.token, vultrapi.CreateInstanceRequest{
-		Region:    getRequiredString(input, "region_id"),
-		Plan:      getRequiredString(input, "plan_id"),
-		OSID:      getRequiredInt(input, "os.provider_os_id"),
-		Label:     getRequiredString(input, "environment_id"),
-		Hostname:  getString(input, "hostname"),
-		UserData:  getString(input, "network_profile"),
-		Tags:      getStringSlice(input, "labels"),
+		Region:   getRequiredString(input, "region_id"),
+		Plan:     getRequiredString(input, "plan_id"),
+		OSID:     getRequiredInt(input, "os.provider_os_id"),
+		Label:    getRequiredString(input, "environment_id"),
+		Hostname: getString(input, "hostname"),
+		UserData: getString(input, "network_profile"),
+		Tags:     getStringSlice(input, "labels"),
 	})
 
 	if err != nil {
@@ -188,7 +188,7 @@ func (a *VultrHostingAdapter) handleStart(ctx context.Context, request adapter.I
 
 	// In Vultr, instances are started by setting power_status to active
 	// This typically happens automatically after creation or via user data
-	
+
 	// For now, we return completed since the instance should already be running
 	return adapter.InvokeResponse{
 		JSONRPC: "2.0",
@@ -263,7 +263,7 @@ func New(httpClient *http.Client) (*VultrHostingAdapter, error) {
 	}
 
 	// In production, token would be loaded from systemd credential reference
-	
+
 	client := vultrapi.NewClient(httpClient)
 
 	return &VultrHostingAdapter{
