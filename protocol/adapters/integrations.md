@@ -135,6 +135,10 @@ The controller MUST resolve a server's network profile before planning operation
 
 Monitoring/notification adapters receive only explicitly permitted event fields and destinations. They MUST declare data transmitted, retention where known, and privacy implications. Optional player telemetry remains disabled by default and requires the separate consent rules in the security specification.
 
+Optional capability `integration.monitoring.event.publish` version 1 publishes only the controller-authorized proxy availability events in its [request schema](../schemas/integrations/monitoring-event-publish-input.schema.json). Each request targets the destination configured for the adapter, and the event environment MUST match the invocation environment. Only the declared identifiers, event type, and timestamp may leave the controller through this capability. Player or session data, raw diagnostics, and caller-supplied destinations are prohibited.
+
+The [result](../schemas/integrations/monitoring-event-publish-output.schema.json) MUST echo the request's event ID. Use `accepted` only after acknowledgment from the configured destination, `rejected` for a confirmed refusal, and `outcome_unknown` if delivery could have occurred without acknowledgment. The controller MUST treat mismatched IDs as unconfirmed. Retry an unknown delivery only when the destination deduplicates the same stable event ID. Delivery outcomes do not establish backend readiness or change lifecycle state.
+
 ### 7.1 Proxy availability
 
 The controller probes each proxy integration it runs. A probe checks only availability and identity (for Velocity, the bridge's `GET /v1/info`); it MUST NOT change proxy state. A probe result is `up`, `unreachable`, or `identity_mismatch` (the proxy answers, but with a different proxy instance or an unsupported API version).

@@ -644,19 +644,17 @@ func updateOperationTx(tx *bolt.Tx, expectedRevision uint64, next OperationRecor
 	if err != nil {
 		return StoredOperation{}, err
 	}
-	if current.Revision != expectedRevision {
-		return StoredOperation{}, ErrRevisionConflict
+	if err := checkRevision(current.Revision, expectedRevision); err != nil {
+		return StoredOperation{}, err
 	}
-	if protocolstate.IsTerminalOperation(current.Record.Status) {
-		return StoredOperation{}, ErrTerminalOperation
+	if err := checkTerminalStatus(current.Record.Status); err != nil {
+		return StoredOperation{}, err
 	}
 	if !sameAcceptedRequest(current.Record, next) {
 		return StoredOperation{}, ErrImmutableFields
 	}
-	if next.Status != current.Record.Status {
-		if err := protocolstate.ValidateOperationTransition(current.Record.Status, next.Status); err != nil {
-			return StoredOperation{}, err
-		}
+	if err := validateStatusTransition(current.Record.Status, next.Status); err != nil {
+		return StoredOperation{}, err
 	}
 	if err := validateStepChanges(current.Record.Steps, next.Steps, next.Status); err != nil {
 		return StoredOperation{}, err
@@ -685,10 +683,8 @@ func updateOperationTx(tx *bolt.Tx, expectedRevision uint64, next OperationRecor
 	if err := validateTerminalOutcome(next); err != nil {
 		return StoredOperation{}, err
 	}
-	if protocolstate.IsTerminalOperation(next.Status) {
-		if err := releaseOperationLocks(tx, next.OperationID); err != nil {
-			return StoredOperation{}, err
-		}
+	if err := releaseTerminalLocks(tx, next); err != nil {
+		return StoredOperation{}, err
 	}
 	if current.Revision == ^uint64(0) {
 		return StoredOperation{}, fmt.Errorf("%w: revision exhausted", ErrInvalidRecord)
@@ -779,6 +775,42 @@ func decodeEnvelope(value []byte) (StoredOperation, error) {
 		return StoredOperation{}, fmt.Errorf("%w: invalid terminal operation: %v", ErrCorruptStore, err)
 	}
 	return StoredOperation{Record: envelope.Record, Revision: envelope.Revision}, nil
+}
+
+// checkRevision verifies the stored revision matches expected.
+func checkRevision(currentRevision, expectedRevision uint64) error {
+	if currentRevision != expectedRevision {
+		return ErrRevisionConflict
+	}
+	return nil
+}
+
+// checkTerminalStatus returns an error if the operation status is terminal.
+func checkTerminalStatus(status protocolstate.OperationStatus) error {
+	if protocolstate.IsTerminalOperation(status) {
+		return ErrTerminalOperation
+	}
+	return nil
+}
+
+// validateStatusTransition checks if the status change is valid per protocol.
+func validateStatusTransition(from, to protocolstate.OperationStatus) error {
+	if from != to {
+		if err := protocolstate.ValidateOperationTransition(from, to); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// releaseTerminalLocks releases locks for terminal operations.
+func releaseTerminalLocks(tx *bolt.Tx, next OperationRecord) error {
+	if protocolstate.IsTerminalOperation(next.Status) {
+		if err := releaseOperationLocks(tx, next.OperationID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func sameAcceptedRequest(current, next OperationRecord) bool {
