@@ -1,0 +1,210 @@
+{
+  "provider": "vultr",
+  "api_version": "2.0",
+  "base_url": "https://api.vultr.com/v2",
+  "capabilities": [
+    {
+      "name": "instance-create",
+      "http_method": "POST",
+      "path": "/instances",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "region": {"type": "string", "minLength": 2, "maxLength": 200},
+          "plan": {"type": "string", "minLength": 1, "maxLength": 200},
+          "os_id": {"type": "integer", "minimum": 1},
+          "label": {"type": "string", "minLength": 1, "maxLength": 200},
+          "hostname": {"type": "string"},
+          "sshkey_id": {"type": "array", "items": {"type": "string"}},
+          "script_id": {"type": "string"},
+          "firewall_group_id": {"type": "string"},
+          "tags": {"type": "array", "items": {"type": "string"}}},
+        },
+        "required": ["region", "plan", "os_id", "label"]
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "instance": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "region": {"type": "string"},
+              "plan": {"type": "string"},
+              "os_id": {"type": "integer"},
+              "label": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "instance-get",
+      "http_method": "GET",
+      "path": "/instances/{id}",
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "instance": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "date_created": {"type": "string", "format": "date-time"},
+              "region": {"type": "string"},
+              "plan": {"type": "string"},
+              "os_id": {"type": "integer"},
+              "label": {"type": "string"},
+              "status": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "instance-list",
+      "http_method": "GET",
+      "path": "/instances",
+      "query_params": {
+        "label": {"type": "string"},
+        "per_page": {"type": "integer", "default": 100}
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "instances": {"type": "array"},
+          "meta": {
+            "type": "object",
+            "properties": {
+              "total": {"type": "integer"},
+              "links": {
+                "type": "object",
+                "properties": {
+                  "next": {"type": "string"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "script-create",
+      "http_method": "POST",
+      "path": "/startup-scripts",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string", "maxLength": 255},
+          "type": {"type": "string", "enum": ["boot", "pxe"]},
+          "script": {"type": "string"}
+        },
+        "required": ["name", "type", "script"]
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "startup_script": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "name": {"type": "string"},
+              "type": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "script-get",
+      "http_method": "GET",
+      "path": "/startup-scripts/{id}"
+    },
+    {
+      "name": "ssh-key-create",
+      "http_method": "POST",
+      "path": "/ssh-keys",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "ssh_key": {"type": "string"}
+        },
+        "required": ["name", "ssh_key"]
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "ssh_key": {
+            "type": "object",
+            "properties": {
+              "id": {"type": "string"},
+              "name": {"type": "string"},
+              "ssh_key": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "firewall-rules-list",
+      "http_method": "GET",
+      "path": "/firewalls/{group_id}/rules",
+      "query_params": {
+        "per_page": {"type": "integer", "default": 100}
+      },
+      "response_schema": {
+        "type": "object",
+        "properties": {
+          "firewall_rules": {"type": "array"},
+          "meta": {
+            "type": "object",
+            "properties": {
+              "total": {"type": "integer"},
+              "links": {
+                "type": "object",
+                "properties": {
+                  "next": {"type": "string"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "firewall-ruleset-get",
+      "http_method": "GET",
+      "path": "/firewalls/{group_id}"
+    },
+    {
+      "name": "instance-userdata-set",
+      "http_method": "PATCH",
+      "path": "/instances/{id}",
+      "request_schema": {
+        "type": "object",
+        "properties": {
+          "user_data": {"type": "string"}
+        }
+      }
+    }
+  ],
+  "instance_types": [
+    {
+      "family": "vc2",
+      "description": "Virtual Compute Generation 2"
+    }
+  ],
+  "enums": {
+    "script_type": ["boot", "pxe"],
+    "firewall_action": ["accept", "drop"],
+    "firewall_ip_type": ["ipv4", "ipv6"]
+  },
+  "notes": [
+    "All operations require Bearer token authentication",
+    "Mutation operations (POST/PATCH) return ErrOutcomeUnknown on unclear results",
+    "Pagination uses cursor-based pagination with next field in meta.links",
+    "Startup script content must be UTF-8 encoded and base64-encoded for API requests",
+    "Vultr instance IDs follow pattern: inst-{uuid}",
+    "Firewall group IDs follow pattern: fw-group-{uuid}"
+  ]
+}

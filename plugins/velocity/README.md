@@ -44,7 +44,8 @@ health check passes.
 
 ## Install
 
-1. Build: `gradle build` (Java 21 toolchain, Gradle 8.x). The jar is in
+1. From this directory, build with `./gradlew build` (`.\gradlew.bat build`
+   on Windows) and a Java 21 toolchain. The jar is in
    `build/libs/`. It targets Java 17 bytecode and the Velocity 3.4 API.
    Velocity 4.x requires Java 25; the API calls the plugin uses have the same
    signatures in 4.3.1, but it has not been built or run against 4.x.

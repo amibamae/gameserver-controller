@@ -47,6 +47,7 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 	minecraftPort := flags.Uint("minecraft-port", 0, "Minecraft server port")
 	voicePort := flags.Uint("voice-chat-port", 0, "voice chat port")
 	wasabiPath := flags.String("wasabi-remote-path", "", "Wasabi bucket or bucket/prefix used by the bootstrap")
+	vultrPlan := flags.String("plan", "", "Vultr server plan (e.g., vc2-1-0150, vc4-1-0150, vc8-1-0150)")
 	credentialRef := flags.String("credential-ref", defaultCredential, "systemd credential reference for the Vultr API token")
 	timeout := flags.Duration("timeout", 30*time.Second, "maximum time for the Vultr API call")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -55,21 +56,13 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 		}
 		return err
 	}
-	if flags.NArg() != 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
-	}
-	if err := allowFlags(flags, "execute", "confirm-upload", "name", "controller-ip", "minecraft-port", "voice-chat-port", "wasabi-remote-path", "credential-ref", "timeout"); err != nil {
+	if err := validateUploadFlags(flags, *name, *minecraftPort, *voicePort); err != nil {
 		return err
-	}
-	if !safeScriptName.MatchString(*name) {
-		return errors.New("--name must be a lowercase Vultr startup-script name using letters, digits, and hyphens")
-	}
-	if *minecraftPort > 65535 || *voicePort > 65535 {
-		return errors.New("ports must be between 1 and 65535")
 	}
 	settings := bootstrap.Settings{
 		ControllerIP: *controllerIP, MinecraftPort: uint16(*minecraftPort),
 		VoiceChatPort: uint16(*voicePort), WasabiRemotePath: *wasabiPath,
+		Plan: *vultrPlan,
 	}
 	script, err := bootstrap.Render(settings)
 	if err != nil {
@@ -115,6 +108,22 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 	return nil
 }
 
+func validateUploadFlags(flags *flag.FlagSet, name string, minecraftPort, voicePort uint) error {
+	if flags.NArg() != 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
+	}
+	if err := allowFlags(flags, "execute", "confirm-upload", "name", "controller-ip", "minecraft-port", "voice-chat-port", "wasabi-remote-path", "plan", "credential-ref", "timeout"); err != nil {
+		return err
+	}
+	if !safeScriptName.MatchString(name) {
+		return errors.New("--name must be a lowercase Vultr startup-script name using letters, digits, and hyphens")
+	}
+	if minecraftPort > 65535 || voicePort > 65535 {
+		return errors.New("ports must be between 1 and 65535")
+	}
+	return nil
+}
+
 func allowFlags(flags *flag.FlagSet, permitted ...string) error {
 	allowed := make(map[string]bool, len(permitted))
 	for _, key := range permitted {
@@ -134,7 +143,7 @@ func allowFlags(flags *flag.FlagSet, permitted ...string) error {
 
 func usage(w io.Writer) error {
 	fmt.Fprintln(w, "Upload a reviewed Minecraft bootstrap to Vultr")
-	fmt.Fprintln(w, "  gsc-bootstrap upload --name <name> --controller-ip <ip-or-CIDR> --minecraft-port <port> --voice-chat-port <port> --wasabi-remote-path <bucket/prefix>")
+	fmt.Fprintln(w, "  gsc-bootstrap upload --name <name> --controller-ip <ip-or-CIDR> --minecraft-port <port> --voice-chat-port <port> --plan <vultr-plan> --wasabi-remote-path <bucket/prefix>")
 	fmt.Fprintln(w, "  add --execute --confirm-upload <same-name> to create the startup script")
 	return errors.New("an action is required")
 }

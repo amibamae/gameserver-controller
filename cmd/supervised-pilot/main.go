@@ -56,7 +56,11 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) error {
-	return runWithSettings(args, stdout, stderr, runtimeSettings{})
+	err := runWithSettings(args, stdout, stderr, runtimeSettings{})
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	return err
 }
 
 func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSettings) error {
@@ -101,23 +105,17 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 	keyName := flags.String("name", "", "name for the SSH key in Vultr")
 	var sshKeyIDs stringListFlag
 	flags.Var(&sshKeyIDs, "ssh-key-id", "Vultr SSH key ID; repeat for multiple keys (required for provisioning)")
-	if err := flags.Parse(args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return nil
-		}
+
+	if err := parseFlags(flags, args[1:]); err != nil {
 		return err
-	}
-	if flags.NArg() != 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
-	}
-	if action == "history" {
-		if flags.NFlag() != 0 {
-			return errors.New("history is local and read-only; remove all flags")
-		}
-		return showHistory(stdout)
 	}
 
 	switch action {
+	case "history":
+		if flags.NFlag() != 0 {
+			return errors.New("history is local and read-only; remove all flags")
+		}
+		return doHistory(stdout)
 	case "status":
 		if err := allowOnlyFlags(flags, "host", "execute", "confirm-host"); err != nil {
 			return err
@@ -128,7 +126,7 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if *execute || *confirmHost != "" {
 			return errors.New("status is read-only; remove --execute and --confirm-host")
 		}
-		return showStatus(*host, stdout)
+		return doStatus(*host, stdout)
 	case "backup":
 		if err := allowOnlyFlags(flags, "host", "execute", "confirm-host", "timeout"); err != nil {
 			return err
@@ -139,7 +137,7 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if *timeout <= 0 || *timeout > 24*time.Hour {
 			return errors.New("--timeout must be greater than zero and no more than 24 hours")
 		}
-		return backup(*host, *execute, *confirmHost, *timeout, stdout, stderr)
+		return doBackup(*host, *execute, *confirmHost, *timeout, stdout, stderr)
 	case "provision":
 		if err := allowOnlyFlags(flags, "execute", "confirm-create", "timeout", "server-id", "environment", "region", "plan", "os-id", "hostname", "credential-ref", "operation-id", "ssh-key-id", "startup-script-id", "startup-script-sha256", "firewall-group-id", "controller-ip", "ssh-credential-ref"); err != nil {
 			return err
@@ -152,13 +150,12 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if err != nil {
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
-		access := provisionAccess{FirewallGroupID: *firewallGroupID, ControllerIP: *controllerIP, SSHCredentialRef: *sshCredentialRef}
-		return provisionVultr(provisionOptions{
+		return doProvision(provisionOptions{
 			execute: *execute, confirmation: *confirmCreate, timeout: *timeout,
 			policy: policy, statePath: statePath, serverID: *serverID, environment: *environmentID,
 			region: *region, plan: *plan, osID: *osID, hostname: *hostname,
 			sshKeyIDs: sshKeyIDs, startupScriptID: *startupScriptID, startupScriptSHA256: *startupScriptSHA256,
-			credentialRef: *credentialRef, operationID: *operationID, access: access,
+			credentialRef: *credentialRef, operationID: *operationID, access: provisionAccess{FirewallGroupID: *firewallGroupID, ControllerIP: *controllerIP, SSHCredentialRef: *sshCredentialRef},
 		}, stdout, stderr)
 	case "adopt":
 		if err := allowOnlyFlags(flags, "execute", "confirm-adopt", "timeout", "server-id", "environment", "instance-id", "expected-ip", "region", "plan", "os-id", "os-name", "credential-ref", "operation-id"); err != nil {
@@ -166,17 +163,17 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		}
 		policy, err := pilotcapacity.LoadEmbeddedPolicy()
 		if err != nil {
-			return err
+			return fmt.Errorf("load embedded capacity policy: %w", err)
 		}
 		statePath, err := settings.capacityStatePath()
 		if err != nil {
-			return err
+			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
 		providerOSID, err := vultrapi.ParseOSID(*osID)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse Vultr OS ID: %w", err)
 		}
-		return adoptVultr(*execute, *confirmAdopt, *timeout, policy, statePath, *credentialRef, pilotvultr.AdoptionRequest{
+		return doAdoptVultr(*execute, *confirmAdopt, *timeout, policy, statePath, *credentialRef, pilotvultr.AdoptionRequest{
 			OperationID: *operationID, ServerID: *serverID, Environment: *environmentID, InstanceID: *instanceID,
 			IP: *expectedIP, Region: *region, Plan: *plan, OSID: providerOSID, OS: *osName,
 		}, stdout)
@@ -192,14 +189,14 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if !flagSet(flags, "timeout") {
 			handoffTimeout = 45 * time.Minute
 		}
-		return runHandoff(handoffOptions{Execute: *execute, Confirmation: *confirmHandoff, Timeout: handoffTimeout, OperationID: *operationID,
+		return doHandoff(handoffOptions{Execute: *execute, Confirmation: *confirmHandoff, Timeout: handoffTimeout, OperationID: *operationID,
 			CredentialRef: *credentialRef, SSHCredentialRef: *sshCredentialRef, WasabiAccessRef: *wasabiAccessRef, WasabiSecretRef: *wasabiSecretRef,
 			WasabiRegion: *wasabiRegion}, statePath, stdout, stderr)
 	case "register-ssh-key":
 		if err := allowOnlyFlags(flags, "execute", "public-key-file", "name", "credential-ref", "timeout"); err != nil {
 			return err
 		}
-		return runRegisterSSHKey(*execute, *publicKeyFile, *keyName, *credentialRef, min(*timeout, 2*time.Minute), stdout)
+		return doRegisterSSHKey(*execute, *publicKeyFile, *keyName, *credentialRef, min(*timeout, 2*time.Minute), stdout)
 	case "capacity":
 		if flags.NFlag() != 0 {
 			return errors.New("capacity reads the fixed local policy and state database; remove all flags")
@@ -212,7 +209,7 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if err != nil {
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
-		return showCapacity(policy, statePath, stdout)
+		return doShowCapacity(policy, statePath, stdout)
 	case "boot-status":
 		if err := allowOnlyFlags(flags, "server-id", "environment"); err != nil {
 			return err
@@ -227,10 +224,66 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if err != nil {
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
-		return showBootStatus(*serverID, *environmentID, statePath, time.Now().UTC(), stdout)
+		return doShowBootStatus(*serverID, *environmentID, statePath, time.Now().UTC(), stdout)
 	default:
 		return usage(stderr)
 	}
+}
+
+// parseFlags parses command-line flags and returns an error if parsing fails or extra args remain.
+func parseFlags(flags *flag.FlagSet, args []string) error {
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
+	}
+	return nil
+}
+
+// doHistory shows the local history and returns an error if any flags are present.
+func doHistory(stdout io.Writer) error {
+	return showHistory(stdout)
+}
+
+// doStatus gets the status of a Minecraft server from systemd.
+func doStatus(host string, stdout io.Writer) error {
+	return showStatus(host, stdout)
+}
+
+// doBackup runs a backup operation on a Minecraft server.
+func doBackup(host string, execute bool, confirmHost string, timeout time.Duration, stdout, stderr io.Writer) error {
+	return backup(host, execute, confirmHost, timeout, stdout, stderr)
+}
+
+// doProvision provisions a new Vultr VM for a Minecraft server.
+func doProvision(opts provisionOptions, stdout, stderr io.Writer) error {
+	return provisionVultr(opts, stdout, stderr)
+}
+
+// doAdoptVultr adopts an existing Vultr instance for local management.
+func doAdoptVultr(execute bool, confirmAdopt string, timeout time.Duration, policy pilotcapacity.Policy, statePath string, credentialRef string, request pilotvultr.AdoptionRequest, stdout io.Writer) error {
+	return adoptVultr(execute, confirmAdopt, timeout, policy, statePath, credentialRef, request, stdout)
+}
+
+// doHandoff completes the SSH handoff to a newly provisioned or adopted server.
+func doHandoff(opts handoffOptions, statePath string, stdout, stderr io.Writer) error {
+	return runHandoff(opts, statePath, stdout, stderr)
+}
+
+// doRegisterSSHKey registers an SSH key with Vultr for use by new VMs.
+func doRegisterSSHKey(execute bool, publicKeyFile, keyName, credentialRef string, timeout time.Duration, stdout io.Writer) error {
+	return runRegisterSSHKey(execute, publicKeyFile, keyName, credentialRef, timeout, stdout)
+}
+
+// doShowCapacity shows the current capacity policy and state.
+func doShowCapacity(policy pilotcapacity.Policy, statePath string, stdout io.Writer) error {
+	return showCapacity(policy, statePath, stdout)
+}
+
+// doShowBootStatus checks boot status for a server in a specific environment.
+func doShowBootStatus(serverID, environmentID string, statePath string, now time.Time, stdout io.Writer) error {
+	return showBootStatus(serverID, environmentID, statePath, now, stdout)
 }
 
 func (settings runtimeSettings) capacityStatePath() (string, error) {
