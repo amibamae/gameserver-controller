@@ -11,7 +11,8 @@ func init() {
 		"security.staging.production-write-scope-denied",
 		"security.production.backup-write-authorized")
 	registerEvaluator(withoutPackage(evaluateStorageBackupPartialUploadNotVerified), "storage.backup.partial-upload-not-verified")
-	registerEvaluator(withoutPackage(evaluateStorageObjectChecksumMismatchBlocksRestore), "storage.object.checksum-mismatch-blocks-restore")
+	registerEvaluator(withoutPackage(evaluateStorageObjectChecksumMismatchBlocksRestore),
+		"storage.object.checksum-mismatch-blocks-restore", "storage.object.size-mismatch-blocks-restore")
 	registerEvaluator(withoutPackage(evaluateStorageObjectEtagNotChecksum), "storage.object.etag-not-checksum")
 	registerEvaluator(withoutPackage(evaluateBackupDeleteScope),
 		"storage.staging.cannot-delete-production-object",

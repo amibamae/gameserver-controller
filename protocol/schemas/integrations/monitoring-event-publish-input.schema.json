@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:integrations:monitoring-event-publish-input",
+  "title": "Monitoring event publish input",
+  "description": "One controller-authorized proxy availability event for the adapter's configured monitoring destination.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "occurred_at", "environment_id", "source_adapter_id"],
+  "properties": {
+    "event_id": {"type": "string", "pattern": "^evt-[0-9a-f]{32}$"},
+    "event_type": {
+      "enum": [
+        "integration.proxy.unreachable",
+        "integration.proxy.identity_mismatch",
+        "integration.proxy.recovered"
+      ]
+    },
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "environment_id": {"$ref": "urn:gameserver-controller:0.21.0-draft:common:identifier"},
+    "source_adapter_id": {"$ref": "urn:gameserver-controller:0.21.0-draft:common:identifier"}
+  }
+}
