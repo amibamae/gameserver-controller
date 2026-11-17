@@ -50,16 +50,10 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 	vultrPlan := flags.String("plan", "", "Vultr server plan (e.g., vc2-1-0150, vc4-1-0150, vc8-1-0150)")
 	credentialRef := flags.String("credential-ref", defaultCredential, "systemd credential reference for the Vultr API token")
 	timeout := flags.Duration("timeout", 30*time.Second, "maximum time for the Vultr API call")
-	if err := flags.Parse(args[1:]); err != nil {
+	if err := parseUploadFlags(flags, args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
-	}
-	if flags.NArg() != 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
-	}
-	if err := allowFlags(flags, "execute", "confirm-upload", "name", "controller-ip", "minecraft-port", "voice-chat-port", "wasabi-remote-path", "plan", "credential-ref", "timeout"); err != nil {
 		return err
 	}
 	if !safeScriptName.MatchString(*name) {
@@ -69,9 +63,9 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 		return errors.New("ports must be between 1 and 65535")
 	}
 	settings := bootstrap.Settings{
-		ControllerIP:   *controllerIP, MinecraftPort: uint16(*minecraftPort),
+		ControllerIP: *controllerIP, MinecraftPort: uint16(*minecraftPort),
 		VoiceChatPort: uint16(*voicePort), WasabiRemotePath: *wasabiPath,
-		Plan:           *vultrPlan,
+		Plan: *vultrPlan,
 	}
 	script, err := bootstrap.Render(settings)
 	if err != nil {
@@ -93,28 +87,46 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 	if *confirm != *name {
 		return fmt.Errorf("upload not started: --confirm-upload must exactly match %q", *name)
 	}
-	if !strings.HasPrefix(*credentialRef, credential.SystemdReferenceScheme) {
-		return errors.New("--credential-ref must use systemd-credential://NAME")
-	}
-	resolver, err := credential.FromEnvironment()
+	request := vultrapi.StartupScriptRequest{Name: *name, Type: "boot", Script: script}
+	uploaded, err := uploadScript(client, request, *credentialRef, *timeout)
 	if err != nil {
-		return fmt.Errorf("load systemd credential directory: %w", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
-	defer cancel()
-	var uploaded vultrapi.StartupScript
-	err = resolver.WithCredential(*credentialRef, func(token []byte) error {
-		var createErr error
-		uploaded, createErr = client.CreateStartupScript(ctx, token, vultrapi.StartupScriptRequest{
-			Name: *name, Type: "boot", Script: script,
-		})
-		return createErr
-	})
-	if err != nil {
-		return fmt.Errorf("Vultr startup-script create failed; inspect the provider account before retrying if the outcome is unknown: %w", err)
+		return err
 	}
 	fmt.Fprintf(stdout, "Created Vultr startup script.\nScript ID: %s\nName: %s\nSHA-256: %s\n", uploaded.ID, uploaded.Name, digestText)
 	return nil
+}
+
+func parseUploadFlags(flags *flag.FlagSet, args []string) error {
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
+	}
+	return allowFlags(flags, "execute", "confirm-upload", "name", "controller-ip", "minecraft-port",
+		"voice-chat-port", "wasabi-remote-path", "plan", "credential-ref", "timeout")
+}
+
+func uploadScript(client scriptCreator, request vultrapi.StartupScriptRequest, credentialRef string, timeout time.Duration) (vultrapi.StartupScript, error) {
+	if !strings.HasPrefix(credentialRef, credential.SystemdReferenceScheme) {
+		return vultrapi.StartupScript{}, errors.New("--credential-ref must use systemd-credential://NAME")
+	}
+	resolver, err := credential.FromEnvironment()
+	if err != nil {
+		return vultrapi.StartupScript{}, fmt.Errorf("load systemd credential directory: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	var uploaded vultrapi.StartupScript
+	err = resolver.WithCredential(credentialRef, func(token []byte) error {
+		var createErr error
+		uploaded, createErr = client.CreateStartupScript(ctx, token, request)
+		return createErr
+	})
+	if err != nil {
+		return vultrapi.StartupScript{}, fmt.Errorf("Vultr startup-script create failed; inspect the provider account before retrying if the outcome is unknown: %w", err)
+	}
+	return uploaded, nil
 }
 
 func allowFlags(flags *flag.FlagSet, permitted ...string) error {
@@ -136,7 +148,7 @@ func allowFlags(flags *flag.FlagSet, permitted ...string) error {
 
 func usage(w io.Writer) error {
 	fmt.Fprintln(w, "Upload a reviewed Minecraft bootstrap to Vultr")
-	fmt.Fprintln(w, "  gsc-bootstrap upload --name <name> --controller-ip <ip-or-CIDR> --minecraft-port <port> --voice-chat-port <port> --wasabi-remote-path <bucket/prefix>")
+	fmt.Fprintln(w, "  gsc-bootstrap upload --name <name> --controller-ip <ip-or-CIDR> --minecraft-port <port> --voice-chat-port <port> --wasabi-remote-path <bucket/prefix> --plan <plan>")
 	fmt.Fprintln(w, "  add --execute --confirm-upload <same-name> to create the startup script")
 	return errors.New("an action is required")
 }
