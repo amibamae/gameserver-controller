@@ -12,9 +12,7 @@ func TestCompleteInventoryPaginatesWithoutFilters(t *testing.T) {
 	calls := 0
 	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		if r.Method != http.MethodGet || r.URL.Path != "/v2/instances" || r.URL.Query().Get("label") != "" || r.Header.Get("Authorization") != "Bearer "+testToken {
-			t.Errorf("unexpected inventory request: %s %s", r.Method, r.URL)
-		}
+		assertUnfilteredInventoryRequest(t, r)
 		if calls == 1 {
 			fmt.Fprint(w, `{"instances":[{"id":"example-a","os":"Example Linux"}],"meta":{"total":2,"links":{"next":"opaque cursor/&"}}}`)
 		} else {
@@ -27,6 +25,14 @@ func TestCompleteInventoryPaginatesWithoutFilters(t *testing.T) {
 	instances, err := client.ListInstances(context.Background(), []byte(testToken))
 	if err != nil || len(instances) != 2 || calls != 2 || instances[0].OS != "Example Linux" {
 		t.Fatalf("inventory=%#v calls=%d error=%v", instances, calls, err)
+	}
+}
+
+func assertUnfilteredInventoryRequest(t *testing.T, r *http.Request) {
+	t.Helper()
+	inventoryEndpoint := r.Method == http.MethodGet && r.URL.Path == "/v2/instances"
+	if !inventoryEndpoint || r.URL.Query().Get("label") != "" || r.Header.Get("Authorization") != "Bearer "+testToken {
+		t.Errorf("unexpected inventory request: %s %s", r.Method, r.URL)
 	}
 }
 
