@@ -56,17 +56,8 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 		}
 		return err
 	}
-	if flags.NArg() != 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
-	}
-	if err := allowFlags(flags, "execute", "confirm-upload", "name", "controller-ip", "minecraft-port", "voice-chat-port", "wasabi-remote-path", "plan", "credential-ref", "timeout"); err != nil {
+	if err := validateUploadFlags(flags, *name, *minecraftPort, *voicePort); err != nil {
 		return err
-	}
-	if !safeScriptName.MatchString(*name) {
-		return errors.New("--name must be a lowercase Vultr startup-script name using letters, digits, and hyphens")
-	}
-	if *minecraftPort > 65535 || *voicePort > 65535 {
-		return errors.New("ports must be between 1 and 65535")
 	}
 	settings := bootstrap.Settings{
 		ControllerIP: *controllerIP, MinecraftPort: uint16(*minecraftPort),
@@ -114,6 +105,22 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 		return fmt.Errorf("Vultr startup-script create failed; inspect the provider account before retrying if the outcome is unknown: %w", err)
 	}
 	fmt.Fprintf(stdout, "Created Vultr startup script.\nScript ID: %s\nName: %s\nSHA-256: %s\n", uploaded.ID, uploaded.Name, digestText)
+	return nil
+}
+
+func validateUploadFlags(flags *flag.FlagSet, name string, minecraftPort, voicePort uint) error {
+	if flags.NArg() != 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
+	}
+	if err := allowFlags(flags, "execute", "confirm-upload", "name", "controller-ip", "minecraft-port", "voice-chat-port", "wasabi-remote-path", "plan", "credential-ref", "timeout"); err != nil {
+		return err
+	}
+	if !safeScriptName.MatchString(name) {
+		return errors.New("--name must be a lowercase Vultr startup-script name using letters, digits, and hyphens")
+	}
+	if minecraftPort > 65535 || voicePort > 65535 {
+		return errors.New("ports must be between 1 and 65535")
+	}
 	return nil
 }
 
