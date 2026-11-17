@@ -52,6 +52,10 @@ func Estimate(durations []time.Duration, safetyFactor float64) (time.Duration, e
 	// overflowing multiplication. The rank is one-based.
 	rank := len(samples) - len(samples)/4
 	p75 := samples[rank-1]
+	return scaleEstimate(p75, safetyFactor)
+}
+
+func scaleEstimate(p75 time.Duration, safetyFactor float64) (time.Duration, error) {
 	if safetyFactor == 1 {
 		return p75, nil
 	}

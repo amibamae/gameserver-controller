@@ -137,20 +137,28 @@ func parseToken(token string) (string, []byte, bool) {
 	if len(token) > 256 || !strings.HasPrefix(token, tokenPrefix) {
 		return "", nil, false
 	}
-	parts := strings.SplitN(strings.TrimPrefix(token, tokenPrefix), "_", 2)
-	if len(parts) != 2 || len(parts[0]) != 32 {
+	id, encodedSecret, found := strings.Cut(strings.TrimPrefix(token, tokenPrefix), "_")
+	if !found || len(id) != 32 {
 		return "", nil, false
 	}
-	idBytes, err := hex.DecodeString(parts[0])
+	idBytes, err := hex.DecodeString(id)
 	if err != nil || len(idBytes) != 16 {
 		return "", nil, false
 	}
-	secret, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil || len(secret) != 32 {
-		zero(secret)
+	secret := decodeTokenSecret(encodedSecret)
+	if secret == nil {
 		return "", nil, false
 	}
-	return parts[0], secret, true
+	return id, secret, true
+}
+
+func decodeTokenSecret(encoded string) []byte {
+	secret, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil || len(secret) != 32 {
+		zero(secret)
+		return nil
+	}
+	return secret
 }
 
 func zero(value []byte) {

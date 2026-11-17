@@ -14,34 +14,41 @@ func evaluateSystemdUnitInspection(pkg *protocolPackage, fixture map[string]any)
 
 	results := make([]any, 0, len(evaluations))
 	for _, rawEvaluation := range evaluations {
-		evaluation := asObject(rawEvaluation)
-		caseID := stringValue(evaluation, "case_id")
-		request := asObject(evaluation["request"])
-		response := asObject(evaluation["response"])
-		if caseID == "" || request == nil || response == nil {
-			return nil, fmt.Errorf("inspection evaluation must include case_id, request, and response")
+		result, err := evaluateSystemdInspectionCase(pkg, asObject(rawEvaluation))
+		if err != nil {
+			return nil, err
 		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-inspect-input", request); err != nil {
-			return nil, fmt.Errorf("%s: inspect input does not match schema: %w", caseID, err)
-		}
-		if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-inspect-output", response); err != nil {
-			return nil, fmt.Errorf("%s: inspect output does not match schema: %w", caseID, err)
-		}
-
-		unitBound := reflect.DeepEqual(request["unit_ref"], response["unit_ref"])
-		state := stringValue(response, "state")
-		results = append(results, map[string]any{
-			"case_id":                  caseID,
-			"request_schema_valid":     true,
-			"response_schema_valid":    true,
-			"unit_bound":               unitBound,
-			"observation_conclusive":   unitBound && state != "unknown",
-			"observation_unknown":      state == "unknown",
-			"safe_to_treat_as_running": unitBound && state == "running",
-			"safe_to_treat_as_stopped": unitBound && state == "stopped",
-		})
+		results = append(results, result)
 	}
 	return map[string]any{"evaluations": results}, nil
+}
+
+func evaluateSystemdInspectionCase(pkg *protocolPackage, evaluation map[string]any) (map[string]any, error) {
+	caseID := stringValue(evaluation, "case_id")
+	request := asObject(evaluation["request"])
+	response := asObject(evaluation["response"])
+	if caseID == "" || request == nil || response == nil {
+		return nil, fmt.Errorf("inspection evaluation must include case_id, request, and response")
+	}
+	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-inspect-input", request); err != nil {
+		return nil, fmt.Errorf("%s: inspect input does not match schema: %w", caseID, err)
+	}
+	if err := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-inspect-output", response); err != nil {
+		return nil, fmt.Errorf("%s: inspect output does not match schema: %w", caseID, err)
+	}
+
+	unitBound := reflect.DeepEqual(request["unit_ref"], response["unit_ref"])
+	state := stringValue(response, "state")
+	return map[string]any{
+		"case_id":                  caseID,
+		"request_schema_valid":     true,
+		"response_schema_valid":    true,
+		"unit_bound":               unitBound,
+		"observation_conclusive":   unitBound && state != "unknown",
+		"observation_unknown":      state == "unknown",
+		"safe_to_treat_as_running": unitBound && state == "running",
+		"safe_to_treat_as_stopped": unitBound && state == "stopped",
+	}, nil
 }
 
 func init() {

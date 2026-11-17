@@ -20,15 +20,23 @@ func TestBackupCommandPreviewAndConfirmation(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			err := run(append([]string{"backup", "--host", "server.example"}, test.args...), &stdout, &stderr)
-			if test.errorText == "" && err != nil {
-				t.Fatal(err)
-			}
-			if test.errorText != "" && (err == nil || err.Error() != test.errorText) {
-				t.Fatalf("error = %v, want %q", err, test.errorText)
-			}
+			assertBackupCommandError(t, err, test.errorText)
 			if stdout.String() != test.output || stderr.Len() != 0 {
 				t.Fatalf("stdout = %q, stderr = %q, want stdout %q and empty stderr", stdout.String(), stderr.String(), test.output)
 			}
 		})
+	}
+}
+
+func assertBackupCommandError(t *testing.T, err error, want string) {
+	t.Helper()
+	if want == "" {
+		if err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	if err == nil || err.Error() != want {
+		t.Fatalf("error = %v, want %q", err, want)
 	}
 }
