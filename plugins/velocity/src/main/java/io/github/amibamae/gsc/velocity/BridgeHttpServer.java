@@ -19,6 +19,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import org.slf4j.Logger;
 
 /**
@@ -32,7 +33,7 @@ final class BridgeHttpServer {
   private final byte[] token;
   private final Logger logger;
   private final boolean enforceLoopback;
-  private final SSLContext tls;
+  private final SSLContext tlsContext;
   private HttpServer server;
   private ExecutorService executor;
 
@@ -40,7 +41,8 @@ final class BridgeHttpServer {
     this(service, token, enforceLoopback, logger, null);
   }
 
-  BridgeHttpServer(BridgeService service, byte[] token, boolean enforceLoopback, Logger logger, SSLContext tls) {
+  BridgeHttpServer(BridgeService service, byte[] token, boolean enforceLoopback, Logger logger,
+                   SSLContext tlsContext) {
     if (token.length < 16) {
       throw new IllegalArgumentException("bridge token must be at least 16 bytes");
     }
@@ -48,26 +50,19 @@ final class BridgeHttpServer {
     this.token = ("Bearer " + new String(token, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
     this.enforceLoopback = enforceLoopback;
     this.logger = logger;
-    this.tls = tls;
+    this.tlsContext = tlsContext;
   }
 
-  /**
-   * Starts listening on the given address.
-   * If this server has TLS configured, it will use HTTPS; otherwise plain HTTP.
-   * The address must be a loopback address unless the loopback check is disabled in the plugin configuration.
-   */
   synchronized InetSocketAddress start(InetSocketAddress address) throws IOException {
     if (enforceLoopback && (address.getAddress() == null || !address.getAddress().isLoopbackAddress())) {
       throw new IllegalArgumentException("bridge must bind to a loopback address");
     }
-
     server = createServer(address);
     executor = Executors.newFixedThreadPool(4, runnable -> {
       Thread thread = new Thread(runnable, "gsc-bridge-http");
       thread.setDaemon(true);
       return thread;
     });
-
     server.setExecutor(executor);
     server.createContext("/v1/", this::handle);
     server.start();
@@ -75,16 +70,16 @@ final class BridgeHttpServer {
   }
 
   private HttpServer createServer(InetSocketAddress address) throws IOException {
-    if (tls == null) {
+    if (tlsContext == null) {
       return HttpServer.create(address, 16);
     }
     HttpsServer https = HttpsServer.create(address, 16);
-    https.setHttpsConfigurator(new HttpsConfigurator(tls) {
+    https.setHttpsConfigurator(new HttpsConfigurator(tlsContext) {
       @Override
-      public void configure(HttpsParameters parameters) {
-        var ssl = tls.getDefaultSSLParameters();
-        ssl.setNeedClientAuth(true);
-        parameters.setSSLParameters(ssl);
+      public void configure(HttpsParameters connection) {
+        SSLParameters parameters = tlsContext.getDefaultSSLParameters();
+        parameters.setNeedClientAuth(true);
+        connection.setSSLParameters(parameters);
       }
     });
     return https;

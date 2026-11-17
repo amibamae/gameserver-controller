@@ -2,9 +2,8 @@ package io.github.amibamae.gsc.velocity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.github.amibamae.gsc.velocity.tls.SslContextBuilder;
+import io.github.amibamae.gsc.velocity.tls.TlsMaterialManager;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -15,8 +14,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyStore;
-import java.time.Clock;
+import java.security.PrivateKey;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -28,77 +28,91 @@ import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.helpers.NOPLogger;
 
 class BridgeTlsTest {
-  private static final String TOKEN = BridgeHttpServerTest.TOKEN;
-  private static final String STORE_PASSWORD = "fixture-password";
-
-  @TempDir Path temporary;
+  private static final String PASSWORD = "test-store-password";
 
   @Test
-  void requiresBothTrustedClientCertificateAndBearerToken() throws Exception {
-    Identity server = createIdentity("server");
-    Identity controller = createIdentity("controller");
-    assertThrows(IOException.class,
-        () -> SslContextBuilder.build(server.certificate(), controller.key(), controller.certificate()));
-    SSLContext tls = SslContextBuilder.build(server.certificate(), server.key(), controller.certificate());
-    Clock clock = Clock.systemUTC();
-    BridgeService service = new BridgeService("edge", new BackendRegistry(Set.of(), Duration.ofSeconds(15), clock),
+  void requiresATrustedClientCertificateAndBearerToken(@TempDir Path directory) throws Exception {
+    KeyStore identity = identity(directory.resolve("server.p12"), "SAN=ip:127.0.0.1");
+    KeyStore controller = identity(directory.resolve("controller.p12"), "BC=ca:true");
+    KeyStore untrusted = identity(directory.resolve("untrusted.p12"), "BC=ca:true");
+    Path certificate = pem(directory.resolve("server.crt"), "CERTIFICATE",
+        identity.getCertificate("test").getEncoded());
+    Path key = pem(directory.resolve("server.key"), "PRIVATE KEY",
+        ((PrivateKey) identity.getKey("test", PASSWORD.toCharArray())).getEncoded());
+    Path ca = pem(directory.resolve("controller-ca.crt"), "CERTIFICATE",
+        controller.getCertificate("test").getEncoded());
+    SSLContext context = TlsMaterialManager.load(certificate, key, ca);
+
+    MutableClock clock = new MutableClock(Instant.EPOCH);
+    BridgeService service = new BridgeService("test-proxy",
+        new BackendRegistry(Set.of(), Duration.ofSeconds(15), clock),
         new SessionRegistry(clock), new BridgeHttpServerTest.FakeProxy(), clock, () -> {});
-    BridgeHttpServer bridge = new BridgeHttpServer(service, TOKEN.getBytes(StandardCharsets.UTF_8), true,
-        NOPLogger.NOP_LOGGER, tls);
-    int port = bridge.start(new InetSocketAddress("127.0.0.1", 0)).getPort();
+    String token = BridgeHttpServerTest.TOKEN;
+    BridgeHttpServer bridge = new BridgeHttpServer(service, token.getBytes(StandardCharsets.UTF_8),
+        true, NOPLogger.NOP_LOGGER, context);
     try {
-      HttpClient authenticated = client(server, controller);
-      HttpClient anonymous = client(server, null);
-      URI uri = URI.create("https://127.0.0.1:" + port + "/v1/info");
-      var authorized = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(5))
-          .header("Authorization", "Bearer " + TOKEN).build();
-      var noToken = HttpRequest.newBuilder(uri).timeout(Duration.ofSeconds(5)).build();
-      assertEquals(200, authenticated.send(authorized, HttpResponse.BodyHandlers.discarding()).statusCode());
-      assertEquals(401, authenticated.send(noToken, HttpResponse.BodyHandlers.discarding()).statusCode());
-      assertThrows(IOException.class, () -> anonymous.send(authorized, HttpResponse.BodyHandlers.discarding()));
+      InetSocketAddress address = bridge.start(new InetSocketAddress("127.0.0.1", 0));
+      URI info = URI.create("https://127.0.0.1:" + address.getPort() + "/v1/info");
+      HttpRequest authorized = HttpRequest.newBuilder(info).timeout(Duration.ofSeconds(5))
+          .header("Authorization", "Bearer " + token).build();
+      assertThrows(IOException.class, () -> request(clientContext(identity, null), authorized));
+      assertThrows(IOException.class, () -> request(clientContext(identity, untrusted), authorized));
+      assertEquals(200, request(clientContext(identity, controller), authorized));
+      assertEquals(401, request(clientContext(identity, controller),
+          HttpRequest.newBuilder(info).timeout(Duration.ofSeconds(5)).build()));
     } finally {
       bridge.stop();
     }
   }
 
-  private Identity createIdentity(String name) throws Exception {
-    Path storeFile = temporary.resolve(name + ".p12");
-    Path log = temporary.resolve(name + ".log");
-    Path keytool = Path.of(System.getProperty("java.home"), "bin", "keytool");
-    Process process = new ProcessBuilder(keytool.toString(), "-genkeypair", "-alias", name, "-keyalg", "EC",
-        "-dname", "CN=" + name, "-ext", "SAN=ip:127.0.0.1", "-validity", "1", "-storetype", "PKCS12",
-        "-keystore", storeFile.toString(), "-storepass", STORE_PASSWORD)
-        .redirectErrorStream(true).redirectOutput(log.toFile()).start();
-    if (!process.waitFor(20, TimeUnit.SECONDS)) {
+  @Test
+  void rejectsMissingTlsMaterial(@TempDir Path directory) {
+    Path missing = directory.resolve("missing");
+    IOException error = assertThrows(IOException.class,
+        () -> TlsMaterialManager.load(missing, missing, missing));
+    assertEquals("Could not load Velocity bridge TLS material", error.getMessage());
+  }
+
+  private static KeyStore identity(Path file, String extension) throws Exception {
+    Path bin = Path.of(System.getProperty("java.home"), "bin");
+    Path keytool = Files.isRegularFile(bin.resolve("keytool.exe"))
+        ? bin.resolve("keytool.exe") : bin.resolve("keytool");
+    Process process = new ProcessBuilder(keytool.toString(), "-genkeypair", "-alias", "test",
+        "-keyalg", "EC", "-dname", "CN=" + file.getFileName(), "-validity", "1", "-ext", extension,
+        "-storetype", "PKCS12", "-keystore", file.toString(), "-storepass", PASSWORD)
+        .redirectErrorStream(true).start();
+    if (!process.waitFor(30, TimeUnit.SECONDS)) {
       process.destroyForcibly();
-      throw new IOException("keytool timed out");
+      throw new IOException("Timed out generating the test TLS identity");
     }
-    assertTrue(process.exitValue() == 0, () -> "keytool failed for " + name);
-    KeyStore store = KeyStore.getInstance(storeFile.toFile(), STORE_PASSWORD.toCharArray());
-    return new Identity(store,
-        writePem(name + ".crt", "CERTIFICATE", store.getCertificate(name).getEncoded()),
-        writePem(name + ".key", "PRIVATE KEY", store.getKey(name, STORE_PASSWORD.toCharArray()).getEncoded()));
+    if (process.exitValue() != 0) {
+      throw new IOException(new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
+    }
+    return KeyStore.getInstance(file.toFile(), PASSWORD.toCharArray());
   }
 
-  private Path writePem(String file, String type, byte[] bytes) throws IOException {
-    String body = Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(bytes);
-    return Files.writeString(temporary.resolve(file), "-----BEGIN " + type + "-----\n" + body
-        + "\n-----END " + type + "-----\n");
+  private static Path pem(Path path, String type, byte[] contents) throws IOException {
+    String content = Base64.getMimeEncoder().encodeToString(contents);
+    return Files.writeString(path, "-----BEGIN " + type + "-----\n" + content
+        + "\n-----END " + type + "-----\n", StandardCharsets.US_ASCII);
   }
 
-  private static HttpClient client(Identity server, Identity controller) throws Exception {
-    KeyStore trusted = KeyStore.getInstance("PKCS12");
-    trusted.load(null, null);
-    trusted.setCertificateEntry("server", server.store().getCertificate("server"));
-    TrustManagerFactory trust = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-    trust.init(trusted);
+  private static SSLContext clientContext(KeyStore server, KeyStore client) throws Exception {
+    KeyStore roots = KeyStore.getInstance("PKCS12");
+    roots.load(null, null);
+    roots.setCertificateEntry("server", server.getCertificate("test"));
+    TrustManagerFactory trust = TrustManagerFactory.getInstance("PKIX");
+    trust.init(roots);
     KeyManagerFactory keys = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-    keys.init(controller == null ? null : controller.store(), STORE_PASSWORD.toCharArray());
-    SSLContext tls = SSLContext.getInstance("TLS");
-    tls.init(keys.getKeyManagers(), trust.getTrustManagers(), null);
-    return HttpClient.newBuilder().proxy(HttpClient.Builder.NO_PROXY).sslContext(tls)
-        .version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(5)).build();
+    keys.init(client, client == null ? null : PASSWORD.toCharArray());
+    SSLContext context = SSLContext.getInstance("TLS");
+    context.init(keys.getKeyManagers(), trust.getTrustManagers(), null);
+    return context;
   }
 
-  private record Identity(KeyStore store, Path certificate, Path key) {}
+  private static int request(SSLContext context, HttpRequest request) throws Exception {
+    HttpClient client = HttpClient.newBuilder().sslContext(context).proxy(HttpClient.Builder.NO_PROXY)
+        .connectTimeout(Duration.ofSeconds(5)).build();
+    return client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode();
+  }
 }

@@ -16,7 +16,7 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
-import io.github.amibamae.gsc.velocity.tls.SslContextBuilder;
+import io.github.amibamae.gsc.velocity.tls.TlsMaterialManager;
 import io.github.amibamae.gsc.velocity.BackendRegistry.Backend;
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,6 +28,7 @@ import java.time.Clock;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import javax.net.ssl.SSLContext;
 import org.slf4j.Logger;
 
 /**
@@ -80,11 +81,7 @@ public final class GscBridgePlugin {
   private void start() throws IOException {
     BridgeConfig config = BridgeConfig.parse(new Toml().read(configFile().toFile()));
     byte[] token = readToken(config.tokenFile(), config.enforceTokenPermissions());
-    BridgeConfig.Tls tls = config.tls();
-    var tlsContext = tls.enabled() ? SslContextBuilder.build(tls.certFile(), tls.keyFile(), tls.controllerCaFile()) : null;
-    if (!tls.enabled()) {
-      logger.warn("Velocity bridge TLS is disabled by configuration");
-    }
+    SSLContext tlsContext = bridgeTlsContext(config.tls());
     Clock clock = Clock.systemUTC();
 
     Set<String> staticBackends = new HashSet<>();
@@ -133,6 +130,14 @@ public final class GscBridgePlugin {
           .schedule();
       logger.info("Moving waiting players automatically: {} every {} seconds", config.autoMove().batchSize(), config.autoMove().interval().toSeconds());
     }
+  }
+
+  private SSLContext bridgeTlsContext(BridgeConfig.Tls settings) throws IOException {
+    if (settings.enabled()) {
+      return TlsMaterialManager.load(settings.certFile(), settings.keyFile(), settings.controllerCaFile());
+    }
+    logger.warn("Velocity bridge TLS is disabled; the bridge will use plaintext HTTP.");
+    return null;
   }
 
   private void stop() {

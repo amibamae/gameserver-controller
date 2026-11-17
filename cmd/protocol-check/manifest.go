@@ -63,11 +63,9 @@ func (pkg *protocolPackage) packageManifest() (conformancePackageManifest, error
 func digestPackageFiles(root string, paths []string) (string, error) {
 	ordered := append([]string(nil), paths...)
 	sort.Strings(ordered)
-
 	digest := sha256.New()
 	for _, relative := range ordered {
-		fullPath := filepath.Join(root, filepath.FromSlash(relative))
-		content, err := os.ReadFile(fullPath)
+		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
 		if err != nil {
 			return "", fmt.Errorf("read %s: %w", relative, err)
 		}
@@ -76,7 +74,6 @@ func digestPackageFiles(root string, paths []string) (string, error) {
 			return "", err
 		}
 	}
-
 	return "sha256:" + hex.EncodeToString(digest.Sum(nil)), nil
 }
 

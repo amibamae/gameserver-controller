@@ -19,18 +19,17 @@ type Target struct {
 // Monitor probes each target on its own schedule and publishes the events its
 // tracker emits.
 type Monitor struct {
-	policy     Policy
-	targets    []Target
-	publish    func(Event)
-	now        func() time.Time
-	sleep      func(context.Context, time.Duration) bool
-	wg         sync.WaitGroup
-	probeSlots chan struct{}
+	policy  Policy
+	targets []Target
+	publish func(Event)
+	now     func() time.Time
+	sleep   func(context.Context, time.Duration) bool
+	wg      sync.WaitGroup
 }
 
 // New returns a monitor. publish receives every event in order per target.
 func New(policy Policy, targets []Target, publish func(Event)) *Monitor {
-	return &Monitor{policy: policy, targets: targets, publish: publish, now: time.Now, sleep: sleepContext, probeSlots: make(chan struct{}, 10)}
+	return &Monitor{policy: policy, targets: targets, publish: publish, now: time.Now, sleep: sleepContext}
 }
 
 // Start launches one probe loop per target until ctx ends.
@@ -54,25 +53,12 @@ func (m *Monitor) run(ctx context.Context, target Target) {
 		delay = m.observe(tracker, target.Initial)
 	}
 	for m.sleep(ctx, delay) {
-		result := m.probe(ctx, target)
+		result := target.Probe(ctx)
 		// A probe cut short by shutdown says nothing about the integration.
 		if ctx.Err() != nil {
 			return
 		}
 		delay = m.observe(tracker, result)
-	}
-}
-
-func (m *Monitor) probe(ctx context.Context, target Target) Result {
-	select {
-	case <-ctx.Done():
-		return ""
-	case m.probeSlots <- struct{}{}:
-		defer func() { <-m.probeSlots }()
-		if ctx.Err() != nil {
-			return ""
-		}
-		return target.Probe(ctx)
 	}
 }
 
