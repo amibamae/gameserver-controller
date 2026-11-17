@@ -316,6 +316,23 @@ func TestServerReadsShowOnlyInspectableServers(t *testing.T) {
 		}
 		return response.Code, ids, page.NextCursor
 	}
+	next := assertInspectableServerPages(t, list, reader)
+	assertInvalidServerListQueries(t, list, reader, next)
+	other := f.as("other", scopes...)
+	if code, _, _ := list("?environment_id=staging&cursor="+next, other); code != http.StatusBadRequest {
+		t.Errorf("a cursor reused by another actor = %d, want 400", code)
+	}
+
+	assertInspectableServerView(t, f, reader)
+	for _, path := range []string{"/v1/servers/b-1", "/v1/servers/missing"} {
+		if response := f.do(http.MethodGet, path, reader, "", ""); response.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404", path, response.Code)
+		}
+	}
+}
+
+func assertInspectableServerPages(t *testing.T, list func(string, string) (int, []string, string), reader string) string {
+	t.Helper()
 	code, ids, next := list("?environment_id=staging&limit=2", reader)
 	if code != http.StatusOK || strings.Join(ids, ",") != "a-1,a-2" || next == "" {
 		t.Fatalf("first page = %d %v %q", code, ids, next)
@@ -327,9 +344,21 @@ func TestServerReadsShowOnlyInspectableServers(t *testing.T) {
 	if code, ids, _ := list("", reader); code != http.StatusOK || strings.Join(ids, ",") != "a-1,a-2,a-3,p-1" {
 		t.Fatalf("unfiltered list = %d %v", code, ids)
 	}
+	return next
+}
+
+func assertInvalidServerListQueries(t *testing.T, list func(string, string) (int, []string, string), reader, next string) {
+	t.Helper()
+	// Change a significant character even when the cursor already ends in AA.
+	tamperedIndex := len(next) - 2
+	replacement := "A"
+	if next[tamperedIndex] == 'A' {
+		replacement = "B"
+	}
+	tampered := next[:tamperedIndex] + replacement + next[tamperedIndex+1:]
 	for name, query := range map[string]string{
 		"cursor for another filter": "?cursor=" + next,
-		"tampered cursor":           "?environment_id=staging&cursor=" + next[:len(next)-2] + "AA",
+		"tampered cursor":           "?environment_id=staging&cursor=" + tampered,
 		"limit too large":           "?limit=201",
 		"limit zero":                "?limit=0",
 	} {
@@ -337,11 +366,10 @@ func TestServerReadsShowOnlyInspectableServers(t *testing.T) {
 			t.Errorf("%s = %d, want 400", name, code)
 		}
 	}
-	other := f.as("other", scopes...)
-	if code, _, _ := list("?environment_id=staging&cursor="+next, other); code != http.StatusBadRequest {
-		t.Errorf("a cursor reused by another actor = %d, want 400", code)
-	}
+}
 
+func assertInspectableServerView(t *testing.T, f *apiFixture, reader string) {
+	t.Helper()
 	response := f.do(http.MethodGet, "/v1/servers/a-1", reader, "", "")
 	var server map[string]any
 	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &server) != nil || server["environment_id"] != "staging" || server["lifecycle_state"] == nil {
@@ -360,11 +388,6 @@ func TestServerReadsShowOnlyInspectableServers(t *testing.T) {
 	}
 	if err := schemas.ValidateJSON("urn:gameserver-controller:"+schemas.ProtocolVersion()+":lifecycle:server", view); err != nil {
 		t.Fatalf("server view does not match the protocol schema: %v", err)
-	}
-	for _, path := range []string{"/v1/servers/b-1", "/v1/servers/missing"} {
-		if response := f.do(http.MethodGet, path, reader, "", ""); response.Code != http.StatusNotFound {
-			t.Errorf("GET %s = %d, want 404", path, response.Code)
-		}
 	}
 }
 

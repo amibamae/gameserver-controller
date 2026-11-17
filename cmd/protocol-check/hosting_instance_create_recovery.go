@@ -21,17 +21,12 @@ func evaluateInstanceCreateRecovery(pkg *protocolPackage, fixture map[string]any
 		outputValid := pkg.validateSchema(hostingInstanceFindOutputSchemaID, output) == nil
 		bound := resourceKey != "" && stringValue(output, "resource_key") == resourceKey
 		matches := arrayValue(output, "matches")
-		exactMatch := false
-		if len(matches) == 1 {
-			ref := asObject(asObject(matches[0])["instance_ref"])
-			exactMatch = stringValue(ref, "resource_kind") == "instance" &&
-				stringValue(ref, "environment_id") == stringValue(createRequest, "environment_id") &&
-				stringValue(ref, "adapter_id") != "" && stringValue(ref, "external_id") != ""
-		}
-		reconciled := createValid && inputValid && outputValid && bound && exactMatch
+		schemaValid := inputValid && outputValid
+		exactMatch := hasExactRecoveryInstance(matches, stringValue(createRequest, "environment_id"))
+		reconciled := createValid && schemaValid && bound && exactMatch
 		lookups = append(lookups, map[string]any{
 			"case_id":              stringValue(lookup, "case_id"),
-			"schema_valid":         inputValid && outputValid,
+			"schema_valid":         schemaValid,
 			"match_count":          len(matches),
 			"reconcile_as_created": reconciled,
 			"retry_create":         false,
@@ -43,6 +38,16 @@ func evaluateInstanceCreateRecovery(pkg *protocolPackage, fixture map[string]any
 		"lookups":                     lookups,
 		"retry_requires_authoritative_safe_to_retry_evidence": true,
 	}, nil
+}
+
+func hasExactRecoveryInstance(matches []any, environmentID string) bool {
+	if len(matches) != 1 {
+		return false
+	}
+	ref := asObject(asObject(matches[0])["instance_ref"])
+	return stringValue(ref, "resource_kind") == "instance" &&
+		stringValue(ref, "environment_id") == environmentID &&
+		stringValue(ref, "adapter_id") != "" && stringValue(ref, "external_id") != ""
 }
 
 func init() {

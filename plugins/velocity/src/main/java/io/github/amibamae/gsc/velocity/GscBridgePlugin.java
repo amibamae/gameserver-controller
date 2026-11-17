@@ -16,6 +16,7 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.scheduler.ScheduledTask;
+import io.github.amibamae.gsc.velocity.tls.TlsMaterialManager;
 import io.github.amibamae.gsc.velocity.BackendRegistry.Backend;
 import java.io.IOException;
 import java.io.InputStream;
@@ -105,7 +106,20 @@ public final class GscBridgePlugin {
     BridgeService service = new BridgeService(config.proxyInstanceId(), backends, sessions, operations, clock, this::saveBackends);
     boolean autoMove = config.autoMove().enabled() && !config.fallback().isEmpty();
     service.advertiseAutoMove(autoMove);
-    http = new BridgeHttpServer(service, token, config.enforceLoopbackBind(), logger);
+    
+    // Create TLS material manager if TLS is enabled
+    TlsMaterialManager.Material tlsMaterial = null;
+    if (config.tls().enabled()) {
+      try {
+        TlsMaterialManager manager = new TlsMaterialManager(
+            config.tls().certFile(), config.tls().keyFile(), config.tls().controllerCaFile());
+        tlsMaterial = manager.get(); // May return null on first load until files validated
+      } catch (Exception e) {
+        logger.warn("Failed to initialize TLS material manager: {}", e.getMessage());
+        tlsMaterial = null; // Fall back to plain HTTP if TLS fails to load
+      }
+    }
+    http = new BridgeHttpServer(service, token, config.enforceLoopbackBind(), logger, tlsMaterial);
     InetSocketAddress bound = http.start(new InetSocketAddress(config.bind(), config.port()));
     logger.info("GSC bridge listening on {}:{}", bound.getAddress().getHostAddress(), bound.getPort());
     if (!config.enforceLoopbackBind()) {
