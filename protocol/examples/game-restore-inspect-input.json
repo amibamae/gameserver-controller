@@ -1,0 +1,20 @@
+{
+  "backup_id": "backup-compat-010",
+  "target": {
+    "server_id": "minecraft-test",
+    "environment_id": "staging",
+    "instance_ref": {
+      "adapter_id": "hosting.example",
+      "environment_id": "staging",
+      "resource_kind": "instance",
+      "external_id": "instance-paper-target-011"
+    }
+  },
+  "target_data_generation_id": "generation-restore-011",
+  "restore_execution_ref": {
+    "adapter_id": "game.minecraft-paper",
+    "environment_id": "staging",
+    "resource_kind": "restore-execution",
+    "external_id": "restore-execution-011"
+  }
+}
