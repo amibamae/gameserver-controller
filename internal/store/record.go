@@ -253,7 +253,7 @@ func validateRecordSteps(record OperationRecord) error {
 			return invalidField("duplicate step_id")
 		}
 		seenStepIDs[step.StepID] = struct{}{}
-		
+
 		stepErrors := validateStepCore(record, i, step)
 		for _, stepError := range stepErrors {
 			if stepError != nil {
@@ -273,22 +273,22 @@ func isUniqueStepID(stepID string, seen map[string]struct{}) bool {
 // validateStepCore runs all validation checks that don't involve identity.
 func validateStepCore(record OperationRecord, i int, step OperationStep) []error {
 	var errors []error
-	
+
 	inputErr := validateStepInput(record, i, step)
 	if inputErr != nil {
 		errors = append(errors, inputErr)
 	}
-	
+
 	outcomeErr := validateStepOutcome(record, i, step)
 	if outcomeErr != nil {
 		errors = append(errors, outcomeErr)
 	}
-	
+
 	timesErr := validateStepTimes(record, i, step)
 	if timesErr != nil {
 		errors = append(errors, timesErr)
 	}
-	
+
 	return errors
 }
 

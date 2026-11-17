@@ -41,7 +41,7 @@ func evaluateSystemdUnitGeneration(fixture map[string]any) (map[string]any, erro
 
 	// Verify all units use simple type (or oneshot for restore)
 	mcServiceTypeSimple := strings.Contains(bootstrap, "[Service]") && strings.Contains(bootstrap, "Type=simple")
-	
+
 	// Check proper restart behavior
 	mcRestartOnFailure := strings.Contains(bootstrap, "Restart=on-failure")
 	mcRestartSec10 := strings.Contains(bootstrap, "RestartSec=10")
@@ -55,16 +55,16 @@ func evaluateSystemdUnitGeneration(fixture map[string]any) (map[string]any, erro
 	result["minecraft_unit_uses_minecraft_user"] = mcUserService
 	result["minecraft_unit_uses_minecraft_group"] = mcGroupService
 	result["minecraft_unit_sets_working_directory"] = mcWorkingDir
-	
+
 	result["restore_service_unit_present"] = restoreUnitPresent
 	result["restore_unit_has_description"] = restoreDescription
 	result["restore_unit_is_oneshot"] = restoreTypeOneshot
 	result["restore_unit_remains_after_exit"] = restoreRemainAfterExit
-	
+
 	result["mcrcon_socket_unit_present"] = socketUnitPresent
 	result["mcrcon_socket_has_description"] = socketDescription
 	result["mcrcon_socket_binds_to_127_0_0_1_25577"] = socketListenAddress
-	
+
 	result["mcrcon_service_unit_present"] = serviceUnitPresent
 	result["mcrcon_service_has_description"] = serviceDescription
 	result["mcrcon_service_uses_environment_file"] = serviceEnvironmentFile
@@ -78,7 +78,7 @@ func evaluateSystemdUnitGeneration(fixture map[string]any) (map[string]any, erro
 
 	// Determine if validation passed
 	allUnitsPresent := mcUnitPresent && restoreUnitPresent && socketUnitPresent && serviceUnitPresent
-	
+
 	if allUnitsPresent {
 		result["validation_passed"] = true
 	} else {
@@ -132,7 +132,7 @@ func evaluateSystemdUnitSecurity(fixture map[string]any) (map[string]any, error)
 	result["runs_as_non_root"] = runAsNonRoot
 
 	// Determine if security checks passed
-	allSecurityChecksPass := noNewPrivileges && privateTmp && protectSystemFull && 
+	allSecurityChecksPass := noNewPrivileges && privateTmp && protectSystemFull &&
 		protectHome && readWritePathsLimited && runAsNonRoot
 
 	result["security_passed"] = allSecurityChecksPass
