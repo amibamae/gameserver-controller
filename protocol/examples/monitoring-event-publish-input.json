@@ -1,0 +1,7 @@
+{
+  "event_id": "evt-0123456789abcdef0123456789abcdef",
+  "event_type": "integration.proxy.unreachable",
+  "occurred_at": "2026-11-15T17:00:00Z",
+  "environment_id": "staging",
+  "source_adapter_id": "integration.velocity.example"
+}

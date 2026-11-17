@@ -1,129 +1,118 @@
 package io.github.amibamae.gsc.velocity.tls;
 
-import java.io.*;
-import java.nio.file.*;
-import java.security.*;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.GeneralSecurityException;
+import java.security.KeyFactory;
+import java.security.KeyStore;
+import java.security.PrivateKey;
+import java.security.Signature;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.time.Instant;
-import java.util.concurrent.TimeUnit;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.Arrays;
+import java.util.Base64;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
 
-/**
- * Manages TLS material (server cert, key, CA bundle) with hot rotation support.
- */
-public class TlsMaterialManager {
+/** Loads the server identity and explicit client trust anchors at startup. */
+public final class TlsMaterialManager {
+  private static final String KEY_BEGIN = "-----BEGIN PRIVATE KEY-----";
+  private static final String KEY_END = "-----END PRIVATE KEY-----";
 
-  private final Path certPath;
-  private final Path keyPath;
-  private final Path caPath;
-  
-  /** Last known good material. */
-  private volatile Material lastKnownGood = null;
-  
-  /** Time when the material was last validated (TTL cache). */
-  private volatile long validSinceNanos = -1;
-  
-  /** Timeout before re-checking file contents (in seconds, default 60). */
-  private static final int TTL_SECONDS = 60;
+  private TlsMaterialManager() {}
 
-  public TlsMaterialManager(Path certPath, Path keyPath, Path caPath) {
-    this.certPath = checkPath(certPath);
-    this.keyPath = checkPath(keyPath);
-    this.caPath = checkPath(caPath);
-  }
-
-  private Path checkPath(Path path) {
-    if (path == null || !path.isAbsolute()) {
-      throw new IllegalArgumentException("Path must be an absolute path");
-    }
-    return path;
-  }
-
-  /** Returns the current TLS material (or last-good if rotation failed). */
-  public Material get() {
-    long nowNanos = System.nanoTime();
-    if (validSinceNanos != -1 && TimeUnit.NANOSECONDS.toSeconds(nowNanos - validSinceNanos) < TTL_SECONDS) {
-      return lastKnownGood;
-    }
-    synchronized (this) {
-      Material newMaterial = loadAndValidate();
-      if (newMaterial != null) {
-        this.lastKnownGood = newMaterial;
-        this.validSinceNanos = nowNanos;
-      }
-      return lastKnownGood;
-    }
-  }
-
-  private Material loadAndValidate() {
-    File certFile = certPath.toFile();
-    File keyFile = keyPath.toFile();
-
-    if (!certFile.exists() || !keyFile.exists()) {
-      return null; // Keep last-good on missing files
-    }
-
+  public static SSLContext load(Path certFile, Path keyFile, Path controllerCaFile) throws IOException {
     try {
-      X509Certificate cert = loadCertificate(certFile);
-      
-      Instant expiry = cert.getNotAfter().toInstant();
-      if (expiry.isBefore(Instant.now())) {
-        throw new IllegalArgumentException("Certificate has expired: " + expiry);
-      }
-
-      // Load CA bundle for client cert validation (if exists)
-      String caBundlePath = null;
-      if (caPath != null && caPath.toFile().exists()) {
-        caBundlePath = loadCaBundle(caPath.toFile());
-      }
-
-      return new Material(cert, caBundlePath); // Key not validated yet - placeholder for now
-    } catch (Exception e) {
-      System.err.println("Failed to validate TLS material: " + e.getMessage());
-      return null;
+      KeyManagerFactory keys = serverKeys(certFile, keyFile);
+      TrustManagerFactory trust = clientTrust(controllerCaFile);
+      SSLContext context = SSLContext.getInstance("TLS");
+      context.init(keys.getKeyManagers(), trust.getTrustManagers(), null);
+      return context;
+    } catch (GeneralSecurityException | IllegalArgumentException | IOException e) {
+      throw new IOException("Could not load Velocity bridge TLS material", e);
     }
   }
 
-  /** Loads CA bundle for client certificate validation. */
-  private String loadCaBundle(File caFile) throws IOException {
-    // Simplified: just return the path for now
-    // In production, this would read and parse the CA bundle
-    return caFile.getAbsolutePath();
+  private static KeyManagerFactory serverKeys(Path certFile, Path keyFile)
+      throws GeneralSecurityException, IOException {
+    X509Certificate[] chain = certificates(certFile);
+    for (X509Certificate certificate : chain) {
+      certificate.checkValidity();
+    }
+    X509Certificate leaf = chain[0];
+    PrivateKey key = privateKey(keyFile, leaf.getPublicKey().getAlgorithm());
+    verifyKeyPair(key, leaf);
+
+    char[] password = new char[0];
+    KeyStore identity = KeyStore.getInstance("PKCS12");
+    identity.load(null, password);
+    identity.setKeyEntry("bridge", key, password, chain);
+    KeyManagerFactory keys = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+    keys.init(identity, password);
+    return keys;
   }
 
-  private X509Certificate loadCertificate(File file) throws CertificateException, IOException {
-    try (InputStream is = Files.newInputStream(file.toPath())) {
-      CertificateFactory factory = CertificateFactory.getInstance("X.509");
-      Certificate cert = factory.generateCertificate(is);
-      
-      if (!(cert instanceof X509Certificate)) {
-        throw new CertificateException("Not an X.509 certificate");
+  private static TrustManagerFactory clientTrust(Path caFile) throws GeneralSecurityException, IOException {
+    KeyStore roots = KeyStore.getInstance("PKCS12");
+    roots.load(null, null);
+    int index = 0;
+    for (X509Certificate root : certificates(caFile)) {
+      if (root.getBasicConstraints() < 0) {
+        throw new GeneralSecurityException("Controller trust bundle contains a non-CA certificate");
       }
-      
-      return (X509Certificate)cert;
+      roots.setCertificateEntry("controller-ca-" + index++, root);
+    }
+    TrustManagerFactory trust = TrustManagerFactory.getInstance("PKIX");
+    trust.init(roots);
+    return trust;
+  }
+
+  private static X509Certificate[] certificates(Path file) throws GeneralSecurityException, IOException {
+    try (InputStream input = Files.newInputStream(file)) {
+      X509Certificate[] certificates = CertificateFactory.getInstance("X.509").generateCertificates(input)
+          .toArray(X509Certificate[]::new);
+      if (certificates.length == 0) {
+        throw new GeneralSecurityException("TLS certificate file contains no certificates");
+      }
+      return certificates;
     }
   }
 
-  private void loadTrustStore(File caFile) throws IOException {
-    // Simplified: just check CA file exists and is readable
-    // In production, this would build a TrustManagerFactory from the CA bundle
+  private static PrivateKey privateKey(Path file, String algorithm) throws GeneralSecurityException, IOException {
+    String pem = Files.readString(file, StandardCharsets.US_ASCII).strip();
+    if (!pem.startsWith(KEY_BEGIN) || !pem.endsWith(KEY_END)) {
+      throw new GeneralSecurityException("TLS private key must use unencrypted PKCS#8 PEM");
+    }
+    String payload = pem.substring(KEY_BEGIN.length(), pem.length() - KEY_END.length());
+    byte[] der = Base64.getDecoder().decode(payload.replaceAll("\\s", ""));
+    try {
+      return KeyFactory.getInstance(algorithm).generatePrivate(new PKCS8EncodedKeySpec(der));
+    } finally {
+      Arrays.fill(der, (byte) 0);
+    }
   }
 
-  /** Holds TLS material - key may be null on initial load until fully validated. */
-  public static class Material {
-    private final X509Certificate cert;
-    private final String caBundlePath;
-    
-    Material(X509Certificate cert, String caBundlePath) {
-      this.cert = cert;
-      this.caBundlePath = caBundlePath;
+  private static void verifyKeyPair(PrivateKey key, X509Certificate leaf) throws GeneralSecurityException {
+    String algorithm = switch (key.getAlgorithm()) {
+      case "RSA" -> "SHA256withRSA";
+      case "EC" -> "SHA256withECDSA";
+      case "EdDSA" -> "EdDSA";
+      default -> throw new GeneralSecurityException("Unsupported TLS private key algorithm");
+    };
+    byte[] challenge = "gsc velocity bridge key check".getBytes(StandardCharsets.US_ASCII);
+    Signature signature = Signature.getInstance(algorithm);
+    signature.initSign(key);
+    signature.update(challenge);
+    byte[] proof = signature.sign();
+    signature.initVerify(leaf);
+    signature.update(challenge);
+    if (!signature.verify(proof)) {
+      throw new GeneralSecurityException("TLS private key does not match the server certificate");
     }
-    
-    public X509Certificate getCert() { return cert; }
-    
-    /** CA bundle path for client certificate validation. */
-    public String getCaBundlePath() { return caBundlePath; }
   }
 }
