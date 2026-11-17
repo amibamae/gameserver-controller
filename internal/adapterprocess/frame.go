@@ -145,12 +145,20 @@ func parseEnvelope(frame []byte) (envelope, string, int, error) {
 	if message.JSONRPC != "2.0" {
 		return message, "", codeInvalidRequest, errors.New("jsonrpc must be \"2.0\"")
 	}
-	if len(message.ID) == 0 || message.ID[0] != '"' {
-		return message, "", codeInvalidRequest, errors.New("id must be a string; notifications and numeric IDs are not supported")
-	}
-	var id string
-	if err := json.Unmarshal(message.ID, &id); err != nil || id == "" {
-		return message, "", codeInvalidRequest, errors.New("id must be a non-empty string")
+	id, err := parseEnvelopeID(message.ID)
+	if err != nil {
+		return message, "", codeInvalidRequest, err
 	}
 	return message, id, 0, nil
+}
+
+func parseEnvelopeID(raw json.RawMessage) (string, error) {
+	if len(raw) == 0 || raw[0] != '"' {
+		return "", errors.New("id must be a string; notifications and numeric IDs are not supported")
+	}
+	var id string
+	if err := json.Unmarshal(raw, &id); err != nil || id == "" {
+		return "", errors.New("id must be a non-empty string")
+	}
+	return id, nil
 }
