@@ -194,6 +194,18 @@
       "schema_id": "urn:gameserver-controller:0.21.0-draft:game:validate-installation-output"
     },
     {
+      "path": "game-restore-input.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:game:restore-input"
+    },
+    {
+      "path": "game-restore-inspect-input.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:game:restore-inspect-input"
+    },
+    {
+      "path": "game-restore-output.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:game:restore-output"
+    },
+    {
       "path": "hosting-bootstrap-deliver-input.json",
       "schema_id": "urn:gameserver-controller:0.21.0-draft:hosting:bootstrap-deliver-input"
     },
@@ -258,6 +270,14 @@
       "schema_id": "urn:gameserver-controller:0.21.0-draft:hosting:instance-wait-output"
     },
     {
+      "path": "hosting-network-inspect-input.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:hosting:network-inspect-input"
+    },
+    {
+      "path": "hosting-network-inspect-output.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:hosting:network-inspect-output"
+    },
+    {
       "path": "hosting-os-offerings-list-input.json",
       "schema_id": "urn:gameserver-controller:0.21.0-draft:hosting:os-offerings-list-input"
     },
@@ -280,6 +300,14 @@
     {
       "path": "hosting-regions-list-output.json",
       "schema_id": "urn:gameserver-controller:0.21.0-draft:hosting:regions-list-output"
+    },
+    {
+      "path": "monitoring-event-publish-input.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:integrations:monitoring-event-publish-input"
+    },
+    {
+      "path": "monitoring-event-publish-output.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:integrations:monitoring-event-publish-output"
     },
     {
       "path": "network-profile.proxy.json",
@@ -516,6 +544,14 @@
     {
       "path": "systemd-unit-health-inspect-output.json",
       "schema_id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-health-inspect-output"
+    },
+    {
+      "path": "systemd-unit-inspect-input.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-inspect-input"
+    },
+    {
+      "path": "systemd-unit-inspect-output.json",
+      "schema_id": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-inspect-output"
     },
     {
       "path": "systemd-unit-logs-read-input.json",

@@ -13,6 +13,7 @@
     "instance.create",
     "instance.find_by_resource_key",
     "instance.inspect",
+    "network.inspect",
     "bootstrap.deliver",
     "bootstrap.inspect"
   ],
@@ -35,6 +36,16 @@
       "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:instance-inspect-output",
       "required_permissions": [
         "instance.inspect"
+      ]
+    },
+    {
+      "name": "hosting.network.inspect",
+      "version": "1",
+      "mutating": false,
+      "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:network-inspect-input",
+      "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:hosting:network-inspect-output",
+      "required_permissions": [
+        "network.inspect"
       ]
     },
     {

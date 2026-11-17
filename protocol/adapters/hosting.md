@@ -66,6 +66,12 @@ A request MUST NOT contain raw API tokens, passwords, private keys, storage cred
 
 The adapter MUST support lookup/inspection sufficient to reconcile create and destroy results. If it cannot, the core suspends uncertain operations for operator action.
 
+### 4.1 Network inspection
+
+The optional, read-only `hosting.network.inspect` capability accepts [one exact instance reference](../schemas/hosting/network-inspect-input.schema.json) and returns a [timestamped network observation](../schemas/hosting/network-inspect-output.schema.json). The result MUST echo the entire requested reference, including the adapter and environment. The caller MUST discard an observation for a different instance.
+
+An `observed` result includes both the IPv4 and IPv6 address inventory and the provider's opaque network attachment IDs. Each inventory is an array and may be empty. When either inventory cannot be determined completely, return `unknown` and omit both arrays. An `unknown` result cannot establish that the instance has no addresses or attachments. This capability makes no provider changes and supplies no game readiness evidence.
+
 ## 5. Instance references and security
 
 An instance reference contains adapter ID, environment ID, resource kind, and opaque provider ID. Never use a provider ID from one environment as a target in another.
