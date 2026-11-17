@@ -74,19 +74,24 @@ func TestBackupRecoveryRuntimeResolution(t *testing.T) {
 			if err != nil || got.State != tc.want || !equalJSON(got.ExternalOperationRef, step.ExternalOperationRef) {
 				t.Fatalf("Reconcile = %+v, %v; want %s and original external reference", got, err, tc.want)
 			}
-			if tc.want == ResolutionCompleted {
-				want := `{"unit_ref":{"name":"server.service"},"outcome":"completed","state":"` + tc.observed + `","observed_at":"` + recoveryTestObservedAt + `"}`
-				if string(got.Output) != want {
-					t.Fatalf("output = %s; want %s", got.Output, want)
-				}
-			}
-			if tc.want == ResolutionDefinitiveError {
-				want := protocolError("core.execution.unit_failed", "provider_failure", "The exact execution unit is confirmed failed after backup resume was attempted.", operation.OperationID, false, "operator_review", true)
-				if !equalJSON(got.Error, want) {
-					t.Fatalf("error = %s; want %s", got.Error, want)
-				}
-			}
+			assertBackupRecoveryEvidence(t, got, tc.observed, operation.OperationID)
 		})
+	}
+}
+
+func assertBackupRecoveryEvidence(t *testing.T, got Resolution, observed, operationID string) {
+	t.Helper()
+	switch got.State {
+	case ResolutionCompleted:
+		want := `{"unit_ref":{"name":"server.service"},"outcome":"completed","state":"` + observed + `","observed_at":"` + recoveryTestObservedAt + `"}`
+		if string(got.Output) != want {
+			t.Fatalf("output = %s; want %s", got.Output, want)
+		}
+	case ResolutionDefinitiveError:
+		want := protocolError("core.execution.unit_failed", "provider_failure", "The exact execution unit is confirmed failed after backup resume was attempted.", operationID, false, "operator_review", true)
+		if !equalJSON(got.Error, want) {
+			t.Fatalf("error = %s; want %s", got.Error, want)
+		}
 	}
 }
 
