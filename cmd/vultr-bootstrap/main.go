@@ -136,7 +136,7 @@ func allowFlags(flags *flag.FlagSet, permitted ...string) error {
 
 func usage(w io.Writer) error {
 	fmt.Fprintln(w, "Upload a reviewed Minecraft bootstrap to Vultr")
-	fmt.Fprintln(w, "  gsc-bootstrap upload --name <name> --controller-ip <ip-or-CIDR> --minecraft-port <port> --voice-chat-port <port> --wasabi-remote-path <bucket/prefix>")
+	fmt.Fprintln(w, "  gsc-bootstrap upload --name <name> --controller-ip <ip-or-CIDR> --minecraft-port <port> --voice-chat-port <port> --plan <vultr-plan> --wasabi-remote-path <bucket/prefix>")
 	fmt.Fprintln(w, "  add --execute --confirm-upload <same-name> to create the startup script")
 	return errors.New("an action is required")
 }
