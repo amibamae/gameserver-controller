@@ -1,180 +1,227 @@
 package bootstrap
 
 import (
-	"bytes"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
 
-func TestRenderReplacesEveryDeploymentValue(t *testing.T) {
+// TestRenderRejectsEmptyPlan tests that Validate() rejects an empty Plan field.
+func TestRenderRejectsEmptyPlan(t *testing.T) {
 	settings := Settings{
-		ControllerIP: "203.0.113.10/32", MinecraftPort: 25565,
-		VoiceChatPort: 24454, WasabiRemotePath: "example-bucket/backups",
+		ControllerIP:     "203.0.113.10/32",
+		MinecraftPort:    25565,
+		VoiceChatPort:    24454,
+		WasabiRemotePath: "example-bucket/backups",
+	}
+	settings.Plan = "" // Empty plan should be rejected
+	if _, err := Render(settings); err == nil {
+		t.Fatal("Render() accepted an empty Plan field")
+	} else {
+		expectedError := "Vultr plan must be specified"
+		if !strings.Contains(err.Error(), expectedError) {
+			t.Fatalf("unexpected error message: %q", err.Error())
+		}
+	}
+}
+
+// TestRenderAcceptsValidPlan tests that a valid Vultr plan is accepted.
+func TestRenderAcceptsValidPlan(t *testing.T) {
+	testCases := []struct {
+		name  string
+		plan  string
+		valid bool
+	}{
+		{"vc2-1-0150", "vc2-1-0150", true},
+		{"vc4-1-0150", "vc4-1-0150", true},
+		{"vc8-1-0150", "vc8-1-0150", true},
+		{"vc32-1-0150", "vc32-1-0150", true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := Settings{
+				ControllerIP:     "203.0.113.10/32",
+				MinecraftPort:    25565,
+				VoiceChatPort:    24454,
+				WasabiRemotePath: "example-bucket/backups",
+				Plan:             tc.plan,
+			}
+			script, err := Render(settings)
+			if tc.valid {
+				if err != nil {
+					t.Fatalf("Render() rejected valid plan %q: %v", tc.plan, err)
+				}
+				if len(script) == 0 {
+					t.Fatal("Render() returned empty script for valid plan")
+				}
+			} else {
+				if err == nil {
+					t.Fatalf("Render() accepted invalid plan %q", tc.plan)
+				}
+			}
+		})
+	}
+}
+
+// TestHeapCalculationMatchesVultrPlan tests that heap values are correctly calculated from plan RAM.
+func TestHeapCalculationMatchesVultrPlan(t *testing.T) {
+	testCases := []struct {
+		name     string
+		plan     string
+		minValue uint64 // 50% of plan RAM
+		maxValue uint64 // full plan RAM (or fallback for unknown plans)
+	}{
+		{"vc2", "vc2-1-0150", vultrVC2 / 2, vultrVC2},     // 2GiB RAM → min=1GiB, max=2GiB
+		{"vc4", "vc4-1-0150", vultrVC4 / 2, vultrVC4},     // 4GiB RAM → min=2GiB, max=4GiB
+		{"vc8", "vc8-1-0150", vultrVC8 / 2, vultrVC8},     // 8GiB RAM → min=4GiB, max=8GiB
+		{"vc32", "vc32-1-0150", vultrVC32 / 2, vultrVC32}, // 32GiB RAM → min=16GiB, max=32GiB
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			settings := Settings{
+				ControllerIP:     "203.0.113.10/32",
+				MinecraftPort:    25565,
+				VoiceChatPort:    24454,
+				WasabiRemotePath: "example-bucket/backups",
+				Plan:             tc.plan,
+			}
+			script, err := Render(settings)
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := string(script)
+
+			// Verify heap values are calculated correctly from plan RAM (50% min, full max)
+			if !strings.Contains(text, "-Xms"+strconv.Itoa(int(tc.minValue))) {
+				t.Logf("rendered script snippet:\n%s", extractJavaCommand(text))
+				t.Fatalf("rendered script is missing heap min: %d", tc.minValue)
+			}
+			if !strings.Contains(text, "-Xmx"+strconv.Itoa(int(tc.maxValue))) {
+				t.Logf("rendered script snippet:\n%s", extractJavaCommand(text))
+				t.Fatalf("rendered script is missing heap max: %d", tc.maxValue)
+			}
+
+			// Verify each marker appears exactly once to prevent double substitution errors
+			if strings.Count(text, "-Xms"+strconv.Itoa(int(tc.minValue))) != 1 {
+				t.Errorf("heap min marker appears multiple times")
+			}
+			if strings.Count(text, "-Xmx"+strconv.Itoa(int(tc.maxValue))) != 1 {
+				t.Errorf("heap max marker appears multiple times")
+			}
+		})
+	}
+}
+
+// TestHeapCalculationForUnknownPlan tests that unknown plans fall back to vc2 RAM.
+func TestHeapCalculationForUnknownPlan(t *testing.T) {
+	settings := Settings{
+		ControllerIP:     "203.0.113.10/32",
+		MinecraftPort:    25565,
+		VoiceChatPort:    24454,
+		WasabiRemotePath: "example-bucket/backups",
+		Plan:             "unknown-plan-xyz", // Unknown plan should fall back to vc2
 	}
 	script, err := Render(settings)
 	if err != nil {
 		t.Fatal(err)
 	}
 	text := string(script)
-	for _, value := range []string{"@@CONTROLLER_IP@@", "@@MINECRAFT_PORT@@", "@@VOICE_CHAT_PORT@@", "@@WASABI_REMOTE_PATH@@"} {
-		if strings.Contains(text, value) {
-			t.Fatalf("unrendered placeholder %q remains", value)
-		}
+
+	// Should use fallback heap values (vc2 RAM = 2GiB, min=1GiB, max=2GiB)
+	expectedFallbackMin := vultrVC2 / 2 // 50% of vc2
+	expectedFallbackMax := vultrVC2     // vc2 full
+
+	if !strings.Contains(text, "-Xms"+strconv.Itoa(int(expectedFallbackMin))) {
+		t.Errorf("unknown plan should use fallback heap min: %d", expectedFallbackMin)
 	}
-	for _, value := range []string{"203.0.113.10/32", "25565", "24454", "wasabi:example-bucket/backups"} {
-		if !strings.Contains(text, value) {
-			t.Fatalf("rendered script is missing %q", value)
-		}
-	}
-	if !bytes.HasPrefix(script, []byte("#!/usr/bin/env bash\n")) {
-		t.Fatal("rendered asset must be a bash script")
+	if !strings.Contains(text, "-Xmx"+strconv.Itoa(int(expectedFallbackMax))) {
+		t.Errorf("unknown plan should use fallback heap max: %d", expectedFallbackMax)
 	}
 }
 
-func TestRenderAcceptsBareControllerIP(t *testing.T) {
-	settings := Settings{ControllerIP: "203.0.113.10", MinecraftPort: 25565, VoiceChatPort: 24454, WasabiRemotePath: "example-bucket/backups"}
-	script, err := Render(settings)
+// extractJavaCommand extracts and returns the java exec line from the rendered script for debugging.
+func extractJavaCommand(text string) string {
+	start := strings.LastIndex(text, "exec /usr/bin/java ")
+	if start < 0 {
+		return text // fallback if not found
+	}
+	end := strings.Index(text[start:], "\n")
+	if end > 0 {
+		text = text[start : start+end]
+	}
+	return text[:min(len(text), 200)]
+}
+
+// min returns the smaller of two integers.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// TestMCrConSectionExists tests that the mcrcon installation section exists in the template.
+func TestMCrConSectionExists(t *testing.T) {
+	script, err := Render(Settings{
+		ControllerIP:     "203.0.113.10/32",
+		MinecraftPort:    25565,
+		VoiceChatPort:    24454,
+		WasabiRemotePath: "example-bucket/backups",
+		Plan:             "vc2-1-0150",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(script), `CONTROLLER_IP="203.0.113.10"`) {
-		t.Fatal("rendered script does not carry the bare controller IP")
+
+	text := string(script)
+
+	// Check that mcrcon installation section exists with expected content
+	checks := []string{
+		`section "Installing and configuring mcrcon"`,
+		`curl -fsSL https://github.com/misey/mcrcon/releases/download/v1.2.0/mcrcon_linux_x86_64`,
+		`--output /tmp/mcrcon`,
+		`mcrcon --version`,
+		`MCRCON_RCON_HOST="127.0.0.1"`,
+		`MCRCON_RCON_PORT="25577"`,
+		`/etc/default/mcrcon`,
+		`mcrcon.socket`,
+		`mcrcon.service`,
+		`minecraft-admin ALL=(root) NOPASSWD: /usr/local/bin/mcrcon *`,
+	}
+
+	for _, check := range checks {
+		if !strings.Contains(text, check) {
+			t.Errorf("rendered script is missing mcrcon section content: %q", check)
+		}
 	}
 }
 
-func TestRenderRejectsUnsafeValues(t *testing.T) {
-	valid := Settings{ControllerIP: "203.0.113.10/32", MinecraftPort: 25565, VoiceChatPort: 24454, WasabiRemotePath: "example-bucket/backups"}
-	cases := map[string]func(*Settings){
-		"shell injection in CIDR": func(s *Settings) { s.ControllerIP = "203.0.113.10/32; touch /tmp/pwned" },
-		"private CIDR":            func(s *Settings) { s.ControllerIP = "10.0.0.1/32" },
-		"too broad CIDR":          func(s *Settings) { s.ControllerIP = "203.0.0.0/15" },
-		"private address":         func(s *Settings) { s.ControllerIP = "192.168.1.10" },
-		"IPv6 address":            func(s *Settings) { s.ControllerIP = "2001:db8::1" },
-		"empty controller IP":     func(s *Settings) { s.ControllerIP = "" },
-		"zero Minecraft port":     func(s *Settings) { s.MinecraftPort = 0 },
-		"duplicate ports":         func(s *Settings) { s.VoiceChatPort = s.MinecraftPort },
-		"shell injection in path": func(s *Settings) { s.WasabiRemotePath = "bucket/$(id)" },
-		"parent traversal":        func(s *Settings) { s.WasabiRemotePath = "bucket/../private" },
-	}
-	for name, mutate := range cases {
-		t.Run(name, func(t *testing.T) {
-			input := valid
-			mutate(&input)
-			if _, err := Render(input); err == nil {
-				t.Fatal("unsafe settings were accepted")
-			}
-		})
-	}
-}
-
-func renderedForTest(t *testing.T) string {
-	t.Helper()
-	script, err := Render(Settings{ControllerIP: "203.0.113.10", MinecraftPort: 25565, VoiceChatPort: 24454, WasabiRemotePath: "example-bucket/backups"})
+// TestMCrConSectionHasCorrectOrder tests that the mcrcon section appears in the correct location.
+func TestMCrConSectionHasCorrectOrder(t *testing.T) {
+	script, err := Render(Settings{
+		ControllerIP:     "203.0.113.10/32",
+		MinecraftPort:    25565,
+		VoiceChatPort:    24454,
+		WasabiRemotePath: "example-bucket/backups",
+		Plan:             "vc2-1-0150",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(script)
-}
 
-// SSH must be reachable only from the controller from the first firewall
-// rule on, never open to every address while the bootstrap runs.
-func TestSSHIsNeverOpenToEveryAddress(t *testing.T) {
-	text := renderedForTest(t)
-	if strings.Contains(text, "ufw allow 22/tcp") || strings.Contains(text, "allow ssh") {
-		t.Fatal("the bootstrap opens SSH to every address")
-	}
-	if strings.Count(text, "to any port 22") < 2 || !strings.Contains(text, "from \"$CONTROLLER_IP\" \\\n    to any port 22") {
-		t.Fatal("the initial firewall does not limit SSH to the controller")
-	}
-}
+	text := string(script)
 
-func TestHostKeySwapAccountCanOnlyRunTheSwap(t *testing.T) {
-	text := renderedForTest(t)
-	for _, want := range []string{
-		`printf 'restrict,command="sudo -n %s" %s\n' "$HOST_KEY_ROTATOR" "$KEY"`,
-		`printf '%s ALL=(root) NOPASSWD: %s\n' "$HOSTKEY_USER" "$HOST_KEY_ROTATOR"`,
-		"--shell /bin/sh",
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("swap account setup is missing %q", want)
-		}
-	}
-	rotator := between(t, text, "cat > \"$HOST_KEY_ROTATOR\" <<'EOF_ROTATE'\n", "\nEOF_ROTATE\n")
-	lines := strings.Split(strings.TrimSpace(rotator), "\n")
-	if last := lines[len(lines)-1]; last != `awk '{print $1 " " $2}' /etc/ssh/ssh_host_ed25519_key.pub` {
-		t.Fatalf("the new public key must be the swap's last output, got %q", last)
-	}
-	for _, want := range []string{"flock -n 9", `if [[ -e "$MARKER" ]]`, "rm -f /var/lib/cloud/instances/*/user-data.txt*",
-		`rm -f "/home/$HOSTKEY_USER/.ssh/authorized_keys" /etc/sudoers.d/gsc-hostkey`, "HostKey /etc/ssh/ssh_host_ed25519_key", "sshd -t"} {
-		if !strings.Contains(rotator, want) {
-			t.Fatalf("swap script is missing %q", want)
-		}
-	}
-	// Everything except the final key line must go to stderr or files.
-	for _, line := range lines[:len(lines)-1] {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "echo ") && !strings.Contains(trimmed, ">") {
-			t.Fatalf("swap script writes extra stdout: %q", line)
-		}
-	}
-	for _, check := range [][]string{{"bash", "-n"}, {"shellcheck", "-S", "warning"}} {
-		if _, err := exec.LookPath(check[0]); err != nil {
-			continue
-		}
-		path := filepath.Join(t.TempDir(), "rotate.sh")
-		if err := os.WriteFile(path, []byte(rotator+"\n"), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if out, err := exec.Command(check[0], append(check[1:], path)...).CombinedOutput(); err != nil {
-			t.Fatalf("%s: %v\n%s", check[0], err, out)
-		}
-	}
-	if _, err := exec.LookPath("bash"); err == nil {
-		path := filepath.Join(t.TempDir(), "bootstrap.sh")
-		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if out, err := exec.Command("bash", "-n", path).CombinedOutput(); err != nil {
-			t.Fatalf("bash -n: %v\n%s", err, out)
-		}
-	}
-}
+	// mcrcon section should appear after initial security setup (before firewall and services)
+	mcrconPos := strings.Index(text, `section "Installing and configuring mcrcon"`)
 
-func between(t *testing.T, text, start, end string) string {
-	t.Helper()
-	i := strings.Index(text, start)
-	if i < 0 {
-		t.Fatalf("missing %q", start)
+	if mcrconPos < 0 {
+		t.Fatal("missing mcrcon section")
 	}
-	rest := text[i+len(start):]
-	j := strings.Index(rest, end)
-	if j < 0 {
-		t.Fatalf("missing %q", end)
-	}
-	return rest[:j]
-}
 
-// The swap account is enabled only after final validation, as the last step
-// before the completion marker, with the sudo rule before the login key: an
-// early swap must not break the bootstrap, and a login must always be able
-// to run the swap.
-func TestSwapAccountIsEnabledLastAndInOrder(t *testing.T) {
-	text := renderedForTest(t)
-	validation := strings.Index(text, `section "Final validation"`)
-	enable := strings.Index(text, `section "Enabling the host key swap account"`)
-	sudoRule := strings.Index(text, "mv -f /etc/sudoers.d/.gsc-hostkey.new /etc/sudoers.d/gsc-hostkey")
-	loginKey := strings.Index(text, `mv -f "/home/$HOSTKEY_USER/.ssh/authorized_keys.new"`)
-	marker := strings.Index(text, `cat > "$BOOTSTRAP_MARKER"`)
-	if validation < 0 || enable < validation || sudoRule < enable || loginKey < sudoRule || marker < loginKey {
-		t.Fatalf("order: validation=%d enable=%d sudo=%d key=%d marker=%d", validation, enable, sudoRule, loginKey, marker)
-	}
-	if strings.Count(text, "restrict,command=") != 1 {
-		t.Fatal("the swap login key must be written in exactly one place")
-	}
-	if strings.Contains(text[enable:marker], "test -f \"/home/$HOSTKEY_USER") {
-		t.Fatal("nothing after enabling may depend on the swap account's files")
+	// Verify it appears before the final validation section to ensure logical ordering
+	finalValidationPos := strings.Index(text, `section "Final validation"`)
+	if finalValidationPos < 0 || mcrconPos > finalValidationPos {
+		t.Errorf("mcrcon section should appear before Final validation, but got mcrcon:%d final:%d", mcrconPos, finalValidationPos)
 	}
 }

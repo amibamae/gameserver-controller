@@ -1,0 +1,53 @@
+# Vultr Hosting Adapter Configuration Example
+# 
+# This configuration is used when registering the Vultr adapter with the
+# controller runtime. In production, credentials are loaded via systemd
+# credential references, never embedded in this file.
+#
+# Place this file in your deployment config directory and reference it
+# from the controller's configuration files.
+
+adapter:
+  name: vultrhosting
+  enabled: true
+  
+  # Bearer token for Vultr API authentication
+  # In production: credential_ref points to systemd credential path
+  # DO NOT commit actual credentials to version control
+  credential_ref: /etc/systemd/credentials/vultr.api-token
+  api_host: api.vultr.com
+  api_path: /v2
+  
+  # Network timeout for API calls
+  timeout_seconds: 30
+  
+  # Whether to enable verbose logging (for debugging)
+  debug: false
+  
+  # Region and plan defaults (can be overridden per-request)
+  region_id: lon1          # Default region (London)
+  plan_id: vc2-1gcop-01234 # Default plan (VC2 1GB copay)
+  
+  # OS mapping: provider_os_id -> internal OS identifier
+  os_mapping:
+    "1705": 
+      distribution: Ubuntu 22.04 LTS
+      version: "22.04"
+      architecture: x86_64
+      
+# SSH Key configuration (if needed)
+ssh_key:
+  # Reference to an existing SSH key or path to create one
+  credential_ref: /etc/systemd/credentials/vultr.ssh-key
+  name: gsc-bootstrap-key
+  
+# Firewall policy reference (for secure instance creation)
+firewall_policy_ref: gsc-default-ssh-only
+
+# Network profile configuration
+network_profile: default-vpc
+
+# Labels for organizing instances
+labels:
+  environment: production
+  managed-by: gsc-controller
