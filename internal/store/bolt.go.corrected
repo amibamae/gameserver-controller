@@ -1,0 +1,92 @@
+// UpdateOperationAndLogicalServer atomically updates an operation record and its logical server state.
+func (s *BoltStore) UpdateOperationAndLogicalServer(expectedOperationRevision uint64, operation OperationRecord, expectedServerRevision uint64, server LogicalServer) (StoredOperation, StoredLogicalServer, error) {
+	if operation.OperationID == "" {
+		return StoredOperation{}, StoredLogicalServer{}, fmt.Errorf("%w: missing operation_id", ErrInvalidRecord)
+	}
+
+	var result StoredOperation
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		// Validate operation record first
+		if err := validateLifecycleTransitionPreconditions(operation); err != nil {
+			return err
+		}
+
+		// Check if logical server exists and matches expectations
+		logicalServerBucket := tx.Bucket(logicalServersBucket)
+		if logicalServerBucket == nil {
+			return fmt.Errorf("logical servers bucket not found")
+		}
+
+		currentLS, err := logicalServerBucket.Get([]byte(server.ServerID + ":" + server.EnvironmentID))
+		if err != nil || len(currentLS) == 0 {
+			return ErrLogicalServerNotFound
+		}
+
+		var current LogicalServer
+		if err := json.Unmarshal(currentLS, &current); err != nil {
+			return fmt.Errorf("unmarshal logical server: %w", err)
+		}
+
+		// Validate target matches
+		if string(current.ServerID) != server.ServerID || string(current.EnvironmentID) != server.EnvironmentID {
+			return ErrLogicalServerTargetMismatch
+		}
+
+		// Update the operation record using helper functions
+		updated, err := updateOperationTx(tx, expectedOperationRevision, operation)
+		if err != nil {
+			return err
+		}
+
+		result = StoredOperation{
+			Record:     updated,
+			Revision:   updated.Revision,
+		}
+
+		// Update logical server state
+		newLS := LogicalServer{
+			ServerID:             server.ServerID,
+			EnvironmentID:        server.EnvironmentID,
+			DisplayName:          server.DisplayName,
+			HostingProfile:       server.HostingProfile,
+			StorageProfile:       server.StorageProfile,
+			GameAdapterID:        server.Game.AdapterID,
+			ReleaseChannel:       server.Game.ReleaseChannel,
+			ExecutionAdapterID:   server.Execution.AdapterID,
+			ExecutionProfile:     server.Execution.Profile,
+			NetworkProfile:       server.NetworkProfile,
+			Definition:           server.Definition,
+			LifecycleState:       protocolstate.ServerActive,
+			DataGenerationID:     current.DataGenerationID,
+			DataGenerationStatus: current.DataGenerationStatus,
+			CreatedAt:            time.Now().UTC(),
+			UpdatedAt:            time.Now().UTC(),
+		}
+
+		if len(server.Definition) > 0 {
+			newLS.Definition = server.Definition
+		}
+
+		encodedLS, err := json.Marshal(newLS)
+		if err != nil {
+			return fmt.Errorf("encode logical server: %w", err)
+		}
+
+		key := newLS.ServerID + ":" + newLS.EnvironmentID
+		if err := logicalServerBucket.Put([]byte(key), encodedLS); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return StoredOperation{}, StoredLogicalServer{}, err
+	}
+
+	updatedLS := StoredLogicalServer{
+		LogicalServer: server,
+	}
+
+	return result, updatedLS, nil
+}
