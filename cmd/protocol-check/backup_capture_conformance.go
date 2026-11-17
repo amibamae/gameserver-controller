@@ -37,23 +37,18 @@ func evaluateBackupCaptureCase(pkg *protocolPackage, fixture, input, evaluation 
 	bc := newBackupCaptureCase(input, evaluation)
 	request := bc.request
 	schemas := bc.schemaChecks(pkg)
-	target := asObject(request["target"])
-	requestTargetBound := stringValue(target, "server_id") == stringValue(bc.requestContext, "server_id") &&
-		stringValue(target, "environment_id") == stringValue(bc.requestContext, "environment_id")
+	requestTargetBound := backupCaptureRequestTargetBound(request, bc.requestContext)
 	preparationBound := schemas.preparation && backupCapturePreparationBound(request, bc.preparation)
 	transferAuthorized := schemas.transfer && backupCaptureTransferAuthorized(fixture, input, bc.requestContext, request, bc.scope, bc.transfer)
 	bindingExact := backupCaptureBindingExact(request, bc.output)
-	transferID := stringValue(bc.transfer, "transfer_id")
 	streamBytes := []byte(stringValue(evaluation, "stream_bytes"))
 	stream := checkBackupCaptureStream(bc, evaluation, streamBytes)
 	outcome := stringValue(bc.output, "outcome")
-	dispatchPermitted := schemas.input && schemas.requestContext && schemas.transfer &&
-		requestTargetBound && preparationBound && transferAuthorized
-	captureAccepted := schemas.all() && requestTargetBound && preparationBound && transferAuthorized && bindingExact &&
-		outcome == "captured" && stream.accepted()
+	dispatchPermitted := schemas.allowsDispatch(requestTargetBound, preparationBound, transferAuthorized)
+	resultBound := schemas.output && bindingExact
+	captureAccepted := dispatchPermitted && resultBound && outcome == "captured" && stream.accepted()
 	requiresReconciliation := backupCaptureNeedsReconciliation(schemas.output, outcome, captureAccepted, bindingExact, dispatchPermitted, len(streamBytes))
-	watermark := asObject(bc.output["write_watermark"])
-	watermarkBound := len(watermark) > 0 && stringValue(watermark, "data_generation_id") == stringValue(request, "data_generation_id")
+	watermarkBound := backupCaptureWatermarkBound(request, bc.output)
 
 	return map[string]any{
 		"schemas_valid":                         schemas.all(),
@@ -63,9 +58,9 @@ func evaluateBackupCaptureCase(pkg *protocolPackage, fixture, input, evaluation 
 		"request_target_bound":                  requestTargetBound,
 		"binding_exact":                         bindingExact,
 		"transfer_authorized":                   transferAuthorized,
-		"transfer_handle_in_durable_input":      transferID != "" && backupCaptureContainsValue(request, transferID),
-		"transfer_handle_in_invocation_context": transferID != "" && backupCaptureContainsValue(bc.requestContext, transferID),
-		"transfer_handle_in_result":             transferID != "" && backupCaptureContainsValue(bc.output, transferID),
+		"transfer_handle_in_durable_input":      bc.transferHandleIn(request),
+		"transfer_handle_in_invocation_context": bc.transferHandleIn(bc.requestContext),
+		"transfer_handle_in_result":             bc.transferHandleIn(bc.output),
 		"stream_completed":                      stream.completed,
 		"stream_within_bounds":                  stream.withinBounds,
 		"checksum_valid":                        stream.checksumValid,
@@ -75,6 +70,22 @@ func evaluateBackupCaptureCase(pkg *protocolPackage, fixture, input, evaluation 
 		"retry_permitted":                       false,
 		"destruction_current_generation_proven": backupCaptureCurrentGenerationProven(captureAccepted, evaluation, request),
 	}
+}
+
+func (bc backupCaptureCase) transferHandleIn(value any) bool {
+	transferID := stringValue(bc.transfer, "transfer_id")
+	return transferID != "" && backupCaptureContainsValue(value, transferID)
+}
+
+func backupCaptureRequestTargetBound(request, requestContext map[string]any) bool {
+	target := asObject(request["target"])
+	return stringValue(target, "server_id") == stringValue(requestContext, "server_id") &&
+		stringValue(target, "environment_id") == stringValue(requestContext, "environment_id")
+}
+
+func backupCaptureWatermarkBound(request, output map[string]any) bool {
+	watermark := asObject(output["write_watermark"])
+	return len(watermark) > 0 && stringValue(watermark, "data_generation_id") == stringValue(request, "data_generation_id")
 }
 
 // backupCaptureSchemas records which capture messages match their schemas.
@@ -92,6 +103,11 @@ func (bc backupCaptureCase) schemaChecks(pkg *protocolPackage) backupCaptureSche
 		transfer: len(bc.streamTransfers) == 1 &&
 			pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:storage:storage-transfer-reference", asObject(bc.streamTransfers[0])) == nil,
 	}
+}
+
+func (s backupCaptureSchemas) allowsDispatch(targetBound, preparationBound, transferAuthorized bool) bool {
+	messagesValid := s.input && s.requestContext && s.transfer
+	return messagesValid && targetBound && preparationBound && transferAuthorized
 }
 
 // all excludes the preparation result, which is reported separately.
