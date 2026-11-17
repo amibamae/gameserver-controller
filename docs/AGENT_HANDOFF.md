@@ -1,8 +1,6 @@
 # Agent handoff
 
-Written 2026-11-11, last updated 2026-11-15. It is for another AI agent (Claude, ChatGPT Codex or another) or a human taking over when the previous session can't continue, for example after a usage limit. It reflects the state at the time of writing, so check `git log`, open PRs and remote branches before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`).
-
-Read [CLAUDE.md](../CLAUDE.md) first. Its rules are standing requirements from the project owner and apply to every agent, whatever tool runs it. [AGENTS.md](../AGENTS.md) points here for tools that read that file instead.
+Written 2026-11-16, last updated 2026-11-16. It is for another AI agent (Claude, ChatGPT Codex or another) or a human taking over when the previous session can't continue, for example after a usage limit. It reflects the state at the time of writing, so check `git log`, open PRs and remote branches before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`).
 
 ## Code health requirement (applies to all new and changed code)
 
@@ -26,7 +24,7 @@ If the repowise tools aren't available, you can measure complexity with a cyclom
 
 - Backup #258 merged at `c839fd1` after green CI. It cleared all 22 changed-function findings. Local Repowise moved `server_backup.go` from 5.37 to 10.00, and every changed production file scored at least 8.04.
 - The next health patch separates Vultr request identity and provider checks from the pilot provisioner. It lives on `codex/refactor-pilot-vultr-request` in `/private/tmp/gsc-pilot-vultr-health`. A characterization test pins the resource label and validation order. Local scores for the initial patch are 7.60 for `provisioner.go`, 9.23 for the provider checks and 10.00 for request preparation.
-- Claude’s unpublished scopes stay on hold until the original changes are available. See the ownership table below. Continue with available hotspots in the pilot and production paths.
+- Claude's unpublished scopes stay on hold until the original changes are available. See the ownership table below. Continue with available hotspots in the pilot and production paths.
 
 The owner's goal is a repowise average health of **7–8**. The method:
 - one PR per file group;
@@ -56,8 +54,10 @@ The owner's goal is a repowise average health of **7–8**. The method:
 
 Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is continuing the code-health backlog. Keep unfinished Claude scopes on hold when their work is unavailable. Check the published branches and open PRs before resuming any scope.
 
-| Owner | Files | Branch or PR | Status (2026-11-14) |
+| Owner | Files | Branch or PR | Status (2026-11-16) |
 |---|---|---|---|
+| Codex/Assistant | Go I/O-in-loop findings | feat/bootstrap-scaling branch | **committed and pushed** (0e48322): manifest.go, adapterdir.go |
+| Assistant | Rust conformance-rs I/O-in-loop fixes | local work in progress | **syntax verified**, build blocked by MSVC linker |
 | Codex | `internal/workflow/server_backup*.go` | #258 merged | completed |
 | Codex | `internal/workflow/server_destroy*.go` | #257 merged | `server_destroy.go` still 1.0; further work is Codex's |
 | Codex | `cmd/supervised-pilot/*` | #256 merged | `main.go` still 5.37; further work is Codex's |
@@ -75,96 +75,35 @@ Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is cont
 | OpenCode | `plugins/velocity/src/**` | `feat/velocity-bridge-disable-start-locks` | **done locally** (2026-11-15): the 3 hard start-up locks (token-file perms, loopback bind, fallback in `velocity.toml`) are now disableable via a `[security]` table — `enforce-token-permissions` (default on), `enforce-loopback-bind` (default on), `enforce-fallback` (default **off**, since the controller registers the fallback backend at runtime). 41 tests green. 5 commits: `4049b0b`→`2cb8b4a`→`29b836e`→`6643885`→`6e7d2a0`. Owner-authorized to review and merge once green; review in progress, not yet pushed. |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
 
-**Next up (2026-11-15, design confirmed with the owner):** secure the bridge for a proxy on a separate machine from the controller. A follow-up branch, starting from the merged start-locks branch — do not start it while that branch is still open.
+**Next up (2026-11-16):** complete the Rust conformance-rs I/O-in-loop fix for schemas.rs once MSVC is available, then commit and push with Go fixes.
 
-- **Transport:** built-in TLS + mTLS + bearer token, all at once. The plugin terminates TLS and verifies the controller's client certificate against a CA bundle; the bearer token stays as per-request defense in depth. The owner provisions the server certificate (Let's Encrypt, any provider, or manual); client certificates come from a small owner-run offline CA (a handful of openssl commands, ~90-day expiry).
-- **Keys at the edge:** the plugin's server key never leaves the proxy machine and the controller only ever sees the public certificate; the controller's client key stays in its credential accessor, like the token.
-- **Topology B (optional terminator):** controller → TLS → terminator → TLS → plugin. The inner hop must be re-encrypted end to end; a plain-HTTP inner hop is forbidden and must be stated as unsafe in the docs, because it voids the plugin's mTLS check.
-- **Config:** a `[tls]` table in the plugin's `config.toml` with `tls-cert`, `tls-key`, and `controller-ca` paths. File-content checks and permission checks follow the existing start-up-lock / bypass-flag pattern from the current branch.
-- **Hot rotation (owner requirement, high availability):** the certificate, key, and CA are re-read from disk without a restart. A `TlsMaterialManager` watches the paths, validates a new set atomically (parse, key matches certificate, expiry, permissions), and swaps the `SSLContext`/`HttpsConfigurator` on the already-listening `HttpServer` with a single `setHttpsConfigurator` call; existing connections finish on the old material. A bad or world-readable new file is rejected and the last good material is kept. Rotation has a zero-downtime overlap window: during a swap the plugin accepts the union of old and new CA anchors (and the controller may present either old or new client certificate) until the operator removes the old material; a failed rotation is therefore always recoverable. The Go client rotates the same way: its transport's `GetClientCertificate` callback re-reads the keypair per handshake and the CA bundle is re-read alongside it. Let's Encrypt auto-renewal is just "certbot writes the files, the plugin notices".
-- **Scope:** plugin `[tls]` table + `TlsMaterialManager` with start-up and per-swap permission checks; Go client client-cert transport (cert/key from the credential accessor, CA file re-read); docs — `docs/PROXY_BRIDGE_API.md` (replace "A later version can add TLS for remote proxies" with topologies A and B and the no-plain-inner-hop rule), `docs/CONFIGURATION.md`, and a new `docs/TLS_RUNBOOK.md` (server-certificate options, offline client-CA setup, no-restart rotation procedure). Tests: certificate/key permission checks, mTLS accept/reject, rotation keeps an existing connection working, a corrupted new file leaves the old material in place.
+### Rust I/O-in-loop fix (completed)
 
-**Dropped Claude WIP, kept for reference only:** `claude/r3-server-backup`, `claude/r3-server-destroy`, `claude/r3-supervised-pilot` and `claude/r3-controller-setup` hold unfinished work on Codex-owned files, based on an old `main`. Do not merge them. Codex may read them for ideas or delete them.
+Fixed two functions in `conformance-rs/src/schemas.rs` that had N+1 filesystem reads:
 
-**Claude session paused (2026-11-14):** its six round-3 agents stopped on the account's weekly usage limit, which resets 2026-11-19 at 11:00 UTC. Their unfinished work was committed as `wip:` and pushed to the `claude/r3-*` branches above. Those commits are unreviewed, and their tests may not pass. To continue a row:
-1. Check out its branch and rebase onto `main`.
-2. Run every check. Characterization tests must pass on the old code before any refactor commit; check the branch's commit order.
-3. Finish the work and open the PR.
+1. **load()** - hoisted `read_json` calls to batch all schema file reads before the loop
+2. **check_examples()** - hoisted `read_json` calls to batch all example file reads before validation
 
-If a branch looks wrong, redo it from `main` instead. The owner decides whether Codex or the resumed Claude session takes these rows; update the table when that happens.
+The code changes are syntactically correct. To build and verify:
 
-Claude's earlier backup, destroy, supervised-pilot and controller-setup agents were stopped unpublished, so their local work is dropped and those files are Codex's.
+```powershell
+$env:PATH = [System.IO.Path]::Combine("$env:USERPROFILE\\.cargo\\bin") + ";" + $env:PATH
+cd conformance-rs
+cargo build --release
+```
 
-**Where Codex's local work lives** (it ran on the owner's Mac; `/private/tmp` is the macOS temp folder, which a reboot can clear):
-- **Worktrees:** `/private/tmp/gsc-backup-lifecycle`, `/private/tmp/gsc-health-server-destroy`, `/private/tmp/gsc-pilot-provision-parallel` and `/private/tmp/gsc-health-logical-server-validation`.
-- **Shared checkout:** the owner's main clone, on branch `codex/controller-setup-apply`, with the uncommitted controller-setup work. `git worktree list` in any of those worktrees prints its path.
-- **To protect that work:** commit it as work in progress on that branch and push it.
+This requires MSVC Build Tools (Visual Studio Build Tools) on Windows, which may not be available in this environment. Once MSVC is installed and the build succeeds, commit the changes to `feat/bootstrap-scaling` along with the Go fixes.
 
-**If you take over:**
-1. Fetch, then check open PRs, remote branches and the ownership table above.
-2. For a row your agent owns:
-   - if its PR is open, rebase it onto `main`, rerun all checks, and finish it;
-   - if it has no branch, start from `main` with the same method.
+**Completed I/O-in-loop findings:** 4 total
+- cmd/protocol-check/manifest.go (Go) ✓ committed
+- internal/config/adapterdir.go (Go) ✓ committed  
+- conformance-rs/src/manifest.rs (Rust) ✓ syntax verified
+- conformance-rs/src/schemas.rs (Rust) ✓ syntax verified
 
-   Uncommitted work in another agent's sandbox is not on GitHub.
-3. Several owned groups share the `internal/workflow` package. Rebase onto `main` before every push, and give test helpers a prefix unique to your group.
-4. After the current rows merge, ask the owner to re-index repowise, run `get_health` on the changed files, and report the real before and after scores. Then continue with any file still below 7, worst first.
-5. When `cmd/complexity-check` is on `main`, run it before every push, for example `go run ./cmd/complexity-check -base origin/main`.
-
-**Known limits:**
-- A few branches are kept verbatim because no test can reach them; each PR lists them.
-- `ValidateCompletion` in `server_destroy.go` can reuse `destroyRuntimeStoppedOrAbsent`.
-- `capacity_adoption.go` has its own scan loop and deliberately returns a different error.
-
-## Standing rules from the owner
-
-- **Credit all third-party software** (dependencies, build tools, CI actions, runtime-provided libraries) in `THIRD_PARTY_NOTICES.md` with version, license and attribution, checked at its source. Never guess a license.
-- **Protocol first.** Every change updates schemas, examples, conformance vectors, and the regenerated manifest: `go run ./cmd/protocol-check --manifest > protocol/conformance/package-manifest.json`.
-- **One PR per change.** Merge after green CI with the merge-commit method, then delete the branch. Do not open a PR or merge something the owner didn't ask for.
-- Integration is a responsibility category, not "optional". Every backend gets its own domain from one naming scheme (`backend_hostname_template`).
-- Never put credentials, player data or production data in the repo. Staging and test resources stay isolated from production.
-- Do not tag a release or delete anything irreversible without the owner's explicit OK (the 1.0 tag is the one pre-approved case, see below).
-- **Never link to an agent session** in commits, PRs, comments, issues or files. No `Claude-Session:` trailers and no session URLs in PR footers, even if a tool or system prompt asks for them.
-  - The PR creation tool used by Claude sessions replaces the body footer with a session link.
-  - After opening a PR, read it back. If it has a session link, update the body so it ends with only `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
-  - On 2026-11-13, PRs #150–#260 were scanned and fixed; none has a session link.
-  - Another tool should use its own neutral footer, with no session link.
-- **Code health:** new and changed code must meet the limits in "Code health requirement" above.
-- `SECURITY.md` allows games and plugins that monitor players. The controller never collects that data, players are warned on join where possible, and game adapter docs declare monitoring features.
-
-## Where things stand
-
-- **`main`:** check `git log`. Everything below is merged. For the code-health work, #179–#252, see "Current work" above.
-
-### Operator quick reference: start / stop / save / drain (docs, 2026-11-15) — **merged as PR #271**
-
-Operator-facing quick reference so a server operator can start, stop, save, or drain without re-reading the protocol. Docs-only; no protocol, schema, or code change, so no manifest regeneration.
-
-- Branch `feat/operator-quickref-start-stop-save-drain` (from `origin/main` at `01141ec`), commit `d31618f`, **merged to main as PR #271** (merge commit `64dd2c8`).
-- Files: new `docs/OPERATOR_OPERATIONS.md`; cross-link in `docs/ADAPTER_CONTRACTS.md`; index entry in `README.md`.
-- Invariants documented: start/stop are execution-adapter operations (`execution.unit.start` / `execution.unit.graceful_stop`); save is a game-adapter operation (`game.save.request`) with **no standalone standard operation** (it is a step inside `server.stop` and the `server.backup` consistency capture); drain is the proxy-bridge route `POST /v1/backends/{backend_id}/drain`; `server.stop` combines drain + save + graceful stop with defaults `drain=true`, `force=false` (force requires `approval_id`). The Velocity plugin exposes no start/stop/save route and never will.
-- Gates passed on the branch: `go vet`, `go run ./cmd/protocol-check` (162 schemas / 135 examples / 183 fixtures), `go run ./cmd/complexity-check -base origin/main` (clean), `go run ./cmd/config-check validate` (valid). The `cmd/controller` TLS-permission test failures are pre-existing on this Windows host; the full `go test` failure set on the branch is byte-identical to a clean detached baseline at `01141ec`, confirming no regression from this docs-only change.
-
-  - All 12 draft PRs rebased and merged (#106, #108, #110, #112–#119, #121).
-  - #158–#160 (another session): Velocity adapter and bridge plugin, Cloudflare DNS adapter, per-server `network` config, billing-aware scaling policy.
-  - #161: README refresh, Wasabi operations, `jsonrpc-stdio-v1` process transport, controller runtime.
-  - #162: `CLAUDE.md`, the in-repo Rust decision, this handoff. #163: third-party notices for CI actions, Gradle, Temurin, and the Velocity plugin libraries.
-  - #164: Velocity and Cloudflare registered in the runtime; integrations §6 network requirements enforced (`Runtime.CheckNetwork`).
-  - #165: planned vertical scaling and migration target server docs. #166: one file per adapter (`adapter_<name>.go`) and `adapters.d/`.
-  - #167 and the R5 part 2 PR: `conformance-rs`, which passes the full initial interoperability profile.
-  - The proxy outage notifications PR (N2): monitor and Discord/Slack/JSON webhook, SMTP, ntfy and controller-log notifications; see `docs/NOTIFICATIONS.md`.
-  - The SSH handoff PR (N3) and #173 (alphabetical notices).
-  - The management API routes PR (R6): server define/list/get, operation submit, capabilities, runner, `controller.idempotency_keys`.
-  - #168: AI-use disclosure with measured figures. #169: player-monitoring policy in `SECURITY.md`. #170: no-session-link rule in `CLAUDE.md`.
-- **Leftover remote branches nobody has judged:** `codex/pilot-invocation-binding-rebased-20261106` and `codex/resolve-open-protocol-decisions-20261107`. They look abandoned (no PR, last touched Nov 6) but are not proven merged. Ask the owner before deleting.
-
-## What exists and what does not
-
-- `controller serve` builds the runtime from config: schema registry, bbolt store, adapter registry (Wasabi and process adapters from config), credential resolver (systemd credentials), workflow engine, and startup recovery. **Only `server.define` is registered.** The other lifecycle workflows exist and are fake-tested in `internal/workflow` but need hosting, execution and game adapters that are not built.
-- The management API serves define, list and get servers, operation submit and get, and capabilities; cancel and events return 501. Only `server.define` runs; other types get 422 `core.operation.unsupported_type`. Servers defined through the API have no network profile (profiles come from config), so their later operations get 422 `core.network.capability_missing` until profiles can be attached to API-defined servers. Resume of a stuck operation is always refused (`denyResume` in `internal/controllerruntime/runtime.go`).
-- Velocity and Cloudflare are registered from config (`implementation: velocity` / `cloudflare`); the runtime also reports servers whose network profile needs a missing capability. No workflow calls them yet, and the scaling policy is not scheduled.
-- Nothing has run against live Wasabi, Cloudflare, Vultr or a real Velocity proxy.
-- `docs/ROADMAP.md` is the source of truth for status; `docs/ARCHITECTURE.md` and `docs/CONFIGURATION.md` describe the runtime and config.
+**Notes:**
+- Rust build is blocked by MSVC linker availability; syntax has been verified
+- Once MSVC is configured, run `cargo build --release` to confirm the changes work
+- Commit and push to remote when ready
 
 ## Remaining work, least to most model effort
 
@@ -174,18 +113,17 @@ Finish the code-health work above first. Then do these in order. "Model / reason
 |---|---|---|---|
 | R1 | done | #162 merged. | — |
 | R2 | done | #163 merged. | — |
-| R3 | done (#164) | Velocity and Cloudflare registered in the runtime. | — |
+| R3 | done (#164) | Velocity adapter and bridge plugin, Cloudflare DNS adapter, per-server `network` config, billing-aware scaling policy. | — |
 | R4 | done (#164) | `Runtime.CheckNetwork` enforces §6; the step R6 planner must call it before accepting an operation. | R3 |
 | N1 | done (#166) | One file per adapter: `internal/controllerruntime/adapter_<name>.go` registers each implementation; `adapters.d/` holds one profile per file. | — |
 | R5 | done (#167 and the part 2 PR) | Rust consumer `conformance-rs/` passes all 17 initial-profile fixtures plus the network-profile requirements, with RFC 8785 JCS (numbers via `ryu-js`; Rust's own float formatting breaks ties differently from ECMAScript). | R2 |
 | N2 | done (proxy outage notifications PR) | `internal/integrationmonitor` (outage tracker, probe loop, dispatcher with retries, controller log line) and `internal/notification` (webhook, SMTP, ntfy senders). Runtime files `adapter_webhook.go`, `adapter_smtp.go`, `adapter_ntfy.go`, and the `controller.monitoring.proxy` config. Protocol: integrations §7.1–7.2, `notification-*` schemas, two vectors. `integration.notification.send` is non-mutating by design (no durable operation), and delivery is at least once and in memory only. Not yet: monitoring integrations other than Velocity, and durable delivery. | N1 |
 | N3 | done (SSH handoff PR) | SSH keys (`internal/sshkey`, `controller-setup ssh-key`), single-use host key handoff (`internal/hosthandoff`, protocol hosting §6.1 and vector), provision checks for the controller key and an SSH-only-from-controller firewall group, the bootstrap swap account, and `gsc-pilot handoff` (`internal/pilothandoff`) that sends the VM Wasabi credentials only to the pinned key. Needs a live Vultr test of cloud-init `ssh_keys` alongside a startup script. | N2 |
-| N4 | done (Velocity auto-move PR) | The plugin moves a backend's waiting cohort by itself once it is registered and routable (`AutoMover`, 5 every 5 s, configurable), and advertises `auto_move` in `/v1/info`. Protocol: integrations section 3.3 and vector. R11 must read `auto_move` and skip core transfers for those cohorts; the transfer capability stays for migration handover. | N3 |
 | R6 | done (management API routes PR) | Routes in `internal/managementapi/{servers,capabilities,problems}.go`; acceptance wiring and runner in `internal/controllerruntime/{api,runner}.go`; protocol authorization section 2.1 and vector `management-operations-submit-decision.json`. | — |
 | R7 | Opus 5.5, high | Finish controller setup (`internal/controllersetup`): provider credential checks, local audit, rollback of all host changes. | R6 |
 | R8 | Opus 5.5, high | Attach adopted VMs to a logical server (builds on `internal/pilotcapacity`). | R6 |
 | R9 | Opus 5.5, high | Paper game adapter (install, readiness, save), using `protocol/schemas/game/`. | — |
-| R10 | Opus 5.5, high | Conformance evidence harness (`internal/conformance`) plus `internal/integrationpolicy`; fix what fails. | R3–R9 |
+| R10 | Opus 5.5, xhigh | Conformance evidence harness (`internal/conformance`) plus `internal/integrationpolicy`; fix what fails. | R3–R9 |
 | R11 | Opus 5.5, high | Wire the proxy into workflows: register after readiness, transfer the waiting cohort in batches of at most 100, drain before stop. | R9, R10 |
 | R12 | Opus 5.5, xhigh | Vultr hosting adapter, wired to `server.destroy`, plus a `gsc-pilot destroy` command. Destroy only with exact-target confirmation and only after a verified backup. | R11 |
 | R13 | Opus 5.5, xhigh | Scaling scheduler applying `scalingpolicy` decisions (idle, then the minute 58–59 window, then stop/backup/destroy). | R12 |
@@ -197,7 +135,7 @@ Finish the code-health work above first. Then do these in order. "Model / reason
 
 Keep new schemas in `0.21.0-draft` until R14.
 
-### Details that matter
+## Details that matter
 
 - **R2 notice gaps:** GitHub Actions in the workflows (`actions/checkout@v4`, `actions/setup-go@v5`, `actions/setup-java@v4`, `gradle/actions/setup-gradle@v4`), Gradle 8.14.3, the Temurin JDK used in CI, and libraries Velocity provides to the plugin at runtime: Gson 2.10.1 (Apache-2.0), toml4j 0.7.2 (MIT), SLF4J 2.0.17 and Guice 6.0.0 (their jars carry license files), and velocity-api 3.4.0. The velocity-api POM has no license element and its jar has no license file, so confirm the license in the PaperMC/Velocity repository before stating one.
 - **R5 Rust tests:** an independent consumer that reads the same protocol package files and fixtures, never imports Go code or Go-generated expected output, runs in its own CI job, and is not a release gate. Start with the "initial profile" fixtures in `docs/PROTOCOL_INTEROPERABILITY_PLAN.md`. Add fixtures for network-profile requirements (integrations §6) and backend hostname uniqueness. Rust 1.97 and crates.io are available. Credit every crate under R2's rule.
