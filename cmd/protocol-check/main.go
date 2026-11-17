@@ -5,10 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
-	"time"
 
-	"github.com/dlclark/regexp2"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -23,25 +20,7 @@ type schemaEntry struct {
 	ID   string
 }
 
-type ecmaRegexp regexp2.Regexp
-
-func (re *ecmaRegexp) MatchString(value string) bool {
-	matched, err := (*regexp2.Regexp)(re).MatchString(value)
-	return err == nil && matched
-}
-
-func (re *ecmaRegexp) String() string {
-	return (*regexp2.Regexp)(re).String()
-}
-
-func compileECMA(expression string) (jsonschema.Regexp, error) {
-	re, err := regexp2.Compile(expression, regexp2.ECMAScript)
-	if err != nil {
-		return nil, err
-	}
-	return (*ecmaRegexp)(re), nil
-}
-
+// protocolPackage holds the validated protocol package with loaded schemas, examples, and validators.
 type protocolPackage struct {
 	root       string
 	version    string
@@ -63,25 +42,27 @@ func main() {
 	}
 }
 
+// run is a convenience function that runs protocol validation without printing manifest.
 func run(root string) error {
 	return runWithManifest(root, false)
 }
 
+// runWithManifest performs full protocol package validation and optionally prints the manifest.
 func runWithManifest(root string, printManifest bool) error {
 	pkg, err := loadPackage(root)
 	if err != nil {
-		return err
+		return fmt.Errorf("loadPackage(%q): %w", root, err)
 	}
 	if err := pkg.validatePackage(); err != nil {
-		return err
+		return fmt.Errorf("validatePackage(): %w", err)
 	}
 	if err := pkg.runConformance(); err != nil {
-		return err
+		return fmt.Errorf("runConformance(): %w", err)
 	}
 	if printManifest {
 		manifest, err := pkg.packageManifest()
 		if err != nil {
-			return err
+			return fmt.Errorf("packageManifest(): %w", err)
 		}
 		encoder := json.NewEncoder(os.Stdout)
 		encoder.SetIndent("", "  ")
@@ -96,51 +77,3 @@ func runWithManifest(root string, printManifest bool) error {
 // exampleIndexFile is the language-neutral example-to-schema map. It is the
 // only mapping: this validator and other implementations both read it.
 const exampleIndexFile = "index.json"
-
-func asObject(value any) map[string]any {
-	object, _ := value.(map[string]any)
-	return object
-}
-
-func stringValue(object map[string]any, key string) string {
-	value, _ := object[key].(string)
-	return value
-}
-
-func boolValue(object map[string]any, key string) bool {
-	value, _ := object[key].(bool)
-	return value
-}
-
-func arrayValue(object map[string]any, key string) []any {
-	value, _ := object[key].([]any)
-	return value
-}
-
-func contains(values []any, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
-func uniqueStrings(values []any) bool {
-	seen := make(map[string]bool)
-	for _, value := range values {
-		str, ok := value.(string)
-		if !ok || seen[str] {
-			return false
-		}
-		seen[str] = true
-	}
-	return true
-}
-
-func parseTime(value string) (time.Time, error) {
-	if !strings.HasSuffix(value, "Z") {
-		return time.Time{}, fmt.Errorf("expected UTC Z timestamp, got %q", value)
-	}
-	return time.Parse(time.RFC3339Nano, value)
-}

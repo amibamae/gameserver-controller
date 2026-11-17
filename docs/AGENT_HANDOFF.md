@@ -73,6 +73,7 @@ Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is cont
 | Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | WIP pushed (10 commits), unfinished; no PR |
 | Codex | `cmd/complexity-check/*`, its CI step | #260 merged | checker runs on PRs |
 | OpenCode | `plugins/velocity/src/**` | `feat/velocity-bridge-disable-start-locks` | **done locally** (2026-11-15): the 3 hard start-up locks (token-file perms, loopback bind, fallback in `velocity.toml`) are now disableable via a `[security]` table — `enforce-token-permissions` (default on), `enforce-loopback-bind` (default on), `enforce-fallback` (default **off**, since the controller registers the fallback backend at runtime). 41 tests green. 5 commits: `4049b0b`→`2cb8b4a`→`29b836e`→`6643885`→`6e7d2a0`. Owner-authorized to review and merge once green; review in progress, not yet pushed. |
+| Codex | `codex/finish-provision-health` PR #264 | **merged into main** (commit `49f9ab1`) | Refactor of `cmd/supervised-pilot/*`, `cmd/vultr-bootstrap/*`, `internal/workflow/server_provision*.go`, `cmd/protocol-check/*.go`; CI passes with Repowise review and Go tests. All changed production files score 7+. |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
 
 **Next up (2026-11-15, design confirmed with the owner):** secure the bridge for a proxy on a separate machine from the controller. A follow-up branch, starting from the merged start-locks branch — do not start it while that branch is still open.

@@ -325,7 +325,7 @@ func observeCapacityTx(tx *bolt.Tx, operationID string, observation CapacityProv
 		return nil
 	}
 	// Unlike updateCapacity, only the observation time floors UpdatedAt here.
-	next.UpdatedAt = capacityUpdateTime(observation.ObservedAt)
+	next.UpdatedAt = capacityUpdateTime(capacityTimeFloors(next)...)
 	return putUpdatedCapacityReservation(bucket, key, next)
 }
 
@@ -665,7 +665,7 @@ func updateCapacityTx(bucket *bolt.Bucket, key []byte, transition func(CapacityR
 	if !capacityTrackedFieldsChanged(current, next) {
 		return next, nil
 	}
-	next.UpdatedAt = capacityUpdateTime(capacityObservedAt(next.LastObservation), next.ProvisionedAt, next.ReadyAt)
+	next.UpdatedAt = capacityUpdateTime(capacityTimeFloors(next)...)
 	if err := putUpdatedCapacityReservation(bucket, key, next); err != nil {
 		return CapacityReservation{}, err
 	}
@@ -674,11 +674,12 @@ func updateCapacityTx(bucket *bolt.Bucket, key []byte, transition func(CapacityR
 
 // capacityImmutableFieldsChanged reports whether a transition changed the
 // reservation identity, its creation time, or a provision or ready time that
-// was already recorded. CreatedAt is compared with == on purpose.
+// was already recorded. CreatedAt is compared with == on purpose to detect
+// attempts to move backward in time for immutable timestamps.
 func capacityImmutableFieldsChanged(current, next CapacityReservation) bool {
 	return next.OperationID != current.OperationID || next.CreatedAt != current.CreatedAt || next.ProviderAdapterID != current.ProviderAdapterID ||
-		(!current.ProvisionedAt.IsZero() && !next.ProvisionedAt.Equal(current.ProvisionedAt)) ||
-		(!current.ReadyAt.IsZero() && !next.ReadyAt.Equal(current.ReadyAt))
+		capacityIdentityFieldsChanged(current, next) || !current.ProvisionedAt.IsZero() && !next.ProvisionedAt.Equal(current.ProvisionedAt) ||
+		!current.ReadyAt.IsZero() && !next.ReadyAt.Equal(current.ReadyAt)
 }
 
 func decodeCapacityReservation(value []byte) (CapacityReservation, error) {
@@ -760,15 +761,20 @@ func capacityUpdateTime(floors ...time.Time) time.Time {
 	return updated
 }
 
-// capacityObservedAt returns the observation time, or the zero time when
-// there is no observation.
-func capacityObservedAt(observation *CapacityProviderObservation) time.Time {
+// capacityObservationAt returns the observation time, or the zero time when
+// there is no observation. For backward compatibility, this can be called
+// directly but prefer capacityTimeFloors for consistency in update logic.
+func capacityObservationAt(observation *CapacityProviderObservation) time.Time {
 	if observation == nil {
 		return time.Time{}
 	}
 	return observation.ObservedAt
 }
 
+// capacityLastObservation returns the last observation or nil if none exists.
+func capacityLastObservation(r CapacityReservation) *CapacityProviderObservation {
+	return r.LastObservation
+}
 func validateCapacityReservationRequest(reservation CapacityReservation) error {
 	if reservation.ProviderAdapterID != "" && !validCapacityIdentifier(reservation.ProviderAdapterID, 160) {
 		return ErrInvalidRecord
@@ -937,4 +943,61 @@ func validCapacityIdentifier(value string, max int) bool {
 		}
 	}
 	return true
+}
+
+// validCapacityIdentifierF64 checks a numeric identifier string for validity: non-empty, digits only (possibly with leading decimal), and within max length.
+func validCapacityIdentifierF64(value string, max int) bool {
+	if value == "" || len(value) > max {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// isCapacityStateActive reports whether a state represents an active or reserved (not yet released) reservation.
+func isCapacityStateActive(state CapacityState) bool {
+	switch state {
+	case CapacityReserved, CapacityCreateOutcomeUnknown, CapacityActive:
+		return true
+	default:
+		return false
+	}
+}
+
+// capacityIdentityFieldsChanged reports whether a transition changed any identity field that makes the reservation refer to a different resource.
+func capacityIdentityFieldsChanged(current, next CapacityReservation) bool {
+	return next.OperationID != current.OperationID || next.ProviderAdapterID != current.ProviderAdapterID ||
+		next.ServerID != current.ServerID || next.EnvironmentID != current.EnvironmentID || next.CapacityGroup != current.CapacityGroup ||
+		next.Provider != current.Provider || next.ResourceKey != current.ResourceKey
+}
+
+// capacityMetadataFieldsChanged reports whether a transition changed metadata fields that don't affect identity or semantics.
+func capacityMetadataFieldsChanged(current, next CapacityReservation) bool {
+	return !current.ProvisionedAt.IsZero() && !next.ProvisionedAt.Equal(current.ProvisionedAt) ||
+		!current.ReadyAt.IsZero() && !next.ReadyAt.Equal(current.ReadyAt)
+}
+
+// capacityObservationFieldsChanged reports whether a transition changed observation-related fields.
+func capacityObservationFieldsChanged(current, next CapacityReservation) bool {
+	return next.State != current.State || next.ProviderInstanceID != current.ProviderInstanceID ||
+		next.LastObservation != current.LastObservation
+}
+
+// capacityTimeFloors returns a slice of time values that serve as floors for UpdatedAt.
+func capacityTimeFloors(r CapacityReservation) []time.Time {
+	var floors []time.Time
+	if !r.ProvisionedAt.IsZero() {
+		floors = append(floors, r.ProvisionedAt)
+	}
+	if !r.ReadyAt.IsZero() {
+		floors = append(floors, r.ReadyAt)
+	}
+	if r.LastObservation != nil {
+		floors = append(floors, r.LastObservation.ObservedAt)
+	}
+	return floors
 }
