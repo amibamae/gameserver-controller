@@ -19,11 +19,15 @@ func (c *Client) InstanceMainIP(ctx context.Context, token []byte, instanceID st
 	if err != nil {
 		return netip.Addr{}, err
 	}
-	ip, err := netip.ParseAddr(instance.MainIP)
+	return parseInstanceMainIP(instance.MainIP)
+}
+
+func parseInstanceMainIP(mainIP string) (netip.Addr, error) {
+	if mainIP == "" {
+		return netip.Addr{}, ErrIPNotAssigned
+	}
+	ip, err := netip.ParseAddr(mainIP)
 	if err != nil || !ip.Is4() {
-		if instance.MainIP == "" {
-			return netip.Addr{}, ErrIPNotAssigned
-		}
 		return netip.Addr{}, ErrInvalidResponse
 	}
 	if ip.IsUnspecified() {
