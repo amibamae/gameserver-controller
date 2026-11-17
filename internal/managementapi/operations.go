@@ -38,7 +38,7 @@ func NewHandler(repository OperationRepository, authenticator managementauth.Aut
 
 func getOperation(w http.ResponseWriter, r *http.Request, repository OperationRepository) {
 	operationID := r.PathValue("operation_id")
-	if operationID == "" || len(operationID) > 200 || strings.TrimSpace(operationID) != operationID || strings.ContainsAny(operationID, "\r\n\x00") {
+	if !validOperationPathID(operationID) {
 		writeProblem(w, http.StatusNotFound, "Not Found")
 		return
 	}
@@ -64,10 +64,12 @@ func getOperation(w http.ResponseWriter, r *http.Request, repository OperationRe
 		writeProblem(w, http.StatusNotFound, "Not Found")
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(stored.Record)
+	writeJSON(w, http.StatusOK, stored.Record)
+}
+
+func validOperationPathID(operationID string) bool {
+	return operationID != "" && len(operationID) <= 200 &&
+		strings.TrimSpace(operationID) == operationID && !strings.ContainsAny(operationID, "\r\n\x00")
 }
 
 func hasScope(principal authkey.Principal, required authkey.Scope) bool {
