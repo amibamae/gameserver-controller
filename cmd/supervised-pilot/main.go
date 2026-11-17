@@ -138,9 +138,17 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if err := allowOnlyFlags(flags, "execute", "confirm-create", "timeout", "server-id", "environment", "region", "plan", "os-id", "hostname", "credential-ref", "operation-id", "ssh-key-id", "startup-script-id", "startup-script-sha256", "firewall-group-id", "controller-ip", "ssh-credential-ref"); err != nil {
 			return err
 		}
+		policy, err := pilotcapacity.LoadEmbeddedPolicy()
+		if err != nil {
+			return fmt.Errorf("load embedded capacity policy: %w", err)
+		}
+		statePath, err := settings.capacityStatePath()
+		if err != nil {
+			return fmt.Errorf("resolve capacity state path: %w", err)
+		}
 		return doProvision(provisionOptions{
 			execute: *execute, confirmation: *confirmCreate, timeout: *timeout,
-			policy: pilotcapacity.LoadEmbeddedPolicy(), statePath: settings.capacityStatePath(), serverID: *serverID, environment: *environmentID,
+			policy: policy, statePath: statePath, serverID: *serverID, environment: *environmentID,
 			region: *region, plan: *plan, osID: *osID, hostname: *hostname,
 			sshKeyIDs: sshKeyIDs, startupScriptID: *startupScriptID, startupScriptSHA256: *startupScriptSHA256,
 			credentialRef: *credentialRef, operationID: *operationID, access: provisionAccess{FirewallGroupID: *firewallGroupID, ControllerIP: *controllerIP, SSHCredentialRef: *sshCredentialRef},
@@ -243,16 +251,13 @@ func doStatus(host string, stdout io.Writer) error {
 }
 
 // doBackup runs a backup operation on a Minecraft server.
-func doBackup(host, hostStr string, execute bool, confirmHost string, timeout time.Duration, stdout, stderr io.Writer) error {
-	return backup(hostStr, execute, confirmHost, timeout, stdout, stderr)
+func doBackup(host string, execute bool, confirmHost string, timeout time.Duration, stdout, stderr io.Writer) error {
+	return backup(host, execute, confirmHost, timeout, stdout, stderr)
 }
 
 // doProvision provisions a new Vultr VM for a Minecraft server.
-func doProvision(opts provisionOptions) (stdout io.Writer, stderr io.Writer, retErr error) {
-	if err := opts.access.validate(); err != nil {
-		return nil, nil, fmt.Errorf("validate provisioning access: %w", err)
-	}
-	return pilotvultr.Provision(*opts, stdout, stderr), stdout, stderr, nil
+func doProvision(opts provisionOptions, stdout, stderr io.Writer) error {
+	return provisionVultr(opts, stdout, stderr)
 }
 
 // doAdoptVultr adopts an existing Vultr instance for local management.
