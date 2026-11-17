@@ -69,9 +69,9 @@ func run(args []string, stdout, stderr io.Writer, client scriptCreator) error {
 		return errors.New("ports must be between 1 and 65535")
 	}
 	settings := bootstrap.Settings{
-		ControllerIP:   *controllerIP, MinecraftPort: uint16(*minecraftPort),
+		ControllerIP: *controllerIP, MinecraftPort: uint16(*minecraftPort),
 		VoiceChatPort: uint16(*voicePort), WasabiRemotePath: *wasabiPath,
-		Plan:           *vultrPlan,
+		Plan: *vultrPlan,
 	}
 	script, err := bootstrap.Render(settings)
 	if err != nil {
