@@ -98,4 +98,3 @@ AI coding agents (OpenAI Codex and Anthropic Claude Code) write most of this rep
 This project uses GNU AGPL-3.0-only. See [LICENSE](LICENSE). Third-party components retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
 
 The [copyright notice](COPYRIGHT.md) identifies amibamae for material covered by applicable copyright law. To cite the project, use [CITATION.cff](CITATION.cff).
-/
