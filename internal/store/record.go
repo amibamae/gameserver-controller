@@ -163,33 +163,26 @@ func validateBackupInitialState(record OperationRecord) error {
 	return nil
 }
 
+// validateRecordIdentity checks the record's identity fields in a fixed
+// order and reports the first invalid one.
 func validateRecordIdentity(record OperationRecord) error {
-	if !validIdentifier(record.OperationID, 200) {
-		return invalidField("operation_id")
-	}
-	if !validQualifiedName(record.OperationType, 160) {
-		return invalidField("operation_type")
-	}
-	if record.ProtocolVersion == "" || len(record.ProtocolVersion) > 100 {
-		return invalidField("protocol_version")
-	}
-	if len(record.SchemaPackageRevision) > 200 {
-		return invalidField("schema_package_revision")
-	}
-	if !validIdentifier(record.Target.ServerID, 200) || !validIdentifier(record.Target.EnvironmentID, 200) {
-		return invalidField("target")
-	}
-	if record.ActorID == "" || len(record.ActorID) > 200 {
-		return invalidField("actor_id")
-	}
-	if record.CorrelationID != "" && len(record.CorrelationID) > 200 {
-		return invalidField("correlation_id")
-	}
-	if record.IdempotencyKey != "" && !validIdempotencyKey(record.IdempotencyKey) {
-		return invalidField("idempotency_key")
-	}
-	if record.RequestFingerprint != "" && !validFingerprint(record.RequestFingerprint) {
-		return invalidField("request_fingerprint")
+	for _, check := range []struct {
+		field string
+		valid bool
+	}{
+		{"operation_id", validIdentifier(record.OperationID, 200)},
+		{"operation_type", validQualifiedName(record.OperationType, 160)},
+		{"protocol_version", validIdentifier(record.ProtocolVersion, 100)},
+		{"schema_package_revision", len(record.SchemaPackageRevision) <= 200},
+		{"target", validIdentifier(record.Target.ServerID, 200) && validIdentifier(record.Target.EnvironmentID, 200)},
+		{"actor_id", validIdentifier(record.ActorID, 200)},
+		{"correlation_id", len(record.CorrelationID) <= 200},
+		{"idempotency_key", record.IdempotencyKey == "" || validIdempotencyKey(record.IdempotencyKey)},
+		{"request_fingerprint", record.RequestFingerprint == "" || validFingerprint(record.RequestFingerprint)},
+	} {
+		if !check.valid {
+			return invalidField(check.field)
+		}
 	}
 	return nil
 }
@@ -269,42 +262,88 @@ func validateRecordSteps(record OperationRecord) error {
 // validateStepIdentity checks a step's ID, type, status, and attempt count. A
 // server.backup must record its initial lifecycle state before any step runs.
 func validateStepIdentity(record OperationRecord, i int, step OperationStep) error {
-	if record.OperationType == "server.backup" && record.BackupInitialLifecycleState == "" && (step.Attempt != 0 || step.Status == protocolstate.StepRunning || step.Status == protocolstate.StepSucceeded || step.Status == protocolstate.StepWaiting || step.Status == protocolstate.StepOutcomeUnknown) {
+	if backupDispatchedWithoutContext(record, step) {
 		return invalidField("backup_initial_lifecycle_state must precede dispatch")
 	}
-	if !validIdentifier(step.StepID, 200) || !validCapabilityName(step.StepType, 160) || !knownStepStatus(step.Status) || step.Attempt < 0 {
+	if !validStepShape(step) {
 		return invalidField(fmt.Sprintf("steps[%d]", i))
 	}
-	if (step.Status == protocolstate.StepPending && step.Attempt != 0) ||
-		(step.Status != protocolstate.StepPending && step.Status != protocolstate.StepSkipped && step.Status != protocolstate.StepCancelled && step.Attempt == 0) {
+	if !stepAttemptMatchesStatus(step) {
 		return invalidField(fmt.Sprintf("steps[%d].attempt", i))
 	}
 	return nil
+}
+
+// backupDispatchedWithoutContext reports a server.backup step that has been
+// attempted or has run before the backup recorded its initial state.
+func backupDispatchedWithoutContext(record OperationRecord, step OperationStep) bool {
+	return record.OperationType == "server.backup" && record.BackupInitialLifecycleState == "" && stepDispatched(step)
+}
+
+func stepDispatched(step OperationStep) bool {
+	switch step.Status {
+	case protocolstate.StepRunning, protocolstate.StepSucceeded, protocolstate.StepWaiting, protocolstate.StepOutcomeUnknown:
+		return true
+	}
+	return step.Attempt != 0
+}
+
+func validStepShape(step OperationStep) bool {
+	return validIdentifier(step.StepID, 200) && validCapabilityName(step.StepType, 160) && knownStepStatus(step.Status) && step.Attempt >= 0
+}
+
+// stepAttemptMatchesStatus requires a pending step to have no attempt and
+// every step past pending to have one, except a skipped or cancelled step,
+// which may have either.
+func stepAttemptMatchesStatus(step OperationStep) bool {
+	switch step.Status {
+	case protocolstate.StepPending:
+		return step.Attempt == 0
+	case protocolstate.StepSkipped, protocolstate.StepCancelled:
+		return true
+	default:
+		return step.Attempt != 0
+	}
 }
 
 // validateStepInput checks the step's capability identity, its input object,
 // and its input bindings. Resolved input exists only for bound steps and must
 // be persisted before a bound step is dispatched.
 func validateStepInput(_ OperationRecord, i int, step OperationStep) error {
-	if step.CapabilityName != "" && (!validCapabilityName(step.CapabilityName, 160) || step.AdapterID == "" || step.CapabilityVersion == "") {
+	if !stepCapabilityComplete(step) {
 		return invalidField(fmt.Sprintf("steps[%d].capability", i))
 	}
-	if step.CapabilityVersion != "" && (step.AdapterID == "" || step.CapabilityName == "") {
-		return invalidField(fmt.Sprintf("steps[%d].capability", i))
-	}
-	if (step.CapabilityName != "" || len(step.Input) > 0) && !isJSONObject(step.Input) {
+	if stepNeedsObjectInput(step) && !isJSONObject(step.Input) {
 		return invalidField(fmt.Sprintf("steps[%d].input", i))
 	}
 	if len(step.InputBindings) > 0 && (step.CapabilityName == "" || !isJSONObject(step.Input)) {
 		return invalidField(fmt.Sprintf("steps[%d].input_bindings", i))
 	}
-	if len(step.ResolvedInput) > 0 && !isJSONObject(step.ResolvedInput) {
+	return validateStepResolvedInput(i, step)
+}
+
+// stepCapabilityComplete requires a named capability to be valid and to
+// record its adapter and version, and a capability version to have a name.
+func stepCapabilityComplete(step OperationStep) bool {
+	if step.CapabilityName == "" {
+		return step.CapabilityVersion == ""
+	}
+	return validCapabilityName(step.CapabilityName, 160) && step.AdapterID != "" && step.CapabilityVersion != ""
+}
+
+func stepNeedsObjectInput(step OperationStep) bool {
+	return step.CapabilityName != "" || len(step.Input) > 0
+}
+
+func validateStepResolvedInput(i int, step OperationStep) error {
+	bound, resolved := len(step.InputBindings) > 0, len(step.ResolvedInput) > 0
+	if resolved && !isJSONObject(step.ResolvedInput) {
 		return invalidField(fmt.Sprintf("steps[%d].resolved_input", i))
 	}
-	if len(step.InputBindings) == 0 && len(step.ResolvedInput) > 0 {
+	if !bound && resolved {
 		return invalidField(fmt.Sprintf("steps[%d].resolved_input has no bindings", i))
 	}
-	if len(step.InputBindings) > 0 && step.Attempt > 0 && len(step.ResolvedInput) == 0 {
+	if bound && step.Attempt > 0 && !resolved {
 		return invalidField(fmt.Sprintf("steps[%d].resolved_input must be persisted before dispatch", i))
 	}
 	return nil
@@ -332,23 +371,40 @@ func validateStepOutcome(_ OperationRecord, i int, step OperationStep) error {
 // validateStepTimes requires step timestamps to fall within the record's
 // lifetime, with completion no earlier than the step's start.
 func validateStepTimes(record OperationRecord, i int, step OperationStep) error {
-	if step.StartedAt != nil && (step.StartedAt.Before(record.CreatedAt) || step.StartedAt.After(record.UpdatedAt)) {
+	if step.StartedAt != nil && !withinRecordLifetime(record, *step.StartedAt) {
 		return invalidField(fmt.Sprintf("steps[%d].started_at", i))
 	}
-	if step.CompletedAt != nil && (step.CompletedAt.Before(record.CreatedAt) || (step.StartedAt != nil && step.CompletedAt.Before(*step.StartedAt)) || step.CompletedAt.After(record.UpdatedAt)) {
+	if step.CompletedAt != nil && !stepCompletionValid(record, step) {
 		return invalidField(fmt.Sprintf("steps[%d].completed_at", i))
 	}
 	return nil
 }
 
+func withinRecordLifetime(record OperationRecord, at time.Time) bool {
+	return !at.Before(record.CreatedAt) && !at.After(record.UpdatedAt)
+}
+
+// stepCompletionValid requires a step's completion to fall within the
+// record's lifetime and no earlier than the step's start.
+func stepCompletionValid(record OperationRecord, step OperationStep) bool {
+	completedAt := *step.CompletedAt
+	return withinRecordLifetime(record, completedAt) && (step.StartedAt == nil || !completedAt.Before(*step.StartedAt))
+}
+
+// inputBindingSteps converts the record's steps to the binding resolver's
+// view of them.
+func inputBindingSteps(steps []OperationStep) []inputbinding.Step {
+	bindingSteps := make([]inputbinding.Step, len(steps))
+	for i, step := range steps {
+		bindingSteps[i] = inputbinding.Step{StepID: step.StepID, Status: string(step.Status), Input: step.Input, Output: step.Output, Binding: step.InputBindings}
+	}
+	return bindingSteps
+}
+
 // validateRecordStepPlan checks the input bindings across steps and that the
 // current step, if set, is one of the record's steps.
 func validateRecordStepPlan(record OperationRecord) error {
-	bindingSteps := make([]inputbinding.Step, len(record.Steps))
-	for i, step := range record.Steps {
-		bindingSteps[i] = inputbinding.Step{StepID: step.StepID, Status: string(step.Status), Input: step.Input, Output: step.Output, Binding: step.InputBindings}
-	}
-	if err := inputbinding.ValidatePlan(bindingSteps); err != nil {
+	if err := inputbinding.ValidatePlan(inputBindingSteps(record.Steps)); err != nil {
 		return invalidField("step input_bindings")
 	}
 	if record.CurrentStepID != nil {
@@ -371,25 +427,31 @@ func containsStepID(steps []OperationStep, stepID string) bool {
 	return false
 }
 
+// validSecretReference requires a bounded reference with a lowercase URI
+// scheme, a bounded purpose and version, and unique bounded permission
+// scopes.
 func validSecretReference(ref SecretReference) bool {
-	if ref.SecretRef == "" || len(ref.SecretRef) > 1024 || ref.Purpose == "" || len(ref.Purpose) > 100 {
+	return validSecretLocation(ref) && len(ref.VersionRef) <= 500 && uniquePermissionScopes(ref.PermissionScope)
+}
+
+func validSecretLocation(ref SecretReference) bool {
+	return validIdentifier(ref.SecretRef, 1024) && validIdentifier(ref.Purpose, 100) && validSecretScheme(ref.SecretRef)
+}
+
+// validSecretScheme requires the text before the first "://" to be a
+// lowercase letter followed by lowercase letters, digits, '+', '.' or '-'.
+func validSecretScheme(secretRef string) bool {
+	separator := strings.Index(secretRef, "://")
+	if separator < 1 || !isLowerLetter(rune(secretRef[0])) {
 		return false
 	}
-	separator := strings.Index(ref.SecretRef, "://")
-	if separator < 1 || ref.SecretRef[0] < 'a' || ref.SecretRef[0] > 'z' {
-		return false
-	}
-	for _, ch := range ref.SecretRef[1:separator] {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '+' && ch != '.' && ch != '-' {
-			return false
-		}
-	}
-	if len(ref.VersionRef) > 500 {
-		return false
-	}
-	seen := make(map[string]struct{}, len(ref.PermissionScope))
-	for _, scope := range ref.PermissionScope {
-		if scope == "" || len(scope) > 160 {
+	return allRunes(secretRef[1:separator], nameRune("+.-"))
+}
+
+func uniquePermissionScopes(scopes []string) bool {
+	seen := make(map[string]struct{}, len(scopes))
+	for _, scope := range scopes {
+		if !validIdentifier(scope, 160) {
 			return false
 		}
 		if _, exists := seen[scope]; exists {
@@ -405,23 +467,36 @@ func validIdentifier(value string, max int) bool {
 }
 
 func validQualifiedName(value string, max int) bool {
-	if len(value) < 2 || len(value) > max || value[0] < 'a' || value[0] > 'z' {
-		return false
-	}
-	for _, ch := range value[1:] {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' {
-			return false
-		}
-	}
-	return true
+	return validLowerName(value, max, ".")
 }
 
 func validCapabilityName(value string, max int) bool {
-	if len(value) < 2 || len(value) > max || value[0] < 'a' || value[0] > 'z' {
+	return validLowerName(value, max, "._-")
+}
+
+// validLowerName requires 2 to max characters: a lowercase letter, then
+// lowercase letters, digits, or the given punctuation.
+func validLowerName(value string, max int, punctuation string) bool {
+	if len(value) < 2 || len(value) > max || !isLowerLetter(rune(value[0])) {
 		return false
 	}
-	for _, ch := range value[1:] {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' && ch != '_' && ch != '-' {
+	return allRunes(value[1:], nameRune(punctuation))
+}
+
+// nameRune accepts lowercase letters, digits, and the given punctuation.
+func nameRune(punctuation string) func(rune) bool {
+	return func(ch rune) bool {
+		return isLowerLetter(ch) || (ch >= '0' && ch <= '9') || strings.ContainsRune(punctuation, ch)
+	}
+}
+
+func isLowerLetter(ch rune) bool {
+	return ch >= 'a' && ch <= 'z'
+}
+
+func allRunes(value string, accept func(rune) bool) bool {
+	for _, ch := range value {
+		if !accept(ch) {
 			return false
 		}
 	}
