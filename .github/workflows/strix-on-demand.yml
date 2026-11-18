@@ -1,0 +1,95 @@
+# Optional, manual Strix security scan. Nothing runs automatically or on PRs.
+# Setup and security considerations: docs/STRIX_CI.md
+name: Strix on-demand security scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      approve_model_usage:
+        description: 'I approve using billable LLM credits for one scan of main'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: strix-manual-main
+  cancel-in-progress: false
+
+jobs:
+  security-scan:
+    # Only an explicit approval on main runs Strix.
+    if: ${{ github.ref == 'refs/heads/main' && inputs.approve_model_usage == true }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out main without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Verify prerequisites
+        env:
+          STRIX_LLM: ${{ secrets.STRIX_LLM }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ -z "$STRIX_LLM" || -z "$LLM_API_KEY" ]]; then
+            echo "::error::Missing STRIX_LLM or LLM_API_KEY Actions secret. See docs/STRIX_CI.md."
+            exit 1
+          fi
+          docker info >/dev/null
+
+      - name: Install pinned Strix CLI
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          archive="$RUNNER_TEMP/strix-1.7.1-linux-x86_64.tar.gz"
+          curl --fail --location --show-error --silent --retry 3 \
+            --output "$archive" \
+            https://github.com/usestrix/strix/releases/download/v1.7.1/strix-1.7.1-linux-x86_64.tar.gz
+          printf '%s  %s\n' \
+            'c8e836251578baa228afe9e65f4a901ef6ae1116c444f8f0a67f7ae7898c480f' \
+            "$archive" | sha256sum --check --status
+          mkdir -p "$RUNNER_TEMP/strix-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/strix-bin"
+          mv "$RUNNER_TEMP/strix-bin/strix-1.7.1-linux-x86_64" "$RUNNER_TEMP/strix-bin/strix"
+          chmod 0755 "$RUNNER_TEMP/strix-bin/strix"
+          echo "$RUNNER_TEMP/strix-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/strix-bin/strix" --version
+
+      - name: Scan repository source
+        id: scan
+        env:
+          STRIX_LLM: ${{ secrets.STRIX_LLM }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          # Full checkout scan, intentionally not an automatic PR diff scan.
+          # The USD budget is a cap per manually started scan, not a subscription.
+          strix -n -t ./ --scan-mode quick --scope-mode full \
+            --fail-on high --max-budget 3
+
+      - name: Reject incomplete or missing scan report
+        if: ${{ always() && steps.scan.outcome != 'skipped' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          if [[ ! -d strix_runs ]]; then
+            echo "::error::No Strix run was recorded."
+            exit 1
+          fi
+          mapfile -t runs < <(find strix_runs -mindepth 2 -maxdepth 2 -type f -name run.json | sort)
+          if [[ "${#runs[@]}" -ne 1 ]]; then
+            echo "::error::Expected exactly one Strix run.json result."
+            exit 1
+          fi
+          status="$(jq -r '.status // empty' "${runs[0]}")"
+          if [[ "$status" != completed ]]; then
+            echo "::error::Strix ended with status '$status', not completed."
+            exit 1
+          fi
