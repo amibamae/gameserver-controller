@@ -383,11 +383,6 @@ func (w *ServerDestroyWorkflow) checkDestroyVerifyInstance(_ context.Context, ch
 	return nil
 }
 
-func activeOrStopped(state string) bool { return state == "active" || state == "stopped" }
-
-func stoppedOrFailedLifecycle(state protocolstate.ServerState) bool {
-	return state == protocolstate.ServerStopped || state == protocolstate.ServerFailed
-}
 
 func (w *ServerDestroyWorkflow) markCapacityDestroySent(server store.LogicalServer) error {
 	capacityStore, ok := w.servers.(serverDestroyCapacityStore)
@@ -491,30 +486,6 @@ func reservationMismatchError(reservation store.CapacityReservation, instanceAda
 	return errors.New("managed VM reservation does not identify the exact server instance")
 }
 
-func externalInstanceIdentity(raw json.RawMessage) (string, string, error) {
-	var ref struct {
-		AdapterID    string `json:"adapter_id"`
-		ResourceKind string `json:"resource_kind"`
-		ExternalID   string `json:"external_id"`
-	}
-	if err := json.Unmarshal(raw, &ref); err != nil {
-		return "", "", errors.New("managed VM capacity requires an exact provider instance reference")
-	}
-	if !isObject(raw) || !exactInstanceReference(ref) {
-		return "", "", errors.New("managed VM capacity requires an exact provider instance reference")
-	}
-	return ref.AdapterID, ref.ExternalID, nil
-}
-
-// exactInstanceReference reports whether a parsed instance reference names an
-// instance owned by a specific adapter.
-func exactInstanceReference(ref struct {
-	AdapterID    string `json:"adapter_id"`
-	ResourceKind string `json:"resource_kind"`
-	ExternalID   string `json:"external_id"`
-}) bool {
-	return ref.AdapterID != "" && ref.ResourceKind == "instance" && ref.ExternalID != ""
-}
 
 func (w *ServerDestroyWorkflow) ProjectLifecycle(operation store.OperationRecord, current store.StoredLogicalServer) (store.LogicalServer, bool, error) {
 	if operation.OperationType != "server.destroy" || current.Record.ServerID != operation.Target.ServerID || current.Record.EnvironmentID != operation.Target.EnvironmentID ||
@@ -616,79 +587,6 @@ func validServerDestroyTargetRef(result struct {
 	return equalJSON(result.OperationData.InstanceRef, operation.Target.InstanceRef)
 }
 
-func destroyInstanceStepOutput(operation store.OperationRecord, stepID string, requiredStatus protocolstate.StepStatus) (serverDestroyInstanceInspection, error) {
-	var output serverDestroyInstanceInspection
-	step := operationStep(operation, stepID)
-	if step.StepID == "" || step.Status != requiredStatus || json.Unmarshal(step.Output, &output) != nil {
-		return serverDestroyInstanceInspection{}, errors.New("provider instance inspection output is missing")
-	}
-	if _, err := time.Parse(time.RFC3339Nano, output.ObservedAt); err != nil {
-		return serverDestroyInstanceInspection{}, err
-	}
-	if !observationIsFreshForStep(output.ObservedAt, step) {
-		return serverDestroyInstanceInspection{}, errors.New("provider observation is stale or outside the tolerated clock window")
-	}
-	return output, nil
-}
-
-func destroyRuntimeStepOutput(operation store.OperationRecord) (serverDestroyUnitInspection, error) {
-	var output serverDestroyUnitInspection
-	step := operationStep(operation, destroyInspectRuntimeStep)
-	if step.StepID == "" || step.Status != protocolstate.StepSucceeded || json.Unmarshal(step.Output, &output) != nil {
-		return serverDestroyUnitInspection{}, errors.New("runtime inspection output is missing")
-	}
-	if _, err := time.Parse(time.RFC3339Nano, output.ObservedAt); err != nil {
-		return serverDestroyUnitInspection{}, err
-	}
-	if !observationIsFreshForStep(output.ObservedAt, step) {
-		return serverDestroyUnitInspection{}, errors.New("runtime observation is stale or outside the tolerated clock window")
-	}
-	return output, nil
-}
-
-func destroyProviderOutput(operation store.OperationRecord) (serverDestroyOutput, error) {
-	var output serverDestroyOutput
-	step := operationStep(operation, destroyProviderStep)
-	if step.StepID == "" || step.Status != protocolstate.StepSucceeded || json.Unmarshal(step.Output, &output) != nil {
-		return serverDestroyOutput{}, errors.New("provider destruction output is missing")
-	}
-	if _, err := time.Parse(time.RFC3339Nano, output.ObservedAt); err != nil {
-		return serverDestroyOutput{}, err
-	}
-	if !observationIsFreshForStep(output.ObservedAt, step) {
-		return serverDestroyOutput{}, errors.New("provider destroy result is stale or outside the tolerated clock window")
-	}
-	return output, nil
-}
-
-func observationIsFreshForStep(value string, step store.OperationStep) bool {
-	observed, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil || step.StartedAt == nil {
-		return false
-	}
-	// Permit small provider clock drift, but reject evidence that could predate
-	// the inspection or implausibly claim to come from the future.
-	const toleratedClockSkew = 30 * time.Second
-	if observed.Before(step.StartedAt.Add(-toleratedClockSkew)) || observed.After(time.Now().UTC().Add(5*time.Minute)) {
-		return false
-	}
-	return true
-}
-
-func observationAfter(before, after string) error {
-	first, err := time.Parse(time.RFC3339Nano, before)
-	if err != nil {
-		return err
-	}
-	second, err := time.Parse(time.RFC3339Nano, after)
-	if err != nil {
-		return err
-	}
-	if second.Before(first) {
-		return errors.New("observation timestamp moved backwards")
-	}
-	return nil
-}
 
 func destroyReconcileRequestID(operationID, stepID string, attempt int, label string) string {
 	return fmt.Sprintf("destroy-%s-%s-%d-%s", operationID, stepID, attempt, label)

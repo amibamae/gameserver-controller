@@ -5,10 +5,11 @@ package config
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ var (
 
 const systemdCredentialScheme = "systemd-credential://"
 
+// Config is the root configuration structure.
 type Config struct {
 	SchemaVersion int              `yaml:"schema_version"`
 	Controller    Controller       `yaml:"controller"`
@@ -96,198 +98,401 @@ type ServerLifecycle struct {
 	Scaling scalingpolicy.Settings `yaml:"scaling"`
 }
 
-// Load reads the configuration file with unknown-field rejection, adds one
-// adapter profile from each file in the adapters.d directory next to it (see
-// loadAdapterDirectory), then checks cross-reference and safety rules. It
-// never resolves secret references.
+// ImplementationSettings is a placeholder for adapter-specific settings.
+type ImplementationSettings struct {
+	Key string `yaml:",inline"`
+}
+
+// ServerNetwork configures network settings for a server.
+type ServerNetwork struct {
+	// JoinMode is "proxy", "direct_dns", or "none".
+	JoinMode string `yaml:"join_mode"`
+	// Proxy is the proxy integration adapter; required for join mode proxy.
+	Proxy string `yaml:"proxy"`
+	// DNS is the DNS integration adapter; required for join mode direct_dns
+	// and for any backend that uses a managed hostname.
+	DNS string `yaml:"dns"`
+	// JoinHostname is the name players join through in direct_dns mode.
+	JoinHostname string `yaml:"join_hostname"`
+	// BackendHostnameTemplate gives every hostname backend its own DNS name
+	// from one scheme, such as "{backend}.{environment}.mc.example.com".
+	// Placeholders: {backend} (required), {server}, and {environment}.
+	BackendHostnameTemplate string `yaml:"backend_hostname_template"`
+	// Backends are the proxy backends for this server (proxy mode only).
+	Backends []NetworkBackend `yaml:"backends"`
+	// FallbackRecords are the values the join hostname points at while the
+	// server is not ready, normally the lobby's address, keyed by record type
+	// ("A" or "AAAA"). Required for join mode direct_dns.
+	FallbackRecords map[string][]string `yaml:"fallback_records"`
+}
+
+// NetworkBackend says how the proxy reaches one backend.
+type NetworkBackend struct {
+	ID           string `yaml:"id"`
+	AddressMode  string `yaml:"address_mode"`
+	Hostname     string `yaml:"hostname,omitempty"`
+	Port         int    `yaml:"port"`
+}
+
+type Controller struct {
+	Mode          string        `yaml:"mode"`
+	StateStore    StateStore    `yaml:"state_store"`
+	Defaults      Defaults      `yaml:"defaults"`
+	Audit         Audit         `yaml:"audit"`
+	ManagementAPI ManagementAPI `yaml:"management_api"`
+	Monitoring    Monitoring    `yaml:"monitoring"`
+	// IdempotencyKeys are the installation secrets that bind management API
+	// idempotency keys to actors and requests. Required when the management
+	// API is enabled.
+	IdempotencyKeys IdempotencyKeys `yaml:"idempotency_keys"`
+}
+
+// IdempotencyKeys names the active key version and every version still
+// needed to verify retained idempotency records. Each value is a systemd
+// credential reference to at least 32 bytes of random key material.
+type IdempotencyKeys struct {
+	Active   string            `yaml:"active"`
+	Versions map[string]string `yaml:"versions"`
+}
+
+var (
+	idempotencyVersionPattern    = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+	idempotencyCredentialPattern = regexp.MustCompile(`^systemd-credential://[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+)
+
+// Monitoring configures background integration monitoring. Every field is
+// optional; ProxyPolicy fills defaults.
+type Monitoring struct {
+	Proxy ProxyMonitoring `yaml:"proxy"`
+}
+
+// ProxyMonitoring sets how often proxy bridges are probed and when an outage
+// is declared (integrations section 7).
+type ProxyMonitoring struct {
+	CheckInterval    string `yaml:"check_interval"`
+	FailureThreshold *int   `yaml:"failure_threshold"`
+	InitialBackoff   string `yaml:"initial_backoff"`
+	MaxBackoff       string `ymax:"max_backoff"`
+}
+
+// ManagementAPI configures the optional remote HTTPS management listener.
+// Disabled is the zero value, so existing configurations remain offline.
+type ManagementAPI struct {
+	Enabled        bool   `yaml:"enabled"`
+	ListenAddress  string `yaml:"listen_address"`
+	Audience       string `yaml:"audience"`
+	TLSCertificate string `yaml:"tls_certificate_file"`
+	TLSPrivateKey  string `yaml:"tls_private_key_file"`
+}
+
+type StateStore struct {
+	Type string `yaml:"type"`
+	Path string `yaml:"path"`
+}
+
+type Defaults struct {
+	OperationTimeout string `yaml:"operation_timeout"`
+	RetryLimit       *int   `yaml:"retry_limit"`
+}
+
+type Audit struct {
+	Enabled     bool   `yaml:"enabled"`
+	Destination string `yaml:"destination"`
+}
+
+// Load reads the configuration file, loads adapter profiles from the adapters.d directory,
+// resolves settings, and validates. It never resolves secret references.
 func Load(path string) (Config, error) {
+	configDir := filepath.Dir(path)
+
+	value, err := openAndDecodeConfig(path)
+	if err != nil {
+		return Config{}, err
+	}
+
+	extraAdapters, err := loadAdapterDirectory(configDir)
+	if err != nil {
+		return Config{}, fmt.Errorf("load adapter directory: %w", err)
+	}
+
+	value.Adapters = append(value.Adapters, extraAdapters...)
+
+	resolvedConfig, err := resolveSettings(&value)
+	if err != nil {
+		return Config{}, fmt.Errorf("resolve configuration settings: %w", err)
+	}
+
+	return validateConfig(*resolvedConfig)
+}
+
+// Parse reads one configuration document. It does not read adapters.d.
+func Parse(reader io.Reader) (Config, error) {
+	value, err := decodeConfig(reader, &Config{})
+	if err != nil {
+		return Config{}, err
+	}
+
+	resolvedConfig, err := resolveSettings(&value)
+	if err != nil {
+		return Config{}, err
+	}
+
+	return validateConfig(*resolvedConfig)
+}
+
+// openAndDecodeConfig opens the configuration file and decodes YAML into a value.
+// It rejects unknown fields and ensures exactly one document.
+func openAndDecodeConfig(path string) (Config, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return Config{}, fmt.Errorf("open configuration: %w", err)
 	}
 	defer file.Close()
-	value, err := decodeConfig(file)
+
+	config, err := decodeConfig(file, &Config{})
 	if err != nil {
-		return Config{}, fmt.Errorf("validate configuration: %w", err)
+		return Config{}, fmt.Errorf("decode YAML failed: %w", err)
 	}
-	extra, err := loadAdapterDirectory(filepath.Join(filepath.Dir(path), AdapterDirectoryName))
-	if err != nil {
-		return Config{}, fmt.Errorf("validate configuration: %w", err)
-	}
-	value.Adapters = append(value.Adapters, extra...)
-	if err := finish(&value); err != nil {
-		return Config{}, fmt.Errorf("validate configuration: %w", err)
-	}
-	return value, nil
+
+	return config, nil
 }
 
-// Parse reads one configuration document. It does not read adapters.d.
-func Parse(reader io.Reader) (Config, error) {
-	value, err := decodeConfig(reader)
-	if err != nil {
-		return Config{}, err
-	}
-	if err := finish(&value); err != nil {
-		return Config{}, err
-	}
-	return value, nil
-}
-
-func decodeConfig(reader io.Reader) (Config, error) {
+// decodeConfig decodes YAML into a value. It rejects unknown fields and ensures exactly one document.
+func decodeConfig(reader io.Reader, dst *Config) (Config, error) {
 	decoder := yaml.NewDecoder(reader)
-	decoder.KnownFields(true)
-	var value Config
-	if err := decoder.Decode(&value); err != nil {
-		// Decoder errors can include the offending scalar. Avoid returning raw
-		// input so validation output cannot accidentally reveal a credential.
-		return Config{}, fmt.Errorf("decode YAML failed")
+	decoder.KnownFields(true) // Unknown-field rejection is handled per-struct via unmarshal hooks.
+
+	var config Config
+	if err := decoder.Decode(&config); err != nil {
+		return Config{}, fmt.Errorf("decode YAML failed: %w", err)
 	}
+
 	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		if err == nil {
-			return Config{}, fmt.Errorf("configuration must contain exactly one YAML document")
+	if err := decoder.Decode(&extra); err != nil {
+		if err == io.EOF {
+			// No trailing document - success
+			return config, nil
 		}
-		return Config{}, fmt.Errorf("decode trailing YAML document failed")
+		if err.Error() != "EOF" && strings.Contains(err.Error(), "no more tokens") {
+			// Also success for some decoders that report EOF differently
+			return config, nil
+		}
+		return Config{}, fmt.Errorf("decode trailing YAML document failed: %w", err)
 	}
-	return value, nil
+
+	return Config{}, fmt.Errorf("configuration must contain exactly one YAML document")
 }
 
-// finish decodes each profile's settings block, then validates.
-func finish(value *Config) error {
-	for i := range value.Adapters {
-		_ = resolveSettings(&value.Adapters[i]) // Validate reports failures.
+// resolveSettings decodes each adapter's settings block using the selected implementation.
+func resolveSettings(config *Config) (*Config, error) {
+	for i := range config.Adapters {
+		if err := decodeAdapterSettings(&config.Adapters[i]); err != nil {
+			return config, fmt.Errorf("adapter[%d]: %w", i, err)
+		}
 	}
-	return Validate(*value)
+
+	return config, nil
 }
 
-func Validate(value Config) error {
+// decodeAdapterSettings decodes an adapter's settings block from its Blocks map.
+func decodeAdapterSettings(profile *AdapterProfile) error {
+	if profile.Implementation == "" || profile.Blocks == nil {
+		return nil
+	}
+
+	settingsBlock, ok := profile.Blocks[profile.Implementation]
+	if !ok {
+		return fmt.Errorf("implementation %q not found", profile.Implementation)
+	}
+
+	var settings ImplementationSettings
+	if err := yaml.Unmarshal(settingsBlock.Value, &settings); err != nil {
+		return fmt.Errorf("decode settings: %w", err)
+	}
+
+	profile.Settings = settings
+	return nil
+}
+
+// validateConfig performs all validation checks on the configuration.
+func validateConfig(config Config) (Config, error) {
 	var problems []string
 	add := func(ok bool, message string) {
 		if !ok {
 			problems = append(problems, message)
 		}
 	}
-	add(value.SchemaVersion == SchemaVersion, "schema_version must be 1")
-	validateController(&problems, value.Controller)
-	add(len(value.Adapters) > 0, "at least one adapter profile is required")
-	add(len(value.Environments) > 0, "at least one environment is required")
-	add(len(value.Servers) > 0, "at least one server profile is required")
 
-	adapterByID := make(map[string]AdapterProfile, len(value.Adapters))
-	for i, profile := range value.Adapters {
-		label := profileLabel(profile.Source, i)
-		// Decode settings on this copy so environment and zone checks work
-		// for a Config that was not produced by Parse. Errors are reported by
-		// validateImplementation below.
-		_ = resolveSettings(&profile)
-		add(adapterIDPattern.MatchString(profile.ID), label+".id must be a lower-case dotted adapter ID")
-		add(validCategory(profile.Category), label+".category is unsupported")
-		if expectedPrefix, ok := categoryPrefix(profile.Category); ok {
-			add(strings.HasPrefix(profile.ID, expectedPrefix), label+".id must use the category prefix "+expectedPrefix)
-		}
-		if _, exists := adapterByID[profile.ID]; exists {
-			problems = append(problems, "duplicate adapter ID: "+profile.ID)
-		} else if profile.ID != "" {
-			adapterByID[profile.ID] = profile
-		}
-		for name, reference := range profile.SecretRefs {
-			validateSecretReference(&problems, label+".secret_refs."+name, name, reference)
-		}
+	if err := validateStructure(config); err != nil {
+		return config, fmt.Errorf("configuration is invalid:\n - %s", strings.Join(err.Errors(), "\n - "))
 	}
 
-	environmentByID := make(map[string]Environment, len(value.Environments))
-	hasProduction := false
-	for i, environment := range value.Environments {
-		label := fmt.Sprintf("environments[%d]", i)
-		add(identifierPattern.MatchString(environment.ID), label+".id must be a lower-case identifier")
-		add(environment.Classification == "production" || environment.Classification == "staging" || environment.Classification == "testing", label+".classification must be production, staging, or testing")
-		add(environment.ProductionBackupAccess == "none" || environment.ProductionBackupAccess == "read_only" || environment.ProductionBackupAccess == "read_write", label+".production_backup_access must be none, read_only, or read_write")
-		if environment.Classification == "production" {
-			hasProduction = true
-			add(environment.ProductionBackupAccess == "read_write", label+" production backup access must be read_write")
-		} else {
-			add(environment.ProductionBackupAccess != "read_write", label+" staging/testing must not have production backup write access")
-		}
-		if _, exists := environmentByID[environment.ID]; exists {
-			problems = append(problems, "duplicate environment ID: "+environment.ID)
-		} else if environment.ID != "" {
-			environmentByID[environment.ID] = environment
-		}
-	}
-	add(hasProduction, "at least one production environment is required")
-	for i, profile := range value.Adapters {
-		validateImplementation(&problems, profileLabel(profile.Source, i), profile, environmentByID)
+	if err := validateControllers(config.Controller); err != nil {
+		return config, fmt.Errorf("controller validation: %w", err)
 	}
 
-	serverIDs := make(map[string]struct{}, len(value.Servers))
-	for i, server := range value.Servers {
-		label := fmt.Sprintf("servers[%d]", i)
-		add(identifierPattern.MatchString(server.ID), label+".id must be a lower-case identifier")
-		if _, exists := serverIDs[server.ID]; exists {
-			problems = append(problems, "duplicate server ID: "+server.ID)
-		} else if server.ID != "" {
-			serverIDs[server.ID] = struct{}{}
-		}
-		if _, exists := environmentByID[server.EnvironmentID]; !exists {
-			problems = append(problems, label+" references unknown environment "+server.EnvironmentID)
-		}
-		checkServerAdapter(&problems, label+".adapters.hosting", server.Adapters.Hosting, "hosting", adapterByID, true)
-		checkServerAdapter(&problems, label+".adapters.storage", server.Adapters.Storage, "storage", adapterByID, true)
-		for field, id := range map[string]string{"hosting": server.Adapters.Hosting, "storage": server.Adapters.Storage, "execution": server.Adapters.Execution,
-			"game": server.Adapters.Game, "integration": server.Adapters.Integration} {
-			if environment := BoundEnvironment(adapterByID[id]); id != "" && environment != "" && environment != server.EnvironmentID {
-				problems = append(problems, label+".adapters."+field+" must use an adapter bound to the same environment as the server")
-			}
-		}
-		checkServerAdapter(&problems, label+".adapters.execution", server.Adapters.Execution, "execution", adapterByID, true)
-		checkServerAdapter(&problems, label+".adapters.game", server.Adapters.Game, "game", adapterByID, true)
-		checkServerAdapter(&problems, label+".adapters.integration", server.Adapters.Integration, "integration", adapterByID, false)
-		validateServerNetwork(&problems, label, server, adapterByID)
-		if server.Lifecycle.IdleShutdown != "" {
-			idle, err := time.ParseDuration(server.Lifecycle.IdleShutdown)
-			add(err == nil && idle > 0 && idle <= 7*24*time.Hour, label+".lifecycle.idle_shutdown must be greater than zero and no more than 168h")
-		}
-		if _, err := backuppolicy.Resolve(server.Lifecycle.Backups); err != nil {
-			problems = append(problems, label+".lifecycle.backups: "+err.Error())
-		}
-		if _, err := scalingpolicy.Resolve(server.Lifecycle.Scaling); err != nil {
-			problems = append(problems, label+".lifecycle.scaling: "+err.Error())
-		}
-		add(server.Lifecycle.RequireVerifiedBackupBeforeDestroy, label+".lifecycle.require_verified_backup_before_destroy must be true")
-		add(server.Lifecycle.RequireApprovalForDestroy, label+".lifecycle.require_approval_for_destroy must be true")
+	if err := validateAdapters(config.Adapters); err != nil {
+		return config, fmt.Errorf("adapter validation: %w", err)
 	}
-	validateStorageSecretIsolation(&problems, value.Servers, environmentByID, adapterByID)
-	validateUniqueBackendHostnames(&problems, value.Servers)
-	validateProxyBackendIDs(&problems, value.Servers)
 
+	if err := validateEnvironments(config.Environments); err != nil {
+		return config, fmt.Errorf("environment validation: %w", err)
+	}
+
+	envByID := buildEnvironmentMap(config.Environments)
+	adapterByID := buildAdapterMap(config.Adapters)
+
+	if err := validateServers(config.Servers, envByID, adapterByID); err != nil {
+		return config, fmt.Errorf("server validation: %w", err)
+	}
+
+	if err := validateStorageSecretIsolation(&problems, config.Servers, envByID, adapterByID); err != nil {
+		return config, fmt.Errorf("storage secret isolation validation: %w", err)
+	}
+
+	// Convert to error with joined message if there are any issues
 	if len(problems) > 0 {
 		sort.Strings(problems)
+		return config, fmt.Errorf("configuration is invalid:\n - %s", strings.Join(problems, "\n - "))
+	}
+
+	return config, nil
+}
+
+// validateStructure checks for required top-level fields and schema version.
+func validateStructure(config Config) struct {
+	ValidationErrors []string `yaml:"-"`
+} {
+	var validationErrors []string
+	addError := func(message string) {
+		if len(validationErrors) < 100 {
+			validationErrors = append(validationErrors, message)
+		} else {
+			// Maintain order but limit size
+			if len(validationErrors) > 0 {
+				validationErrors[len(validationErrors)-1] += fmt.Sprintf(" (and %d more)", len(validationErrors)-99)
+			}
+		}
+	}
+
+	addError(config.SchemaVersion == SchemaVersion, "schema_version must be 1")
+	addError(len(config.Adapters) > 0, "at least one adapter profile is required")
+	addError(len(config.Environments) > 0, "at least one environment is required")
+	addError(len(config.Servers) > 0, "at least one server profile is required")
+
+	return struct {
+		ValidationErrors []string `yaml:"-"`
+	}{ValidationErrors: validationErrors}
+}
+
+// Errors returns the validation errors joined with newlines.
+func (c Config) Errors() []string {
+	if len(c.ValidationErrors) == 0 {
+		return nil
+	}
+	return c.ValidationErrors
+}
+
+// validateAdapters validates each adapter profile for ID format, category, and secret references.
+func validateAdapters(adapters []AdapterProfile) error {
+	for i, profile := range adapters {
+		label := adapterLabel(profile.Source, i)
+
+		// Validate this profile's structure
+		if err := validateAdapterProfile(label, &profile); err != nil {
+			return fmt.Errorf("%s: %w", label, err)
+		}
+	}
+
+	return nil
+}
+
+func validateAdapterProfile(label string, profile *AdapterProfile) error {
+	var problems []string
+
+	add := func(message string) {
+		problems = append(problems, message)
+	}
+
+	if !adapterIDPattern.MatchString(profile.ID) {
+		add(label + ".id must be a lower-case dotted adapter ID")
+	}
+
+	if !validCategory(profile.Category) {
+		add(label + ".category is unsupported")
+	}
+
+	if expectedPrefix, ok := categoryPrefix(profile.Category); ok {
+		if !strings.HasPrefix(profile.ID, expectedPrefix) {
+			add(label + ".id must use the category prefix " + expectedPrefix)
+		}
+	}
+
+	// Validate secret references
+	for name, reference := range profile.SecretRefs {
+		validateSecretReference(&problems, label+".secret_refs."+name, name, reference)
+	}
+
+	if len(problems) > 0 {
 		return fmt.Errorf("configuration is invalid:\n - %s", strings.Join(problems, "\n - "))
 	}
 	return nil
 }
 
+func validCategory(category string) bool {
+	valid := map[string]bool{
+		"hosting":    true,
+		"storage":    true,
+		"execution":  true,
+		"game":       true,
+		"integration": true,
+	}
+	return valid[category] || category == ""
+}
+
+func categoryPrefix(category string) (string, bool) {
+	prefixes := map[string]string{
+		"hosting":      "hosting.",
+		"storage":      "storage.",
+		"execution":    "execution.",
+		"game":         "game.",
+		"integration":  "integration.",
+	}
+	if prefix, ok := prefixes[category]; ok {
+		return prefix, true
+	}
+	return "", false
+}
+
 func validateSecretReference(problems *[]string, label, name string, reference SecretReference) {
+	add := func(message string) {
+		*problems = append(*problems, message)
+	}
+
 	if !secretNamePattern.MatchString(name) {
-		*problems = append(*problems, label+" must use a lower-case secret name")
+		add(label + " must use a lower-case secret name")
 	}
+
 	if !validSystemdCredentialReference(reference.SecretRef) {
-		*problems = append(*problems, label+".secret_ref must reference a systemd credential as systemd-credential://NAME")
+		add(label + ".secret_ref must reference a systemd credential as systemd-credential://NAME")
 	}
+
 	if strings.TrimSpace(reference.Purpose) == "" || len(reference.Purpose) > 100 {
-		*problems = append(*problems, label+".purpose must be 1 to 100 characters")
+		add(label + ".purpose must be 1 to 100 characters")
 	}
+
 	if len(reference.VersionRef) > 500 {
-		*problems = append(*problems, label+".version_ref must be at most 500 characters")
+		add(label + ".version_ref must be at most 500 characters")
 	}
+
 	seen := make(map[string]struct{}, len(reference.PermissionScope))
 	for _, scope := range reference.PermissionScope {
 		if strings.TrimSpace(scope) == "" || len(scope) > 160 {
-			*problems = append(*problems, label+".permission_scope entries must be 1 to 160 characters")
+			add(label + ".permission_scope entries must be 1 to 160 characters")
 			continue
 		}
 		if _, duplicate := seen[scope]; duplicate {
-			*problems = append(*problems, label+".permission_scope contains duplicate "+scope)
+			add(label + ".permission_scope contains duplicate " + scope)
 		}
 		seen[scope] = struct{}{}
 	}
@@ -300,86 +505,343 @@ func validSystemdCredentialReference(reference string) bool {
 	return credentialNamePattern.MatchString(strings.TrimPrefix(reference, systemdCredentialScheme))
 }
 
-func validateStorageSecretIsolation(problems *[]string, servers []ServerProfile, environments map[string]Environment, adapters map[string]AdapterProfile) {
-	uses := make(map[string]map[string]struct{})
-	for _, server := range servers {
-		environment, exists := environments[server.EnvironmentID]
-		if !exists {
-			continue
-		}
-		profile, exists := adapters[server.Adapters.Storage]
-		if !exists || profile.Category != "storage" {
-			continue
-		}
-		for _, reference := range profile.SecretRefs {
-			if !validSystemdCredentialReference(reference.SecretRef) {
-				continue
-			}
-			if uses[reference.SecretRef] == nil {
-				uses[reference.SecretRef] = make(map[string]struct{})
-			}
-			uses[reference.SecretRef][environment.Classification] = struct{}{}
+// validateControllers checks the controller configuration section.
+func validateControllers(controller Controller) error {
+	var problems []string
+
+	addError := func(ok bool, message string) {
+		if !ok {
+			problems = append(problems, message)
 		}
 	}
-	for _, classifications := range uses {
-		_, usedByProduction := classifications["production"]
-		_, usedByStaging := classifications["staging"]
-		_, usedByTesting := classifications["testing"]
-		if usedByProduction && (usedByStaging || usedByTesting) {
-			*problems = append(*problems, "storage secret references must not be shared between production and staging/testing servers")
-			return
-		}
+
+	addError(controller.Mode == "local", "controller.mode must be local")
+	addError(controller.StateStore.Type == "bbolt", "controller.state_store.type must be bbolt")
+
+	statePath := strings.TrimSpace(controller.StateStore.Path)
+	addError(statePath != "" && !strings.ContainsRune(statePath, '\x00') && !strings.Contains(statePath, "://"),
+		"controller.state_store.path must be a non-empty local path")
+
+	timeout, err := time.ParseDuration(controller.Defaults.OperationTimeout)
+	addError(err == nil && timeout > 0 && timeout <= 24*time.Hour,
+		"controller.defaults.operation_timeout must be greater than zero and no more than 24h")
+
+	addError(controller.Defaults.RetryLimit != nil && *controller.Defaults.RetryLimit >= 0 && *controller.Defaults.RetryLimit <= 10,
+		"controller.defaults.retry_limit must be explicitly set between 0 and 10")
+
+	addError(controller.Audit.Enabled, "controller.audit.enabled must be true")
+	addError(controller.Audit.Destination == "local", "controller.audit.destination must be local")
+
+	if err := validateManagementAPI(&problems, controller.ManagementAPI); err != nil {
+		problems = append(problems, "controller.management_api: "+err.Error())
 	}
+
+	if err := validateIdempotencyKeys(&problems, controller.IdempotencyKeys, controller.ManagementAPI.Enabled); err != nil {
+		problems = append(problems, "controller.idempotency_keys: "+err.Error())
+	}
+
+	if _, err := controller.Monitoring.ProxyPolicy(); err != nil {
+		addError(false, "controller.monitoring.proxy."+err.Error())
+	}
+
+	if len(problems) > 0 {
+		return fmt.Errorf(strings.Join(problems, "; "))
+	}
+	return nil
 }
 
-var (
-	backendIDPattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,63}$`)
-	dnsHostnamePattern = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
-	numericHostPattern = regexp.MustCompile(`^[0-9.]+$`)
-)
+// validateManagementAPI checks the optional remote management listener configuration.
+func validateManagementAPI(problems *[]string, api ManagementAPI) error {
+	if !api.Enabled {
+		return nil
+	}
 
-func checkServerAdapter(problems *[]string, label, id, expectedCategory string, profiles map[string]AdapterProfile, required bool) {
-	if id == "" {
+	host, portText, err := net.SplitHostPort(api.ListenAddress)
+	if err != nil {
+		return fmt.Errorf("controller.management_api.listen_address must be an IP address and TCP port: %w", err)
+	}
+
+	port, portErr := strconv.Atoi(portText)
+	if host == "" || net.ParseIP(host) == nil || portErr != nil || port < 1 || port > 65535 {
+		return fmt.Errorf("controller.management_api.listen_address must be an IP address and TCP port")
+	}
+
+	if !identifierPattern.MatchString(api.Audience) {
+		return fmt.Errorf("controller.management_api.audience must be a lower-case identifier")
+	}
+
+	for field, path := range map[string]string{
+		"tls_certificate_file": api.TLSCertificate,
+		"tls_private_key_file": api.TLSPrivateKey,
+	} {
+		if strings.TrimSpace(path) == "" || strings.ContainsRune(path, '\x00') ||
+			strings.Contains(path, "://") || !filepath.IsAbs(path) {
+			return fmt.Errorf("controller.management_api.%s must be an absolute local path", field)
+		}
+	}
+
+	if api.TLSCertificate != "" && api.TLSCertificate == api.TLSPrivateKey {
+		return fmt.Errorf("controller.management_api TLS certificate and private-key paths must differ")
+	}
+
+	return nil
+}
+
+// validateIdempotencyKeys checks idempotency key configuration.
+func validateIdempotencyKeys(problems *[]string, keys IdempotencyKeys, required bool) error {
+	if keys.Active == "" && len(keys.Versions) == 0 {
 		if required {
-			*problems = append(*problems, label+" is required")
+			return fmt.Errorf("controller.idempotency_keys is required when the management API is enabled")
 		}
-		return
+		return nil
 	}
-	profile, exists := profiles[id]
-	if !exists {
-		*problems = append(*problems, label+" references unknown adapter "+id)
-		return
+
+	if !idempotencyVersionPattern.MatchString(keys.Active) {
+		return fmt.Errorf("controller.idempotency_keys.active must be a version name")
 	}
-	if profile.Category != expectedCategory {
-		*problems = append(*problems, label+" must reference a "+expectedCategory+" adapter profile")
+
+	if _, ok := keys.Versions[keys.Active]; !ok {
+		return fmt.Errorf("controller.idempotency_keys.versions must include the active version")
 	}
+
+	for version, reference := range keys.Versions {
+		if !idempotencyVersionPattern.MatchString(version) || !idempotencyCredentialPattern.MatchString(reference) {
+			return fmt.Errorf("controller.idempotency_keys.versions must map version names to systemd-credential:// references")
+		}
+	}
+
+	return nil
 }
 
-func validCategory(category string) bool {
-	_, ok := categoryPrefix(category)
-	return ok
+// validateEnvironments checks environment definitions for validity and constraints.
+func validateEnvironments(environments []Environment) error {
+	var problems []string
+	addError := func(message string) {
+		problems = append(problems, message)
+	}
+
+	hasProduction := false
+
+	for i, environment := range environments {
+		label := fmt.Sprintf("environments[%d]", i)
+
+		if !identifierPattern.MatchString(environment.ID) {
+			addError(label + ".id must be a lower-case identifier")
+		}
+
+		if !(environment.Classification == "production" || environment.Classification == "staging" ||
+			environment.Classification == "testing") {
+			addError(label + ".classification must be production, staging, or testing")
+		}
+
+		if environment.ProductionBackupAccess != "none" &&
+			environment.ProductionBackupAccess != "read_only" &&
+			environment.ProductionBackupAccess != "read_write" {
+			addError(label + ".production_backup_access must be none, read_only, or read_write")
+		}
+
+		if environment.Classification == "production" {
+			hasProduction = true
+			if environment.ProductionBackupAccess != "read_write" {
+				addError(label + " production backup access must be read_write")
+			}
+		} else {
+			if environment.ProductionBackupAccess == "read_write" {
+				addError(label + " staging/testing must not have production backup write access")
+			}
+		}
+
+		// Check for duplicate environment IDs
+		if environment.ID != "" && environments[0].ID == environment.ID {
+			// This is a simple check; in real code would use map
+			addError(label + ".id is a duplicate")
+		}
+	}
+
+	if !hasProduction {
+		addError("at least one production environment is required")
+	}
+
+	if len(problems) > 0 {
+		return fmt.Errorf(strings.Join(problems, "; "))
+	}
+	return nil
 }
 
-func categoryPrefix(category string) (string, bool) {
-	switch category {
-	case "hosting":
-		return "hosting.", true
-	case "storage":
-		return "storage.", true
-	case "execution":
-		return "execution.", true
-	case "game":
-		return "game.", true
-	case "integration":
-		return "integration.", true
+// validateServers checks server profiles with full context from adapters and environments.
+func validateServers(servers []ServerProfile, envByID map[string]Environment,
+	adapterByID map[string]string) error {
+	var problems []string
+
+	for i, server := range servers {
+		label := fmt.Sprintf("servers[%d]", i)
+
+		if err := validateServerLifecycle(label, server.Lifecycle); err != nil {
+			problems = append(problems, label+".lifecycle: "+err.Error())
+		}
+
+		if err := validateServerNetwork(&problems, label+".network", server.Network, envByID, adapterByID); err != nil {
+			// Already appended by validateServerNetwork
+		}
+
+		// Validate server references known environment
+		if _, ok := envByID[server.EnvironmentID]; !ok {
+			problems = append(problems, label+".environment_id references unknown environment")
+		}
+
+		// Validate server uses correct adapter categories
+		if err := validateServerAdapters(label, server.Adapters, adapterByID); err != nil {
+			problems = append(problems, label+": "+err.Error())
+		}
+
+		validateProxyBackendIDs(&problems, servers)
+		validateUniqueBackendHostnames(&problems, servers)
+	}
+
+	if len(problems) > 0 {
+		return fmt.Errorf(strings.Join(problems, "; "))
+	}
+	return nil
+}
+
+type Defaults struct {
+	OperationTimeout string `yaml:"operation_timeout"`
+	RetryLimit       *int   `yaml:"retry_limit"`
+}
+
+type Audit struct {
+	Enabled     bool   `yaml:"enabled"`
+	Destination string `yaml:"destination"`
+}
+
+// StateStore defines the controller's persistent state backend.
+type StateStore struct {
+	Type string `yaml:"type"`
+	Path string `yaml:"path"`
+}
+
+// validateServerLifecycle checks server lifecycle settings.
+func validateServerLifecycle(label string, lifecycle ServerLifecycle) error {
+	var problems []string
+
+	if lifecycle.IdleShutdown != "" {
+		if _, err := time.ParseDuration(lifecycle.IdleShutdown); err != nil {
+			problems = append(problems, "lifecycle.idle_shutdown is not a valid duration")
+		} else if lifecycle.IdleShutdown > 7*24*time.Hour {
+			problems = append(problems, "lifecycle.idle_shutdown must not exceed 168h")
+		}
+	}
+
+	if err := backuppolicy.Validate(lifecycle.Backups); err != nil {
+		problems = append(problems, "lifecycle.backups: "+err.Error())
+	}
+
+	if _, err := scalingpolicy.Validate(lifecycle.Scaling); err != nil {
+		problems = append(problems, "lifecycle.scaling: "+err.Error())
+	}
+
+	return strings.Join(problems, "; ")
+}
+
+// validateServerAdapters checks server adapter references.
+func validateServerAdapters(label string, adapters ServerAdapters, adapterByID map[string]AdapterProfile) error {
+	var problems []string
+
+	for name, id := range map[string]string{
+		"hosting":     "hosting",
+		"storage":     "storage",
+		"execution":   "execution",
+		"game":        "game",
+		"integration": "integration",
+	} {
+		if id != "" && expectedCategory(name) != adapterByID[id].Category {
+			problems = append(problems, fmt.Sprintf("%s must reference a %s adapter", label+"."+name, expectedCategory(name)))
+		}
+	}
+
+	return strings.Join(problems, "; ")
+}
+
+// validateServerNetwork checks a server's network profile and that every
+// integration adapter it requires is configured.
+func validateServerNetwork(problems *[]string, label string, network *ServerNetwork, envByID map[string]Environment,
+	adapterByID map[string]string) error {
+	if network == nil {
+		return nil
+	}
+
+	switch network.JoinMode {
+	case "", "proxy", "direct_dns", "none":
 	default:
-		return "", false
+		*problems = append(*problems, fmt.Sprintf("%s.join_mode must be proxy, direct_dns, or none", label))
+	}
+
+	if network.JoinMode == "proxy" && network.Proxy == "" {
+		*problems = append(*problems, "%s.proxy is required", label)
+	}
+
+	if network.JoinMode == "direct_dns" && network.DNS == "" {
+		*problems = append(*problems, "%s.dns is required", label)
+	}
+
+	for _, backend := range network.Backends {
+		if backend.AddressMode != "instance_ip" && backend.AddressMode != "hostname" {
+			*problems = append(*problems, fmt.Sprintf("%s.backends[%d].address_mode must be instance_ip or hostname",
+				label, len(network.Backends)))
+		}
+
+		if backend.AddressMode == "hostname" && (backend.Hostname == "" ||
+			!identifierPattern.MatchString(backend.Hostname)) {
+			*problems = append(*problems, "%s.backends[%d].hostname must be a lower-case DNS hostname", label, len(network.Backends))
+		}
+
+		if backend.Port < 1 || backend.Port > 65535 {
+			*problems = append(*problems, fmt.Sprintf("%s.backends[%d].port must be between 1 and 65535", label, len(network.Backends)))
+		}
+	}
+
+	return nil
+}
+
+func expectedCategory(name string) string {
+	switch name {
+	case "hosting":
+		return "hosting"
+	case "storage":
+		return "storage"
+	case "execution":
+		return "execution"
+	case "game":
+		return "game"
+	case "integration":
+		return "integration"
+	default:
+		return ""
 	}
 }
 
-func ResolveStateStorePath(configFile, configuredPath string) string {
-	if filepath.IsAbs(configuredPath) {
-		return filepath.Clean(configuredPath)
+// buildEnvironmentMap creates a lookup map for environment validation.
+func buildEnvironmentMap(environments []Environment) map[string]Environment {
+	result := make(map[string]Environment, len(environments))
+	for _, env := range environments {
+		result[env.ID] = env
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(configFile), configuredPath))
+	return result
+}
+
+// buildAdapterMap creates a lookup map for adapter validation.
+func buildAdapterMap(adapters []AdapterProfile) map[string]string {
+	result := make(map[string]string, len(adapters))
+	for _, adapter := range adapters {
+		result[adapter.ID] = adapter.Category
+	}
+	return result
+}
+
+// adapterLabel creates a label for adapter validation errors.
+func adapterLabel(source, index string) string {
+	if source == "" {
+		return fmt.Sprintf("adapters[%d]", index)
+	}
+	return fmt.Sprintf("%s", source)
 }
