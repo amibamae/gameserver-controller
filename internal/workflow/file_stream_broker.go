@@ -115,9 +115,7 @@ func (b *FileServerBackupTransferBroker) VerifyStepStreams(
 	ctx context.Context, operation store.OperationRecord, step store.OperationStep,
 	expectations []ServerBackupStreamExpectation,
 ) error {
-	if b == nil || ctx == nil || ctx.Err() != nil || operation.OperationID == "" ||
-		operation.OperationType != "server.backup" || step.StepID == "" ||
-		step.Status != protocolstate.StepSucceeded || step.Attempt < 1 || len(expectations) == 0 {
+	if b == nil || !completedBackupStreamStep(ctx, operation, step, expectations) {
 		return errors.New("completed server.backup stream step and context are required")
 	}
 	direction, sink, err := backupStreamRoute(step)
@@ -132,36 +130,7 @@ func (b *FileServerBackupTransferBroker) VerifyStepStreams(
 	if err := b.validateOperationInput(operation, step, expectations); err != nil {
 		return err
 	}
-	seen := make(map[string]struct{}, len(expectations))
-	for _, expectation := range expectations {
-		if expectation.DataSetID == "" || expectation.SizeBytes < 0 || expectation.SizeBytes > expectation.MaximumBytes {
-			return errors.New("stream verification expectation has an invalid data set or byte count")
-		}
-		if _, duplicate := seen[expectation.DataSetID]; duplicate {
-			return errors.New("stream verification repeats a data set")
-		}
-		seen[expectation.DataSetID] = struct{}{}
-		dataPath, metaPath, err := b.streamPaths(operation.OperationID, step.StepID, step.Attempt, expectation.DataSetID)
-		if err != nil {
-			return err
-		}
-		record, err := readStagedStreamRecord(metaPath)
-		if err != nil {
-			return errors.New("stream completion evidence is missing")
-		}
-		if !stagedRecordMatches(record, operation, step, expectation, direction, sink) ||
-			!record.Complete || record.ActualSize != expectation.SizeBytes ||
-			record.ActualSHA256 != expectation.SHA256 {
-			return errors.New("stream completion evidence does not match the exact operation, step, data set, size, and checksum")
-		}
-		if sink {
-			size, digest, err := hashFileBounded(dataPath, expectation.MaximumBytes)
-			if err != nil || size != expectation.SizeBytes || digest != expectation.SHA256 {
-				return errors.New("staged stream bytes do not match the adapter output and trusted expectation")
-			}
-		}
-	}
-	return nil
+	return b.verifyCompletedStreams(stepStreams{operation: operation, step: step, direction: direction, storesBytes: sink}, expectations)
 }
 
 // verifyInvocationStream validates completion evidence while the workflow
@@ -171,8 +140,7 @@ func (b *FileServerBackupTransferBroker) verifyInvocationStream(
 	operation store.OperationRecord, step store.OperationStep,
 	expectation ServerBackupStreamExpectation, direction string, storesBytes bool,
 ) error {
-	if b == nil || operation.OperationType != "server.backup" || step.Status != protocolstate.StepRunning ||
-		step.Attempt < 1 || expectation.DataSetID == "" {
+	if b == nil || !runningInvocationStream(operation, step, expectation) {
 		return errors.New("running server.backup stream and trusted expectation are required")
 	}
 	b.mu.Lock()
@@ -186,16 +154,11 @@ func (b *FileServerBackupTransferBroker) verifyInvocationStream(
 	}
 	record, err := readStagedStreamRecord(metaPath)
 	if err != nil || !stagedRecordMatches(record, operation, step, expectation, direction, storesBytes) ||
-		!record.Complete || record.ActualSize < 0 || record.ActualSize > expectation.MaximumBytes ||
-		(record.ExpectedSize >= 0 && record.ActualSize != record.ExpectedSize) ||
-		(record.ExpectedSHA256 != "" && record.ActualSHA256 != record.ExpectedSHA256) {
+		!invocationRecordComplete(record, expectation.MaximumBytes) {
 		return errors.New("backup stream was not fully consumed or did not match its exact integrity expectation")
 	}
-	if storesBytes {
-		size, digest, err := hashFileBounded(dataPath, expectation.MaximumBytes)
-		if err != nil || size != record.ActualSize || digest != record.ActualSHA256 {
-			return errors.New("staged backup bytes failed independent size or checksum verification")
-		}
+	if storesBytes && !stagedBytesMatch(dataPath, expectation.MaximumBytes, record.ActualSize, record.ActualSHA256) {
+		return errors.New("staged backup bytes failed independent size or checksum verification")
 	}
 	return nil
 }
@@ -261,63 +224,6 @@ func (b *FileServerBackupTransferBroker) newRecord(
 		InputSHA256: streamInputDigest(effectiveStepInput(step)), ExpiresAt: expiresAt,
 		StoresBytes: storesBytes,
 	}
-}
-
-func (b *FileServerBackupTransferBroker) validateOperationInput(
-	operation store.OperationRecord, step store.OperationStep, expectations []ServerBackupStreamExpectation,
-) error {
-	input := decodeObject(effectiveStepInput(step))
-	switch step.CapabilityName {
-	case "game.backup.capture":
-		if stringValueMap(input, "backup_id") != operation.OperationID ||
-			stringValueMap(input, "data_set_id") != expectations[0].DataSetID ||
-			!backupTargetMatchesOperation(mustJSON(input["target"]), operation) {
-			return errors.New("capture stream is not bound to the exact operation target and data set")
-		}
-	case "storage.object.put", "storage.object.get":
-		size, sizeErr := integerFromAny(input["expected_size_bytes"])
-		checksum := asStringMap(input["expected_checksum"])
-		if sizeErr != nil || size != expectations[0].SizeBytes ||
-			stringValueMap(checksum, "algorithm") != "sha256" ||
-			stringValueMap(checksum, "digest") != expectations[0].SHA256 {
-			return errors.New("storage stream is not bound to the exact expected size and checksum")
-		}
-		if step.CapabilityName == "storage.object.put" {
-			target := asStringMap(input["target"])
-			if stringValueMap(target, "environment_id") != operation.Target.EnvironmentID {
-				return errors.New("storage upload target crosses its operation environment")
-			}
-		} else {
-			objectRef := asStringMap(input["object_ref"])
-			if stringValueMap(objectRef, "environment_id") != operation.Target.EnvironmentID {
-				return errors.New("storage readback reference crosses its operation environment")
-			}
-		}
-	case "game.backup.validate":
-		if stringValueMap(input, "backup_id") != operation.OperationID ||
-			stringValueMap(input, "environment_id") != operation.Target.EnvironmentID {
-			return errors.New("game validation stream is not bound to its operation and environment")
-		}
-		manifest := asStringMap(input["manifest"])
-		objects := asAnySlice(manifest["objects"])
-		streams := asAnySlice(input["object_streams"])
-		if len(objects) != len(expectations) || len(streams) != len(expectations) {
-			return errors.New("game validation stream count differs from the manifest object count")
-		}
-		for index, expectation := range expectations {
-			object := asStringMap(objects[index])
-			stream := asStringMap(streams[index])
-			size, sizeErr := integerFromAny(object["size_bytes"])
-			if sizeErr != nil || stringValueMap(object, "data_set_id") != expectation.DataSetID ||
-				size != expectation.SizeBytes || stringValueMap(object, "checksum") != expectation.SHA256 ||
-				!equalJSON(mustJSON(stream["object_ref"]), mustJSON(object["object_ref"])) {
-				return errors.New("game validation stream is not bound to the corresponding exact manifest object")
-			}
-		}
-	default:
-		return errors.New("unsupported stream capability")
-	}
-	return nil
 }
 
 func (b *FileServerBackupTransferBroker) verifySourceArtifact(
