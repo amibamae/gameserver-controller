@@ -61,6 +61,20 @@ All GitHub Actions used in [.github/workflows/](.github/workflows/) are MIT lice
 
 - **GitHub Actions** (all MIT, Copyright (c) 2018 GitHub, Inc. and contributors): [`actions/checkout@v7`](https://github.com/actions/checkout), [`actions/setup-go@v7`](https://github.com/actions/setup-go), [`actions/setup-java@v4`](https://github.com/actions/setup-java). Text: [licenses/github-actions-LICENSE](licenses/github-actions-LICENSE).
 
+### Strix security scanner (CI-only, manually initiated)
+
+- **Name/version:** Strix CLI `v1.7.1`, as downloaded from GitHub Releases
+  (`strix-1.7.1-linux-x86_64.tar.gz`).
+- **Purpose:** Opt-in, manually triggered security assessment in GitHub
+  Actions. Strix is not linked into or distributed with Game Server Controller.
+- **Upstream:** [usestrix/strix](https://github.com/usestrix/strix/tree/v1.7.1).
+- **License:** Apache License 2.0; [upstream license text](https://github.com/usestrix/strix/blob/v1.7.1/LICENSE).
+- **Attribution:** Strix project maintainers and contributors.
+- **Upstream NOTICE:** No top-level `NOTICE` file was present at `v1.7.1`.
+- **Supply chain:** The CLI archive is checksum-verified; the tool may
+  download a separate sandbox Docker image at runtime. For configuration,
+  restrictions and data handling, see [Strix CI](docs/STRIX_CI.md).
+
 ### Eclipse Temurin JDK 21
 
 Installed by `actions/setup-java` with `distribution: temurin`: GNU GPL v2 with the Classpath Exception, from the Eclipse Adoptium project ([license](https://github.com/adoptium/jdk21u/blob/HEAD/LICENSE)). The JDK is only the build and test toolchain.
