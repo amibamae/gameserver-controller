@@ -201,6 +201,10 @@ func TestSetupR3LoadControllerBinaryRejections(t *testing.T) {
 		t.Fatal(err)
 	}
 	const shape = "controller binary must be a non-empty executable regular file no larger than 128 MiB"
+	ownerExecError := "open controller binary"
+	if os.Geteuid() == 0 {
+		ownerExecError = "controller binary does not contain readable Go build metadata"
+	}
 	for path, want := range map[string]string{
 		"controller":                  "controller binary path must be clean and absolute",
 		"/usr/../controller":          "controller binary path must be clean and absolute",
@@ -215,7 +219,7 @@ func TestSetupR3LoadControllerBinaryRejections(t *testing.T) {
 		huge:   shape,
 		limit:  "controller binary does not contain readable Go build metadata",
 		script: "controller binary does not contain readable Go build metadata",
-		setupR3WriteFile(t, filepath.Join(dir, "owner-exec-only"), 0o100, []byte("x")): "controller binary does not contain readable Go build metadata",
+		setupR3WriteFile(t, filepath.Join(dir, "owner-exec-only"), 0o100, []byte("x")): ownerExecError,
 	} {
 		binary, err := loadControllerBinary(path)
 		if got := setupR3Err(err); got != want || binary != nil {
