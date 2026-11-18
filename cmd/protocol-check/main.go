@@ -23,24 +23,7 @@ type schemaEntry struct {
 	ID   string
 }
 
-type ecmaRegexp regexp2.Regexp
-
-func (re *ecmaRegexp) MatchString(value string) bool {
-	matched, err := (*regexp2.Regexp)(re).MatchString(value)
-	return err == nil && matched
-}
-
-func (re *ecmaRegexp) String() string {
-	return (*regexp2.Regexp)(re).String()
-}
-
-func compileECMA(expression string) (jsonschema.Regexp, error) {
-	re, err := regexp2.Compile(expression, regexp2.ECMAScript)
-	if err != nil {
-		return nil, err
-	}
-	return (*ecmaRegexp)(re), nil
-}
+// ecmaRegexp and compileECMA are defined in util.go
 
 type protocolPackage struct {
 	root       string
@@ -97,50 +80,4 @@ func runWithManifest(root string, printManifest bool) error {
 // only mapping: this validator and other implementations both read it.
 const exampleIndexFile = "index.json"
 
-func asObject(value any) map[string]any {
-	object, _ := value.(map[string]any)
-	return object
-}
-
-func stringValue(object map[string]any, key string) string {
-	value, _ := object[key].(string)
-	return value
-}
-
-func boolValue(object map[string]any, key string) bool {
-	value, _ := object[key].(bool)
-	return value
-}
-
-func arrayValue(object map[string]any, key string) []any {
-	value, _ := object[key].([]any)
-	return value
-}
-
-func contains(values []any, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
-func uniqueStrings(values []any) bool {
-	seen := make(map[string]bool)
-	for _, value := range values {
-		str, ok := value.(string)
-		if !ok || seen[str] {
-			return false
-		}
-		seen[str] = true
-	}
-	return true
-}
-
-func parseTime(value string) (time.Time, error) {
-	if !strings.HasSuffix(value, "Z") {
-		return time.Time{}, fmt.Errorf("expected UTC Z timestamp, got %q", value)
-	}
-	return time.Parse(time.RFC3339Nano, value)
-}
+// asObject, stringValue, boolValue, arrayValue, contains, uniqueStrings, parseTime are defined in util.go

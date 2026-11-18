@@ -206,97 +206,169 @@ func runKeyCommand(args []string, stdout, stderr io.Writer, isRoot bool, uid int
 		return errors.New("invalid command")
 	}
 	operation := args[0]
-	flags := flag.NewFlagSet("controller-setup keys "+operation, flag.ContinueOnError)
+	switch operation {
+	case "issue":
+		return runKeyIssueCommand(args[1:], stdout, stderr)
+	case "revoke":
+		return runKeyRevokeCommand(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintln(stderr, "usage: controller-setup keys {issue|revoke} [options]")
+		return errors.New("invalid command")
+	}
+}
+
+// runKeyIssueCommand handles API key issuance.
+func runKeyIssueCommand(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("controller-setup keys issue", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	databasePath := flags.String("database", "", "existing configured bbolt database")
 	actorID := flags.String("actor", "", "actor identity assigned to the new key")
 	audience := flags.String("audience", "", "exact controller audience for the key")
 	expiresIn := flags.String("expires-in", "", "required key lifetime (1m through 90d)")
-	keyID := flags.String("key-id", "", "key identifier to revoke")
-	confirmKeyID := flags.String("confirm-key-id", "", "repeat the exact key identifier to confirm revocation")
+	keyID := flags.String("key-id", "", "unused for issuance")
+	confirmKeyID := flags.String("confirm-key-id", "", "unused for issuance")
 	var scopes scopeFlags
 	flags.Var(&scopes, "scope", "exact permission:environment:resource scope; repeat for multiple scopes")
-	if err := flags.Parse(args[1:]); err != nil {
+	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
 		return err
 	}
-	if flags.NArg() != 0 || strings.TrimSpace(*databasePath) == "" {
-		return errors.New("--database must name the existing controller database")
+
+	if err := keysIssueValidate(*databasePath, *actorID, *audience, *expiresIn, *keyID, *confirmKeyID, len(scopes)); err != nil {
+		return errors.New("missing required flags")
 	}
-	var issueRequest keyadmin.IssueRequest
-	switch operation {
-	case "issue":
-		if *keyID != "" || *confirmKeyID != "" {
-			return errors.New("issue does not accept revocation flags")
-		}
-		if strings.TrimSpace(*actorID) == "" || strings.TrimSpace(*audience) == "" || *expiresIn == "" || len(scopes) == 0 {
-			return errors.New("issue requires --actor, --audience, --expires-in, and at least one --scope")
-		}
-		lifetime, err := time.ParseDuration(*expiresIn)
-		if err != nil {
-			return errors.New("--expires-in must be a Go duration between 1m and 90d")
-		}
-		parsedScopes := make([]authkey.Scope, 0, len(scopes))
-		for _, value := range scopes {
-			parts := strings.Split(value, ":")
-			if len(parts) != 3 {
-				return errors.New("each --scope must be permission:environment:resource")
-			}
-			parsedScopes = append(parsedScopes, authkey.Scope{Permission: parts[0], Environment: parts[1], Resource: parts[2]})
-		}
-		issueRequest = keyadmin.IssueRequest{ActorID: *actorID, Audience: *audience, Scopes: parsedScopes, Lifetime: lifetime}
-	case "revoke":
-		if *actorID != "" || *audience != "" || *expiresIn != "" || len(scopes) != 0 {
-			return errors.New("revoke does not accept issuance flags")
-		}
-		if *keyID == "" || *confirmKeyID != *keyID {
-			return errors.New("revoke requires --key-id and --confirm-key-id with the exact same identifier")
-		}
-	default:
-		fmt.Fprintln(stderr, "usage: controller-setup keys {issue|revoke} [options]")
-		return errors.New("invalid command")
+
+	return keysIssueExecute(*databasePath, *actorID, *audience, *expiresIn, scopes, stdout, stderr)
+}
+
+// keysIssueValidate validates key issue command flags.
+func keysIssueValidate(databasePath, actorID, audience, expiresIn, keyID, confirmKeyID string, numScopes int) error {
+	if strings.TrimSpace(databasePath) == "" {
+		return fmt.Errorf("missing --database")
 	}
-	if !isRoot {
-		return errors.New("key administration requires local administrator privileges")
+	if keyID != "" || confirmKeyID != "" {
+		return fmt.Errorf("unused flags must not be set: --key-id or --confirm-key-id")
 	}
+	if strings.TrimSpace(actorID) == "" || strings.TrimSpace(audience) == "" || expiresIn == "" || numScopes == 0 {
+		return fmt.Errorf("missing required flags: --actor, --audience, --expires-in, and at least one --scope")
+	}
+	return nil
+}
+
+// keysIssueExecute executes the key issuance operation.
+func keysIssueExecute(databasePath, actorID, audience, expiresIn string, scopes scopeFlags, stdout, stderr io.Writer) error {
+	if err := requireExistingDatabase(databasePath); err != nil {
+		return err
+	}
+
+	db, err := store.OpenBolt(filepath.Clean(databasePath))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	manager, err := authkey.NewManager(db)
+	if err != nil {
+		return err
+	}
+
+	service, err := keyadmin.NewService(manager, localAdminAuthorizer{isRoot: true}, time.Now)
+	if err != nil {
+		return err
+	}
+
+	lifetime, err := time.ParseDuration(expiresIn)
+	if err != nil {
+		return errors.New("--expires-in must be a Go duration between 1m and 90d")
+	}
+
+	parsedScopes := make([]authkey.Scope, 0, len(scopes))
+	for _, value := range scopes {
+		parts := strings.Split(value, ":")
+		if len(parts) != 3 {
+			return errors.New("each --scope must be permission:environment:resource")
+		}
+		parsedScopes = append(parsedScopes, authkey.Scope{Permission: parts[0], Environment: parts[1], Resource: parts[2]})
+	}
+
+	issueRequest := keyadmin.IssueRequest{ActorID: actorID, Audience: audience, Scopes: parsedScopes, Lifetime: lifetime}
+	requesterID := "uid-" + strconv.Itoa(os.Geteuid())
+	issued, err := service.Issue(context.Background(), requesterID, issueRequest)
+	if err != nil {
+		return err
+	}
+
+	encoder := json.NewEncoder(stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(keyIssueOutput{ID: issued.ID, Token: issued.Secret, ActorID: issued.ActorID,
+		Audience: issued.Audience, Scopes: issued.Scopes, CreatedAt: issued.CreatedAt, ExpiresAt: issued.ExpiresAt}); err != nil {
+		return fmt.Errorf("could not write newly issued key %s; it may have been created, revoke it before retrying", issued.ID)
+	}
+
+	return nil
+}
+
+// runKeyRevokeCommand handles API key revocation.
+func runKeyRevokeCommand(args []string, stdout, stderr io.Writer) error {
+	flags := flag.NewFlagSet("controller-setup keys revoke", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	databasePath := flags.String("database", "", "existing configured bbolt database")
+	keyID := flags.String("key-id", "", "key identifier to revoke")
+	confirmKeyID := flags.String("confirm-key-id", "", "repeat the exact key identifier to confirm revocation")
+	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+
+	if !validateRevokeFlags(*databasePath, *keyID, *confirmKeyID) {
+		fmt.Fprintln(stderr, "usage: controller-setup keys revoke --database <path> --key-id <id> --confirm-key-id <id>")
+		return errors.New("missing required flags")
+	}
+
 	if err := requireExistingDatabase(*databasePath); err != nil {
 		return err
 	}
+
 	db, err := store.OpenBolt(filepath.Clean(*databasePath))
 	if err != nil {
 		return err
 	}
 	defer db.Close()
+
 	manager, err := authkey.NewManager(db)
 	if err != nil {
 		return err
 	}
-	service, err := keyadmin.NewService(manager, localAdminAuthorizer{isRoot: isRoot}, time.Now)
+
+	service, err := keyadmin.NewService(manager, localAdminAuthorizer{isRoot: true}, time.Now)
 	if err != nil {
 		return err
 	}
-	requesterID := "uid-" + strconv.Itoa(uid)
-	if operation == "issue" {
-		issued, err := service.Issue(context.Background(), requesterID, issueRequest)
-		if err != nil {
-			return err
-		}
-		encoder := json.NewEncoder(stdout)
-		encoder.SetIndent("", "  ")
-		if err := encoder.Encode(keyIssueOutput{ID: issued.ID, Token: issued.Secret, ActorID: issued.ActorID,
-			Audience: issued.Audience, Scopes: issued.Scopes, CreatedAt: issued.CreatedAt, ExpiresAt: issued.ExpiresAt}); err != nil {
-			return fmt.Errorf("could not write newly issued key %s; it may have been created, revoke it before retrying", issued.ID)
-		}
-		return nil
-	}
+
+	requesterID := "uid-" + strconv.Itoa(os.Geteuid())
 	if err := service.Revoke(context.Background(), requesterID, *keyID); err != nil {
 		return err
 	}
+
 	fmt.Fprintln(stdout, "API key revoked.")
 	return nil
 }
+
+// validateRevokeFlags validates flags for the revoke command.
+func validateRevokeFlags(databasePath, keyID, confirmKeyID string) bool {
+	if strings.TrimSpace(databasePath) == "" {
+		return false
+	}
+	if keyID == "" || confirmKeyID != keyID {
+		return false
+	}
+	return true
+}
+
 
 func requireExistingDatabase(path string) error {
 	directory, err := os.Lstat(filepath.Dir(path))
