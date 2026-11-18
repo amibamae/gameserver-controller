@@ -1,0 +1,6 @@
+{
+  "fixture_id": "bootstrap.template.placement",
+  "expected": {
+    "rendered_bootstrap": "[Unit]\nDescription=Minecraft Server Control Daemon\nAfter=network-online.target\n\n[Service]\nType=simple\nUser=root\nWorkingDirectory=/usr/local/bin\nEnvironment=\"MCRCON_RCON_HOST=127.0.0.1\"\nExecStart=/usr/local/sbin/minecraft-start.sh\nRestart=on-failure\n\n[Install]\nWantedBy=multi-user.target"
+  }
+}

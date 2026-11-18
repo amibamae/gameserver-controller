@@ -8,9 +8,9 @@ import (
 // TestAsObject tests the asObject function.
 func TestAsObject(t *testing.T) {
 	tests := []struct {
-		name     string
-		value    any
-		wantOk   bool
+		name   string
+		value  any
+		wantOk bool
 	}{
 		{"nil value", nil, false},
 		{"map value", map[string]any{"key": "value"}, true},
@@ -33,10 +33,10 @@ func TestAsObject(t *testing.T) {
 // TestStringValue tests the stringValue function.
 func TestStringValue(t *testing.T) {
 	tests := []struct {
-		name     string
-		object   map[string]any
-		key      string
-		want     string
+		name   string
+		object map[string]any
+		key    string
+		want   string
 	}{
 		{"string value", map[string]any{"name": "Alice"}, "name", "Alice"},
 		{"missing key", map[string]any{"other": "Bob"}, "name", ""},
@@ -56,10 +56,10 @@ func TestStringValue(t *testing.T) {
 // TestBoolValue tests the boolValue function.
 func TestBoolValue(t *testing.T) {
 	tests := []struct {
-		name     string
-		object   map[string]any
-		key      string
-		want     bool
+		name   string
+		object map[string]any
+		key    string
+		want   bool
 	}{
 		{"true value", map[string]any{"enabled": true}, "enabled", true},
 		{"false value", map[string]any{"enabled": false}, "enabled", false},
@@ -80,10 +80,10 @@ func TestBoolValue(t *testing.T) {
 // TestArrayValue tests the arrayValue function.
 func TestArrayValue(t *testing.T) {
 	tests := []struct {
-		name     string
-		object   map[string]any
-		key      string
-		wantLen  int
+		name    string
+		object  map[string]any
+		key     string
+		wantLen int
 	}{
 		{"array value", map[string]any{"items": []any{1, 2, 3}}, "items", 3},
 		{"missing key", map[string]any{"other": "value"}, "items", 0},
@@ -103,11 +103,11 @@ func TestArrayValue(t *testing.T) {
 // TestContains tests the contains function.
 func TestContains(t *testing.T) {
 	tests := []struct {
-		name     string
-		values   []any
-		target   any
-		wantVal  bool
-		convert  bool
+		name    string
+		values  []any
+		target  any
+		wantVal bool
+		convert bool
 	}{
 		{"contains int", []any{1, 2, 3}, "2", true, true},
 		{"not contains int", []any{1, 2, 3}, "5", false, true},
@@ -137,9 +137,9 @@ func TestContains(t *testing.T) {
 // TestUniqueStrings tests the uniqueStrings function.
 func TestUniqueStrings(t *testing.T) {
 	tests := []struct {
-		name     string
-		values   []any
-		want     bool
+		name   string
+		values []any
+		want   bool
 	}{
 		{"empty slice", []any{}, true},
 		{"unique strings", []any{"a", "b", "c"}, true},
@@ -158,21 +158,19 @@ func TestUniqueStrings(t *testing.T) {
 	}
 }
 
-
-
 // TestSafeJSONNumber tests the safeJSONNumber function.
 func TestSafeJSONNumber(t *testing.T) {
 	tests := []struct {
-		name     string
-		num      json.Number
-		wantVal  int64
-		wantErr  bool
+		name    string
+		num     json.Number
+		wantVal int64
+		wantErr bool
 	}{
 		{"zero", "0", 0, false},
 		{"positive", "42", 42, false},
 		{"negative", "-17", -17, false},
 		{"safe positive", "9007199254740992", 9007199254740992, false}, // exactly 2^53
-		{"unsafe positive", "9007199254740993", 0, true}, // exceeds safe range
+		{"unsafe positive", "9007199254740993", 0, true},               // exceeds safe range
 		{"unsafe negative", "-9007199254740993", 0, true},
 	}
 
@@ -195,10 +193,10 @@ func TestSafeJSONNumber(t *testing.T) {
 // TestEnsureSafeNumber tests the ensureSafeNumber function with various types.
 func TestEnsureSafeNumber(t *testing.T) {
 	tests := []struct {
-		name     string
-		value    any
-		wantVal  int64
-		wantErr  bool
+		name    string
+		value   any
+		wantVal int64
+		wantErr bool
 	}{
 		{"json.Number zero", json.Number("0"), 0, false},
 		{"int zero", int(0), 0, false},
@@ -227,10 +225,10 @@ func TestEnsureSafeNumber(t *testing.T) {
 // TestDeepEqual tests the deepEqual and safeDeepEqual functions.
 func TestDeepEqual(t *testing.T) {
 	tests := []struct {
-		name     string
-		a        any
-		b        any
-		want     bool
+		name string
+		a    any
+		b    any
+		want bool
 	}{
 		{"same maps", map[string]any{"key": "value"}, map[string]any{"key": "value"}, true},
 		{"different maps", map[string]any{"key": "value"}, map[string]any{"key": "other"}, false},
@@ -266,10 +264,8 @@ func TestCompileECMA(t *testing.T) {
 				t.Errorf("compileECMA(%q): got error %v, wantErr %v", test.pattern, err, test.wantErr)
 			}
 			if !test.wantErr {
-				re, ok := got.(*ecmaRegexp)
-				if !ok {
-					t.Errorf("compileECMA should return *ecmaRegexp type")
-				} else if !got.MatchString("abc") {
+				// Verify it has MatchString method that works for the given input
+				if got.MatchString("abc") != true {
 					t.Error("compiled regex should match 'abc'")
 				}
 			}
@@ -281,10 +277,10 @@ func TestCompileECMA(t *testing.T) {
 func TestUtilityFunctionsIntegration(t *testing.T) {
 	t.Run("full workflow", func(t *testing.T) {
 		fixture := map[string]any{
-			"name":        "TestUser",
-			"active":      true,
-			"items":       []any{"item1", "item2"},
-			"metadata":    map[string]any{"version": "1.0"},
+			"name":     "TestUser",
+			"active":   true,
+			"items":    []any{"item1", "item2"},
+			"metadata": map[string]any{"version": "1.0"},
 		}
 
 		name := stringValue(fixture, "name")

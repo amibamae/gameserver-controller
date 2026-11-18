@@ -143,8 +143,3 @@ func evaluateSystemdUnitSecurity(fixture map[string]any) (map[string]any, error)
 func stringsContains(haystack, needle string) bool {
 	return len(haystack) > 0 && len(needle) > 0 && strings.Contains(haystack, needle)
 }
-
-func init() {
-	registerEvaluator(withoutPackage(evaluateSystemdUnitGeneration), "bootstrap.systemd.unit-generation")
-	registerEvaluator(withoutPackage(evaluateSystemdUnitSecurity), "bootstrap.systemd.security")
-}

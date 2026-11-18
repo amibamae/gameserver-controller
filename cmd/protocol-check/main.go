@@ -5,11 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
-	"time"
 
-	"github.com/dlclark/regexp2"
-	"github.com/santhosh-tekuri/jsonschema/v6"
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 const (

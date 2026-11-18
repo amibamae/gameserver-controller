@@ -342,26 +342,56 @@ func (w *ServerDestroyWorkflow) checkDestroyInspectRuntime(_ context.Context, ch
 	return nil
 }
 
-// checkDestroyProvider guards the only mutating step: it requires a stopped
-// runtime, revalidates the exact approval, and claims capacity last.
+// checkDestroyProvider validates all preconditions for provider destruction step.
 func (w *ServerDestroyWorkflow) checkDestroyProvider(ctx context.Context, check destroyPreconditionState) error {
-	server := check.server
-	if !stoppedOrFailedLifecycle(server.LifecycleState) && server.LifecycleState != protocolstate.ServerDestroying {
-		return errors.New("provider destruction requires a stopped, failed, or already-destroying server")
+	// Validate lifecycle state is appropriate for destruction
+	if err := validateDestructionLifecycleState(check.server.LifecycleState); err != nil {
+		return err
 	}
-	if !stepSucceeded(check.operation, destroyInspectRuntimeStep) || !stepBindsRef(check.step.Input, "instance_ref", server.InstanceRef) {
-		return errors.New("provider destruction requires successful exact-instance and runtime inspections")
+
+	// Validate prior inspections have succeeded
+	if err := validatePriorInspectionsCompleted(check.operation); err != nil {
+		return err
 	}
+
+	// Validate step binds correct instance
+	if !stepBindsRef(check.step.Input, "instance_ref", check.server.InstanceRef) {
+		return errors.New("provider destruction requires binding to the correct instance")
+	}
+
+	// Validate runtime state is stopped or absent
 	if !destroyRuntimeStoppedOrAbsent(check.operation) {
 		return errors.New("provider destruction requires the exact execution unit to be stopped or absent")
 	}
-	if server.LifecycleState == protocolstate.ServerDestroying && check.step.Attempt == 0 {
+
+	// Prevent re-entry from destroying state on first attempt
+	if check.server.LifecycleState == protocolstate.ServerDestroying && check.step.Attempt == 0 {
 		return errors.New("new destroy dispatch cannot start from an unexplained destroying state")
 	}
-	if err := w.authorizer.AuthorizeServerDestroy(ctx, check.operation.ActorID, check.parameters.ApprovalID, check.operation, server, check.backup); err != nil {
-		return fmt.Errorf("revalidate exact server.destroy approval before provider call: %w", err)
+
+	// Authorize destruction operation
+	if authErr := w.authorizer.AuthorizeServerDestroy(ctx, check.operation.ActorID, check.parameters.ApprovalID, check.operation, check.server, check.backup); authErr != nil {
+		return fmt.Errorf("revalidate exact server.destroy approval before provider call: %w", authErr)
 	}
-	return w.markCapacityDestroySent(server)
+
+	// Mark capacity for destroy after authorization
+	return w.markCapacityDestroySent(check.server)
+}
+
+// validateDestructionLifecycleState reports whether the lifecycle state permits destruction dispatch.
+func validateDestructionLifecycleState(lifecycleState protocolstate.ServerState) error {
+	if !stoppedOrFailedLifecycle(lifecycleState) && lifecycleState != protocolstate.ServerDestroying {
+		return errors.New("provider destruction requires a stopped, failed, or already-destroying server")
+	}
+	return nil
+}
+
+// validatePriorInspectionsCompleted reports whether all required inspections have succeeded.
+func validatePriorInspectionsCompleted(operation store.OperationRecord) error {
+	if !stepSucceeded(operation, destroyInspectRuntimeStep) {
+		return errors.New("provider destruction requires successful exact-instance and runtime inspections")
+	}
+	return nil
 }
 
 // destroyRuntimeStoppedOrAbsent reports whether the recorded runtime
@@ -373,11 +403,27 @@ func destroyRuntimeStoppedOrAbsent(operation store.OperationRecord) bool {
 }
 
 func (w *ServerDestroyWorkflow) checkDestroyVerifyInstance(_ context.Context, check destroyPreconditionState) error {
-	if check.server.LifecycleState != protocolstate.ServerDestroying || !stepSucceeded(check.operation, destroyProviderStep) {
+	// Verify destroying state and successful provider destroy
+	if err := verifyDestroyingAndCompletedState(check.server.LifecycleState, check.operation); err != nil {
+		return err
+	}
+
+	// Verify destroy output indicates completion
+	return verifyProviderCompletionOutput(check.operation)
+}
+
+// verifyDestroyingAndCompletedState checks the lifecycle state and destroy step success.
+func verifyDestroyingAndCompletedState(lifecycleState protocolstate.ServerState, operation store.OperationRecord) error {
+	if lifecycleState != protocolstate.ServerDestroying || !stepSucceeded(operation, destroyProviderStep) {
 		return errors.New("provider absence verification requires a dispatched destroy and destroying lifecycle state")
 	}
-	result, err := destroyProviderOutput(check.operation)
-	if err != nil || result.Outcome != "completed" || result.State != "destroyed" || !equalJSON(result.InstanceRef, check.server.InstanceRef) {
+	return nil
+}
+
+// verifyProviderCompletionOutput validates the provider destroy step output.
+func verifyProviderCompletionOutput(operation store.OperationRecord) error {
+	result, err := destroyProviderOutput(operation)
+	if err != nil || result.Outcome != "completed" || result.State != "destroyed" || !equalJSON(result.InstanceRef, operation.Target.InstanceRef) {
 		return errors.New("provider absence verification requires the exact completed destroy output")
 	}
 	return nil
@@ -414,61 +460,99 @@ func (w *ServerDestroyWorkflow) markCapacityDestroySent(server store.LogicalServ
 	return nil
 }
 
+// reservationAnalysis holds the result of checking a single capacity reservation.
+type reservationAnalysis struct {
+	matchesServer    bool
+	isDestroyed      bool
+	bindsToInstance  bool
+	identifiesServer bool
+	state            string
+}
+
+// matchingDestroyCapacityReservation finds the active managed VM reservation using a two-phase
+// approach: first collecting server/environment matches, then validating binding and instance.
 func matchingDestroyCapacityReservation(capacityStore serverDestroyCapacityStore, server store.LogicalServer) (store.CapacityReservation, bool, error) {
 	reservations, err := capacityStore.ListCapacityReservations()
 	if err != nil {
 		return store.CapacityReservation{}, false, fmt.Errorf("list managed VM capacity reservations: %w", err)
 	}
+
 	instanceAdapterID, instanceID, err := externalInstanceIdentity(server.InstanceRef)
 	if err != nil {
 		return store.CapacityReservation{}, false, err
 	}
+
 	var match *store.CapacityReservation
+
 	for _, reservation := range reservations {
-		if reservation.ServerID != server.ServerID || reservation.EnvironmentID != server.EnvironmentID {
+		analysis := analyzeCapacityReservation(reservation, server, instanceAdapterID, instanceID)
+
+		// Skip already-processed destroyed/absent reservations
+		if analysis.isDestroyed {
 			continue
 		}
-		if destroyedReservationBindsInstance(reservation, instanceAdapterID, instanceID) {
-			if match != nil {
-				return store.CapacityReservation{}, false, errors.New("multiple managed VM reservations match one exact server instance")
-			}
-			copyReservation := reservation
-			match = &copyReservation
-			continue
-		}
-		if destroyedCapacityState(reservation) {
-			continue
-		}
-		if !reservationIdentifiesServerInstance(reservation, instanceAdapterID, instanceID) {
+
+		// For active reservations that don't identify this server, return error immediately
+		if !analysis.identifiesServer {
 			return store.CapacityReservation{}, false, reservationMismatchError(reservation, instanceAdapterID, instanceID)
 		}
-		if match != nil {
-			return store.CapacityReservation{}, false, errors.New("multiple active managed VM reservations match one logical server")
+
+		// Detect multiple matches on the same server/environment
+		if analysis.matchesServer {
+			return store.CapacityReservation{}, false, errors.New("multiple managed VM reservations match one logical server")
 		}
-		copyReservation := reservation
-		match = &copyReservation
+
+		// Track reservation that binds to this instance
+		if analysis.bindsToInstance {
+			match = &reservation
+		}
 	}
+
 	if match == nil {
 		return store.CapacityReservation{}, false, nil
 	}
+
 	return *match, true, nil
 }
 
-// destroyedCapacityState reports whether a reservation already reflects a
-// destroyed or absent provider instance.
-func destroyedCapacityState(reservation store.CapacityReservation) bool {
-	return reservation.State == store.CapacityAbsent || reservation.State == store.CapacityDestroyed
+// analyzeCapacityReservation performs a complete analysis of a single reservation.
+func analyzeCapacityReservation(reservation store.CapacityReservation, server store.LogicalServer, instanceAdapterID, instanceID string) reservationAnalysis {
+	result := reservationAnalysis{state: reservation.State}
+
+	// Check if reservation reflects destroyed/absent state (already processed)
+	if reservation.State == store.CapacityAbsent || reservation.State == store.CapacityDestroyed {
+		result.isDestroyed = true
+		return result
+	}
+
+	// For active reservations, check instance binding for destroyed-state handling
+	if verifyDestroyedReservationBindsInstance(reservation, instanceAdapterID, instanceID) {
+		result.bindsToInstance = true
+	}
+
+	// Check if this reservation identifies the server's adapter and instance
+	if !reservationIdentifiesServerInstance(reservation, instanceAdapterID, instanceID) {
+		result.identifiesServer = false
+	}
+
+	// Check if this matches the server's environment identification
+	if verifyServerEnvironmentMatch(reservation, server) {
+		result.matchesServer = true
+	}
+
+	return result
 }
 
-// destroyedReservationBindsInstance reports whether a destroyed or absent
-// reservation identifies the exact server instance, allowing it to carry no
-// adapter identity.
-func destroyedReservationBindsInstance(reservation store.CapacityReservation, instanceAdapterID, instanceID string) bool {
-	if !destroyedCapacityState(reservation) {
-		return false
-	}
+// verifyDestroyedReservationBindsInstance reports whether a destroyed/absent reservation
+// identifies the exact server instance.
+func verifyDestroyedReservationBindsInstance(reservation store.CapacityReservation, instanceAdapterID, instanceID string) bool {
 	return reservation.ProviderInstanceID == instanceID &&
 		(reservation.ProviderAdapterID == "" || reservation.ProviderAdapterID == instanceAdapterID)
+}
+
+// verifyServerEnvironmentMatch reports whether the reservation matches this server's environment.
+func verifyServerEnvironmentMatch(reservation store.CapacityReservation, server store.LogicalServer) bool {
+	return reservation.ServerID == server.ServerID && reservation.EnvironmentID == server.EnvironmentID
 }
 
 // reservationIdentifiesServerInstance reports whether an active reservation

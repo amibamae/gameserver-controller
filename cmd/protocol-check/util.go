@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	regexp2 "github.com/dlclark/regexp2"
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 // ecmaRegexp is a JSON Schema regexp interface that uses the ECMAScript engine.
@@ -150,7 +150,7 @@ func safeJSONNumber(num json.Number) (int64, error) {
 	const minInt64 = int64(-1 << 63)
 	// JavaScript safe integer range: -2^53 to 2^53-1
 	const maxSafeJSInt = int64(1<<53 - 1)
-	const minSafeJSInt = -(int64(1<<53))
+	const minSafeJSInt = -(int64(1 << 53))
 
 	raw, err := num.Int64()
 	if err != nil {
