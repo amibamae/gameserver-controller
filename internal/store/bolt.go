@@ -17,34 +17,6 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 )
 
-const (
-	operationsBucketName           = "operations"
-	metadataBucketName             = "metadata"
-	idempotencyBucketName          = "idempotency"
-	locksBucketName                = "resource_locks"
-	operationLocksBucketName       = "operation_locks"
-	keyVersionsBucketName          = "idempotency_key_versions"
-	logicalServersBucketName       = "logical_servers"
-	capacityReservationsBucketName = "capacity_reservations"
-	managementAPIKeysBucketName    = "management_api_keys"
-	hostHandoffsBucketName         = "host_handoffs"
-	databaseSchema                 = "5"
-)
-
-var (
-	operationsBucket           = []byte(operationsBucketName)
-	metadataBucket             = []byte(metadataBucketName)
-	idempotencyBucket          = []byte(idempotencyBucketName)
-	locksBucket                = []byte(locksBucketName)
-	operationLocksBucket       = []byte(operationLocksBucketName)
-	keyVersionsBucket          = []byte(keyVersionsBucketName)
-	logicalServersBucket       = []byte(logicalServersBucketName)
-	capacityReservationsBucket = []byte(capacityReservationsBucketName)
-	managementAPIKeysBucket    = []byte(managementAPIKeysBucketName)
-	hostHandoffsBucket         = []byte(hostHandoffsBucketName)
-	schemaKey                  = []byte("schema_version")
-)
-
 // BoltStore is a single-controller-process, durable operation store. bbolt
 // serializes writes and commits each transaction to disk before returning.
 type BoltStore struct {
