@@ -18,6 +18,7 @@ var (
 	ErrCapacityTransition = errors.New("invalid capacity reservation transition")
 )
 
+// CapacityState represents the lifecycle state of a capacity reservation.
 type CapacityState string
 
 const (
@@ -371,16 +372,17 @@ func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanc
 }
 
 // findCapacityReservationForInstance returns the key and value of the single
-// reservation for the provider instance on serverID in environmentID (and
-// adapterID, when given). A second match is ErrCapacityConflict and no match
-// is ErrCapacityNotFound. The first match is returned even with an error.
+// reservation for a provider instance. The caller passes an instance identifier
+// (serverID, environmentID, providerInstanceID); adapterID is optional and only
+// applies when known. A second match is ErrCapacityConflict; no match is
+// ErrCapacityNotFound. The first match is returned even with an error.
 func findCapacityReservationForInstance(bucket *bolt.Bucket, serverID, environmentID, providerInstanceID, adapterID string) ([]byte, CapacityReservation, error) {
 	found := false
 	var matchedKey []byte
 	var match CapacityReservation
 	err := forEachCapacityReservation(bucket, func(key []byte, current CapacityReservation) error {
-		if current.ServerID != serverID || current.EnvironmentID != environmentID || current.ProviderInstanceID != providerInstanceID ||
-			(adapterID != "" && current.ProviderAdapterID != adapterID) {
+		if !currentMatchesInstance(current, serverID, environmentID, providerInstanceID) ||
+			!adapterMatchesIfProvided(current, adapterID) {
 			return nil
 		}
 		if found {
@@ -395,6 +397,19 @@ func findCapacityReservationForInstance(bucket *bolt.Bucket, serverID, environme
 		err = ErrCapacityNotFound
 	}
 	return matchedKey, match, err
+}
+
+// currentMatchesInstance returns true if the reservation belongs to the given
+// server/environment/instance combination. It ignores adapterID since that is
+// an optional enrichment field not required for instance identification.
+func currentMatchesInstance(r CapacityReservation, serverID, environmentID, providerInstanceID string) bool {
+	return r.ServerID == serverID && r.EnvironmentID == environmentID && r.ProviderInstanceID == providerInstanceID
+}
+
+// adapterMatchesIfProvided returns true if the adapter field matches when one
+// was provided; if no adapter was provided in the query, it always matches.
+func adapterMatchesIfProvided(r CapacityReservation, adapterID string) bool {
+	return adapterID == "" || r.ProviderAdapterID == adapterID
 }
 
 // capacityReadyAllowed reports whether readiness at readyAt may be recorded:
