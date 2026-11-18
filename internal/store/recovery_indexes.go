@@ -253,24 +253,24 @@ func verifyRecoveryIndexes(tx *bolt.Tx) error {
 	// Step 1: Build key versions index (needed for idempotency validation)
 	knownVersions, err := buildKeyVersionIndex(tx.Bucket(keyVersionsBucket))
 	if err != nil {
-		return err
+		return fmt.Errorf("build key versions index: %w", err)
 	}
 
 	// Step 2: Build idempotency index (depends on knownVersions from step 1)
 	idempotencyByOperation, err := buildIdempotencyIndex(tx.Bucket(idempotencyBucket), knownVersions)
 	if err != nil {
-		return err
+		return fmt.Errorf("build idempotency index: %w", err)
 	}
 
 	// Step 3: Build operation lock index (needs operations and locks buckets)
 	reverseLocks, err := buildOperationLockIndex(tx.Bucket(operationLocksBucket), operations, locks)
 	if err != nil {
-		return err
+		return fmt.Errorf("build operation lock index: %w", err)
 	}
 
 	// Step 4: Validate forward lock index
 	if err := buildForwardLockIndex(locks, operations, reverseLocks); err != nil {
-		return err
+		return fmt.Errorf("validate forward lock index: %w", err)
 	}
 
 	// Step 5: Validate server operation invariants

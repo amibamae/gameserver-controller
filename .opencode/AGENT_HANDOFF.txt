@@ -1,0 +1,19 @@
+# Agent Handoff: README Cleanup Complete
+
+## Completed Work
+- Created `feat/readme-cleanup` branch
+- Removed git merge markers (/// lines) from main/README.md
+- Ran pre-push checks (gofmt, go vet) - all passed
+- Committed changes with descriptive message
+- Pushed to origin
+
+## Branch Status
+- **Branch:** feat/readme-cleanup
+- **Commit:** eab5b62
+- **Files changed:** README.md (merged markers removed)
+
+## Next Steps
+Wait for owner approval before creating draft PR on GitHub.
+
+## Files Modified
+- main/README.md: Removed /// git merge marker lines from PR #350 squash merge
