@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -861,142 +862,123 @@ func validateStepChanges(current, next []OperationStep, operationStatus protocol
 		return fmt.Errorf("%w: accepted operation steps cannot be added or removed", ErrImmutableFields)
 	}
 	for i, previous := range current {
-		candidate := next[i]
-		// Check field identities
-		if !checkStepIdentity(previous, candidate) {
-			return fmt.Errorf("%w: step order and identity cannot change", ErrImmutableFields)
-		}
-		// Check adapter capability identity
-		if !checkAdapterCapabilityIdentity(previous, candidate) {
-			return fmt.Errorf("%w: recorded adapter capability identity cannot change", ErrImmutableFields)
-		}
-		// Check input bindings and input bytes
-		if !sameInputBindings(previous.InputBindings, candidate.InputBindings) {
-			return fmt.Errorf("%w: recorded step input bindings cannot change", ErrImmutableFields)
-		}
-		if !bytes.Equal(previous.Input, candidate.Input) {
-			return fmt.Errorf("%w: recorded step input cannot change", ErrImmutableFields)
-		}
-		// Check resolved input constraints (complex logic extracted to helper)
-		if !validateResolvedInputConsistency(previous, candidate) {
-			return fmt.Errorf("%w: resolved step input cannot change", ErrInvalidRecord)
-		}
-		// Check output and external ref
-		if len(previous.Output) > 0 && !bytes.Equal(previous.Output, candidate.Output) {
-			return fmt.Errorf("%w: recorded step output cannot change", ErrImmutableFields)
-		}
-		if len(previous.ExternalOperationRef) > 0 && !bytes.Equal(previous.ExternalOperationRef, candidate.ExternalOperationRef) {
-			return fmt.Errorf("%w: recorded external operation reference cannot change", ErrImmutableFields)
-		}
-		// Check status transition and attempt progression (extracted to helper)
-		if err := validateStepTransitionAndAttempt(previous, candidate, operationStatus); err != nil {
+		if err := validateStepChange(next, i, previous, operationStatus); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// checkStepIdentity validates step ID and type remain unchanged.
-func checkStepIdentity(previous, current OperationStep) bool {
-	return previous.StepID == current.StepID && previous.StepType == current.StepType
+// validateStepChange checks step i of next against its previous version:
+// recorded fields first, then a newly committed resolved input, then
+// recorded outcomes, then the status transition and attempt count.
+func validateStepChange(next []OperationStep, i int, previous OperationStep, operationStatus protocolstate.OperationStatus) error {
+	candidate := next[i]
+	if err := validateRecordedStepFields(previous, candidate); err != nil {
+		return err
+	}
+	if err := validateResolvedInputCommit(next, i, previous, operationStatus); err != nil {
+		return err
+	}
+	if changedOnceRecorded(previous.Output, candidate.Output) {
+		return fmt.Errorf("%w: recorded step output cannot change", ErrImmutableFields)
+	}
+	if changedOnceRecorded(previous.ExternalOperationRef, candidate.ExternalOperationRef) {
+		return fmt.Errorf("%w: recorded external operation reference cannot change", ErrImmutableFields)
+	}
+	return validateStepProgress(previous, candidate, operationStatus)
 }
 
-// checkAdapterCapabilityIdentity validates adapter capability fields remain unchanged when set.
-func checkAdapterCapabilityIdentity(previous, current OperationStep) bool {
-	if previous.AdapterID != "" && previous.AdapterID != current.AdapterID {
-		return false
+// validateRecordedStepFields rejects a change to a step's identity, recorded
+// capability, bindings, input, or recorded resolved input.
+func validateRecordedStepFields(previous, candidate OperationStep) error {
+	switch {
+	case previous.StepID != candidate.StepID || previous.StepType != candidate.StepType:
+		return fmt.Errorf("%w: step order and identity cannot change", ErrImmutableFields)
+	case !sameRecordedCapability(previous, candidate):
+		return fmt.Errorf("%w: recorded adapter capability identity cannot change", ErrImmutableFields)
+	case !slices.Equal(previous.InputBindings, candidate.InputBindings):
+		return fmt.Errorf("%w: recorded step input bindings cannot change", ErrImmutableFields)
+	case !bytes.Equal(previous.Input, candidate.Input):
+		return fmt.Errorf("%w: recorded step input cannot change", ErrImmutableFields)
+	case changedOnceRecorded(previous.ResolvedInput, candidate.ResolvedInput):
+		return fmt.Errorf("%w: resolved step input cannot change", ErrImmutableFields)
 	}
-	if previous.CapabilityName != "" && previous.CapabilityName != current.CapabilityName {
-		return false
-	}
-	if previous.CapabilityVersion != "" && previous.CapabilityVersion != current.CapabilityVersion {
-		return false
-	}
-	return true
-}
-
-// validateResolvedInputConsistency ensures resolved input constraints are honored.
-func validateResolvedInputConsistency(previous, current OperationStep) bool {
-	if len(previous.ResolvedInput) > 0 {
-		// Resolved input must match when previously set
-		if !bytes.Equal(previous.ResolvedInput, current.ResolvedInput) {
-			return false
-		}
-	} else if len(current.ResolvedInput) > 0 {
-		// Resolved input can only be set while step is pending and bindings exist
-		if len(previous.InputBindings) == 0 || previous.Status != protocolstate.StepPending || current.Status != protocolstate.StepPending {
-			return false
-		}
-		// We don't recompute resolved input here to avoid importing into the hot path;
-		// instead we just verify it's non-empty and consistent with pending state.
-	}
-	return true
-}
-
-// checkStatusAttemptProgression validates status transitions and attempt increments.
-// Returns false if validation fails, but callers must wrap with ErrInvalidRecord as appropriate.
-func checkStatusAttemptProgression(previous, current OperationStep, operationStatus protocolstate.OperationStatus) bool {
-	// Status transition must be valid if changed
-	if previous.Status != current.Status {
-		if err := protocolstate.ValidateStepTransition(previous.Status, current.Status); err != nil {
-			return false
-		}
-	}
-	// Attempt can only change when entering StepRunning, and must increment by exactly 1
-	if current.Status == protocolstate.StepRunning && previous.Status != protocolstate.StepRunning {
-		if operationStatus != protocolstate.OperationRunning {
-			return false
-		}
-		if current.Attempt != previous.Attempt+1 {
-			return false
-		}
-	} else if current.Attempt != previous.Attempt {
-		// Attempt can only change when entering running (handled above), so any other change is invalid
-		return false
-	}
-	return true
-}
-
-// validateStepTransitionAndAttempt checks status transition validity and attempt progression.
-// Returns protocolstate.ErrIllegalTransition for invalid state changes, or an error if
-// entering StepRunning without the operation being running (when operation is in a valid state).
-func validateStepTransitionAndAttempt(previous, current OperationStep, operationState protocolstate.OperationStatus) error {
-	// Status transition must be valid if changed
-	if previous.Status != current.Status {
-		err := protocolstate.ValidateStepTransition(previous.Status, current.Status)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Attempt can only change when entering StepRunning, and must increment by exactly 1.
-	// Only enforce "operation must be running" constraint if operation is in a valid state (not empty/initial).
-	if current.Status == protocolstate.StepRunning && previous.Status != protocolstate.StepRunning {
-		// Skip this check if operation hasn't been set to a proper state yet (e.g., both are "")
-		if operationState != "" && operationState != protocolstate.OperationRunning {
-			return fmt.Errorf("%w: a step may start only while the operation is running", ErrInvalidRecord)
-		}
-		if current.Attempt != previous.Attempt+1 {
-			return fmt.Errorf("%w: entering running must increment step attempt by one", ErrInvalidRecord)
-		}
-	} else if current.Attempt != previous.Attempt {
-		// Attempt can only change when entering running; any other attempt change is invalid
-		return fmt.Errorf("%w: step attempt can change only when entering running", ErrImmutableFields)
-	}
-
 	return nil
 }
 
-func sameInputBindings(left, right []inputbinding.Binding) bool {
-	if len(left) != len(right) {
-		return false
+// sameRecordedCapability allows each capability field to be recorded once
+// and never changed afterwards.
+func sameRecordedCapability(previous, candidate OperationStep) bool {
+	return keptOnceRecorded(previous.AdapterID, candidate.AdapterID) &&
+		keptOnceRecorded(previous.CapabilityName, candidate.CapabilityName) &&
+		keptOnceRecorded(previous.CapabilityVersion, candidate.CapabilityVersion)
+}
+
+func keptOnceRecorded(previous, candidate string) bool {
+	return previous == "" || previous == candidate
+}
+
+func changedOnceRecorded(previous, candidate json.RawMessage) bool {
+	return len(previous) > 0 && !bytes.Equal(previous, candidate)
+}
+
+// validateResolvedInputCommit checks a resolved input recorded for the first
+// time: the bound step must still be pending in a running operation, and the
+// input must be what the bindings resolve to from the recorded outputs.
+func validateResolvedInputCommit(next []OperationStep, i int, previous OperationStep, operationStatus protocolstate.OperationStatus) error {
+	candidate := next[i]
+	if len(previous.ResolvedInput) > 0 || len(candidate.ResolvedInput) == 0 {
+		return nil
 	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
+	if !resolvedInputCommitAllowed(previous, candidate, operationStatus) {
+		return fmt.Errorf("%w: resolved input must be committed while the bound step is pending", ErrInvalidRecord)
+	}
+	expected, err := inputbinding.Resolve(inputBindingSteps(next), i)
+	if err != nil || !bytes.Equal(expected, candidate.ResolvedInput) {
+		return fmt.Errorf("%w: resolved input does not match the immutable bindings and recorded outputs", ErrInvalidRecord)
+	}
+	return nil
+}
+
+func resolvedInputCommitAllowed(previous, candidate OperationStep, operationStatus protocolstate.OperationStatus) bool {
+	return boundStepStillPending(previous, candidate) && candidate.Attempt == previous.Attempt && operationStatus == protocolstate.OperationRunning
+}
+
+func boundStepStillPending(previous, candidate OperationStep) bool {
+	return len(previous.InputBindings) > 0 && previous.Status == protocolstate.StepPending && candidate.Status == protocolstate.StepPending
+}
+
+// validateStepProgress checks the step status transition, and that the
+// attempt count rises by one exactly when the step enters running, which it
+// may do only while the operation is running.
+func validateStepProgress(previous, candidate OperationStep, operationStatus protocolstate.OperationStatus) error {
+	if previous.Status != candidate.Status {
+		if err := protocolstate.ValidateStepTransition(previous.Status, candidate.Status); err != nil {
+			return err
 		}
 	}
-	return true
+	if candidate.Status != protocolstate.StepRunning || previous.Status == protocolstate.StepRunning {
+		if candidate.Attempt != previous.Attempt {
+			return fmt.Errorf("%w: step attempt can change only when entering running", ErrImmutableFields)
+		}
+		return nil
+	}
+	if operationStatus != protocolstate.OperationRunning {
+		return fmt.Errorf("%w: a step may start only while the operation is running", ErrInvalidRecord)
+	}
+	if candidate.Attempt != previous.Attempt+1 {
+		return fmt.Errorf("%w: entering running must increment step attempt by one", ErrInvalidRecord)
+	}
+	return nil
+}
+
+func inputBindingSteps(steps []OperationStep) []inputbinding.Step {
+	bindingSteps := make([]inputbinding.Step, len(steps))
+	for i, step := range steps {
+		bindingSteps[i] = inputbinding.Step{StepID: step.StepID, Status: string(step.Status), Input: step.Input, Output: step.Output, Binding: step.InputBindings}
+	}
+	return bindingSteps
 }
 
 func updateStepTimestamps(current, next []OperationStep, now time.Time) []OperationStep {
