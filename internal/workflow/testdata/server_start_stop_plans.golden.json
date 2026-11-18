@@ -1,0 +1,910 @@
+{
+  "server.start": {
+    "stopped untargeted": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "start-runtime",
+        "step_type": "execution.unit.start",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.start",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "verify-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "check-readiness",
+        "step_type": "game.readiness.check",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.readiness.check",
+        "capability_version": "1",
+        "input": {
+          "environment_id": "staging",
+          "game_release_id": "paper-1.21.11-build-3",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          },
+          "readiness_check_set_id": "game.paper:paper-1.21.11:checks-v1",
+          "required_checks": [
+            {
+              "check_id": "paper.startup-complete",
+              "check_version": "1"
+            },
+            {
+              "check_id": "paper.world-loaded",
+              "check_version": "2"
+            }
+          ],
+          "server_id": "start-test"
+        }
+      }
+    ],
+    "stopped with matching expected instance": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "start-runtime",
+        "step_type": "execution.unit.start",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.start",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "verify-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "check-readiness",
+        "step_type": "game.readiness.check",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.readiness.check",
+        "capability_version": "1",
+        "input": {
+          "environment_id": "staging",
+          "game_release_id": "paper-1.21.11-build-3",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          },
+          "readiness_check_set_id": "game.paper:paper-1.21.11:checks-v1",
+          "required_checks": [
+            {
+              "check_id": "paper.startup-complete",
+              "check_version": "1"
+            },
+            {
+              "check_id": "paper.world-loaded",
+              "check_version": "2"
+            }
+          ],
+          "server_id": "start-test"
+        }
+      }
+    ],
+    "stopped with network profile": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "start-runtime",
+        "step_type": "execution.unit.start",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.start",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "verify-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "check-readiness",
+        "step_type": "game.readiness.check",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.readiness.check",
+        "capability_version": "1",
+        "input": {
+          "environment_id": "staging",
+          "game_release_id": "paper-1.21.11-build-3",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          },
+          "readiness_check_set_id": "game.paper:paper-1.21.11:checks-v1",
+          "required_checks": [
+            {
+              "check_id": "paper.startup-complete",
+              "check_version": "1"
+            },
+            {
+              "check_id": "paper.world-loaded",
+              "check_version": "2"
+            }
+          ],
+          "server_id": "start-test"
+        }
+      }
+    ],
+    "stopped with pinned target instance": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "start-runtime",
+        "step_type": "execution.unit.start",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.start",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "verify-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "check-readiness",
+        "step_type": "game.readiness.check",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.readiness.check",
+        "capability_version": "1",
+        "input": {
+          "environment_id": "staging",
+          "game_release_id": "paper-1.21.11-build-3",
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          },
+          "readiness_check_set_id": "game.paper:paper-1.21.11:checks-v1",
+          "required_checks": [
+            {
+              "check_id": "paper.startup-complete",
+              "check_version": "1"
+            },
+            {
+              "check_id": "paper.world-loaded",
+              "check_version": "2"
+            }
+          ],
+          "server_id": "start-test"
+        }
+      }
+    ]
+  },
+  "server.stop": {
+    "ready default grace": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "inspect-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "save-game-data",
+        "step_type": "game.save.request",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.save.request",
+        "capability_version": "1",
+        "input": {
+          "reason": "shutdown",
+          "release_id": "paper-1.21.11-build-3",
+          "target": {
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.fake",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "vm-start-test"
+            },
+            "server_id": "start-test"
+          }
+        }
+      },
+      {
+        "step_id": "stop-runtime",
+        "step_type": "execution.unit.graceful_stop",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.graceful_stop",
+        "capability_version": "1",
+        "input": {
+          "grace_period_seconds": 120,
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      }
+    ],
+    "ready explicit drain without network": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "inspect-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "save-game-data",
+        "step_type": "game.save.request",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.save.request",
+        "capability_version": "1",
+        "input": {
+          "reason": "shutdown",
+          "release_id": "paper-1.21.11-build-3",
+          "target": {
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.fake",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "vm-start-test"
+            },
+            "server_id": "start-test"
+          }
+        }
+      },
+      {
+        "step_id": "stop-runtime",
+        "step_type": "execution.unit.graceful_stop",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.graceful_stop",
+        "capability_version": "1",
+        "input": {
+          "grace_period_seconds": 120,
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      }
+    ],
+    "ready grace one hour": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "inspect-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "save-game-data",
+        "step_type": "game.save.request",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.save.request",
+        "capability_version": "1",
+        "input": {
+          "reason": "shutdown",
+          "release_id": "paper-1.21.11-build-3",
+          "target": {
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.fake",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "vm-start-test"
+            },
+            "server_id": "start-test"
+          }
+        }
+      },
+      {
+        "step_id": "stop-runtime",
+        "step_type": "execution.unit.graceful_stop",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.graceful_stop",
+        "capability_version": "1",
+        "input": {
+          "grace_period_seconds": 3600,
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      }
+    ],
+    "ready grace one millisecond": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "inspect-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "save-game-data",
+        "step_type": "game.save.request",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.save.request",
+        "capability_version": "1",
+        "input": {
+          "reason": "shutdown",
+          "release_id": "paper-1.21.11-build-3",
+          "target": {
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.fake",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "vm-start-test"
+            },
+            "server_id": "start-test"
+          }
+        }
+      },
+      {
+        "step_id": "stop-runtime",
+        "step_type": "execution.unit.graceful_stop",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.graceful_stop",
+        "capability_version": "1",
+        "input": {
+          "grace_period_seconds": 1,
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      }
+    ],
+    "ready grace rounded up": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "inspect-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "save-game-data",
+        "step_type": "game.save.request",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.save.request",
+        "capability_version": "1",
+        "input": {
+          "reason": "shutdown",
+          "release_id": "paper-1.21.11-build-3",
+          "target": {
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.fake",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "vm-start-test"
+            },
+            "server_id": "start-test"
+          }
+        }
+      },
+      {
+        "step_id": "stop-runtime",
+        "step_type": "execution.unit.graceful_stop",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.graceful_stop",
+        "capability_version": "1",
+        "input": {
+          "grace_period_seconds": 2,
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      }
+    ],
+    "ready matching expected instance": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "inspect-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "save-game-data",
+        "step_type": "game.save.request",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.save.request",
+        "capability_version": "1",
+        "input": {
+          "reason": "shutdown",
+          "release_id": "paper-1.21.11-build-3",
+          "target": {
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.fake",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "vm-start-test"
+            },
+            "server_id": "start-test"
+          }
+        }
+      },
+      {
+        "step_id": "stop-runtime",
+        "step_type": "execution.unit.graceful_stop",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.graceful_stop",
+        "capability_version": "1",
+        "input": {
+          "grace_period_seconds": 120,
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      }
+    ],
+    "ready network profile without drain": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "inspect-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "save-game-data",
+        "step_type": "game.save.request",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.save.request",
+        "capability_version": "1",
+        "input": {
+          "reason": "shutdown",
+          "release_id": "paper-1.21.11-build-3",
+          "target": {
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.fake",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "vm-start-test"
+            },
+            "server_id": "start-test"
+          }
+        }
+      },
+      {
+        "step_id": "stop-runtime",
+        "step_type": "execution.unit.graceful_stop",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.graceful_stop",
+        "capability_version": "1",
+        "input": {
+          "grace_period_seconds": 120,
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      }
+    ],
+    "ready pinned target instance": [
+      {
+        "step_id": "inspect-instance",
+        "step_type": "hosting.instance.inspect",
+        "status": "pending",
+        "adapter_id": "hosting.fake",
+        "capability_name": "hosting.instance.inspect",
+        "capability_version": "1",
+        "input": {
+          "instance_ref": {
+            "adapter_id": "hosting.fake",
+            "environment_id": "staging",
+            "resource_kind": "instance",
+            "external_id": "vm-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "inspect-runtime",
+        "step_type": "execution.unit.inspect",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.inspect",
+        "capability_version": "1",
+        "input": {
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      },
+      {
+        "step_id": "save-game-data",
+        "step_type": "game.save.request",
+        "status": "pending",
+        "adapter_id": "game.paper",
+        "capability_name": "game.save.request",
+        "capability_version": "1",
+        "input": {
+          "reason": "shutdown",
+          "release_id": "paper-1.21.11-build-3",
+          "target": {
+            "environment_id": "staging",
+            "instance_ref": {
+              "adapter_id": "hosting.fake",
+              "environment_id": "staging",
+              "resource_kind": "instance",
+              "external_id": "vm-start-test"
+            },
+            "server_id": "start-test"
+          }
+        }
+      },
+      {
+        "step_id": "stop-runtime",
+        "step_type": "execution.unit.graceful_stop",
+        "status": "pending",
+        "adapter_id": "execution.fake",
+        "capability_name": "execution.unit.graceful_stop",
+        "capability_version": "1",
+        "input": {
+          "grace_period_seconds": 120,
+          "unit_ref": {
+            "adapter_id": "execution.fake",
+            "environment_id": "staging",
+            "resource_kind": "systemd-unit",
+            "external_id": "paper-start-test"
+          }
+        }
+      }
+    ]
+  }
+}
