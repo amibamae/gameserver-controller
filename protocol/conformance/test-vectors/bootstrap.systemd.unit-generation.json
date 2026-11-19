@@ -1,0 +1,33 @@
+{
+  "fixture_id": "bootstrap.systemd.unit-generation",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "protocol.bootstrap",
+  "purpose": "Bootstrap generates valid systemd unit files with proper service, socket, and security configurations.",
+  "input": {
+    "rendered_bootstrap": "# Generate minecraft-vanilla.service\n[Unit]\nDescription=Vanilla No Grief Minecraft Paper Server\nAfter=network.target\nRequires=minecraft-restore.service\nAfter=minecraft-restore.service\n\n[Service]\nType=simple\nUser=minecraft\nGroup=minecraft\nWorkingDirectory=/opt/minecraft/vanilla_no_grief\nExecStart=/usr/local/sbin/minecraft-start.sh\nRestart=on-failure\nRestartSec=10\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nProtectHome=true\nReadWritePaths=/opt/minecraft/vanilla_no_grief\n\n[Install]\nWantedBy=multi-user.target\n\n# Generate minecraft-restore.service\n[Unit]\nDescription=Restore Vanilla No Grief Minecraft data from Wasabi\nAfter=network.target\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/minecraft-restore.sh\nStandardOutput=null\nStandardError=null\n\n[Install]\nWantedBy=multi-user.target\n\n# Generate mcrcon.socket\n[Unit]\nDescription=mcrcon RCON Socket\nAfter=network.target\n\n[Socket]\nListenStream=127.0.0.1:25577\nNoDelay=true\nKeepAlive=true\n\n[Install]\nWantedBy=sockets.target\n\n# Generate mcrcon.service\n[Unit]\nDescription=mcrcon RCON Server for Minecraft\nAfter=network.target\nRequires=minecraft-restore.service\nAfter=minecraft-restore.service\n\n[Service]\nType=simple\nUser=minecraft\nGroup=minecraft\nExecStart=/usr/local/sbin/minecraft-mcrcon\nEnvironmentFile=-/etc/default/mcrcon\nRestart=on-failure\nRestartSec=10\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nProtectHome=true\nReadWritePaths=/opt/minecraft/vanilla_no_grief\n\n[Install]\nWantedBy=multi-user.target\n"
+  },
+  "expected": {
+    "rendered_bootstrap": "# Generate minecraft-vanilla.service\n[Unit]\nDescription=Vanilla No Grief Minecraft Paper Server\nAfter=network.target\nRequires=minecraft-restore.service\nAfter=minecraft-restore.service\n\n[Service]\nType=simple\nUser=minecraft\nGroup=minecraft\nWorkingDirectory=/opt/minecraft/vanilla_no_grief\nExecStart=/usr/local/sbin/minecraft-start.sh\nRestart=on-failure\nRestartSec=10\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nProtectHome=true\nReadWritePaths=/opt/minecraft/vanilla_no_grief\n\n[Install]\nWantedBy=multi-user.target\n\n# Generate minecraft-restore.service\n[Unit]\nDescription=Restore Vanilla No Grief Minecraft data from Wasabi\nAfter=network.target\n\n[Service]\nType=oneshot\nRemainAfterExit=yes\nExecStart=/usr/local/sbin/minecraft-restore.sh\nStandardOutput=null\nStandardError=null\n\n[Install]\nWantedBy=multi-user.target\n\n# Generate mcrcon.socket\n[Unit]\nDescription=mcrcon RCON Socket\nAfter=network.target\n\n[Socket]\nListenStream=127.0.0.1:25577\nNoDelay=true\nKeepAlive=true\n\n[Install]\nWantedBy=sockets.target\n\n# Generate mcrcon.service\n[Unit]\nDescription=mcrcon RCON Server for Minecraft\nAfter=network.target\nRequires=minecraft-restore.service\nAfter=minecraft-restore.service\n\n[Service]\nType=simple\nUser=minecraft\nGroup=minecraft\nExecStart=/usr/local/sbin/minecraft-mcrcon\nEnvironmentFile=-/etc/default/mcrcon\nRestart=on-failure\nRestartSec=10\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nProtectHome=true\nReadWritePaths=/opt/minecraft/vanilla_no_grief\n\n[Install]\nWantedBy=multi-user.target\n",
+    "minecraft_service_unit_present": true,
+    "minecraft_unit_has_description": true,
+    "minecraft_unit_uses_minecraft_user": true,
+    "minecraft_unit_uses_minecraft_group": true,
+    "minecraft_unit_sets_working_directory": true,
+    "restore_service_unit_present": true,
+    "restore_unit_has_description": true,
+    "restore_unit_is_oneshot": true,
+    "restore_unit_remains_after_exit": true,
+    "mcrcon_socket_unit_present": true,
+    "mcrcon_socket_has_description": true,
+    "mcrcon_socket_binds_to_127_0_0_1_25577": true,
+    "mcrcon_service_unit_present": true,
+    "mcrcon_service_has_description": true,
+    "mcrcon_service_uses_environment_file": true,
+    "mc_service_type_simple": true,
+    "mc_restart_on_failure": true,
+    "mc_restart_sec_is_10": true,
+    "mc_requires_restore_service": true,
+    "mc_after_restore_service": true,
+    "validation_passed": true
+  }
+}

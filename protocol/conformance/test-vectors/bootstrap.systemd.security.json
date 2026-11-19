@@ -1,0 +1,19 @@
+{
+  "fixture_id": "bootstrap.systemd.security",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "protocol.bootstrap",
+  "purpose": "Bootstrap systemd units follow security best practices including non-root execution, private tmp, and protected system paths.",
+  "input": {
+    "rendered_bootstrap": "# Generate minecraft-vanilla.service\n[Unit]\nDescription=Vanilla No Grief Minecraft Paper Server\nAfter=network.target\nRequires=minecraft-restore.service\nAfter=minecraft-restore.service\n\n[Service]\nType=simple\nUser=minecraft\nGroup=minecraft\nWorkingDirectory=/opt/minecraft/vanilla_no_grief\nExecStart=/usr/local/sbin/minecraft-start.sh\nRestart=on-failure\nRestartSec=10\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nProtectHome=true\nReadWritePaths=/opt/minecraft/vanilla_no_grief\n\n[Install]\nWantedBy=multi-user.target\n\n# Generate mcrcon.service\n[Unit]\nDescription=mcrcon RCON Server for Minecraft\nAfter=network.target\nRequires=minecraft-restore.service\nAfter=minecraft-restore.service\n\n[Service]\nType=simple\nUser=minecraft\nGroup=minecraft\nExecStart=/usr/local/sbin/minecraft-mcrcon\nEnvironmentFile=-/etc/default/mcrcon\nRestart=on-failure\nRestartSec=10\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nProtectHome=true\nReadWritePaths=/opt/minecraft/vanilla_no_grief\n\n[Install]\nWantedBy=multi-user.target\n"
+  },
+  "expected": {
+    "rendered_bootstrap": "# Generate minecraft-vanilla.service\n[Unit]\nDescription=Vanilla No Grief Minecraft Paper Server\nAfter=network.target\nRequires=minecraft-restore.service\nAfter=minecraft-restore.service\n\n[Service]\nType=simple\nUser=minecraft\nGroup=minecraft\nWorkingDirectory=/opt/minecraft/vanilla_no_grief\nExecStart=/usr/local/sbin/minecraft-start.sh\nRestart=on-failure\nRestartSec=10\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nProtectHome=true\nReadWritePaths=/opt/minecraft/vanilla_no_grief\n\n[Install]\nWantedBy=multi-user.target\n\n# Generate mcrcon.service\n[Unit]\nDescription=mcrcon RCON Server for Minecraft\nAfter=network.target\nRequires=minecraft-restore.service\nAfter=minecraft-restore.service\n\n[Service]\nType=simple\nUser=minecraft\nGroup=minecraft\nExecStart=/usr/local/sbin/minecraft-mcrcon\nEnvironmentFile=-/etc/default/mcrcon\nRestart=on-failure\nRestartSec=10\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nProtectHome=true\nReadWritePaths=/opt/minecraft/vanilla_no_grief\n\n[Install]\nWantedBy=multi-user.target\n",
+    "no_new_privileges": true,
+    "private_tmp": true,
+    "protect_system_full": true,
+    "protect_home": true,
+    "read_write_paths_limited": true,
+    "runs_as_non_root": true,
+    "security_passed": true
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "fixture_id": "bootstrap.template.placement",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "protocol.bootstrap",
+  "purpose": "Bootstrap content is correctly placed in the expected locations with proper file permissions and structure.",
+  "input": {
+    "rendered_bootstrap": "# Install mcrcon for Minecraft server control.\n\n# Create password file\ncat > /etc/minecraft-mcrcon/password.conf << 'EOF'\nmcrcon_password=${RCON_PASSWORD}\nEOF\n\n# Create service unit\ncat > /etc/systemd/system/minecraft-mcrcon.socket << 'EOF'\n[Unit]\nDescription=mcrcon RCON Socket\nAfter=network.target\n\n[Socket]\nListenStream=127.0.0.1:25577\nNoDelay=true\nKeepAlive=true\n\n[Install]\nWantedBy=sockets.target\nEOF\n\ncat > /etc/systemd/system/minecraft-mcrcon.service << 'EOF'\n[Unit]\nDescription=mcrcon RCON Server for Minecraft\nAfter=network.target\nRequires=minecraft-restore.service\nAfter=minecraft-restore.service\n\n[Service]\nType=simple\nUser=minecraft\nGroup=minecraft\nExecStart=/usr/local/sbin/minecraft-mcrcon\nEnvironmentFile=-/etc/default/mcrcon\nRestart=on-failure\nRestartSec=10\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nProtectHome=true\nReadWritePaths=/opt/minecraft/vanilla_no_grief\n\n[Install]\nWantedBy=multi-user.target\nEOF\n\nsystemctl daemon-reload\n"
+  },
+  "expected": {
+    "rendered_bootstrap": "# Install mcrcon for Minecraft server control.\n\n# Create password file\ncat > /etc/minecraft-mcrcon/password.conf << 'EOF'\nmcrcon_password=${RCON_PASSWORD}\nEOF\n\n# Create service unit\ncat > /etc/systemd/system/minecraft-mcrcon.socket << 'EOF'\n[Unit]\nDescription=mcrcon RCON Socket\nAfter=network.target\n\n[Socket]\nListenStream=127.0.0.1:25577\nNoDelay=true\nKeepAlive=true\n\n[Install]\nWantedBy=sockets.target\nEOF\n\ncat > /etc/systemd/system/minecraft-mcrcon.service << 'EOF'\n[Unit]\nDescription=mcrcon RCON Server for Minecraft\nAfter=network.target\nRequires=minecraft-restore.service\nAfter=minecraft-restore.service\n\n[Service]\nType=simple\nUser=minecraft\nGroup=minecraft\nExecStart=/usr/local/sbin/minecraft-mcrcon\nEnvironmentFile=-/etc/default/mcrcon\nRestart=on-failure\nRestartSec=10\nNoNewPrivileges=true\nPrivateTmp=true\nProtectSystem=full\nProtectHome=true\nReadWritePaths=/opt/minecraft/vanilla_no_grief\n\n[Install]\nWantedBy=multi-user.target\nEOF\n\nsystemctl daemon-reload\n",
+    "mcrcon_section_present": true,
+    "rcon_config_setup_present": true,
+    "socket_unit_present": true,
+    "rcon_binds_to_localhost": true,
+    "validation_passed": true
+  }
+}
