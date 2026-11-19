@@ -43,8 +43,11 @@ func TestCreateOperationPersistsAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := info.Mode().Perm(); got&0o077 != 0 {
-		t.Fatalf("database permissions are too broad: %o", got)
+	if runtime.GOOS != "windows" {
+		got := info.Mode().Perm()
+		if got&0o077 != 0 {
+			t.Fatalf("database permissions are too broad: %o", got)
+		}
 	}
 
 	reopened, err := OpenBolt(path)

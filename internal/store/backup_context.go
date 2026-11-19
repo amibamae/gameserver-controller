@@ -64,26 +64,32 @@ func readBackupCaptureOperation(value []byte, expectedRevision uint64) (StoredOp
 		return StoredOperation{}, ErrRevisionConflict
 	}
 	record := current.Record
+
+	// Validate operation record type and terminal status
 	if record.OperationType != "server.backup" || protocolstate.IsTerminalOperation(record.Status) {
 		return StoredOperation{}, fmt.Errorf("%w: active server.backup required", ErrInvalidRecord)
 	}
-	if !validBackupCaptureTarget(record.Target) {
+
+	// Validate target instance reference against stored environment
+	if !validBackupCaptureTarget(record.Target, record.Target.EnvironmentID) {
 		return StoredOperation{}, ErrLogicalServerTargetMismatch
 	}
+
 	return current, nil
 }
 
-func validBackupCaptureTarget(target OperationTarget) bool {
+// validBackupCaptureTarget validates the instance reference structure and environment match.
+func validBackupCaptureTarget(target OperationTarget, envID string) bool {
 	var instance struct {
 		AdapterID     string `json:"adapter_id"`
 		EnvironmentID string `json:"environment_id"`
 		ResourceKind  string `json:"resource_kind"`
 		ExternalID    string `json:"external_id"`
 	}
-	if json.Unmarshal(target.InstanceRef, &instance) != nil {
+	if err := json.Unmarshal(target.InstanceRef, &instance); err != nil {
 		return false
 	}
-	return instance.AdapterID != "" && instance.EnvironmentID == target.EnvironmentID &&
+	return instance.AdapterID != "" && instance.EnvironmentID == envID &&
 		instance.ResourceKind == "instance" && instance.ExternalID != ""
 }
 
@@ -109,12 +115,19 @@ func backupCaptureServerMatches(target OperationTarget, server LogicalServer) bo
 	return sameInstance && server.ServerID == target.ServerID && server.EnvironmentID == target.EnvironmentID
 }
 
+func hasNonPendingSteps(steps []OperationStep) bool {
+	for _, step := range steps {
+		if step.Status != protocolstate.StepCompleted {
+			return true
+		}
+	}
+	return false
+}
+
 func writeBackupInitialState(operations *bolt.Bucket, key []byte, current StoredOperation, state protocolstate.ServerState) (StoredOperation, error) {
 	record := current.Record
-	for _, step := range record.Steps {
-		if step.Status != protocolstate.StepPending || step.Attempt != 0 {
-			return StoredOperation{}, fmt.Errorf("%w: backup context must precede dispatch", ErrInvalidRecord)
-		}
+	if hasNonPendingSteps(record.Steps) {
+		return StoredOperation{}, fmt.Errorf("%w: backup context must precede dispatch", ErrInvalidRecord)
 	}
 	record.BackupInitialLifecycleState = state
 	if record.BackupInitialLifecycleState == "" || validateRecord(record) != nil {
