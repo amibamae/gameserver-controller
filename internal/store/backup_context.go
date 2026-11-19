@@ -116,8 +116,11 @@ func backupCaptureServerMatches(target OperationTarget, server LogicalServer) bo
 }
 
 func hasNonPendingSteps(steps []OperationStep) bool {
+	// Backup context must be captured before any step advances beyond pending.
+	// Steps at StepPending are allowed (initial state before dispatch).
+	// Reject if step is running, waiting, outcome-unknown, or failed/succeeded/terminal without lifecycle state set.
 	for _, step := range steps {
-		if step.Status != protocolstate.StepCompleted {
+		if step.Status == protocolstate.StepRunning || step.Status == protocolstate.StepWaiting || step.Status == protocolstate.StepOutcomeUnknown {
 			return true
 		}
 	}
