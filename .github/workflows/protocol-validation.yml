@@ -9,12 +9,8 @@ on:
       - "go.sum"
       - ".github/workflows/protocol-validation.yml"
   pull_request:
-    paths:
-      - "protocol/**"
-      - "cmd/protocol-check/**"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/protocol-validation.yml"
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
