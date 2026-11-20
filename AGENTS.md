@@ -61,6 +61,61 @@ Follow these rules unless the owner explicitly instructs otherwise.
 - One branch and one PR per change; never push, merge, force-push, or delete branches you do not own. Only the maintainers merge into the project, and a green CI run does not guarantee acceptance.
 - Commit messages and PR bodies describe the change only: no agent session links (see CLAUDE.md) and no secrets, per CONTRIBUTING.md.
 
+## Git Branch Isolation and Subagent Delegation
+
+**Effective immediately:** All agents must use dedicated feature branches for work. Subagents never push, merge, or create branches - only the parent agent coordinates these operations. This prevents accidental changes to main, respects the repository's Git safety rules, and ensures all code is reviewed through PRs with green CI checks.
+
+### Branch Policy
+- Work on a named feature branch from `main`
+- One focused task per branch
+- Commit frequently with descriptive messages
+- Never force-push or delete branches you don't own
+- Merge only when parent agent approves (auto-merge applies when CI passes + code health ≥ 7)
+
+### Subagent Delegation
+- **Parent agent** (this session): orchestrates Git operations, merges PRs, manages branch lifecycle
+- **Subagents**: perform exploratory work, code changes, local testing - NEVER push or merge
+- Before delegating: clarify task scope, expected outputs, and approval process
+- After delegation: monitor progress via `<subagent>` messages
+
+### Pre-Merge Checklist (Parent Agent)
+1. All required CI checks pass (green ✅)
+2. Code health score ≥ 7 for changed files
+3. Review PR diff for correctness and edge cases
+4. Update AGENTS.md or docs as needed
+5. Create one PR per change group targeting main
+
+### Auto-Merge Policy
+When CI passes and code health is acceptable:
+- **Merge**: squash merge into main automatically
+- **No owner approval needed** when all checks pass
+- **Exception**: breaking changes, security fixes, or scope expansions require manual review first
+
+### Blocked PRs Handling
+PRs with failing tests (CI red), conflicts with main, or code health < 7 are:
+1. Not merged until issues resolved
+2. Documented in `.opencode/WORK_PROGRESS.md`
+3. Closed only after changes integrated elsewhere OR if no longer needed
+
+---
+
+## Protocol Conformance Files
+
+Located in `cmd/protocol-check/` for static validation of schemas, examples, and conformance vectors:
+
+- `backup_capture_acceptance_test.go`: backup capture protocol acceptance
+- `bootstrap_template_conformance.go`: bootstrap template structure conformance
+- `conformance_operations.go`: operation conformance registry management
+- `execution_health_conformance.go`: execution unit health conformance
+- `execution_unit_inspect_conformance.go`: execution unit inspection conformance
+- `game_compatibility_conformance.go`: game compatibility protocol conformance
+- `game_restore_evidence_conformance.go`: game restore evidence conformance
+- `hosting_instance_create_recovery.go`: hosting instance creation recovery conformance
+
+Use `go run ./cmd/protocol-check --manifest` to regenerate the package manifest when schemas/examples change.
+
+---
+
 ## Context management
 
 - Keep one focused task per session and update [docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md) when work stops mid-stream, so the next agent can resume.
