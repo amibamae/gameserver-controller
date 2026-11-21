@@ -211,6 +211,24 @@ Keep new schemas in `0.21.0-draft` until R14.
 ## Working practices that saved time (and mistakes)
 
 - **Gate every push on the checks.** A chained command once pushed a failing branch because the push wasn't gated. Run: `gofmt -l .`, `go vet ./...`, `go test ./...`, `go run ./cmd/protocol-check`, then push only if all pass.
+
+## Reliability Architecture Work (2026-11-21)
+
+**Completed today:**
+- Created `docs/RELIABILITY_ARCHITECTURE.md`: Four-stage availability roadmap (99.99% → 99.999% → 99.9999% research)
+- Created `.opencode/RELIABILITY_GAP_ANALYSIS.md`: Detailed gap analysis identifying SPOFs, test matrix, implementation priorities
+- Reviewed `internal/store/bolt.go`: Confirmed durable operation-store with idempotency keys and per-server locks
+- Reviewed `internal/workflow/engine.go`: Verified persist-before-dispatch pattern throughout all stages
+- Created `.opencode/STORAGE_REVIEW_REPORT.md`: Persistence layer analysis with observability requirements
+- Created `.opencode/WORKFLOW_RELIABILITY_ASSESSMENT.md`: Workflow engine gap analysis and refactoring recommendations
+
+**Next priorities (Stage 1 - Four Nines):**
+1. Add fault-injection tests for bbolt crash recovery
+2. Implement basic Prometheus-compatible metrics export
+3. Write operational runbooks for crash recovery procedures
+4. Continue code health improvements for hotspots
+
+See `docs/RELIABILITY_ARCHITECTURE.md` and `.opencode/STORAGE_REVIEW_REPORT.md` for full details.
 - **Rebasing PRs with generated files:** the package manifest conflicts constantly. Take main's version of `protocol/conformance/package-manifest.json`, finish the rebase, then regenerate it with `go run ./cmd/protocol-check --manifest`. Other conflicts need real reading; when the schema's big `allOf` list conflicts, apply the PR's net change onto main programmatically instead of merging text.
 - **Force-pushing a rebased branch:** use `git push --force-with-lease=<branch>:<old-sha>`.
 - **Waiting for CI:** use a background poll of `gh api repos/amibamae/gameserver-controller/actions/runs?head_sha=<sha>` until every run is completed, never a foreground `sleep`. Check conclusions, not just completion.

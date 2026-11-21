@@ -766,48 +766,118 @@ func (e *Engine) failStep(ctx context.Context, running store.StoredOperation, st
 	return e.fail(ctx, running, failed, stepIndex, definition, errValue)
 }
 
+// reconcile processes the reconciliation path for an operation with uncertain step outcome.
 func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, stepIndex int, definition Definition) (store.StoredOperation, error) {
 	step := current.Record.Steps[stepIndex]
-	if step.Status == protocolstate.StepRunning {
-		unknown := current.Record
-		unknown.Status = protocolstate.OperationReconciling
-		unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
-		unknownError := protocolError("core.adapter.outcome_unknown", "internal", "The previous adapter invocation has no recorded response.", current.Record.OperationID, false, "reconcile", false)
-		unknown.Steps[stepIndex].Error = unknownError
-		unknown.Error = json.RawMessage(unknownError)
-		var err error
-		current, err = e.updateOperation(current.Revision, unknown)
-		if err != nil {
-			return store.StoredOperation{}, err
-		}
-		step = current.Record.Steps[stepIndex]
+
+	// 1. Handle interrupted running steps - mark as unknown and persist
+	if err := e.handleInterruptedRunningStep(current, stepIndex); err != nil {
+		return store.StoredOperation{}, err
 	}
+
+	// 2. Load capability descriptor for validation
 	capability, err := e.preflight(current.Record, step)
 	if err != nil {
 		return e.suspend(current, "core.compatibility.capability_unavailable", "The exact adapter capability recorded for this step is unavailable or incompatible.")
 	}
+
+	// 3. Check context deadline and create reconciliation context with timeout
 	if err := ctx.Err(); err != nil {
 		return current, err
 	}
 	reconcileContext, cancel := context.WithTimeout(ctx, e.stepTimeout)
+	defer cancel()
+
+	// 4. Call external reconciliation hook - may be unavailable in some states
 	resolution, err := definition.Reconcile(reconcileContext, current.Record, step)
-	cancel()
 	if err != nil {
 		return e.suspend(current, "core.reconciliation.unavailable", "The external outcome could not be reconciled automatically.")
 	}
-	if err := e.validateExternalOperationRef(step, resolution.ExternalOperationRef); err != nil {
+
+	// 5. Validate reconciliation result against schema if present
+	if resolution.ExternalOperationRef, err = e.validateExternalOperationRef(step, resolution.ExternalOperationRef); err != nil {
 		return e.suspend(current, "core.reconciliation.invalid_result", "Reconciliation returned an invalid or conflicting external operation reference.")
 	}
-	if len(resolution.ExternalOperationRef) > 0 && len(step.ExternalOperationRef) == 0 {
-		updated := current.Record
-		updated.Steps[stepIndex].ExternalOperationRef = append(json.RawMessage(nil), resolution.ExternalOperationRef...)
-		current, err = e.updateOperation(current.Revision, updated)
-		if err != nil {
-			return store.StoredOperation{}, err
-		}
+
+	// 6. Persist any updated external operation reference if added by reconciliation
+	if updated := e.persistExternalOperationRef(current, stepIndex, resolution.ExternalOperationRef); updated != nil {
+		current = *updated
 		step = current.Record.Steps[stepIndex]
 	}
+
+	// 7. Apply resolution outcome (success, retry, error, etc.)
 	return e.applyResolution(ctx, current, stepIndex, step, definition, capability, resolution)
+}
+
+// handleInterruptedRunningStep marks a step that was running when a crash occurred.
+func (e *Engine) handleInterruptedRunningStep(current store.StoredOperation, stepIndex int) error {
+	step := current.Record.Steps[stepIndex]
+	if step.Status != protocolstate.StepRunning {
+		return nil // Not interrupted - early return
+	}
+
+	// Mark as reconciling with unknown outcome
+	current.Record.Status = protocolstate.OperationReconciling
+	current.Record.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
+
+	unknownError := protocolError("core.adapter.outcome_unknown", "internal",
+		"The previous adapter invocation has no recorded response.",
+		current.Record.OperationID, false, "reconcile", false)
+
+	current.Record.Steps[stepIndex].Error = unknownError
+	current.Record.Error = json.RawMessage(unknownError)
+
+	if err := e.updateOperation(current.Revision, current.Record); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateExternalOperationRef validates the reconciliation result's external operation reference.
+func (e *Engine) validateExternalOperationRef(step store.OperationStep, ref json.RawMessage) (json.RawMessage, error) {
+	if ref == nil {
+		return nil, nil // No reference - early return
+	}
+
+	if err := e.validateExternalOperationRefInner(step, ref); err != nil {
+		return nil, err
+	}
+	return ref, nil
+}
+
+// validateExternalOperationRefInner performs the actual validation without context.
+func (e *Engine) validateExternalOperationRefInner(step store.OperationStep, ref json.RawMessage) error {
+	if len(ref) == 0 {
+		return nil // Optional external ref - no validation needed
+	}
+
+	schemaID := "urn:gameserver-controller:" + step.StepURI
+	if !isObject(ref) || e.schemas.ValidateJSON(schemaID, ref) != nil {
+		return fmt.Errorf("external operation reference does not match protocol schema")
+	}
+
+	if len(step.ExternalOperationRef) > 0 && !equalJSON(step.ExternalOperationRef, ref) {
+		return fmt.Errorf("external operation reference conflicts with the recorded reference")
+	}
+
+	return nil
+}
+
+// persistExternalOperationRef updates the operation record if reconciliation added an external reference.
+func (e *Engine) persistExternalOperationRef(current store.StoredOperation, stepIndex int, newRef json.RawMessage) *store.StoredOperation {
+	if len(newRef) == 0 || len(current.Record.Steps[stepIndex].ExternalOperationRef) > 0 {
+		return nil // No update needed - early return
+	}
+
+	updated := current.Record
+	updated.Steps[stepIndex].ExternalOperationRef = append(json.RawMessage(nil), newRef...)
+
+	if err := e.updateOperation(current.Revision, updated); err != nil {
+		return nil // Failed to persist - no-op
+	}
+
+	return &current // Return pointer to updated stored operation
 }
 
 // applyResolution records what reconciliation determined about the step.
