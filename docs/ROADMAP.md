@@ -16,10 +16,14 @@ The **existing product roadmap (Phases 0–7)** and the **optional reliability r
 | Optional HA prototype in single-VM QA | 12–24 months | Transactional distributed persistence and worker ownership; three controller and database processes with reproducible failure testing, not physical fault tolerance. |
 | Optional four-nines production-capable HA | 18–36 months | Independent failure domains, monitored service-specific SLI, safe database failover, fencing, restoration and rollback drills, and demonstrated fault-injection acceptance criteria. |
 | Five-nines critical control-plane engineering | 36–72 months | Evidence-based reduction of observed error budget, redundant ingress, deploy-without-outage practices, and measured safe failover. |
-| Selected six-nines services | 60–108 months | Specifically scoped services with isolated dependencies, explicit read freshness, defensible monitoring, and meaningful service-specific evidence. |
+| Six-nines service architecture design (parallel research) | 6–18 months | Define independently useful read/status contracts, dependency maps, redundancy, freshness semantics, failure isolation, and testable SLI definitions. Design is not operational proof. |
+| Selected six-nines implementation and fault testing | 18–48 months | Build narrowly scoped read/status paths, isolated replicas, redundant access and fault-injection tests; demonstrate specified failures do not violate their contracts. A working design is not measured six-nines uptime. |
+| Selected six-nines operational evidence | 36–108+ months, evidence-gated | Independently measured service-specific availability with monitoring confidence and sufficient observations; this is a generous investigation horizon, **not** a promised achievement or fixed delivery date. Six nines may remain unproven beyond this window. |
 | Ten-nines architecture research | Continuous, with no scheduled delivery date | Documented experiments and tradeoffs only; no promise of 99.99999999% end-to-end availability. |
 
 The ranges are intentionally generous and **overlap**; they are not consecutive durations to add together. They include substantial contingency rather than assuming uninterrupted agent work or perfectly successful integration. The earliest window bounds are opportunities, not promised deadlines. If severe failures, scope changes, safety findings, missing infrastructure, or low measurement volume prevent validation, extend the applicable milestone without lowering its acceptance criteria.
+
+For six nines in particular, **architecture designed**, **fault tolerance validated**, and **availability demonstrated** are three separate milestones. Selected read-only services might reach the first two earlier than the conservative operational-evidence window, but no timeline alone establishes 99.9999%. A low-traffic controller may not generate statistically persuasive request samples. Use independent synthetic probes where appropriate and disclose probe limitations, monitoring blind spots and uncertainty; do not claim sustained six-nines service availability without defensible evidence.
 
 Availability targets apply only to a defined deployment and measured service-level indicator (SLI), not to every user or to the public protocol. A tested four-nines-capable architecture is not the same as a system with sufficient production observations to demonstrate 99.99% uptime. Five- and six-nines milestones are progressively stronger engineering goals, while ten nines remains research. A public service-level agreement is not implied.
 
@@ -233,6 +237,10 @@ For read-only APIs, a verified versioned snapshot may remain available during a 
 - Confirm durability and mutating-operation safety before improving apparent uptime; do not weaken replication or fencing merely to meet the SLI.
 
 ### Track R5: Selected six-nines services, not across the board
+
+Six nines is technically plausible for **specific, independently defined read-only or historical-status functions**, not a blanket target for real-time health, durable mutations, provisioning, or backup completion. A 365-day time-based 99.9999% target permits only ~31.54 seconds of downtime per year; a request-based SLI allows an error ratio of 1 in 1,000,000 requests, but these measures are different and must not be conflated. Even a very long calendar observation period cannot compensate automatically for insufficient request volume or unreliable monitoring.
+
+**Progress gates:** (1) architecture and contracts designed; (2) implementation passes specified fault-injection and correctness validation; (3) sustained real-world operational evidence supports a precisely scoped availability claim. The first two gates may be reached before five years. The third has no guaranteed completion date and may remain open indefinitely without enough evidence.
 
 - Separate read-only views and independent status endpoints from write-critical dependencies where the service contract permits it.
 - Offer redundant regional API endpoints and versioned, freshness-labelled read models; keep stale and current responses distinguishable.
