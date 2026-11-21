@@ -15,10 +15,10 @@ import (
 
 // CrashSimulationHarness provides infrastructure for crash recovery testing.
 type CrashSimulationHarness struct {
-	tmpDir         string
-	binaryPath     string
-	storePath      string
-	testStartTime  time.Time
+	tmpDir        string
+	binaryPath    string
+	storePath     string
+	testStartTime time.Time
 }
 
 // NewCrashSimulationHarness creates a new crash simulation harness.
@@ -54,7 +54,7 @@ func TestCrashRecoveryScenario(t *testing.T) {
 		// 5. Verify state restored via WAL replay
 
 		t.Log("Test scenario: Process terminated during operation")
-		
+
 		operationID := "test-crash-" + time.Now().UnixNano()
 		expectedState := map[string]interface{}{
 			"operation_id": operationID,
@@ -78,10 +78,10 @@ func TestCrashRecoveryScenario(t *testing.T) {
 	t.Run("recovery completes within SLI budget", func(t *testing.T) {
 		// Measure recovery duration and assert it's within acceptable bounds
 		start := time.Now()
-		
+
 		// Simulate recovery (placeholder)
 		duration := time.Since(start)
-		
+
 		assert.Less(t, duration, 10*time.Second, "Recovery should complete quickly")
 	})
 }
@@ -95,14 +95,14 @@ func TestIdempotencyAfterCrash(t *testing.T) {
 	t.Run("duplicate operation rejected after crash", func(t *testing.T) {
 		// Simulate crashed instance trying to resume same operation
 		operationID := "test-idempotency-crash-" + time.Now().UnixNano()
-		
+
 		// First call succeeds
 		op1, err1 := Upsert(operationID, StatusPending) // This would use actual store
 		require.NoError(t, err1)
-		
+
 		// Crashed instance tries same operation with old idempotency key
 		_, err2 := Upsert(operationID, StatusPending)
-		
+
 		// Should get conflict error (operation already exists)
 		assert.Error(t, err2)
 		assert.Contains(t, err2.Error(), "already exists")
@@ -118,10 +118,10 @@ func TestLockContentionStress(t *testing.T) {
 	t.Run("high concurrency with locks", func(t *testing.T) {
 		numServers := 10
 		opsPerServer := 20
-		
-		t.Logf("Running lock contention test: %d servers × %d ops each", 
+
+		t.Logf("Running lock contention test: %d servers × %d ops each",
 			numServers, opsPerServer)
-		
+
 		// This would use goroutines to simulate concurrent access
 		// and verify no data races occur
 
@@ -130,14 +130,14 @@ func TestLockContentionStress(t *testing.T) {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
-				
+
 				// Simulate operation on a server with lock acquisition
 				_ = idx
-				
+
 				// In real test: store.Upsert(...) with actual locking
 			}(i)
 		}
-		
+
 		wg.Wait()
 		t.Log("Lock contention stress test completed successfully")
 	})
@@ -157,7 +157,7 @@ func TestWALRecovery(t *testing.T) {
 		// 4. Verify state is correct
 
 		t.Log("Verifying WAL-based durability guarantees")
-		
+
 		// Placeholder - would need actual bbolt DB instance
 		assert.NotNil(t, "WAL recovery test placeholder")
 	})
@@ -168,13 +168,13 @@ func SimulateCrash(process *exec.Cmd) {
 	if process == nil || process.Process == nil {
 		return // No process to kill
 	}
-	
+
 	// Force termination with SIGKILL equivalent
 	err := process.Process.Kill()
 	if err != nil {
 		t.Logf("Failed to kill process: %v", err)
 	}
-	
+
 	t.Log("Process terminated for crash simulation")
 }
 
@@ -183,15 +183,15 @@ func SimulateRestart(process *exec.Cmd, storePath string) error {
 	if process != nil && !process.Process.Pid == 0 {
 		return nil // Previous process still running
 	}
-	
+
 	// This would spawn new Go binary with store path
 	cmd := exec.Command("go", "run", "./cmd/server.go", "--db="+storePath)
-	
+
 	err := cmd.Start()
 	if err != nil {
 		return err
 	}
-	
+
 	t.Log("Controller restarted after crash")
 	return nil
 }
@@ -208,13 +208,13 @@ func ValidateRecoveryResult(expectedState map[string]interface{}, actualState ma
 		if !ok {
 			return fmt.Errorf("expected field %q not found in recovered state", key)
 		}
-		
+
 		if expectedValue != actualValue {
-			return fmt.Errorf("field %q mismatch: expected %v, got %v", 
+			return fmt.Errorf("field %q mismatch: expected %v, got %v",
 				key, expectedValue, actualValue)
 		}
 	}
-	
+
 	return nil
 }
 
