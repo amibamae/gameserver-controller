@@ -2,30 +2,19 @@
 
 **Status:** Planning document. The phases are ordered to reduce production risk; dates are not commitments.
 
-## Estimated timeline (conservative planning windows)
+## Estimated timeline
 
-These are **buffered planning windows, not release dates or availability commitments**, measured from November 2026. They deliberately allow more time than the earlier estimates for agent availability, sequencing, review, CI, real-provider integration, supervised validation, rework, security assessment, incident learning, and operator availability. Work may finish earlier; do not delay a safe, validated release merely to fill the window. Reforecast at least quarterly and after each meaningful test gate.
+These ranges are elapsed calendar time from November 2026. Plan for **12–18 months for the full roadmap through Phase 7**, with room to extend the schedule if usage limits or live testing cause longer pauses. The milestones overlap, so the ranges are measured from the same starting point.
 
-The **existing product roadmap (Phases 0–7)** and the **optional reliability roadmap** below are distinct, partially parallel tracks. Do not make PostgreSQL, Elixir, clustering, or multi-region infrastructure prerequisites for the standalone Go+bbolt controller or for completing the first real-provider lifecycle.
-
-| Milestone | Conservative elapsed window | Exit evidence, not just completed code |
+| Milestone | Estimated calendar time | What needs to be proven |
 | --- | --- | --- |
-| Supervised staging pilot | 3–9 months | Fresh isolated Debian bootstrap, Paper readiness, and verified Wasabi backup and restore of a disposable world. |
-| First production lifecycle deployment | 9–18 months | Real adapters integrated; safe provision, restore, readiness, routing, recovery, and backup validated in staging; separately approved production cutover. |
-| Existing full product roadmap through Phase 7 | 24–36 months | Release/rollback, staging updates, second hosting provider/game validation, and tested cross-provider contracts; protocol stability supported by evidence. |
-| Optional HA prototype in single-VM QA | 12–24 months | Transactional distributed persistence and worker ownership; three controller and database processes with reproducible failure testing, not physical fault tolerance. |
-| Optional four-nines production-capable HA | 18–36 months | Independent failure domains, monitored service-specific SLI, safe database failover, fencing, restoration and rollback drills, and demonstrated fault-injection acceptance criteria. |
-| Five-nines critical control-plane engineering | 36–72 months | Evidence-based reduction of observed error budget, redundant ingress, deploy-without-outage practices, and measured safe failover. |
-| Six-nines service architecture design (parallel research) | 6–18 months | Define independently useful read/status contracts, dependency maps, redundancy, freshness semantics, failure isolation, and testable SLI definitions. Design is not operational proof. |
-| Selected six-nines implementation and fault testing | 18–48 months | Build narrowly scoped read/status paths, isolated replicas, redundant access and fault-injection tests; demonstrate specified failures do not violate their contracts. A working design is not measured six-nines uptime. |
-| Selected six-nines operational evidence | 36–108+ months, evidence-gated | Independently measured service-specific availability with monitoring confidence and sufficient observations; this is a generous investigation horizon, **not** a promised achievement or fixed delivery date. Six nines may remain unproven beyond this window. |
-| Ten-nines architecture research | Continuous, with no scheduled delivery date | Documented experiments and tradeoffs only; no promise of 99.99999999% end-to-end availability. |
+| Supervised staging pilot | 1–3 months | Use the lower-cost Vultr VM to verify Debian bootstrap, Paper readiness, and a backup and restore of a disposable world through Wasabi. |
+| First production deployment | 4–8 months | Wire the required lifecycle workflows to real adapters, verify recovery and cleanup on staging, then restore a fresh backup of the live world onto the larger production VM and verify it before an approved cutover. |
+| Full roadmap through Phase 7 | 12–18 months | Complete production orchestration and scaling, release rollback, automated staging updates, and validation with another hosting provider and game. |
 
-The ranges are intentionally generous and **overlap**; they are not consecutive durations to add together. They include substantial contingency rather than assuming uninterrupted agent work or perfectly successful integration. The earliest window bounds are opportunities, not promised deadlines. If severe failures, scope changes, safety findings, missing infrastructure, or low measurement volume prevent validation, extend the applicable milestone without lowering its acceptance criteria.
+Agents work in sessions when usage is available. Several agents can make progress in parallel, but usage limits can pause them for days or weeks, and some work has to wait for another change, review, or CI run. The ranges include time for those gaps, fixes after staging tests, and operator availability for live checks. Revisit the estimates after the first successful staging restore and whenever the pace of work changes materially.
 
-For six nines in particular, **architecture designed**, **fault tolerance validated**, and **availability demonstrated** are three separate milestones. Selected read-only services might reach the first two earlier than the conservative operational-evidence window, but no timeline alone establishes 99.9999%. A low-traffic controller may not generate statistically persuasive request samples. Use independent synthetic probes where appropriate and disclose probe limitations, monitoring blind spots and uncertainty; do not claim sustained six-nines service availability without defensible evidence.
-
-Availability targets apply only to a defined deployment and measured service-level indicator (SLI), not to every user or to the public protocol. A tested four-nines-capable architecture is not the same as a system with sufficient production observations to demonstrate 99.99% uptime. Five- and six-nines milestones are progressively stronger engineering goals, while ten nines remains research. A public service-level agreement is not implied.
+The optional hosted subdomain service and other-language contributions are outside this schedule. Stable protocol 1.0 follows the implementation evidence gate below.
 
 ## Phase 0: Project foundation
 
@@ -171,98 +160,6 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - Add another game after the game contract stabilizes.
 - Welcome adapter and tooling contributions in other languages; do not require them for release.
 - Review trust boundaries and compatibility for plugins and extensions.
-
-## Optional reliability engineering roadmap
-
-This roadmap extends rather than replaces Phases 0–7. **Standalone Go+bbolt is the default supported deployment** and must never require PostgreSQL, Patroni, etcd, Kubernetes, distributed Erlang, a second language implementation, or multiple machines. Other implementations, including Elixir/OTP, may evolve independently behind the same language-neutral protocol and conformance tests; they are not prerequisites for four-nines readiness.
-
-### Alignment with existing implementation
-
-- **Already aligned:** provider-agnostic adapter contracts, durable operation acceptance, actor-scoped idempotency, persistent per-server locks, immutable step intent, safe reconciliation, trusted planning and approvals, production/staging isolation, and the staged Vultr/Wasabi/Paper/Velocity reference deployment.
-- **Complete existing foundations first:** the running Go controller presently composes only server.define; the other lifecycle workflows have extensive fake-adapter coverage but still require production adapter composition, supervised end-to-end checks, and a deliberate cutover. A reliable HA control plane cannot substitute for those missing integrations.
-- **New optional capabilities:** a transactional distributed store, multi-controller execution claims with generation fencing, independent controller/API replicas, HA database routing, quorum/replication/failover, and optional regional cells. Do not make the first implementation or its protocol depend on them.
-- **Known reliability work:** durable rediscovery and rescheduling of accepted work is needed independently of in-memory queue delivery; distinguish short-lived worker execution claims from long-lived operation resource locks. After a lost provider response, reconcile instead of blindly retrying.
-- **No contradiction in reliability targets:** the protocol's safety invariants apply to all deployments; availability objectives vary by user-selected deployment and service. High availability never overrides authorization, correctness, verified backups, or safe failure.
-
-### Reliability targets by service
-
-These are **internal engineering targets, not achieved availability or public SLAs**. Define request types, latency thresholds, acceptable freshness, exclusions, measurement windows, and observation methods before reporting them. A healthy liveness endpoint cannot establish durable operation acceptance.
-
-| Scope | Target | Required boundary |
-| --- | --- | --- |
-| Optional initial HA deployment, explicitly measured control-plane functions | 99.99% (four nines) | Fault-isolated controller replicas, transactionally durable work, recovery, monitoring, tested failover; ~52.6 minutes/year at a 365-day time-based definition. |
-| Durable operation acceptance and critical workflow infrastructure in advanced HA deployment | 99.999% (five nines) | Safe mutation authority, durable coordinated state, independently tested database failover, redundant ingress, upgrades and rollback; ~5.26 minutes/year. |
-| Selected read-only API functions and independently meaningful health/status services | 99.9999% (six nines) | No synchronous dependency on lower-availability systems unless the documented function remains correct under their loss; ~31.54 seconds/year. |
-| Entire controller and external-provider lifecycle | No six- or ten-nines claim | Includes separately measured dependencies and sometimes unavoidable safe suspension of mutations. |
-| Advanced fault-tolerance research | 99.99999999% (ten nines), aspirational only | ~3.15 milliseconds/year; investigate technical feasibility without presenting it as an achievable release or deployment requirement. |
-
-For read-only APIs, a verified versioned snapshot may remain available during a database outage **only when its age and staleness are visible and the endpoint's contract permits historical data**. Do not represent old state as current health. An operation is never accepted until the required durable transaction commits. An intentionally safety-blocked mutation is not counted as successful mutation acceptance.
-
-### Track R0: Define and measure reliability (parallel, early)
-
-- Document independent SLIs for read endpoints, mutation acceptance, workflow progression, and regional access; define success and safe-degradation semantics.
-- Establish dependency maps, fault domains, incident taxonomy, recovery time objective (RTO), recovery point objective (RPO), and monitoring blind spots.
-- Write an architecture decision record for optional deployment profiles, persistent-store semantics, distributed ownership, cross-region recovery constraints, and safety versus availability tradeoffs.
-- Maintain repeatable acceptance gates for safety invariants; use fault-injection evidence alongside actual operational measurements.
-
-### Track R1: Harden standalone behavior (four-nines foundation)
-
-- Preserve the single-process bbolt file-lock model and existing store invariants.
-- Ensure accepted operations are durably discoverable and eligible work is rescheduled after missed in-memory notifications **without requiring a controller restart**.
-- Test crash interruption around external dispatch, unknown outcomes, idempotency, stale locks, backup verification, and safe cancellation.
-- Add bounded backpressure and observability; ensure optional integrations and notifications cannot halt unrelated operations.
-- Complete real-adapter wiring and supervised staging verification before changing production lifecycle ownership.
-
-### Track R2: Optional distributed persistence and QA (four-nines foundation)
-
-- Introduce a **semantic transactional store contract**, not generic CRUD, for atomic acceptance, actor-scoped deduplication, durable lock acquisition/release, immutable attempts, version-checked transitions, execution claims, and recovery.
-- Implement an optional PostgreSQL-backed store with tested migrations, contention handling, commit ambiguity resolution, and correct fencing; retain bbolt for standalone use.
-- In QA, simulate three controller replicas and PostgreSQL primary plus two standbys under Patroni and an appropriate three-member etcd quorum on one isolated VM. Each local process has separate ports, data directories, credentials, and identity.
-- Use isolated test networks, synthetic adapters, deterministic crash injection, and no production accounts or billable provider operations. One-VM QA proves **software behavior**, never resilience to host failure.
-- Do not allow independent Go and Elixir implementations to mutate the same production resources without one verified authority mechanism.
-
-### Track R3: Four-nines optional production readiness
-
-- Deploy controller, database, quorum and ingress redundancy across independent physical or provider failure domains; validate effective primary fencing and safe promotion.
-- Document the durability/availability tradeoff of strict synchronous PostgreSQL replication. Where required synchronous durability is unavailable, mutating operations fail closed.
-- Test database primary loss, old-primary isolation, controller loss, connection-pool recovery, ambiguous COMMIT results, restore from an older backup, and hostile network partitions.
-- Restore protected backups into an isolated environment, reconcile the recovered state with external resources, and prevent unapproved or duplicate actions.
-- Measure real service SLIs under representative traffic. Label the milestone **architecture validated** until sufficient observations support a reported availability value.
-
-### Track R4: Five-nines critical control plane
-
-- Remove avoidable single points of failure in ingress, management routing, deployment rollout, credentials, and operational recovery.
-- Introduce staggered releases, compatibility-aware database migrations, rollback exercises, independent monitoring and incident response.
-- Improve safe failover timing and workload isolation; evaluate persistent congestion, replica lag, and failure correlation.
-- Confirm durability and mutating-operation safety before improving apparent uptime; do not weaken replication or fencing merely to meet the SLI.
-
-### Track R5: Selected six-nines services, not across the board
-
-Six nines is technically plausible for **specific, independently defined read-only or historical-status functions**, not a blanket target for real-time health, durable mutations, provisioning, or backup completion. A 365-day time-based 99.9999% target permits only ~31.54 seconds of downtime per year; a request-based SLI allows an error ratio of 1 in 1,000,000 requests, but these measures are different and must not be conflated. Even a very long calendar observation period cannot compensate automatically for insufficient request volume or unreliable monitoring.
-
-**Progress gates:** (1) architecture and contracts designed; (2) implementation passes specified fault-injection and correctness validation; (3) sustained real-world operational evidence supports a precisely scoped availability claim. The first two gates may be reached before five years. The third has no guaranteed completion date and may remain open indefinitely without enough evidence.
-
-- Separate read-only views and independent status endpoints from write-critical dependencies where the service contract permits it.
-- Offer redundant regional API endpoints and versioned, freshness-labelled read models; keep stale and current responses distinguishable.
-- Define and measure each selected six-nines endpoint separately. Never infer global six-nines availability from one successful health probe.
-- Test whether notification, provider, database, and workflow outages propagate into supposedly independent services.
-
-### Track R6: Continuous ten-nines research, not a release gate
-
-- Evaluate formal models of ownership, idempotency, stale-worker fencing and regional transfer; consider fault-injection history checking.
-- Research independent regional cells, advanced transactional storage, active-active read availability, zero-interruption rollouts, optional colocation, and common-mode failure prevention.
-- Preserve a tested replaceable persistence boundary and language-neutral protocol; avoid forcing research infrastructure on ordinary users.
-- Treat ten nines as an aspirational question with no guaranteed delivery, automatic promotion, or production claim.
-
-### Release gates and constraints
-
-- **Safety is non-negotiable:** persist intent before side effects; never blindly replay uncertain provider mutations; keep durable resource locks across worker crash/lease expiry; commit a safe terminal state and lock release atomically; preserve actor-scoped idempotency and exact-target approval.
-- Preserve verified backup prerequisites for destructive cleanup; keep staging unable to write production; require fresh exact-instance readiness before Velocity routes players.
-- **Automatic production VM destruction remains disabled** unless the operator separately authorizes changing that policy.
-- Multi-region ownership is optional; one authoritative cell per resource, independent regional databases, effective fencing, and manual/assisted cross-region failover until safe takeover is demonstrated.
-- No provider credentials, live resource mutations, paid accounts, or production deployments in automated tests without explicit authorization.
-- Reliability features are opt-in. A fully functional standalone installation and the portable language-neutral protocol remain release criteria regardless of how advanced the HA research becomes.
-- Do not declare a percentage achieved from architecture diagrams, CI success, short fault tests, or mere presence of replicas. Report implemented capability, simulated resilience, and measured availability separately.
 
 ## Future management clients
 
