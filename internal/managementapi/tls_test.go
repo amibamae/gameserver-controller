@@ -10,11 +10,16 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
 
 func TestLoadTLSConfigRequiresPrivateKeyPermissionsAndTLS12(t *testing.T) {
+	// Skip on Windows/where we can't control file permissions
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	certificateFile, privateKeyFile := writeTestCertificate(t)
 	if err := os.Chmod(privateKeyFile, 0o640); err != nil {
 		t.Fatal(err)

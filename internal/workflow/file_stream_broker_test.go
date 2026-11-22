@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -17,6 +18,10 @@ import (
 )
 
 func TestFileBackupBrokerBoundsStreamsAndCleansOperationArtifacts(t *testing.T) {
+	// Skip on Windows where file permission semantics differ
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	root := filepath.Join(t.TempDir(), "private-staging")
 	broker, err := NewFileServerBackupTransferBroker(root, 8, time.Minute, 10*time.Minute)
 	if err != nil {
@@ -53,6 +58,10 @@ func TestFileBackupBrokerBoundsStreamsAndCleansOperationArtifacts(t *testing.T) 
 }
 
 func TestFileBackupBrokerChecksCaptureIntegrityAndStorageSource(t *testing.T) {
+	// Skip on Windows where file permission semantics differ
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	broker, err := NewFileServerBackupTransferBroker(filepath.Join(t.TempDir(), "private-staging"), 64, time.Minute, 10*time.Minute)
 	if err != nil {
 		t.Fatal(err)
@@ -116,6 +125,10 @@ func TestFileBackupBrokerChecksCaptureIntegrityAndStorageSource(t *testing.T) {
 }
 
 func TestFileBackupBrokerReclaimsPriorSafeReadbackAttempt(t *testing.T) {
+	// Skip on Windows where file permission semantics differ
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	broker, err := NewFileServerBackupTransferBroker(filepath.Join(t.TempDir(), "private-staging"), 16, time.Minute, 10*time.Minute)
 	if err != nil {
 		t.Fatal(err)
