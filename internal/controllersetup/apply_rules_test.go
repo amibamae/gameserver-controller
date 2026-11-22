@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -72,6 +73,10 @@ func writeAt(t *testing.T, root, path string, mode fs.FileMode, content string) 
 }
 
 func TestApplyInstallBundleRejectsBeforeChangingTheHost(t *testing.T) {
+	// Skip permission-based tests on non-Linux platforms
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	ended, cancel := context.WithCancel(context.Background())
 	cancel()
 	var missing context.Context
@@ -181,6 +186,10 @@ func TestApplyInstallBundleRejectsBeforeChangingTheHost(t *testing.T) {
 }
 
 func TestApplyInstallBundleInstallsTheExactBundle(t *testing.T) {
+	// Skip permission-based tests on non-Linux platforms
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	root := t.TempDir()
 	bundle := smallBundle()
 	operations := &scriptedInstallerHost{}
@@ -215,6 +224,10 @@ func TestApplyInstallBundleInstallsTheExactBundle(t *testing.T) {
 }
 
 func TestApplyInstallBundleHostFailures(t *testing.T) {
+	// Skip permission-based tests on non-Linux platforms
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	tests := []struct {
 		name      string
 		host      scriptedInstallerHost
@@ -258,6 +271,10 @@ func TestApplyInstallBundleHostFailures(t *testing.T) {
 }
 
 func TestApplyInstallBundleRollsBackEarlierFilesWhenALaterFileFails(t *testing.T) {
+	// Skip permission-based tests on non-Linux platforms
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	root := t.TempDir()
 	bundle := smallBundle()
 	failing := &failSecondFileHost{scriptedInstallerHost: &scriptedInstallerHost{}}
