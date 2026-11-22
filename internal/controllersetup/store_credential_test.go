@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -36,6 +37,10 @@ type credentialOutcomeCase struct {
 // TestStoreEncryptedCredentialOutcomes pins the exact error, the installed
 // file, and the absence of leftover temporary files for every outcome.
 func TestStoreEncryptedCredentialOutcomes(t *testing.T) {
+	// Skip permission-based tests on non-Linux platforms
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	const name = "example-vultr-api-token"
 	cases := []credentialOutcomeCase{
 		{name: "new credential", credName: name, plaintext: []byte("secret"), encrypt: writeCiphertext, installed: "sealed:secret"},
