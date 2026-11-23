@@ -98,6 +98,10 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 	controllerIP := flags.String("controller-ip", "", "the controller's fixed public IP address (required for provisioning and handoff)")
 	sshCredentialRef := flags.String("ssh-credential-ref", defaultSSHCredential, "systemd credential reference for the controller's SSH private key")
 	confirmHandoff := flags.String("confirm-handoff", "", "repeat <server-id>@<environment>/<instance-id> to approve the SSH handoff")
+	confirmObservability := flags.String("confirm-observability", "", "repeat <server-id>@<environment>/<instance-id> to authorize private log settings")
+	logsEndpoint := flags.String("logs-endpoint", "", "HTTPS ingestion reverse proxy with /insert/jsonline path")
+	logsPrivacy := flags.String("logs-privacy", "lifecycle", "log privacy mode: lifecycle or disabled (never raw player logs)")
+	logsCredentialRef := flags.String("logs-credential-ref", credential.SystemdReferenceScheme+"gsc-victorialogs-ingest-token", "systemd credential reference for VictoriaLogs ingestion only")
 	wasabiRegion := flags.String("wasabi-region", "", "Wasabi region of the backup bucket, for example us-east-1")
 	wasabiAccessRef := flags.String("wasabi-access-key-ref", defaultWasabiAccessKey, "systemd credential reference for the VM's Wasabi access key ID")
 	wasabiSecretRef := flags.String("wasabi-secret-key-ref", defaultWasabiSecretKey, "systemd credential reference for the VM's Wasabi secret access key")
@@ -192,6 +196,20 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		return doHandoff(handoffOptions{Execute: *execute, Confirmation: *confirmHandoff, Timeout: handoffTimeout, OperationID: *operationID,
 			CredentialRef: *credentialRef, SSHCredentialRef: *sshCredentialRef, WasabiAccessRef: *wasabiAccessRef, WasabiSecretRef: *wasabiSecretRef,
 			WasabiRegion: *wasabiRegion}, statePath, stdout, stderr)
+	case "observability":
+		if err := allowOnlyFlags(flags, "execute", "confirm-observability", "operation-id", "credential-ref", "ssh-credential-ref", "logs-endpoint", "logs-privacy", "logs-credential-ref", "timeout"); err != nil {
+			return err
+		}
+		statePath, err := settings.capacityStatePath()
+		if err != nil {
+			return fmt.Errorf("resolve capacity state path: %w", err)
+		}
+		return runObservability(observabilityOptions{
+			Execute: *execute, Confirmation: *confirmObservability, OperationID: *operationID,
+			VultrCredentialRef: *credentialRef, SSHCredentialRef: *sshCredentialRef,
+			LogCredentialRef: *logsCredentialRef, Endpoint: *logsEndpoint,
+			PrivacyMode: *logsPrivacy, Timeout: *timeout,
+		}, statePath, stdout)
 	case "register-ssh-key":
 		if err := allowOnlyFlags(flags, "execute", "public-key-file", "name", "credential-ref", "timeout"); err != nil {
 			return err
