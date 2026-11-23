@@ -72,7 +72,7 @@ func (r *StoredBackupResolver) ResolveVerifiedServerBackup(ctx context.Context, 
 		return VerifiedServerBackup{}, errors.New("backup does not establish verified offline consistency")
 	}
 	for _, object := range manifest.Objects {
-		if err := r.recheckBackupObject(ctx, server, profile, backupID, object); err != nil {
+		if err := r.recheckBackupObject(ctx, server, backupID, object); err != nil {
 			return VerifiedServerBackup{}, err
 		}
 	}
@@ -86,19 +86,31 @@ func (r *StoredBackupResolver) ResolveVerifiedServerBackup(ctx context.Context, 
 }
 
 func offlineBackupBindsCurrentServer(operation store.OperationRecord, server store.LogicalServer, profile string, schemas schemaRuntime) bool {
+	if !backupOperationMatchesServer(operation, server, schemas) {
+		return false
+	}
+	if !backupRequestAndGenerationMatch(operation, server, profile) {
+		return false
+	}
+	if !backupFinalStopEvidenceValid(operation, server) {
+		return false
+	}
+	return hasValidBackupResult(operation.Result, operation, server, schemas, protocolstate.ServerStopped)
+}
+
+func backupOperationMatchesServer(operation store.OperationRecord, server store.LogicalServer, schemas schemaRuntime) bool {
 	if operation.OperationType != "server.backup" || operation.Status != protocolstate.OperationSucceeded || operation.CompletedAt == nil {
 		return false
 	}
 	if operation.ProtocolVersion != schemas.ProtocolVersion() || !equalJSON(operation.Target.InstanceRef, server.InstanceRef) {
 		return false
 	}
-	if operation.Target.ServerID != server.ServerID || operation.Target.EnvironmentID != server.EnvironmentID || server.StorageProfile == "" {
-		return false
-	}
+	return operation.Target.ServerID == server.ServerID &&
+		operation.Target.EnvironmentID == server.EnvironmentID && server.StorageProfile != ""
+}
+
+func backupRequestAndGenerationMatch(operation store.OperationRecord, server store.LogicalServer, profile string) bool {
 	if server.DataGenerationStatus != "known" || server.DataGenerationID == "" || backupResumeAfterBackup(operation) {
-		return false
-	}
-	if !finalBackupLifecycleBoundary(server, operation.OperationID) {
 		return false
 	}
 	var request struct {
@@ -107,13 +119,23 @@ func offlineBackupBindsCurrentServer(operation store.OperationRecord, server sto
 	if json.Unmarshal(operation.RequestSnapshot.Parameters, &request) != nil || request.BackupProfile != profile {
 		return false
 	}
+	var result struct {
+		OperationData backupResultData `json:"operation_data"`
+	}
+	if json.Unmarshal(operation.Result, &result) != nil {
+		return false
+	}
+	return result.OperationData.DataGenerationID == server.DataGenerationID
+}
+
+func backupFinalStopEvidenceValid(operation store.OperationRecord, server store.LogicalServer) bool {
+	if !finalBackupLifecycleBoundary(server, operation.OperationID) {
+		return false
+	}
 	if operation.BackupInitialLifecycleState != protocolstate.ServerStopped && !gameBackupSaveConfirmed(operation) {
 		return false
 	}
-	if !backupEvidenceStepSucceeded(operationStep(operation, backupValidateStep)) {
-		return false
-	}
-	return hasValidBackupResult(operation.Result, operation, server, schemas, protocolstate.ServerStopped)
+	return backupEvidenceStepSucceeded(operationStep(operation, backupValidateStep))
 }
 
 // finalBackupLifecycleBoundary rejects a backup followed by ANY managed
@@ -178,7 +200,7 @@ func decodeStoredBackupManifest(operation store.OperationRecord) (storedBackupMa
 	return manifest, nil
 }
 
-func (r *StoredBackupResolver) recheckBackupObject(ctx context.Context, server store.LogicalServer, profile, backupID string, object storedBackupObject) error {
+func (r *StoredBackupResolver) recheckBackupObject(ctx context.Context, server store.LogicalServer, backupID string, object storedBackupObject) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
