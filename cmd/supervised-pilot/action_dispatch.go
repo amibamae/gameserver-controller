@@ -141,7 +141,7 @@ func (p pilotCommand) runAdoptAction() error {
 }
 
 func (p pilotCommand) runHandoffAction() error {
-	if err := allowOnlyFlags(p.flags, "execute", "confirm-handoff", "timeout", "operation-id", "credential-ref", "ssh-credential-ref", "wasabi-region", "wasabi-access-key-ref", "wasabi-secret-key-ref"); err != nil {
+	if err := allowOnlyFlags(p.flags, "execute", "confirm-handoff", "timeout", "operation-id", "credential-ref", "ssh-credential-ref", "wasabi-region", "wasabi-access-key-ref", "wasabi-secret-key-ref", "enable-victorialogs", "logs-endpoint", "logs-privacy", "logs-credential-ref"); err != nil {
 		return err
 	}
 	statePath, err := p.settings.capacityStatePath()
@@ -152,9 +152,14 @@ func (p pilotCommand) runHandoffAction() error {
 	if !flagSet(p.flags, "timeout") {
 		handoffTimeout = 45 * time.Minute
 	}
-	return doHandoff(handoffOptions{Execute: p.boolean("execute"), Confirmation: p.str("confirm-handoff"), Timeout: handoffTimeout, OperationID: p.str("operation-id"),
+	opts := handoffOptions{Execute: p.boolean("execute"), Confirmation: p.str("confirm-handoff"), Timeout: handoffTimeout, OperationID: p.str("operation-id"),
 		CredentialRef: p.str("credential-ref"), SSHCredentialRef: p.str("ssh-credential-ref"), WasabiAccessRef: p.str("wasabi-access-key-ref"), WasabiSecretRef: p.str("wasabi-secret-key-ref"),
-		WasabiRegion: p.str("wasabi-region")}, statePath, p.stdout, p.stderr)
+		WasabiRegion: p.str("wasabi-region"), AutoVictoriaLogs: p.boolean("enable-victorialogs"), LogsEndpoint: p.str("logs-endpoint"),
+		LogsPrivacyMode: p.str("logs-privacy"), LogsCredentialRef: p.str("logs-credential-ref")}
+	if err := validateAutoObservabilityFlags(p.flags, opts); err != nil {
+		return err
+	}
+	return doHandoff(opts, statePath, p.stdout, p.stderr)
 }
 
 func (p pilotCommand) runObservabilityAction() error {
