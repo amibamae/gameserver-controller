@@ -39,7 +39,7 @@ def lifecycle_message(unit, message):
             return "bootstrap_failed"
         return None
     if unit == "minecraft-vanilla.service":
-        if message.startswith("Done ("):
+        if message.startswith("Done (") or ("Done (" in message and "For help" in message):
             return "paper_ready"
         if message.startswith("Starting minecraft server version"):
             return "paper_starting"
