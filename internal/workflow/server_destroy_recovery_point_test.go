@@ -27,6 +27,13 @@ func TestServerDestroyRejectsIncompleteFinalRecoveryPoint(t *testing.T) {
 				fixture.operation.Record.Steps[0]); err == nil || !strings.Contains(err.Error(), "off-instance consistent backup covering the final write boundary") {
 				t.Fatalf("pre-dispatch check = %v, want recovery-point rejection", err)
 			}
+			// A backup may become unavailable after the first read-only checks.
+			// Rejection must be repeated immediately before provider destruction.
+			late := destroyOperationAfter(fixture, 2)
+			if err := fixture.workflow.CheckPreconditions(context.Background(), late,
+				late.Steps[2]); err == nil || !strings.Contains(err.Error(), "off-instance consistent backup covering the final write boundary") {
+				t.Fatalf("provider destroy precondition = %v, want backup rejection", err)
+			}
 		})
 	}
 }
