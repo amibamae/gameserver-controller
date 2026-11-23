@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Date:** 2026-11-22
 - **Decision owners:** Project maintainers
-- **Scope:** Controller runtime, operation persistence, regional deployment and service-specific reliability. This ADR does not change the wire protocol or authorize production deployment.
+- **Scope:** Controller runtime, operation persistence, regional deployment, service-specific reliability, world-data durability, and anti-rollback restore safety. This ADR identifies future protocol work but does not itself change wire schemas or authorize production deployment.
 - **Related decisions:** [ADR 0003: VM-first execution](0003-execution-agnostic-runtime.md), [ADR 0004: Protocol encoding](0004-protocol-encoding-and-bindings.md), [ADR 0005: bbolt operation store](0005-operation-store.md)
 - **Supporting design:** [Core design](../CORE_DESIGN.md), [Architecture](../ARCHITECTURE.md), [Workflow engine](../WORKFLOW_ENGINE.md), [Security model](../SECURITY_MODEL.md), [Development roadmap](../ROADMAP.md), [Operation protocol](../../protocol/operations.md)
 
@@ -24,6 +24,7 @@ The design must balance correctness, incremental implementation, operational cos
 5. **Treat regional cells as an optional later deployment profile.** Each region owns its authoritative state and explicitly assigned resources. Failover and failback require verified fencing and reconciliation; no heartbeat-only automatic multi-region mutation takeover.
 6. **Use service-specific availability targets.** Four nines first, five nines for advanced transactional services, six nines for selected fault-isolated reads or status functions, and ten nines as ongoing research rather than a product SLA.
 7. **Keep the gameplay data plane independent of the controller control plane.** Routine controller, database and management-API outages do not automatically stop a healthy Velocity/Paper session. Destructive automation stays disabled until separately approved.
+8. **Adopt an independent eleven-nines world-protection design objective.** Wasabi advertises eleven-nines durability for stored objects; GSC must separately prove final complete capture, recoverability, latest-world authority and anti-rollback before any approved destruction or activation. No eleven-nines end-to-end guarantee is implied.
 
 ## 3. Architecture alternatives we reviewed
 
@@ -163,6 +164,7 @@ The following override any uptime optimization:
 9. **Controller/data-plane separation.** Controller outages must not deliberately disconnect already-connected players or stop otherwise healthy Paper/Velocity instances.
 10. **No automatic destruction.** Automatic destruction of production instances remains disabled until separate explicit authorization. Retain guarded and approved destructive workflow semantics for future operator-controlled use.
 11. **All languages and deployment modes conform.** Two different implementations must never independently mutate one resource without verified single ownership and protocol-conformant authorization.
+12. **Latest world protection.** No approved destruction may proceed without a verified final backup matching the source write barrier; no stale/incomparable backup may replace an authoritative world. Failure or uncertainty retains the current VM and recoverable copies.
 
 ## 6. Persistence and workflow design
 
@@ -210,6 +212,107 @@ A six-nines goal is not an across-the-board goal for provisioning, fresh live he
 
 The current checkout of the development roadmap must be reconciled with previously merged [PR #397](https://github.com/amibamae/gameserver-controller/pull/397) before presenting these intervals as the repository's currently accepted schedule. If a later force-push removed that roadmap update, restore it in a separately reviewed documentation PR rather than silently implying it is present on main. Plan generous contingency; accelerate safely when evidence is available. No Elixir rewrite, Kubernetes or multi-region build-out blocks the first Go+bbolt release.
 
+## 7A. World-data durability and monotonic, anti-rollback restore safety
+
+This is a **separate reliability objective** from service availability. Protect two distinct outcomes: (a) the last *committed and acknowledged* player/world state survives approved source-VM destruction; and (b) no older, stale, conflicting or incomparable world silently replaces a newer authoritative world. Both are safety invariants we must design and test. The desired **99.999999999% (eleven-nines) end-to-end reliability** is an **aspirational, unproven research target**, not an achieved SLO or guarantee.
+
+### 7A.1 Scope of Wasabi's advertised eleven nines
+
+Wasabi's documentation states that its storage is *designed for* **99.999999999% durability of already stored objects over a year**. The provider separately recommends backups, tested recovery and safeguards against accidental or malicious actions. This object-level claim does not establish end-to-end Minecraft save correctness, complete upload, protection against deletion/overwrite, freshness of restored worlds, or successful recovery.
+
+Authoritative references:
+- [Wasabi: Durability, Security and Reliability](https://docs.wasabi.com/docs/durability-security-reliability) (updated May 2026)
+- [Wasabi: Shared Responsibility Model](https://docs.wasabi.com/docs/shared-responsibility-model)
+- [Wasabi: Object Lock requirements](https://docs.wasabi.com/docs/object-locking)
+- [Wasabi: Bucket Versioning](https://docs.wasabi.com/docs/bucket-versioning-enabledisable)
+
+A world often contains multiple required objects, all of which must survive and remain mutually consistent. The survival probability of one Wasabi object is not automatically that of the *whole world*. A conservative decomposition is:
+
+~~~text
+P(loss of last committed player/world state)
+  <= P(inconsistent or missed final save)
+   + P(incomplete capture / upload / verification)
+   + P(loss of a required stored object)
+   + P(accidental, malicious or policy-driven deletion)
+   + P(stale overwrite, incorrect restore or promotion)
+   + P(other correlated failure of recovery/credentials/control)
+~~~
+
+This expression is a union-bound illustration; no probabilities are currently established. Adding nonzero application risks to a component advertised at an eleven-nines target does **not** prove an eleven-nines end-to-end result. Extra independent recovery copies and fault-tolerant checks may improve safety; do not assume probability independence or promise an unmeasured aggregate.
+
+### 7A.2 Mandatory final-state backup gate before any manually approved destruction
+
+For a planned VM replacement or an **explicitly approved** destruction, the controller MUST:
+
+1. Take and retain the durable logical-world operation lock, verify exact environment/server/instance identity and current fenced writer authority, and prevent concurrent operations that could modify the world.
+2. Drain new joins, persist an acknowledged game-specific save, and **stop all game and plugin writers**. Verify that Paper/systemd and auxiliary persistence processes have stopped. Prefer a fully **offline** final capture; if the game cannot prove a consistent quiescent snapshot, do not call the backup final.
+3. Capture **all required persistent data**, including dimensions, playerdata and inventories, ender chests, advancements, statistics and declared plugin/mod state. The capture must bind the exact source instance, world lineage/generation, game release, required data-set inventory and a verified final write barrier.
+4. Upload under unique non-reused backup/object names, create an immutable backup manifest, and verify all object lengths, independent SHA-256 hashes, exact object-version references where supported and game-specific validation. A successful PUT, HEAD or ETag alone is not enough; ETag is not a guaranteed content hash.
+5. Retrieve and check the exact stored objects/versions. Perform independent isolated *test restores* on a defined schedule, and before introducing any new destructive execution mechanism; verify an internally consistent startable world with the expected player state.
+6. Establish **latest finalized-state equality**: after the final save barrier, no source writes are permitted; the backup corresponds to the current authoritative world head and matches independent source evidence. A backup taken before subsequent player activity, even if the most recent object in Wasabi, is NOT a valid final backup.
+7. Atomically persist the verified backup association and final-state evidence. **Immediately before** a provider destruction request, recheck exact instance, authorization, world head, fencing epoch, write barrier, protected objects and recovery evidence. If any check changed or is inconclusive, **fail closed and retain the VM**.
+8. Keep **automatic production destruction disabled**; passing these gates does not itself authorize destruction. If the provider response is uncertain, inspect that exact instance rather than blindly issuing another delete.
+
+These gates target **zero loss of acknowledged saved state during a successfully quiesced planned destruction**. They do not establish RPO zero for unexpected VM failure, unflushed writes, game/plugin implementation bugs or storage objects never uploaded. Define and measure those distinct failure cases separately.
+
+### 7A.3 Ordered world generations, lineage and no stale promotion
+
+The current protocol provides a backup manifest with a data_generation_id and checked object references. However, that ID is **not a sortable generation counter**. The optional game write_watermark is explicitly **informational only** because draft 0.21.0 has no interoperable verifier; see [game protocol](../../protocol/adapters/games.md) and [backup manifest](../../protocol/schemas/storage/backup-manifest.schema.json). A timestamp, S3 version ID or higher game version also cannot establish world recency.
+
+**Proposed new, versioned, language-neutral authority model**, not yet implemented:
+
+~~~text
+world_id / environment_id
+lineage_id and parent_generation
+ownership_epoch (monotonic fenced writer authority)
+head_revision (monotonic committed world-state transition)
+verified_write_barrier (source game-save proof)
+head_backup_id + immutable manifest digest + object versions
+active_instance_ref
+compare_and_swap_revision (authoritative store transaction)
+~~~
+
+- Each logical world has **exactly one authorized writer**. Acquire authority using durable locks and explicit fencing. Never interpret worker timeout, remote heartbeat loss or host unreachability as proof the old runtime stopped.
+- Under the authoritative store, commit monotonic head revisions, a comparable ancestry/parent chain and a verified source-save barrier. If the store is restored from an older backup, reconcile with an **independently retained protected generation anchor**, source-instance state and backup evidence before accepting mutating work. A rolled-back database must not silently reset world recency.
+- On **normal restart, recovery, migration and cell takeover**, choose only the *designated current verified authoritative head*. Do **not** choose the backup with the latest timestamp, arbitrary lexical UUID order, highest Wasabi version or a mismatched/incomparable lineage.
+- Restore only into a **fresh, empty, isolated target root** with Paper stopped and no writers. Verify complete manifest, provenance, lineage, source generation, compatibility and content. Never unpack directly over an actively running or newer local world. An *equal-generation* restore into a new empty VM can be correct/idempotent and is not a stale overwrite.
+- Make publish/cutover a **fenced compare-and-swap** against the expected head revision and writer epoch. Handle crashes between filesystem activation, head commit and proxy transfer through a durable recoverable handoff record; do not serve two authoritative writable runtimes.
+- A live server with unbacked writes is newer than an earlier checkpoint, even if the earlier backup has a more recent upload timestamp. Block any replacement, quiesce it, capture/verify the final state and only then consider migration.
+- An explicitly **approved deliberate rollback** to an older backup is a separate break-glass operation: first preserve a verified copy of the current higher state, record approval and rollback provenance, and create a **new descendant recovery revision**. Do not silently claim the historical state was newer. Count and report unintended rollbacks separately from approved recovery.
+- After fenced activation, validate the expected player/world content and the **fresh exact-instance Paper readiness** before Velocity transfers players. Provider fencing and database CAS alone cannot cancel already dispatched external game writes.
+
+If any source/head relationship or writer authority is unknown, **fail closed**, retain both recoverable copies and request operator reconciliation. The no-stale-activation rule is a hard correctness condition, not a statistical permission to overwrite one world in some number of attempts.
+
+### 7A.4 Opt-in Wasabi protection and retention design
+
+- Write backup objects/manifests using unique, effectively immutable keys, not a mutable live /server prefix as the **only** backup. A mutable current-head pointer, if used, is merely a cache: the authoritative durable head and a protected independent audit anchor govern recovery.
+- The optional high-assurance profile should use **bucket versioning plus Object Lock/WORM retention**, with least-privilege writers unable to delete or shorten protected versions. Wasabi says Object Lock is enabled at **bucket creation** and needs versioning, so an existing production bucket may require an explicitly approved new protected bucket and safe migration. **Do not assume the current bucket's versioning status or alter live storage in this ADR.**
+- Distinguish governance-mode bypass privileges, retention expiry and compromised credentials. Verify lock and retention state on exact object versions, and validate that backups are retrievable before depending on them.
+- Keep a separately administered recovery copy if the operator adopts the high-assurance profile (distinct account, region or provider when feasible), with independent retrieval and test-restore drills. This reduces correlated failure exposure but increases storage/egress/cost and does not automatically justify an eleven-nines numerical claim.
+- Set both backup **count** and a **minimum retention horizon** sufficient for delayed discovery of corruption. Retaining five recent copies may be cost-effective for baseline deployments, but cannot prove survival of a correct generation if all copies stem from an earlier corrupted state. Require operator approval for new storage, Object Lock, retention or replication costs.
+
+### 7A.5 Separate eleven-nines objectives and measurable safety rules
+
+| Property | Proposed measure | Honest claim boundary |
+| --- | --- | --- |
+| Wasabi stored-object survival | Provider designs for **99.999999999% annual per-object durability** | Not a GSC or player-data SLA; does not prove availability, uploading or recovery |
+| End-to-end recoverability of a verified world | Aspirational eleven-nines *world-generation retention* | Only claim after independent restore evidence, complete data sets, quantified risk, retained immutable histories and defensible statistics |
+| No unintended stale promotion | Aspirational eleven-nines probability of correct promotion, **operational rule: zero known stale/unknown promotions** | Prove ordering, fencing and CAS safety by model checking, injected failures and actual audits; do not claim eleven-nines from a short test suite |
+| Approved planned destroy | **100%** of attempts must satisfy the final stopped-world verification gate | An invariant on allowed actions, not a statement that eleven nines has been measured |
+| Sudden VM/disk loss | Separately define and measure RPO/RTO | May lose changes since last confirmed durable backup; Wasabi object durability does not cover unbacked state |
+| Active-world replacement | No online/in-place overwrite, no stale or incomparable lineage | Require fresh isolated target, verified current head, CAS and safe game/proxy cutover |
+
+Numerically, an eleven-nines failure target is roughly **1 in 100 billion** qualifying cases. Normal Minecraft server traffic, years of clean operation and a few thousand restores cannot empirically establish it. Report **architecture complete**, **safe under defined injected faults**, and **quantitatively demonstrated** separately; the last milestone has no defensible fixed delivery date.
+
+### 7A.6 Required adversarial tests and follow-up protocol work
+
+Inject: missing playerdata; missed flush; plugin writes after final save; upload succeeded but readback failed; incomplete manifest; wrong version ID; checksum mismatch; mutable /server overwrite; Object Lock absent/expired; retention deletes needed ancestor; stale source chosen by timestamp; incomparable lineage; simultaneous writers; lost claim during restore; database backup rewinding head; old VM reconnecting after a promotion; provider outage; and crashes between staging, activation, transactional head update and Velocity routing.
+
+All unsafe cases must refuse destruction/promotion and retain recoverable evidence; test **approved rollback with preservation of the pre-rollback state** separately. Define new versioned schemas, capabilities and conformance vectors for monotonic world heads, ancestry, verified write barriers, retention evidence, exact-version restore, fenced CAS activation and rollback provenance. Preserve the existing language-neutral and Go+bbolt default boundaries.
+
+This section proposes the architecture only. It **does not** enable automatic destruction, change production Wasabi settings, rewrite the protocol without conformance review, provision paid resources, or claim eleven-nines player-data safety has been achieved.
+
+
 ## 8. Fault-injection and acceptance matrix
 
 Every profile requires a documented, repeatable acceptance suite, plus longer-running production monitoring before SLO claims:
@@ -225,6 +328,10 @@ Every profile requires a documented, repeatable acceptance suite, plus longer-ru
 | Worker claim expires mid-provider request | New worker rejects stale commit and reconciles external outcome before acting |
 | Vultr API times out after creating a VM | Inspect provider state and exact resource identity; avoid duplicate instance creation |
 | Wasabi upload returns success but readback fails | Backup is not verified; destructive cleanup stays blocked |
+| Source continues writing after purported final backup | Final write-barrier proof fails; no destruction or transfer; capture again after quiescence |
+| Restore selects stale/incomparable generation | Refuse activation and preserve both worlds for audit and reconciliation |
+| Database restore rewinds world-head revision | Detect independently protected head evidence; block mutations and reconcile before promotion |
+| Crash during staged restore, CAS promotion or Velocity transfer | Recover exact writer/head state, never serve competing authoritative writable worlds |
 | Restore from stale DB backup | Compare provider inventory and operation history before resuming mutations |
 | Velocity or game readiness stale | Do not transfer waiting players until fresh exact-instance readiness is proven |
 | Controller fails while players are in game | Existing Velocity/Paper gameplay continues independently |
@@ -241,11 +348,11 @@ The original Phases 0–7 are the product delivery roadmap and remain necessary:
 Reliability work is an optional, partly parallel track:
 
 - **R0:** define SLIs, fault domains, RPO/RTO, current gaps, ownership proof and ADRs; verify report claims against actual code.
-- **R1:** harden standalone Go+bbolt: restart, durable rescheduling, safe reconciliation, backup and restoration tests, independent monitoring.
+- **R1:** harden standalone Go+bbolt: restart, durable rescheduling, safe reconciliation, backup and restoration tests, independent monitoring. Require final stopped-world backup and exact-generation verification before any separately approved destructive workflow.
 - **R2:** design and implement optional transactional PostgreSQL backend, claims, fencing, three-controller/three-DB/three-etcd single-VM QA; preserve standalone.
 - **R3:** distribute optional HA services across independent production failure domains, test primary loss, failback, rolling upgrades and rollback; target four-nines-capable architecture.
 - **R4:** eliminate avoidable shared dependencies; improve critical five-nines availability and operational evidence.
-- **R5:** implement selectively isolated six-nines reads and historical status, independently validate their service contracts; evidence-gated success.
+- **R5:** implement selectively isolated six-nines reads and historical status, independently validate their service contracts; evidence-gated success. Independently research eleven-nines world-generation recoverability and no-stale-world promotion without equating Wasabi's object claim to end-to-end guarantees.
 - **R6:** continuously research ten-nines impossibility boundaries and potential long-term designs without committing expensive infrastructure.
 
 Parallel contributors/agents may independently investigate storage, workflow execution, hosting, game integration, testing and review. Implementation requires bounded parallelism, separated file ownership, explicit coordination and independent review. All changes must follow AGENTS.md and CLAUDE.md, conformance rules, security documentation, tests and branch protections. No deployment or paid provider resources without explicit owner approval.
@@ -266,11 +373,13 @@ Parallel contributors/agents may independently investigate storage, workflow exe
 6. Regional cell identity, ownership transfer protocol, DR RPO/RTO, rollback/failback and failure-domain requirements.
 7. Whether an independent Elixir/OTP implementation provides measured value without compromising protocol portability.
 8. How to establish and independently verify any advertised availability figure.
+9. Ordered world-head revisions, lineage ancestry, verified game-save barriers, anti-rewind anchors, crash-safe fenced activation, CAS and deliberately approved rollback provenance.
+10. World-data loss/error-budget model, multi-object completeness, Wasabi Object Lock/versioning profile, protected backup retention and independently verified recovery copies.
 
-**Non-decisions:** no requirement to adopt Kubernetes/Agones, Ansible, Pterodactyl, alternative distributed databases, colocation, special hardware or an Elixir rewrite; no declaration that any reliability target has been reached; no enabling of automatic production destruction.
+**Non-decisions:** no requirement to adopt Kubernetes/Agones, Ansible, Pterodactyl, alternative distributed databases, colocation, special hardware or an Elixir rewrite; no declaration that any availability, eleven-nines world durability or stale-overwrite target has been achieved; no automatic production destruction or live Wasabi setting changes.
 
 ## 11. Proposed acceptance criteria for this ADR
 
-Before marking **Accepted**, maintainers should review that the deployment tiers, safety invariants, initial Go+bbolt investment, optional HA/OTP decisions, per-resource owner model, failure testing, budget tradeoffs and tier-specific SLIs accurately reflect project intent. Reconcile the roadmap regression separately. Acceptance of the *architecture direction* does not authorize deploying production clusters, adding dependencies or announcing achieved SLOs.
+Before marking **Accepted**, maintainers should review that the deployment tiers, final backup and anti-rollback safety design, safety invariants, initial Go+bbolt investment, optional HA/OTP decisions, per-resource owner model, failure testing, budget tradeoffs and tier-specific SLIs accurately reflect project intent. Reconcile the roadmap regression separately. Acceptance of the *architecture direction* does not authorize deploying production clusters, adding dependencies or announcing achieved SLOs.
 
 Related accepted ADRs remain authoritative where implementation is still limited to standalone. Follow-up implementation PRs require passing checks, security review, conformance and tests, and must preserve existing safe game-server behavior.
