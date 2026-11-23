@@ -96,7 +96,7 @@ func Render(settings Settings) ([]byte, error) {
 		"@@JAVA_HEAP_MAX@@":             strconv.Itoa(heapMax),
 		"@@VICTORIALOGS_EXPORT_PY@@":    strings.TrimSuffix(string(shipper), "\n"),
 		"@@VICTORIALOGS_CONFIGURE_PY@@": strings.TrimSuffix(string(configurer), "\n"),
-		"@@MINECRAFT_PROBE_PY@@":       strings.TrimSuffix(string(probe), "\n"),
+		"@@MINECRAFT_PROBE_PY@@":        strings.TrimSuffix(string(probe), "\n"),
 	}
 	result := string(template)
 	for marker, value := range values {
