@@ -33,7 +33,10 @@ type WasabiReader struct {
 }
 
 func NewWasabiReader(client Getter, adapterID, profile, environment, bucket string, maxBytes int64) (*WasabiReader, error) {
-	if client == nil || adapterID == "" || profile == "" || environment == "" || bucket == "" || maxBytes < 1 {
+	if client == nil || adapterID == "" || profile == "" {
+		return nil, errors.New("remote S3 client, exact adapter/profile/environment/bucket and byte limit are required")
+	}
+	if environment == "" || bucket == "" || maxBytes < 1 {
 		return nil, errors.New("remote S3 client, exact adapter/profile/environment/bucket and byte limit are required")
 	}
 	return &WasabiReader{
@@ -88,7 +91,8 @@ func (r *WasabiReader) Readback(ctx context.Context, raw json.RawMessage) (workf
 }
 
 func (r *WasabiReader) matches(ref objectRef) bool {
-	return ref.AdapterID == r.adapter && ref.StorageProfileID == r.profile &&
-		ref.EnvironmentID == r.environment && ref.Container == r.bucket &&
-		ref.Key != ""
+	if ref.AdapterID != r.adapter || ref.StorageProfileID != r.profile || ref.EnvironmentID != r.environment {
+		return false
+	}
+	return ref.Container == r.bucket && ref.Key != ""
 }
