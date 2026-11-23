@@ -11,8 +11,8 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/hosthandoff"
 )
 
-// VictoriaLogsConfig installs or disables the optional sanitized VM log shipper.
-// Its credential is transported on pinned SSH stdin, never passed as an arg.
+// VictoriaLogsConfig controls optional lifecycle-only log forwarding.
+// Its secret is delivered on pinned SSH stdin, never command arguments.
 type VictoriaLogsConfig struct {
 	OperationID, VultrCredentialRef, IngestCredentialRef string
 	Endpoint, PrivacyMode                                string
@@ -28,20 +28,11 @@ type victoriaLogsPayload struct {
 
 var logTokenPattern = regexp.MustCompile(`^[!-~]{16,1024}$`)
 
-// ConfigureVictoriaLogs delivers a private credential and privacy settings
-// only after the pilot's new host key was rotated, pinned, and verified.
-// The endpoint must be an authenticated HTTPS ingestion reverse proxy.
-// This method does not activate the timer until the remote helper validates
-// and installs both private files.
+// ConfigureVictoriaLogs delivers privacy settings and a private ingress token
+// after the current VM host key has been pinned and the firewall finalized.
 func (r Runner) ConfigureVictoriaLogs(ctx context.Context, cfg VictoriaLogsConfig) error {
-	if cfg.PrivacyMode != "lifecycle" && cfg.PrivacyMode != "disabled" {
-		return errors.New("observability privacy mode must be lifecycle or disabled")
-	}
-	if cfg.PrivacyMode == "lifecycle" && !validVictoriaLogsEndpoint(cfg.Endpoint) {
-		return errors.New("observability endpoint must be HTTPS /insert/jsonline")
-	}
-	if cfg.PrivacyMode == "disabled" && cfg.Endpoint != "" {
-		return errors.New("disabled observability must not specify an endpoint")
+	if err := validateVictoriaLogsConfig(cfg); err != nil {
+		return err
 	}
 	reservation, record, err := r.loadState(cfg.OperationID)
 	if err != nil {
@@ -63,15 +54,32 @@ func (r Runner) ConfigureVictoriaLogs(ctx context.Context, cfg VictoriaLogsConfi
 	if cfg.PrivacyMode == "disabled" {
 		return r.sendVictoriaLogs(ctx, admin, &record.Handoff, payload)
 	}
+	return r.sendVictoriaLogsCredential(ctx, admin, &record.Handoff, cfg.IngestCredentialRef, payload)
+}
+
+func validateVictoriaLogsConfig(cfg VictoriaLogsConfig) error {
+	if cfg.PrivacyMode != "lifecycle" && cfg.PrivacyMode != "disabled" {
+		return errors.New("observability privacy mode must be lifecycle or disabled")
+	}
+	if cfg.PrivacyMode == "lifecycle" && !validVictoriaLogsEndpoint(cfg.Endpoint) {
+		return errors.New("observability endpoint must be HTTPS /insert/jsonline")
+	}
+	if cfg.PrivacyMode == "disabled" && cfg.Endpoint != "" {
+		return errors.New("disabled observability must not specify an endpoint")
+	}
+	return nil
+}
+
+func (r Runner) sendVictoriaLogsCredential(ctx context.Context, target Target, handoff *hosthandoff.Handoff, ref string, payload victoriaLogsPayload) error {
 	if r.Credentials == nil {
 		return errors.New("observability credential resolver is required")
 	}
-	return r.Credentials.WithCredential(cfg.IngestCredentialRef, func(token []byte) error {
+	return r.Credentials.WithCredential(ref, func(token []byte) error {
 		if !logTokenPattern.Match(token) {
 			return errors.New("observability token must have 16-1024 printable non-space characters")
 		}
 		payload.Token = string(token)
-		return r.sendVictoriaLogs(ctx, admin, &record.Handoff, payload)
+		return r.sendVictoriaLogs(ctx, target, handoff, payload)
 	})
 }
 
@@ -87,8 +95,7 @@ func (r Runner) sendVictoriaLogs(ctx context.Context, target Target, handoff *ho
 		return err
 	}
 	if result.ExitCode != 0 {
-		// Remote stderr must never enter audit/error text: it may contain a
-		// backend error, URL, or in future versions even a credential.
+		// Remote stderr can contain a URL or future credentials.
 		return errors.New("VM observability configuration failed; check the restricted remote helper")
 	}
 	return nil
@@ -99,7 +106,11 @@ func validVictoriaLogsEndpoint(value string) bool {
 		return false
 	}
 	parsed, err := url.Parse(value)
-	return err == nil && parsed.Scheme == "https" && parsed.Hostname() != "" &&
-		parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == "" &&
-		parsed.Path == "/insert/jsonline" && parsed.Opaque == ""
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
+		return false
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return false
+	}
+	return parsed.Path == "/insert/jsonline" && parsed.Opaque == ""
 }
