@@ -279,7 +279,7 @@ compare_and_swap_revision (authoritative store transaction)
 - Restore only into a **fresh, empty, isolated target root** with Paper stopped and no writers. Verify complete manifest, provenance, lineage, source generation, compatibility and content. Never unpack directly over an actively running or newer local world. An *equal-generation* restore into a new empty VM can be correct/idempotent and is not a stale overwrite.
 - Make publish/cutover a **fenced compare-and-swap** against the expected head revision and writer epoch. Handle crashes between filesystem activation, head commit and proxy transfer through a durable recoverable handoff record; do not serve two authoritative writable runtimes.
 - A live server with unbacked writes is newer than an earlier checkpoint, even if the earlier backup has a more recent upload timestamp. Block any replacement, quiesce it, capture/verify the final state and only then consider migration.
-- An explicitly **approved deliberate rollback** to an older backup is a separate break-glass operation: first preserve a verified copy of the current higher state, record approval and rollback provenance, and create a **new descendant recovery revision**. Do not silently claim the historical state was newer. Count and report unintended rollbacks separately from approved recovery.
+- An explicitly **approved deliberate rollback** to an older backup is a separate high-risk operation: show warnings about newer progress and player data that may be replaced, require exact-target operator confirmation, then preserve a fully verified **pre-rollback snapshot of the current live world** in the separate rollback-history pool (Section 7A.4b). Only after that preservation succeeds may a staged, fenced restore be considered. Record approval and rollback provenance and create a **new descendant recovery revision**. Do not silently claim the historical state was newer. Count and report unintended rollbacks separately from approved recovery.
 - After fenced activation, validate the expected player/world content and the **fresh exact-instance Paper readiness** before Velocity transfers players. Provider fencing and database CAS alone cannot cancel already dispatched external game writes.
 
 If any source/head relationship or writer authority is unknown, **fail closed**, retain both recoverable copies and request operator reconciliation. The no-stale-activation rule is a hard correctness condition, not a statistical permission to overwrite one world in some number of attempts.
@@ -324,6 +324,36 @@ For the high-assurance profile, the normal controller/runtime and management API
 
 Never equate scheduled pruning with assurance that five surviving snapshots provide end-to-end eleven-nines durability. Protect the current committed head, continuous write journal and independently controlled recovery copies with separate retention rules.
 
+### 7A.4b Configurable pre-rollback recovery history (default five)
+
+Operators MAY explicitly restore an older, verified world. An approved rollback is an intentional recovery action, **not** an exception permitting an unverified or silently stale world to become current. Keep the world that was live immediately **before** each rollback as a **separate, recoverable pre-rollback snapshot**, independent of the nine-hour routine backup ring.
+
+**Configuration proposal (not yet a supported runtime/schema field):**
+
+~~~yaml
+lifecycle:
+  backups:
+    schedule:
+      every: 9
+      unit: hours
+    retention:
+      keep_last: 5                  # existing routine schedule policy
+    rollback_retention:
+      keep_last: 5                  # proposed separate pre-rollback pool; configurable
+      # keep_last: 0                # unlimited pre-rollback retention
+~~~
+
+- The pre-rollback pool defaults to **five verified snapshots**, but operators MAY choose another nonnegative integer. **Zero means unlimited** and disables automated pruning of rollback snapshots; it does not disable rollback creation. This policy is **independent** of the routine `lifecycle.backups.retention.keep_last` value. A five-copy setting is a *retention target* rather than a limit that forces unsafe deletion.
+- **Before the rollback:** show the exact server/environment, selected historical backup ID, source world generation and age, live generation, compatibility changes, and an explicit warning: **"Restoring this older world may replace blocks, inventories, player positions, advancements, statistics, and other progress made after that backup. The current live world will first be saved separately so you can recover it."** Require a fresh, deliberate confirmation bound to that exact request and operator identity, plus existing production approval policies; do not infer approval from another restore or automate it on a stale alert.
+- Acquire durable per-world ownership/fencing, drain new joins, quiesce all writers, perform the final acknowledged save/flush, and capture **every required current world/player/plugin data set**. Write a unique **pre-rollback snapshot** under a distinct backup ID/namespace, with full manifest, exact object versions, generation lineage and SHA-256 checksums. Perform independent readback/validation. The snapshot must be recoverable if the later rollback fails. If the live source or backup state is uncertain, **abort without modifying the live world**.
+- **Rollback flow:** stage and validate the selected older verified backup in an isolated inactive root; verify world/game compatibility and lineage, retain original live state, and only then activate under an epoch-fenced, crash-recoverable compare-and-swap creating a **new descendant recovery generation**. Report provenance and retained pre-rollback snapshot location. Transfer players through Velocity only after fresh exact-target Paper readiness. If activation fails, preserve both the original live state and the staged target for safe operator reconciliation.
+- **Separate retention rotation:** when a sixth eligible pre-rollback snapshot has been successfully verified and committed, the oldest *eligible unprotected* snapshot in this **rollback pool** may be removed, but only after the current rollback completes safely and the newest recovery snapshot is available. **Never overwrite the oldest snapshot in place.** Use new immutable object IDs and exact-version deletes only after current-head, rollback-chain, recovery-anchor, active-restore, Object Lock and dependency checks. If deletion is unsafe, retain more than the configured number. On an interrupted/failed rollback or incomplete new snapshot, **do not prune any prior rollback history**.
+- **Unlimited option:** `rollback_retention.keep_last: 0` means retain all subsequent pre-rollback snapshots until the Wasabi account owner takes action outside GSC. Switching to unlimited does not restore copies previously and legitimately pruned.
+- **Archived server exemption:** when a logical server is removed from active management, stop **both** scheduled backup rotation and rollback-history rotation. Keep the remaining pre-rollback snapshots alongside the ordinary backups and protected recovery catalog; removing a server never triggers backup deletion.
+- For stronger durability, rollback snapshots must remain insulated from ordinary backup pruning. A narrowly scoped, independently auditable **rollback-retention maintenance** permission may delete only unprotected, independently eligible rollback-history versions of an active server. It MUST NOT have delete authority for archived data, current authoritative head, final recovery anchor, or protected Object Lock versions. Retention/policy failures keep extra backups and report storage charges; never bypass safety to enforce a five-copy quota.
+
+**Current implementation boundary:** the repository already implements and tests configurable routine `keep_last: 5` and `keep_last: 0` policy selection; `rollback_retention.keep_last`, its separate inventory, operator warnings, snapshot capture and pruning workflow are **new proposed capabilities**, not implemented configuration or runtime behavior. Add a versioned contract/configuration change, tests and a recovery runbook before shipping them.
+
 ### 7A.5 Separate eleven-nines objectives and measurable safety rules
 
 | Property | Proposed measure | Honest claim boundary |
@@ -341,7 +371,7 @@ Numerically, an eleven-nines failure target is roughly **1 in 100 billion** qual
 
 Inject: missing playerdata; missed flush; plugin writes after final save; upload succeeded but readback failed; incomplete manifest; wrong version ID; checksum mismatch; mutable /server overwrite; Object Lock absent/expired; retention deletes needed ancestor; stale source chosen by timestamp; incomparable lineage; simultaneous writers; lost claim during restore; database backup rewinding head; old VM reconnecting after a promotion; provider outage; and crashes between staging, activation, transactional head update and Velocity routing.
 
-All unsafe cases must refuse destruction/promotion and retain recoverable evidence; test **approved rollback with preservation of the pre-rollback state** separately. Define new versioned schemas, capabilities and conformance vectors for monotonic world heads, ancestry, verified write barriers, retention evidence, exact-version restore, fenced CAS activation and rollback provenance. Preserve the existing language-neutral and Go+bbolt default boundaries.
+All unsafe cases must refuse destruction/promotion and retain recoverable evidence; test **approved rollback with warnings, exact-scoped confirmation, separately verified pre-rollback snapshot and independently configurable recovery-history retention (default five, zero unlimited)** separately. Define new versioned schemas, capabilities and conformance vectors for monotonic world heads, ancestry, verified write barriers, retention evidence, exact-version restore, fenced CAS activation and rollback provenance. Preserve the existing language-neutral and Go+bbolt default boundaries.
 
 This section proposes the architecture only. It **does not** enable automatic destruction, change production Wasabi settings, rewrite the protocol without conformance review, provision paid resources, or claim eleven-nines player-data safety has been achieved.
 
@@ -414,7 +444,10 @@ Every profile requires a documented, repeatable acceptance suite, plus longer-ru
 | Normal lifecycle or archive action attempts to delete Wasabi world data | Deny with no-delete IAM and controller policy; never purge archived/protected world objects |
 | Sixth nine-hour backup has not completed verification | Keep all previous routine backups; never overwrite the oldest in place |
 | Sixth backup verified, active server with keep_last: 5 | Prune only the oldest eligible exact unprotected routine version(s); keep pinned or locked copies even if count exceeds five |
-| keep_last: 0 or an archived server | Retention worker never schedules object deletes; preserve existing backups and catalog |
+| Routine keep_last: 0 or an archived server | Routine retention worker never schedules routine backup deletes; preserve existing backups and catalog |
+| Operator requests rollback to an older world | Warn about replaced blocks/player data, require exact approval, verify a separate pre-rollback live-world snapshot before any activation |
+| Sixth pre-rollback snapshot is verified and rollback completes safely | Prune only the oldest eligible unprotected rollback-history snapshot; never touch the five routine backups or pinned recovery anchors |
+| rollback_retention.keep_last: 0 | Retain all pre-rollback snapshots and suppress automatic pruning of that pool |
 | Active Paper VM fails after acknowledged change but before next full snapshot | In high-assurance mode recover from independently durable continuously committed journal; otherwise disclose actual RPO and do not claim zero-loss |
 | Database restore rewinds world-head revision | Detect independently protected head evidence; block mutations and reconcile before promotion |
 | Crash during staged restore, CAS promotion or Velocity transfer | Recover exact writer/head state, never serve competing authoritative writable worlds |
@@ -460,13 +493,13 @@ Parallel contributors/agents may independently investigate storage, workflow exe
 7. Whether an independent Elixir/OTP implementation provides measured value without compromising protocol portability.
 8. How to establish and independently verify any advertised availability figure.
 9. Ordered world-head revisions, lineage ancestry, verified game-save barriers, anti-rewind anchors, crash-safe fenced activation, CAS and deliberately approved rollback provenance.
-10. World-data loss/error-budget model, multi-object completeness, Wasabi Object Lock/versioning profile, **configurable routine rotation versus permanent archive/critical-backup non-deletion**, continuous durability/journaling boundary and independently verified recovery copies.
+10. World-data loss/error-budget model, multi-object completeness, Wasabi Object Lock/versioning profile, **independently configurable routine and pre-rollback retention (each default five and zero unlimited), operator-confirmed rollback versus permanent archive/critical-backup non-deletion**, continuous durability/journaling boundary and independently verified recovery copies.
 11. A new versioned, language-neutral server archive/decommission operation and distinct provider-instance destroy operation with correct behavior if final backup verification fails.
 
 **Non-decisions:** no requirement to adopt Kubernetes/Agones, Ansible, Pterodactyl, alternative distributed databases, colocation, special hardware or an Elixir rewrite; no declaration that any availability, eleven-nines world durability or stale-overwrite target has been achieved; no automatic production destruction or live Wasabi setting changes. No lifecycle operation may delete protected world data simply because a logical server is removed.
 
 ## 11. Proposed acceptance criteria for this ADR
 
-Before marking **Accepted**, maintainers should review that the deployment tiers, nine-hour/five-backup routine rotation with `keep_last: 0` disable option, non-destructive server removal, permanent archived/protected-backup retention, continuous fresh-write durability requirement, final backup and anti-rollback safety design, safety invariants, initial Go+bbolt investment, optional HA/OTP decisions, per-resource owner model, failure testing, budget tradeoffs and tier-specific SLIs accurately reflect project intent. Reconcile the roadmap regression separately. Acceptance of the *architecture direction* does not authorize deploying production clusters, adding dependencies or announcing achieved SLOs.
+Before marking **Accepted**, maintainers should review that the deployment tiers, nine-hour routine backup rotation (five default, zero unlimited), independently configurable pre-rollback snapshot retention (five default, zero unlimited), pre-rollback warnings and exact operator approval, non-destructive server removal, permanent archived/protected-backup retention, continuous fresh-write durability requirement, final backup and anti-rollback safety design, safety invariants, initial Go+bbolt investment, optional HA/OTP decisions, per-resource owner model, failure testing, budget tradeoffs and tier-specific SLIs accurately reflect project intent. Reconcile the roadmap regression separately. Acceptance of the *architecture direction* does not authorize deploying production clusters, adding dependencies or announcing achieved SLOs.
 
 Related accepted ADRs remain authoritative where implementation is still limited to standalone. Follow-up implementation PRs require passing checks, security review, conformance and tests, and must preserve existing safe game-server behavior.
