@@ -21,6 +21,7 @@ on_error() {
     echo "log       : $LOG"
     echo "============================================================"
     echo "$rc" > "$STATE_DIR/bootstrap-failed"
+    logger -t gsc-bootstrap "gsc bootstrap failed" 2>/dev/null || true
     exit "$rc"
 }
 
@@ -99,7 +100,65 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     fail2ban \
     openssh-server \
     sudo \
-    rsync
+    rsync \
+    python3
+
+section "Installing optional VictoriaLogs lifecycle exporter"
+
+# Installation alone does not enable log collection. The trusted controller
+# configures endpoint, private credential and privacy policy through pinned
+# SSH only after bootstrap and host-key verification. No secrets in user-data.
+install -d -m 0755 /usr/local/libexec/gsc
+install -d -m 0700 /etc/gsc-observability
+cat > /usr/local/libexec/gsc/victorialogs_export.py <<'GSC_VL_EXPORTER'
+@@VICTORIALOGS_EXPORT_PY@@
+GSC_VL_EXPORTER
+cat > /usr/local/sbin/gsc-configure-victorialogs <<'GSC_VL_CONFIGURER'
+@@VICTORIALOGS_CONFIGURE_PY@@
+GSC_VL_CONFIGURER
+chmod 0755 /usr/local/libexec/gsc/victorialogs_export.py
+chmod 0700 /usr/local/sbin/gsc-configure-victorialogs
+
+cat > /etc/systemd/system/gsc-victorialogs.service <<'GSC_VL_SERVICE'
+[Unit]
+Description=GSC opt-in sanitized Minecraft lifecycle logs to VictoriaLogs
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+DynamicUser=yes
+SupplementaryGroups=systemd-journal
+StateDirectory=gsc-victorialogs
+EnvironmentFile=/etc/gsc-observability/victorialogs.env
+LoadCredential=token:/etc/gsc-observability/victorialogs.token
+ExecStart=/usr/bin/python3 /usr/local/libexec/gsc/victorialogs_export.py
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=64M
+CPUQuota=20%
+[Install]
+WantedBy=multi-user.target
+GSC_VL_SERVICE
+
+cat > /etc/systemd/system/gsc-victorialogs.timer <<'GSC_VL_TIMER'
+[Unit]
+Description=GSC optional VictoriaLogs journal forwarding timer
+[Timer]
+OnBootSec=90s
+OnUnitInactiveSec=30s
+AccuracySec=10s
+Unit=gsc-victorialogs.service
+[Install]
+WantedBy=timers.target
+GSC_VL_TIMER
+chmod 0644 /etc/systemd/system/gsc-victorialogs.service /etc/systemd/system/gsc-victorialogs.timer
+systemctl daemon-reload
+# Deliberately disabled until the controller securely provisions the service.
 
 section "Disabling unattended upgrades"
 
@@ -584,6 +643,7 @@ section "Configuring restricted sudo"
 cat > /etc/sudoers.d/minecraft-admin <<EOF_SUDO
 minecraft-admin ALL=(root) NOPASSWD: $ADMIN_FINALIZER
 minecraft-admin ALL=(root) NOPASSWD: $RCLONE_INSTALLER
+minecraft-admin ALL=(root) NOPASSWD: /usr/local/sbin/gsc-configure-victorialogs
 minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl start minecraft-vanilla.service
 minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl stop minecraft-vanilla.service
 minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl restart minecraft-vanilla.service
@@ -784,6 +844,8 @@ bootstrap-complete $(date --iso-8601=seconds)
 EOF_MARKER
 
 chmod 0644 "$BOOTSTRAP_MARKER"
+
+logger -t gsc-bootstrap "gsc bootstrap complete" 2>/dev/null || true
 
 section "BOOTSTRAP COMPLETE"
 
