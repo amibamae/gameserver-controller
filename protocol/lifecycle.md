@@ -154,11 +154,15 @@ The safe default is `ready` -> `draining` -> `stopping` -> `backing_up` -> `dest
 Before `destroying`, the core MUST revalidate:
 - Exact logical server, environment, hosting adapter, and instance reference.
 - A verified backup associated with the target server and data generation.
+- An **off-instance**, independent backup location that remains accessible if the old VM and its disks are lost.
+- A consistent, integrity-verified recovery point whose capture covers the **final quiesced write boundary** of the runtime being destroyed. Matching the data generation alone is insufficient: a backup from earlier in the same generation may omit newer world changes.
 - No conflicting restore, migration, or unresolved operation.
 - Destructive authorization and approval bound to the exact target and plan.
 - Provider capability and current observed instance identity.
 
-A failed or uncertain backup MUST block destruction. An unknown destroy result MUST be reconciled before retry or final state assignment. The logical server and verified backup records remain after instance destruction.
+A failed or uncertain backup MUST block destruction. The core MUST NOT treat an older recovery point, a storage upload acknowledgment, an incomplete save, or merely a host health failure as permission to delete the old instance. An unknown destroy result MUST be reconciled before retry or final state assignment. The logical server and verified backup records remain after instance destruction.
+
+Before destroying a VM as part of replacement, the controller MUST first attempt an orderly save, stop/quiesce the runtime, capture a new uniquely identified backup to off-instance storage, verify every object and checksum, and validate a usable restore path. If the instance or disk cannot be read and the final write boundary cannot be verified, replacement MAY be prepared separately under an approved emergency plan, but destruction of the original instance MUST be blocked: preserve the old VM/storage for rescue and obtain a specific operator decision about any unbacked changes. An emergency provisioning decision never grants a destruction approval. The backup, approval, and exact resource identity must be rechecked immediately before any provider deletion.
 
 ### 5.6 Restore
 
@@ -169,6 +173,8 @@ Restoring over existing data requires a separate safety plan and approval accord
 ### 5.7 Replacement
 
 Replacement preserves `server_id` and `environment_id` but creates a new infrastructure instance reference. The replacement reference MUST identify a different concrete provider resource from the prior instance; an old external reference MUST NOT be reassigned to the replacement. The old instance reference and observations MUST remain in operation/audit history until its state and data disposition are reconciled. A replacement MUST restore from a specifically selected verified backup or use an explicitly documented data migration capability, and MUST start a new data generation before any write epoch. The controller MUST NOT route to the replacement until it is `ready` and proxy integration confirms registration.
+
+A game crash, server tick stall, failed port probe, unavailable plugin heartbeat, or unknown SSH status MUST NOT by itself trigger a provider instance create, replace, or destroy. First attempt bounded in-place game recovery; then diagnose Java, storage, RAM, OS, and networking. A VM is a candidate for replacement only after the existing host is independently demonstrated to be unable to run or safely repair the game and the operator-approved replacement policy allows a new billable instance. Recovery attempts and failures MUST NOT bypass the backup-before-destruction barrier above.
 
 ## 6. Persistent-data generation
 
