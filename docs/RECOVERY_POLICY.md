@@ -1,62 +1,59 @@
-# Minecraft health recovery and backup-before-replacement
+# Minecraft recovery: stage first, repair before replacing a VM
 
-This optional Paper-specific reference implementation is a **game restart supervisor**, not a VM replacement daemon. Its only mutating operation is a bounded restart of `minecraft-vanilla.service` on the **existing** VM. It contains no provider create, reboot, destroy, storage delete, or world restore operation. It is disabled until a trusted operator explicitly installs and enables the controller-side timer.
+This branch adds **staging-safe recovery policy, a read-only Paper log probe, and a stronger backup-before-destruction gate**. It does **not** enable or deploy automatic restarts on production, wire a restart operation into `controller serve`, or authorize any Vultr instance creation or destruction.
 
-## Ownership and detection
+## What runs today and what is staged
 
-- **Systemd on the VM** handles ordinary Java process crashes with `Restart=on-failure` and a finite start-rate limit. It cannot reliably detect a live but frozen JVM.
-- **Read-only VM probe** (`scripts/bootstrap/minecraft_probe.py`): runs with a narrow sudo allowance, inspects `minecraft-vanilla.service` and a bounded number of journal lines from the **current** systemd invocation. Returns only `status`, a fixed reason code, and invocation ID, never raw log content.
-- **Controller recovery supervisor** (`scripts/recovery/controller_recover.py`): requires two unhealthy results for the same invocation within five minutes. It persists restart intent before the remote call, enforces a 20-minute cooldown, a maximum of two attempts per hour and three per rolling day, and verifies a **new** invocation reaches the Paper `Done (... )!` log marker after restart. Failed SSH, unreadable journal, unknown/starting state and an intentionally stopped game never authorize a restart.
-- **Velocity bridge**: routes away from an unreachable backend and can report connection failures, but proxy reachability does **not** prove host failure and must never trigger VM creation.
-- **Optional Paper plugin (future work)**: may expose tick heartbeat, MSPT/TPS, world-save and JVM metrics to a game adapter over authenticated, restricted transport. It must not be required for core crash recovery, must never possess Vultr credentials, and must never restart, replace or delete infrastructure itself. A hung main tick thread may prevent the plugin from answering. The controller must cross-check service state, logs, and game response.
+- **systemd** on the Minecraft VM already uses `Restart=on-failure` and `RestartSec=10`. The revised bootstrap adds `StartLimitIntervalSec=900` and `StartLimitBurst=3` to bound crash loops. A stopped game stays stopped.
+- **Read-only Paper health probe**: `scripts/bootstrap/minecraft_probe.py` is bundled in *newly rendered* bootstrap scripts. It inspects `minecraft-vanilla.service` and bounded journald lines from the exact systemd invocation, returning only fixed status and reason codes and an invocation ID, never player messages or credentials. It does not restart anything.
+- **Go recovery policy**: `internal/recovery` requires two fresh, matching unhealthy observations from the same existing VM and runtime. It produces a sequence of existing protocol capabilities, **not executable commands**. It cannot create/destroy a VM. It rejects stale/unknown evidence, different release/host/runtime identities, and intentional stops.
+- **Durability gate**: `internal/workflow/server_destroy.go` requires the verified-backup resolver to independently attest off-VM storage, consistent capture, and inclusion of the last quiesced writes. Until a concrete resolver can prove those facts, destruction fails closed. These attestations cannot be inferred from the existence of a bucket or from a successful upload.
 
-## Opt-in installation
+The original prototype contained a separate Python controller daemon issuing `systemctl restart` directly. **It was removed** because this bypassed the protocol's save-and-restart requirements and risked re-enabling proxy routing before game readiness.
 
-These steps affect only the controller-side supervisor. The VM must already contain the **new bootstrap's** `/usr/local/libexec/gsc/minecraft_probe.py` and the exact sudoers entry for the `minecraft-admin` account. Do **not** rerun the entire bootstrap on an existing production VM to install this one probe.
+## Required in-place recovery sequence
 
-1. On the controller, use a pinned OpenSSH `known_hosts` key and a dedicated SSH alias such as `backend` mapped to `minecraft-admin@<existing VM host>`. Confirm that this user can run `sudo -n /usr/local/libexec/gsc/minecraft_probe.py`, and that the remote script prints a single JSON object without log lines.
-2. From a reviewed checkout, install the controller-side files as root:
+For a running Paper process with two independently confirmed unhealthy observations from the **same** exact systemd incarnation:
 
-   ```sh
-   sudo install -D -m 0755 scripts/recovery/controller_recover.py /usr/local/libexec/gsc/controller_recover.py
-   sudo install -m 0644 scripts/recovery/gsc-paper-recovery@.service /etc/systemd/system/
-   sudo install -m 0644 scripts/recovery/gsc-paper-recovery@.timer /etc/systemd/system/
-   sudo systemctl daemon-reload
-   ```
+1. Persist and authorize an operation against the existing server, environment, instance, game release and unit. Reconcile any conflicting operation and enforce a bounded retry budget/cooldown.
+2. Set the existing registered backend to **draining** via Velocity before restarting. No new player routing should resume merely because the socket answers.
+3. Invoke `game.save.request` and require an exact, confirmed save from the same durable operation, selected game adapter, release and runtime.
+4. Invoke the existing `execution.unit.restart` contract, which requires the confirmed save, bounded graceful stop, exact unit inspection and a **different** running `runtime_id`. Never silently force-kill or replay a restart after an unknown outcome.
+5. Inspect the newly running unit. Run `game.readiness.check` for the selected release/check-set. Require a new Paper `Done (...)!` line belonging to the **new systemd invocation**, with fresh timestamps, and every required game check passing.
+6. Verify the current instance and controller readiness assertion still match. Only then re-register the same backend through the Velocity bridge and permit returning players.
 
-3. Check the service's `User=minecraft-controller` matches the controller's actual unprivileged SSH account. Check that the account's `~/.ssh` configuration and pinned host-key trust work **without** passwords or prompts.
-4. Test one dry run before enabling the recurring service. The `--execute` option on a manual run requires `--confirm-host` to match exactly.
+For an already exited/failed service, use the stopped-runtime **start** path instead of `execution.unit.restart`. Reconcile the logical lifecycle state and failed systemd invocation first. Do not send `systemctl restart` to a still-running process simply because its logs contain an exception.
 
-   ```sh
-   sudo -u minecraft-controller python3 /usr/local/libexec/gsc/controller_recover.py --host backend
-   sudo systemctl enable --now gsc-paper-recovery@backend.timer
-   systemctl list-timers 'gsc-paper-recovery*'
-   ```
+The current Go policy models these actions as `integration.proxy.backend.drain`, `game.save.request`, `execution.unit.restart` (or `execution.unit.start` for an already-dead process), `execution.unit.inspect`, `game.readiness.check`, and `integration.proxy.backend.register`. **The orchestrator and runtime bindings are not implemented yet.** A stage test verifies the ordering and that an old, absent or stale `Done` cannot authorize re-registration. The proxy bridge already has a draining registration state that can keep the backend unroutable even if its TCP probe recovers.
 
-The template runs approximately once per minute **only after explicit enablement**. Its state lives in a protected `/var/lib/gsc-paper-recovery` directory on the controller. The lock prevents duplicate concurrent recovery actions. Timers must not be enabled on a machine that can no longer prove the SSH host identity. An SSH key or credential leak is an incident, not a reason to relax `StrictHostKeyChecking`.
+### Why not add a Paper plugin now?
 
-## Replacement as a last resort
+Paper's logs, systemd incarnation identity, and game readiness checks are enough to implement and test crash/failed-start recovery. A Paper plugin may later enrich TPS/MSPT, watchdog and world-save metrics, but a JVM stall can also stall the plugin. Keep any future plugin optional and advisory. It must never hold Vultr or Wasabi credentials.
 
-A failed Minecraft check, stale or missing plugin heartbeat, unreachable game port, or failed SSH connection **is not enough evidence** to create or replace a VM. Exhaust bounded game restarts and diagnose the existing host: Java binaries, available RAM, storage space and filesystem errors, CPU and kernel health, networking and provider VM state. Separate `game process unhealthy` from `host cannot safely run or repair the game`.
+## VM replacement and Wasabi durability
 
-If a host is genuinely unrecoverable, use this sequence:
+**A game failure is not a host failure.** Never automatically create a new Vultr VM because the game port or health probe failed. Before even considering a new billable VM, independently diagnose Java, memory, storage space/errors, filesystem integrity, SSH/OS availability, and provider instance health. A confirmed inability to repair Minecraft on the existing VM requires a separate approved replacement operation and capacity allocation.
 
-1. Record the exact managed instance and why repair is not possible. Explicitly approve a new **billable** VM and satisfy managed-capacity limits; an unhealthy game never consumes approval for creation.
-2. If the old disk is accessible, drain players, save/flush the Paper world, stop the service and capture a **new, timestamped and uniquely identified** recovery point under Wasabi `/backups`, separate from the mutable `/server` live sync. Do not allow overlapping writes into the snapshot.
-3. Verify the manifest, file listing, object sizes, content checksums, data generation and exact source instance. Demonstrate that the backup exists **outside** the old VM and includes writes through the final quiesced save boundary. Test restoring in isolation when practical. Keep an older known-good backup as an additional fallback rather than overwriting it.
-4. Only from a specifically selected verified backup or approved migration, provision and restore a replacement. Validate Paper readiness and proxy routing **before** switching players. Temporarily retaining both VM resources may need an explicit capacity reservation/exception; do not silently bypass the quota.
-5. Destruction of the original VM is a **separate, operator-approved operation**, performed only after rechecking its exact identity, current stop state, off-instance consistent backup including final writes, and current authorizations. Never automatically destroy, and never retry provider deletion after an uncertain result without reconciliation.
+**VM deletion is a separate, explicitly authorized operation and remains disabled by default.** Before destruction:
 
-**When a backup cannot be completed:** keep the existing VM and disk allocated for forensic recovery even if Minecraft will not start. Do not pretend that the last successful upload includes recent builds; an older backup may imply world rollback. A new VM may be considered under an approved incident plan, but it never grants permission to delete the source. Escalate storage rescue and any unavoidable data-loss decision to the operator.
+1. Drain players and attempt a clean `save-all flush`/graceful shutdown when possible; record the final quiesced write boundary.
+2. Create a **new timestamped, uniquely identified, immutable recovery point** outside the original VM, e.g. in Wasabi `/backups`, rather than overwriting the mutable `/server` sync. Do not delete older recovery points.
+3. Verify the exact source instance, environment, world data generation, manifest, object existence, size, checksum, consistency and final-write boundary. Test a restore in isolation when practical; preserve at least one known-good fallback.
+4. Recheck the backup evidence, current VM identity and independent destruction approval immediately before calling the provider. If the old disk cannot be read or the most recent writes cannot be accounted for, **do not destroy it**. Preserve it for disk/data rescue; an approved replacement may be prepared separately without deleting the source.
 
-## Durability and privacy
+Wasabi advertises storage designed for 99.999999999% annual **object durability**. This is not an end-to-end guarantee that a Minecraft save is correct, complete, recoverable, or immediately accessible. Object Lock/versioning on a properly configured backup bucket can help protect recovery points from accidental deletion. Storage retention and versioning incur costs.
 
-Wasabi states its object storage is **designed for 11-nines (99.999999999%) annual object durability**: https://docs.wasabi.com/docs/durability-security-reliability. This is **not** the probability that a live Minecraft world will be consistently captured and restored. Backup success requires independent checks and periodic restore drills. Use least-privilege storage credentials, keep backup versions or immutable recovery points, and never allow a `/server` sync to delete dated `/backups` snapshots.
+## Optional observability and privacy
 
-Wasabi Object Lock is an option for a dedicated immutable backup bucket; it requires versioning and must be enabled at bucket creation: https://docs.wasabi.com/docs/object-locking. Retention/versioning can add cost. Keep VictoriaLogs and Homelab integrations **optional**. Recovery probes do not depend on either service and do not export raw player logs or personal data.
+VictoriaLogs and Homelable are **optional**, never prerequisites for recovery. Probe output is redacted and bounded; full raw player logs remain local. The controller must not transmit credentials, player chat, or identifiable telemetry through these checks.
 
-## Implementation status
+## Staging validation
 
-The standalone supervisor and bootstrap probe are reference components in this branch. The controller's general workflow engine currently registers only `server.define` in `internal/controllerruntime`; full automated host diagnosis, Paper plugin telemetry, replacement orchestration, restore-drill verification and management API operations remain **unimplemented**. The `server.destroy` workflow now rejects backups without explicit independently verified off-instance, consistency, and final-write-boundary evidence. No deploy or timer activation occurs merely by merging these files.
+No production services should be changed to evaluate this branch. Use an isolated staging VM and a test world to exercise the following acceptance scenarios:
 
-The recovery timer must be tested on a disposable, isolated instance first. Run `python3 -m unittest discover -s scripts/recovery -p 'test_*.py'` and `go test ./scripts/bootstrap ./internal/workflow` as well as the repository's full validation suite.
+- A confirmed failure on one exact VM plans a safe in-place restart; a new `Done` and new runtime identity are required before any Velocity re-registration.
+- Missing, spoofed, stale, conflicting or unknown logs never authorize a restart or routing.
+- An unverified, old, incomplete or non-off-instance Wasabi backup blocks the destroy workflow, even when the VM has failed.
+- Restart attempts never cause hosting instance creation or deletion.
+
+CI runs `go test ./internal/recovery ./internal/workflow ./scripts/bootstrap` alongside the full Go suite, and `python3 -m unittest discover -s scripts/observability -p 'test_*.py'` for the local probe. The Go runtime currently registers only `server.define`; a subsequent controlled integration is required to turn the staged sequence into an automatic controller workflow.
