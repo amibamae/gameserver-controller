@@ -24,15 +24,19 @@ const (
 )
 
 type handoffOptions struct {
-	Execute          bool
-	Confirmation     string
-	Timeout          time.Duration
-	OperationID      string
-	CredentialRef    string
-	SSHCredentialRef string
-	WasabiAccessRef  string
-	WasabiSecretRef  string
-	WasabiRegion     string
+	Execute            bool
+	AutoVictoriaLogs   bool
+	Confirmation       string
+	Timeout            time.Duration
+	OperationID        string
+	CredentialRef      string
+	SSHCredentialRef   string
+	WasabiAccessRef    string
+	WasabiSecretRef    string
+	WasabiRegion       string
+	LogsEndpoint       string
+	LogsPrivacyMode    string
+	LogsCredentialRef  string
 }
 
 // runHandoff verifies a new VM by its single-use host key, swaps and pins
