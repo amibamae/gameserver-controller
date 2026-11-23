@@ -98,6 +98,7 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 	flags.String("ssh-credential-ref", defaultSSHCredential, "systemd credential reference for the controller's SSH private key")
 	flags.String("confirm-handoff", "", "repeat <server-id>@<environment>/<instance-id> to approve the SSH handoff")
 	flags.String("confirm-observability", "", "repeat <server-id>@<environment>/<instance-id> to authorize private log settings")
+	flags.Bool("enable-victorialogs", false, "opt in to configure VictoriaLogs during a successful SSH handoff (off by default)")
 	flags.String("logs-endpoint", "", "HTTPS ingestion reverse proxy with /insert/jsonline path")
 	flags.String("logs-privacy", "lifecycle", "log privacy mode: lifecycle or disabled (never raw player logs)")
 	flags.String("logs-credential-ref", credential.SystemdReferenceScheme+"gsc-victorialogs-ingest-token", "systemd credential reference for VictoriaLogs ingestion only")
@@ -156,7 +157,11 @@ func doAdoptVultr(execute bool, confirmAdopt string, timeout time.Duration, poli
 
 // doHandoff completes the SSH handoff to a newly provisioned or adopted server.
 func doHandoff(opts handoffOptions, statePath string, stdout, stderr io.Writer) error {
-	return runHandoff(opts, statePath, stdout, stderr)
+	if err := runHandoff(opts, statePath, stdout, stderr); err != nil {
+		return err
+	}
+	applyAutomaticObservability(opts, statePath, stdout, stderr, runObservability)
+	return nil
 }
 
 // doRegisterSSHKey registers an SSH key with Vultr for use by new VMs.
