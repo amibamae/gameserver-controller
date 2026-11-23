@@ -53,6 +53,11 @@ jobs:
             gofmt -d $unformatted
             exit 1
           fi
+      - name: Check complexity of changed functions
+        # The default PR checkout is a merge commit. Its first parent is the
+        # exact base tested, even if the target branch advances during CI.
+        if: github.event_name == 'pull_request'
+        run: go run ./cmd/complexity-check -base 'HEAD^1'
       - name: Test packages
         run: go test -count=1 ./...
       - name: Build packages
@@ -67,8 +72,3 @@ jobs:
         run: go run ./cmd/config-check validate configs/controller.example.yaml
       - name: Validate declarative pilot policy
         run: go run ./cmd/pilot-capacity-check
-      - name: Check complexity of changed functions
-        # The default PR checkout is a merge commit. Its first parent is the
-        # exact base tested, even if the target branch advances during CI.
-        if: github.event_name == 'pull_request'
-        run: go run ./cmd/complexity-check -base 'HEAD^1'
