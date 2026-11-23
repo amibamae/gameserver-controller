@@ -19,6 +19,7 @@ type fakeGetter struct {
 	content []byte
 	length  int64
 	failure error
+	dropVersion bool
 	calls   int
 	bucket  string
 	key     string
@@ -29,11 +30,15 @@ func (f *fakeGetter) GetObject(_ context.Context, input *s3.GetObjectInput, _ ..
 	f.calls++
 	f.bucket, f.key = aws.ToString(input.Bucket), aws.ToString(input.Key)
 	f.version = aws.ToString(input.VersionId)
+	if f.dropVersion {
+		f.version = ""
+	}
 	if f.failure != nil {
 		return nil, f.failure
 	}
 	return &s3.GetObjectOutput{
 		Body: io.NopCloser(bytes.NewReader(f.content)), ContentLength: aws.Int64(f.length),
+		VersionId: aws.String(f.version),
 	}, nil
 }
 
@@ -78,6 +83,7 @@ func TestWasabiReadbackFailsClosed(t *testing.T) {
 		{"truncated", &fakeGetter{content: blob, length: 1024}, 2048, ""},
 		{"remote missing", &fakeGetter{failure: errors.New("missing object")}, 2048, ""},
 		{"wrong profile", &fakeGetter{content: blob, length: int64(len(blob))}, 2048, "other-profile"},
+		{"unverifiable remote version", &fakeGetter{content: blob, length: int64(len(blob)), dropVersion: true}, 2048, ""},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			ref := remoteRef()
