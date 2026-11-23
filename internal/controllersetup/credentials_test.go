@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -28,6 +29,10 @@ func (f *fakeEncryptor) Encrypt(_ context.Context, name, destination string, pla
 }
 
 func TestSetEncryptedCredentialInstallsPrivateCiphertextAndZerosInput(t *testing.T) {
+	// Skip permission-based tests on non-Linux platforms
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	directory := filepath.Join(t.TempDir(), "credential-store")
 	secret := []byte("synthetic-provider-key")
 	encryptor := &fakeEncryptor{}
@@ -37,26 +42,11 @@ func TestSetEncryptedCredentialInstallsPrivateCiphertextAndZerosInput(t *testing
 	if encryptor.calls != 1 || encryptor.name != "example-vultr-api-token" || string(encryptor.plaintext) != "synthetic-provider-key" {
 		t.Fatalf("unexpected encryption call: %+v", encryptor)
 	}
-	for _, value := range secret {
-		if value != 0 {
-			t.Fatal("plaintext buffer was not cleared")
-		}
-	}
-	info, err := os.Stat(filepath.Join(directory, encryptor.name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("credential mode = %o, want 600", info.Mode().Perm())
-	}
-	dirInfo, err := os.Stat(directory)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if dirInfo.Mode().Perm() != 0o700 {
-		t.Fatalf("directory mode = %o, want 700", dirInfo.Mode().Perm())
-	}
-	content, err := os.ReadFile(filepath.Join(directory, encryptor.name))
+	assertClearedCredentialBuffer(t, secret, "plaintext buffer was not cleared")
+	path := filepath.Join(directory, encryptor.name)
+	assertCredentialMode(t, path, "credential", 0o600)
+	assertCredentialMode(t, directory, "directory", 0o700)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +55,31 @@ func TestSetEncryptedCredentialInstallsPrivateCiphertextAndZerosInput(t *testing
 	}
 }
 
+func assertClearedCredentialBuffer(t *testing.T, secret []byte, failureMessage string) {
+	t.Helper()
+	for _, value := range secret {
+		if value != 0 {
+			t.Fatal(failureMessage)
+		}
+	}
+}
+
+func assertCredentialMode(t *testing.T, path, label string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("%s mode = %o, want %o", label, got, want)
+	}
+}
+
 func TestSetEncryptedCredentialRequiresExplicitReplacement(t *testing.T) {
+	// Skip permission-based tests on non-Linux platforms
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	directory := t.TempDir()
 	path := filepath.Join(directory, "example-vultr-api-token")
 	if err := os.WriteFile(path, []byte("old-ciphertext"), 0o600); err != nil {
@@ -81,14 +95,14 @@ func TestSetEncryptedCredentialRequiresExplicitReplacement(t *testing.T) {
 	if readErr != nil || string(content) != "old-ciphertext" {
 		t.Fatalf("existing credential changed: content=%q err=%v", content, readErr)
 	}
-	for _, value := range secret {
-		if value != 0 {
-			t.Fatal("plaintext buffer was not cleared after refusal")
-		}
-	}
+	assertClearedCredentialBuffer(t, secret, "plaintext buffer was not cleared after refusal")
 }
 
 func TestSetEncryptedCredentialReplacementIsAtomicOnEncryptionFailure(t *testing.T) {
+	// Skip permission-based tests on non-Linux platforms
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	directory := t.TempDir()
 	path := filepath.Join(directory, "example-vultr-api-token")
 	if err := os.WriteFile(path, []byte("old-ciphertext"), 0o600); err != nil {
@@ -107,6 +121,10 @@ func TestSetEncryptedCredentialReplacementIsAtomicOnEncryptionFailure(t *testing
 }
 
 func TestSetEncryptedCredentialRejectsUnconfiguredNameAndSymlinkDirectory(t *testing.T) {
+	// Skip permission-based tests on non-Linux platforms
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	secret := []byte("synthetic-provider-key")
 	if err := SetEncryptedCredential(context.Background(), exampleConfig(t), "unrelated", t.TempDir(), secret, false, &fakeEncryptor{}); err == nil {
 		t.Fatal("unconfigured credential name was accepted")

@@ -39,11 +39,21 @@ func (p *Provisioner) verifySSHKeys(ctx context.Context, token []byte, request C
 	if err != nil {
 		return ErrSSHKeyMismatch
 	}
-	ed25519Keys, matches := 0, 0
-	for _, id := range request.SSHKeyIDs {
+	ed25519Keys, matches, err := p.countControllerSSHKeys(ctx, token, request.SSHKeyIDs, controller)
+	if err != nil {
+		return err
+	}
+	if ed25519Keys != 1 || matches != 1 {
+		return ErrSSHKeyMismatch
+	}
+	return nil
+}
+
+func (p *Provisioner) countControllerSSHKeys(ctx context.Context, token []byte, keyIDs []string, controller string) (ed25519Keys, matches int, err error) {
+	for _, id := range keyIDs {
 		key, err := p.provider.GetSSHKey(ctx, token, id)
 		if err != nil || key.ID != id {
-			return fmt.Errorf("%w: could not read SSH key %s", ErrSSHKeyMismatch, id)
+			return 0, 0, fmt.Errorf("%w: could not read SSH key %s", ErrSSHKeyMismatch, id)
 		}
 		if !strings.HasPrefix(key.PublicKey, sshkey.KeyType+" ") {
 			continue
@@ -53,10 +63,7 @@ func (p *Provisioner) verifySSHKeys(ctx context.Context, token []byte, request C
 			matches++
 		}
 	}
-	if ed25519Keys != 1 || matches != 1 {
-		return ErrSSHKeyMismatch
-	}
-	return nil
+	return ed25519Keys, matches, nil
 }
 
 // oneTimeHostKeyUserData is the cloud-config that installs the single-use

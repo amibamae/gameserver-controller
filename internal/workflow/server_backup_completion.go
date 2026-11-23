@@ -22,6 +22,16 @@ func (w *ServerBackupWorkflow) ValidateCompletion(ctx context.Context, operation
 	if !backupDataDescriptionMatches(operation, profile, stored.Record) {
 		return errors.New("game data description does not match the trusted release profile")
 	}
+	if err := w.verifyBackupDataCompletion(ctx, operation, profile); err != nil {
+		return err
+	}
+	if backupResumeAfterBackup(operation) {
+		return w.validateBackupResumeCompletion(operation)
+	}
+	return validateBackupStoppedCompletion(operation)
+}
+
+func (w *ServerBackupWorkflow) verifyBackupDataCompletion(ctx context.Context, operation store.OperationRecord, profile ServerBackupProfile) error {
 	if _, err := backupPrepareOutput(operation); err != nil {
 		return err
 	}
@@ -33,13 +43,7 @@ func (w *ServerBackupWorkflow) ValidateCompletion(ctx context.Context, operation
 	if !backupValidationConfirmed(operation, profile) {
 		return errors.New("game-specific backup validation did not pass the complete trusted check set")
 	}
-	if err := w.verifyBackupValidationStreams(ctx, operation, profile); err != nil {
-		return err
-	}
-	if backupResumeAfterBackup(operation) {
-		return w.validateBackupResumeCompletion(operation)
-	}
-	return validateBackupStoppedCompletion(operation)
+	return w.verifyBackupValidationStreams(ctx, operation, profile)
 }
 
 func (w *ServerBackupWorkflow) verifyCompletedBackupDataSet(ctx context.Context, operation store.OperationRecord, dataSet ServerBackupDataSet) error {

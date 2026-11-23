@@ -203,7 +203,7 @@ func (s *BoltStore) ObserveCapacity(operationID string, observation CapacityProv
 
 func validateCapacityObservation(observation CapacityProviderObservation) error {
 	if !validCapacityIdentifier(observation.Provider, 100) || !validCapacityIdentifier(observation.ResourceKey, 240) ||
-		observation.ObservedAt.IsZero() || observation.ObservedAt.After(time.Now().UTC().Add(5*time.Minute)) {
+		!plausibleObservationTime(observation.ObservedAt) {
 		return fmt.Errorf("%w: invalid provider observation", ErrInvalidRecord)
 	}
 	if !knownCapacityObservationState(observation.State) {
@@ -334,7 +334,7 @@ func observeCapacityTx(tx *bolt.Tx, operationID string, observation CapacityProv
 // capacity reservation and therefore do not create local boot samples.
 func (s *BoltStore) RecordCapacityReady(serverID, environmentID, providerInstanceID string, readyAt time.Time) (CapacityReservation, error) {
 	if !validCapacityIdentifier(serverID, 200) || !validCapacityIdentifier(environmentID, 200) ||
-		!validCapacityIdentifier(providerInstanceID, 240) || readyAt.IsZero() || readyAt.After(time.Now().UTC().Add(5*time.Minute)) {
+		!validCapacityIdentifier(providerInstanceID, 240) || !plausibleObservationTime(readyAt) {
 		return CapacityReservation{}, fmt.Errorf("%w: invalid readiness measurement", ErrInvalidRecord)
 	}
 	var result CapacityReservation
@@ -517,7 +517,7 @@ func destroyedCapacityEvidence(operation OperationRecord, server LogicalServer) 
 	if json.Unmarshal(operation.Target.InstanceRef, &instance) != nil || instance.AdapterID == "" || instance.ResourceKind != "instance" || instance.ExternalID == "" {
 		return destroyedCapacityInstance{}, time.Time{}, fmt.Errorf("%w: server.destroy target is not an exact provider instance", ErrInvalidRecord)
 	}
-	if observedAt.After(time.Now().UTC().Add(5 * time.Minute)) {
+	if !plausibleObservationTime(observedAt) {
 		return destroyedCapacityInstance{}, time.Time{}, fmt.Errorf("%w: provider absence observation is too far in the future", ErrInvalidRecord)
 	}
 	return instance, observedAt, nil

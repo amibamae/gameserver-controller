@@ -120,10 +120,15 @@ func requestMatches(entry idempotencyEntry, candidate IdempotencyVerifier) bool 
 
 func decodeIdempotencyEntry(value []byte) (idempotencyEntry, error) {
 	var entry idempotencyEntry
-	if err := json.Unmarshal(value, &entry); err != nil || !validIdentifier(entry.OperationID, 200) || len(entry.BindingDigest) != 32 || !validKeyVersion(entry.KeyVersion) || entry.RecordedAt.IsZero() {
+	if err := json.Unmarshal(value, &entry); err != nil || !entry.valid() {
 		return idempotencyEntry{}, fmt.Errorf("%w: malformed idempotency entry", ErrCorruptStore)
 	}
 	return entry, nil
+}
+
+func (entry idempotencyEntry) valid() bool {
+	return validIdentifier(entry.OperationID, 200) && len(entry.BindingDigest) == 32 &&
+		validKeyVersion(entry.KeyVersion) && !entry.RecordedAt.IsZero()
 }
 
 func decodeResourceLock(value []byte) (ResourceLock, error) {
@@ -138,7 +143,16 @@ func validKeyVersion(version string) bool {
 	if version == "" || len(version) > 64 {
 		return false
 	}
-	return strings.IndexFunc(version, func(r rune) bool {
-		return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-')
-	}) == -1
+	return strings.IndexFunc(version, invalidKeyVersionRune) == -1
+}
+
+func invalidKeyVersionRune(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return false
+	case r == '.', r == '_', r == '-':
+		return false
+	default:
+		return true
+	}
 }

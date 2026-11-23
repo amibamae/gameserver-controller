@@ -113,15 +113,8 @@ func TestRequestRejectsAMissingClientOrBadToken(t *testing.T) {
 }
 
 func TestNewClientAtNormalizesPathAndTimeout(t *testing.T) {
-	for _, base := range []string{"https://api.example.invalid", "https://api.example.invalid/", "https://api.example.invalid/v2"} {
-		client, err := NewClientAt(base, nil)
-		if err != nil {
-			t.Fatalf("NewClientAt(%q): %v", base, err)
-		}
-		if client.baseURL.String() != "https://api.example.invalid/v2" || client.http.Timeout != 30*time.Second || client.http.CheckRedirect == nil {
-			t.Fatalf("NewClientAt(%q) = %s timeout %v", base, client.baseURL, client.http.Timeout)
-		}
-	}
+	assertDefaultClientURLNormalization(t)
+
 	client, err := NewClientAt("https://api.example.invalid/v2", &http.Client{Timeout: time.Second})
 	if err != nil || client.http.Timeout != time.Second {
 		t.Fatalf("caller timeout not kept: %v %v", client, err)
@@ -138,6 +131,19 @@ func TestNewClientAtNormalizesPathAndTimeout(t *testing.T) {
 	}
 	if production := NewClient(nil); production.baseURL.String() != "https://api.vultr.com/v2" {
 		t.Fatalf("NewClient base URL = %s", production.baseURL)
+	}
+}
+
+func assertDefaultClientURLNormalization(t *testing.T) {
+	t.Helper()
+	for _, base := range []string{"https://api.example.invalid", "https://api.example.invalid/", "https://api.example.invalid/v2"} {
+		client, err := NewClientAt(base, nil)
+		if err != nil {
+			t.Fatalf("NewClientAt(%q): %v", base, err)
+		}
+		if client.baseURL.String() != "https://api.example.invalid/v2" || client.http.Timeout != 30*time.Second || client.http.CheckRedirect == nil {
+			t.Fatalf("NewClientAt(%q) = %s timeout %v", base, client.baseURL, client.http.Timeout)
+		}
 	}
 }
 

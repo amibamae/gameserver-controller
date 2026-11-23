@@ -53,7 +53,7 @@ func NewService(manager Manager, authorizer Authorizer, clock func() time.Time) 
 }
 
 func (s *Service) Issue(ctx context.Context, requesterID string, request IssueRequest) (authkey.IssuedKey, error) {
-	if s == nil || s.manager == nil || s.authorizer == nil || ctx == nil || strings.TrimSpace(requesterID) == "" {
+	if !s.canCheckAuthorization(ctx, requesterID) {
 		return authkey.IssuedKey{}, ErrUnauthorized
 	}
 	if request.Lifetime < time.Minute || request.Lifetime > MaxKeyLifetime {
@@ -71,13 +71,18 @@ func (s *Service) Issue(ctx context.Context, requesterID string, request IssueRe
 }
 
 func (s *Service) Revoke(ctx context.Context, requesterID, keyID string) error {
-	if s == nil || s.manager == nil || s.authorizer == nil || ctx == nil || strings.TrimSpace(requesterID) == "" {
+	if !s.canCheckAuthorization(ctx, requesterID) {
 		return ErrUnauthorized
 	}
 	if err := s.authorizer.AuthorizeRevoke(ctx, requesterID, keyID); err != nil {
 		return ErrUnauthorized
 	}
 	return s.manager.Revoke(keyID, requesterID, s.clock().UTC())
+}
+
+func (s *Service) canCheckAuthorization(ctx context.Context, requesterID string) bool {
+	configured := s != nil && s.manager != nil && s.authorizer != nil
+	return configured && ctx != nil && strings.TrimSpace(requesterID) != ""
 }
 
 func cloneIssueRequest(request IssueRequest) IssueRequest {

@@ -22,7 +22,14 @@ record BridgeConfig(
     String fallback,
     boolean fallbackOnKick,
     Duration healthCheckInterval,
-    AutoMover.Settings autoMove) {
+    AutoMover.Settings autoMove,
+    boolean enforceTokenPermissions,
+    boolean enforceLoopbackBind,
+    boolean enforceFallback,
+    Tls tls) {
+
+  /** TLS settings for the bridge API. The table is optional; defaults keep TLS on. */
+  record Tls(boolean enabled, Path certFile, Path keyFile, Path controllerCaFile) {}
 
   static BridgeConfig parse(Toml toml) {
     Toml bridge = toml.getTable("bridge");
@@ -30,7 +37,19 @@ record BridgeConfig(
     if (bridge == null || routing == null) {
       throw new IllegalArgumentException("config.toml needs [bridge] and [routing] sections");
     }
-    InetAddress bind = loopbackBind(bridge);
+    // The controller registers managed backends at runtime through the bridge
+    // API, so the fallback does not have to exist in velocity.toml at start-up.
+    // The lock is off by default; enable it for static deployments where every
+    // server is in velocity.toml and must be checked before the proxy starts.
+    Toml security = toml.getTable("security");
+    boolean enforceTokenPermissions = security == null || security.getBoolean("enforce-token-permissions", true);
+    boolean enforceLoopbackBind = security == null
+        ? true
+        : security.getBoolean("enforce-loopback-bind", true);
+    boolean enforceFallback = security == null
+        ? false
+        : security.getBoolean("enforce-fallback", false);
+    InetAddress bind = loopbackBind(bridge, enforceLoopbackBind);
     long port = bounded(bridge, "port", 25580L, 1, 65535, "bridge.port is out of range");
     String tokenFile = bridge.getString("token-file", "");
     if (tokenFile.isEmpty()) {
@@ -52,21 +71,58 @@ record BridgeConfig(
     AutoMover.Settings autoMove = new AutoMover.Settings(routing.getBoolean("auto-move", true), (int) batch,
         Duration.ofSeconds(interval), AutoMover.Settings.DEFAULT.retryAfter());
     return new BridgeConfig(bind, (int) port, Path.of(tokenFile), instance, join, forced, fallback,
-        routing.getBoolean("fallback-on-kick", true), Duration.ofSeconds(health), autoMove);
+        routing.getBoolean("fallback-on-kick", true), Duration.ofSeconds(health), autoMove,
+        enforceTokenPermissions, enforceLoopbackBind, enforceFallback, parseTls(toml));
   }
 
-  /** The bridge listens only on a loopback IP address. */
-  private static InetAddress loopbackBind(Toml bridge) {
+  /**
+   * Parses the optional [tls] table. Absent keys keep their defaults (TLS on), so a config that
+   * predates TLS starts enforcing it without an edit. When TLS is on, all three file paths are
+   * required and must be absolute; the files themselves are loaded later, not here.
+   */
+  private static Tls parseTls(Toml toml) {
+    // toml4j throws NPE for absent tables, so check presence before getTable.
+    boolean hasTable = toml.contains("tls");
+    if (!hasTable) {
+      throw new IllegalArgumentException(
+          "tls is enabled but no [tls] table is configured; add [tls] with cert-file, key-file and controller-ca-file, or set tls.enabled = false");
+    }
+    Toml table = toml.getTable("tls");
+    boolean enabled = table.getBoolean("enabled", true);
+    if (!enabled) {
+      // Paths are only read at start-up when TLS is on, so they stay null when disabled.
+      return new Tls(false, null, null, null);
+    }
+    Path cert = absolutePath(table, "cert-file", "tls.cert-file is required when tls is enabled");
+    Path key = absolutePath(table, "key-file", "tls.key-file is required when tls is enabled");
+    Path ca = absolutePath(table, "controller-ca-file", "tls.controller-ca-file is required when tls is enabled");
+    return new Tls(true, cert, key, ca);
+  }
+
+  private static Path absolutePath(Toml table, String key, String missing) {
+    String value = table.getString(key, "");
+    if (value.isEmpty()) {
+      throw new IllegalArgumentException(missing);
+    }
+    Path path = Path.of(value);
+    if (!path.isAbsolute()) {
+      throw new IllegalArgumentException("tls." + key + " must be an absolute path");
+    }
+    return path;
+  }
+
+  /** Resolves {@code bridge.bind}; rejects non-loopback addresses unless disabled. */
+  private static InetAddress loopbackBind(Toml bridge, boolean enforceLoopback) {
     InetAddress bind;
     try {
       bind = InetAddress.getByName(bridge.getString("bind", "127.0.0.1"));
     } catch (UnknownHostException e) {
       throw new IllegalArgumentException("bridge.bind must be an IP address");
     }
-    if (!bind.isLoopbackAddress()) {
-      throw new IllegalArgumentException("bridge.bind must be a loopback address");
+    if (!enforceLoopback || bind.isLoopbackAddress()) {
+      return bind;
     }
-    return bind;
+    throw new IllegalArgumentException("bridge.bind must be a loopback address");
   }
 
   /** Reads an integer setting and rejects it with message outside [min, max]. */

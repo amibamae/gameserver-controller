@@ -6,27 +6,19 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
-	"net"
 	"net/http"
-	"net/url"
-	"os"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/capturestream"
-	"github.com/amibamae/gameserver-controller/internal/credential"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 const (
@@ -35,11 +27,6 @@ const (
 	maxMultipartParts = int64(10000)
 	maxPartSize       = int64(128 * 1024 * 1024)
 	minPartSize       = int64(16 * 1024 * 1024)
-)
-
-var (
-	adapterIDPattern = regexp.MustCompile(`^[a-z][a-z0-9.-]{1,159}$`)
-	regionPattern    = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 )
 
 // Config contains non-secret settings for one environment-specific Wasabi
@@ -114,32 +101,6 @@ func newAdapter(config Config, protocolVersion string, resolver CredentialResolv
 // ValidateConfig checks a profile without contacting Wasabi or resolving credentials.
 func ValidateConfig(config Config) error { return validateConfig(config) }
 
-func validateConfig(config Config) error {
-	if !adapterIDPattern.MatchString(config.AdapterID) || !strings.HasPrefix(config.AdapterID, "storage.") || config.StorageProfileID == "" || config.EnvironmentID == "" || config.Container == "" || len(config.Container) > 500 || !strings.HasSuffix(config.KeyPrefix, "/") || len(config.KeyPrefix) > 2048 || !regionPattern.MatchString(config.Region) {
-		return errors.New("storage profile, environment, container, key prefix, and Wasabi region are required")
-	}
-	if config.MaxObjectBytes < 1 || config.MaxObjectBytes > maxS3ObjectSize || config.MaxObjectBytes > maxPartSize*maxMultipartParts {
-		return errors.New("maximum object size must be between 1 byte and the bounded multipart limit")
-	}
-	if !strings.HasPrefix(config.AccessKeyIDRef, credential.SystemdReferenceScheme) ||
-		!strings.HasPrefix(config.SecretAccessKeyRef, credential.SystemdReferenceScheme) ||
-		config.AccessKeyIDRef == config.SecretAccessKeyRef {
-		return errors.New("separate systemd credential references for both Wasabi keys are required")
-	}
-	endpoint, err := url.Parse(config.EndpointURL)
-	if err != nil || endpoint.Scheme != "https" || endpoint.User != nil || endpoint.RawQuery != "" || endpoint.Fragment != "" || endpoint.Hostname() == "" || (endpoint.Path != "" && endpoint.Path != "/") {
-		return errors.New("Wasabi endpoint must be an HTTPS URL without user information, query, or fragment")
-	}
-	host := strings.TrimSuffix(strings.ToLower(endpoint.Hostname()), ".")
-	if net.ParseIP(host) != nil || !(host == "wasabisys.com" || strings.HasSuffix(host, ".wasabisys.com")) {
-		return errors.New("Wasabi endpoint host must be within wasabisys.com")
-	}
-	if endpoint.Port() != "" && endpoint.Port() != "443" {
-		return errors.New("Wasabi endpoint must use HTTPS port 443")
-	}
-	return nil
-}
-
 func (a *Adapter) Descriptor() adapter.Descriptor {
 	version := a.protocolVersion
 	plain := func(name, schema string, mutating bool) adapter.Capability {
@@ -151,13 +112,9 @@ func (a *Adapter) Descriptor() adapter.Descriptor {
 		}
 	}
 	capability := func(name, schema string, mutating bool, direction string) adapter.Capability {
-		return adapter.Capability{
-			Name: name, Version: contractVersion, Mutating: mutating,
-			InputSchemaURI:      "urn:gameserver-controller:" + version + ":storage:" + schema + "-input",
-			OutputSchemaURI:     "urn:gameserver-controller:" + version + ":storage:" + schema + "-output",
-			Constraints:         map[string]any{"stream_transfer_direction": direction, "maximum_object_bytes": a.config.MaxObjectBytes},
-			RequiredPermissions: []string{},
-		}
+		streamed := plain(name, schema, mutating)
+		streamed.Constraints = map[string]any{"stream_transfer_direction": direction, "maximum_object_bytes": a.config.MaxObjectBytes}
+		return streamed
 	}
 	return adapter.Descriptor{
 		AdapterID: a.config.AdapterID, Category: adapter.CategoryStorage, DisplayName: "Wasabi S3-compatible object storage",
@@ -242,206 +199,72 @@ type headInput struct {
 	ObjectRef objectReference `json:"object_ref"`
 }
 
-func (a *Adapter) put(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	var input putInput
-	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validTarget(input.Target) || !validExpected(input.ExpectedSizeBytes, input.ExpectedChecksum, a.config.MaxObjectBytes) {
-		return nil, errors.New("invalid object upload request")
-	}
-	transfer, err := singleTransfer(request, "controller_to_adapter", input.ExpectedSizeBytes)
-	if err != nil {
-		return nil, err
-	}
-	stream, err := request.Params.RequestContext.OpenStream(transfer.TransferID)
-	if err != nil {
-		return nil, errors.New("upload stream is unavailable")
-	}
-	defer stream.Close()
-	staged, err := stageVerifiedUpload(stream, input.ExpectedSizeBytes, input.ExpectedChecksum.Digest)
-	if err != nil {
-		return nil, errors.New("upload stream did not match its declared size and checksum")
-	}
-	defer func() {
-		_ = staged.Close()
-		_ = os.Remove(staged.Name())
-	}()
-	client, err := a.openClient(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	uploader := manager.NewUploader(client, func(u *manager.Uploader) {
-		u.PartSize = partSize(input.ExpectedSizeBytes)
-		u.Concurrency = 1
-		u.LeavePartsOnError = false
-	})
-	result, err := uploader.Upload(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(input.Target.Container), Key: aws.String(input.Target.Key),
-		Body: staged, ContentLength: aws.Int64(input.ExpectedSizeBytes),
-		ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
-	})
-	if err != nil {
-		return nil, sideEffectError("Wasabi upload failed")
-	}
-	ref := objectReference{objectTarget: input.Target}
-	ref.VersionID, _ = confirmedVersion("", result.VersionID)
-	if a.config.RequireVersionIDs && (ref.VersionID == "" || ref.VersionID == "null") {
-		return nil, sideEffectError("Wasabi did not return the required immutable object version")
-	}
-	value := map[string]any{"target": input.Target, "upload_state": "uploaded", "object_ref": ref,
-		"bytes_received": input.ExpectedSizeBytes, "observed_at": time.Now().UTC().Format(time.RFC3339Nano)}
-	if result.ETag != nil && *result.ETag != "" {
-		value["provider_etag"] = *result.ETag
-	}
-	return value, nil
-}
-
-func stageVerifiedUpload(stream io.Reader, expectedSize int64, expectedDigest string) (*os.File, error) {
-	file, err := os.CreateTemp("", "gsc-wasabi-upload-*")
-	if err != nil {
-		return nil, errors.New("private upload staging is unavailable")
-	}
-	cleanup := func() {
-		_ = file.Close()
-		_ = os.Remove(file.Name())
-	}
-	hasher := sha256.New()
-	count, err := io.Copy(io.MultiWriter(file, hasher), io.LimitReader(stream, expectedSize+1))
-	if err != nil || count != expectedSize || !strings.EqualFold(hex.EncodeToString(hasher.Sum(nil)), expectedDigest) {
-		cleanup()
-		return nil, errors.New("upload data does not match the declared size and checksum")
-	}
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		cleanup()
-		return nil, errors.New("private upload staging could not be rewound")
-	}
-	return file, nil
-}
-
-func partSize(objectSize int64) int64 {
-	partSize := minPartSize
-	if required := (objectSize + maxMultipartParts - 1) / maxMultipartParts; required > partSize {
-		partSize = required
-	}
-	return partSize
-}
-
-func (a *Adapter) get(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	var input getInput
-	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validReference(input.ObjectRef) || !validExpected(input.ExpectedSizeBytes, input.ExpectedChecksum, a.config.MaxObjectBytes) {
-		return nil, errors.New("invalid object download request")
-	}
-	if a.config.RequireVersionIDs && input.ObjectRef.VersionID == "" {
-		return nil, errors.New("an exact object version is required by this storage profile")
-	}
-	transfer, err := singleTransfer(request, "adapter_to_controller", input.ExpectedSizeBytes)
-	if err != nil {
-		return nil, err
-	}
-	sink, err := request.Params.RequestContext.CreateStream(transfer.TransferID)
-	if err != nil {
-		return nil, errors.New("download stream is unavailable")
-	}
-	defer sink.Close()
-	client, err := a.openClient(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	get := &s3.GetObjectInput{Bucket: aws.String(input.ObjectRef.Container), Key: aws.String(input.ObjectRef.Key)}
-	if input.ObjectRef.VersionID != "" {
-		get.VersionId = aws.String(input.ObjectRef.VersionID)
-	}
-	result, err := client.GetObject(ctx, get)
-	if err != nil {
-		return nil, errors.New("Wasabi object download failed")
-	}
-	defer result.Body.Close()
-	hasher := sha256.New()
-	writer := io.MultiWriter(sink, hasher)
-	count, err := io.Copy(writer, io.LimitReader(result.Body, input.ExpectedSizeBytes+1))
-	if err != nil || count != input.ExpectedSizeBytes {
-		return nil, errors.New("Wasabi object size does not match the backup manifest")
-	}
-	digest := hex.EncodeToString(hasher.Sum(nil))
-	if !strings.EqualFold(digest, input.ExpectedChecksum.Digest) {
-		return nil, errors.New("Wasabi object checksum does not match the backup manifest")
-	}
-	ref := input.ObjectRef
-	ref.VersionID, err = confirmedVersion(input.ObjectRef.VersionID, result.VersionId)
-	if err != nil {
-		return nil, err
-	}
-	if a.config.RequireVersionIDs && (ref.VersionID == "" || ref.VersionID == "null") {
-		return nil, errors.New("Wasabi object did not resolve to an immutable version")
-	}
-	return map[string]any{"object_ref": ref, "transfer_state": "complete", "bytes_sent": count,
-		"computed_checksum": checksum{Algorithm: "sha256", Digest: digest}, "observed_at": time.Now().UTC().Format(time.RFC3339Nano)}, nil
-}
-
-func (a *Adapter) head(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	var input headInput
-	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validReference(input.ObjectRef) {
-		return nil, errors.New("invalid object inspection request")
-	}
-	client, err := a.openClient(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	head := &s3.HeadObjectInput{Bucket: aws.String(input.ObjectRef.Container), Key: aws.String(input.ObjectRef.Key)}
-	if input.ObjectRef.VersionID != "" {
-		head.VersionId = aws.String(input.ObjectRef.VersionID)
-	}
-	result, err := client.HeadObject(ctx, head)
-	if err != nil {
-		var missing interface{ ErrorCode() string }
-		if errors.As(err, &missing) && (missing.ErrorCode() == "NotFound" || missing.ErrorCode() == "NoSuchKey" || missing.ErrorCode() == "NoSuchVersion") {
-			return map[string]any{"object_ref": input.ObjectRef, "object_state": "absent", "observed_at": time.Now().UTC().Format(time.RFC3339Nano)}, nil
-		}
-		return nil, errors.New("Wasabi object inspection failed")
-	}
-	ref := input.ObjectRef
-	ref.VersionID, err = confirmedVersion(input.ObjectRef.VersionID, result.VersionId)
-	if err != nil {
-		return nil, err
-	}
-	if a.config.RequireVersionIDs && (ref.VersionID == "" || ref.VersionID == "null") {
-		return nil, errors.New("Wasabi object has no immutable version ID")
-	}
-	value := map[string]any{"object_ref": ref, "object_state": "present", "observed_at": time.Now().UTC().Format(time.RFC3339Nano)}
-	if result.ContentLength != nil {
-		value["size_bytes"] = *result.ContentLength
-	}
-	if result.ETag != nil && *result.ETag != "" {
-		value["provider_etag"] = *result.ETag
-	}
-	if result.LastModified != nil {
-		value["last_modified"] = result.LastModified.UTC().Format(time.RFC3339Nano)
-	}
-	if result.ChecksumType == types.ChecksumTypeFullObject && result.ChecksumSHA256 != nil {
-		decoded, decodeErr := base64.StdEncoding.DecodeString(*result.ChecksumSHA256)
-		if decodeErr == nil && len(decoded) == sha256.Size {
-			value["provider_checksum"] = checksum{Algorithm: "sha256", Digest: hex.EncodeToString(decoded)}
-		}
-	}
-	return value, nil
-}
-
+// confirmedVersion returns the exact version a read observed. A requested
+// version must be echoed by the provider; with none requested, the observed
+// version is kept when it is immutable.
 func confirmedVersion(requested string, observed *string) (string, error) {
-	if requested != "" && requested != "null" {
-		if observed == nil || *observed != requested {
-			return "", errors.New("Wasabi did not confirm the requested object version")
-		}
-		return requested, nil
+	if requested == "" {
+		return observedVersion(observed), nil
 	}
 	if requested == "null" {
 		return "", errors.New("the mutable null object version is not accepted as an exact version")
 	}
-	if observed != nil && *observed != "" && *observed != "null" {
-		return *observed, nil
+	if observed == nil || *observed != requested {
+		return "", errors.New("Wasabi did not confirm the requested object version")
 	}
-	return "", nil
+	return requested, nil
 }
 
+// observedVersion returns the provider's version ID, or "" when it reported
+// none or only the mutable "null" version.
+func observedVersion(observed *string) string {
+	if observed != nil && immutableVersion(*observed) {
+		return *observed
+	}
+	return ""
+}
+
+func immutableVersion(version string) bool {
+	return version != "" && version != "null"
+}
+
+// missingRequiredVersion reports a profile that requires version IDs meeting
+// an object without an immutable one.
+func (a *Adapter) missingRequiredVersion(version string) bool {
+	return a.config.RequireVersionIDs && !immutableVersion(version)
+}
+
+// decodeInput decodes a capability's input and applies its acceptance check;
+// a malformed or refused input reports only the capability's rejection text.
+func decodeInput[T any](request adapter.InvokeRequest, rejection string, accept func(T) bool) (T, error) {
+	var input T
+	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !accept(input) {
+		var refused T
+		return refused, errors.New(rejection)
+	}
+	return input, nil
+}
+
+// acceptsTransfer reports a request from this profile's environment for an
+// object inside its bucket and prefix, with a bounded size and a SHA-256.
+func (a *Adapter) acceptsTransfer(request adapter.InvokeRequest, target objectTarget, size int64, expected checksum) bool {
+	return a.validRequestEnvironment(request) && a.validTarget(target) && validExpected(size, expected, a.config.MaxObjectBytes)
+}
+
+func addProviderETag(value map[string]any, etag *string) {
+	if etag != nil && *etag != "" {
+		value["provider_etag"] = *etag
+	}
+}
+
+// validTarget reports an object of this adapter's profile inside its
+// bucket and key prefix.
 func (a *Adapter) validTarget(value objectTarget) bool {
-	return value.AdapterID == a.config.AdapterID && value.StorageProfile == a.config.StorageProfileID && value.EnvironmentID == a.config.EnvironmentID && value.Container == a.config.Container && strings.HasPrefix(value.Key, a.config.KeyPrefix)
+	return a.ownProfile(value) && value.Container == a.config.Container && strings.HasPrefix(value.Key, a.config.KeyPrefix)
+}
+
+func (a *Adapter) ownProfile(value objectTarget) bool {
+	return value.AdapterID == a.config.AdapterID && value.StorageProfile == a.config.StorageProfileID && value.EnvironmentID == a.config.EnvironmentID
 }
 
 func (a *Adapter) validRequestEnvironment(request adapter.InvokeRequest) bool {
@@ -453,7 +276,11 @@ func (a *Adapter) validReference(value objectReference) bool {
 }
 
 func validExpected(size int64, expected checksum, maximum int64) bool {
-	return size >= 0 && size <= maximum && expected.Algorithm == "sha256" && len(expected.Digest) == sha256.Size*2 && isHex(expected.Digest)
+	return size >= 0 && size <= maximum && validSHA256(expected)
+}
+
+func validSHA256(expected checksum) bool {
+	return expected.Algorithm == "sha256" && len(expected.Digest) == sha256.Size*2 && isHex(expected.Digest)
 }
 
 func isHex(value string) bool {
@@ -466,17 +293,41 @@ func singleTransfer(request adapter.InvokeRequest, direction string, expectedSiz
 		return capturestream.Reference{}, errors.New("storage transfer requires exactly one stream handle")
 	}
 	transfer := request.Params.RequestContext.StreamTransfers[0]
-	if transfer.Direction != direction || transfer.MaximumBytes < expectedSize || !transfer.ExpiresAt.After(time.Now()) || transfer.ExpiresAt.After(request.Params.RequestContext.Deadline) {
+	if !boundedTransfer(transfer, direction, expectedSize, request.Params.RequestContext.Deadline) {
 		return capturestream.Reference{}, errors.New("storage stream handle does not match the bounded transfer")
 	}
 	return transfer, nil
 }
 
+// boundedTransfer reports a handle in the expected direction, large enough
+// for the object, and live now but not past the operation deadline.
+func boundedTransfer(transfer capturestream.Reference, direction string, expectedSize int64, deadline time.Time) bool {
+	return transfer.Direction == direction && transfer.MaximumBytes >= expectedSize && liveUntil(transfer.ExpiresAt, deadline)
+}
+
+func liveUntil(expiresAt, deadline time.Time) bool {
+	return expiresAt.After(time.Now()) && !expiresAt.After(deadline)
+}
+
 func (a *Adapter) openClient(ctx context.Context, request adapter.InvokeRequest) (s3Client, error) {
-	refs := request.Params.RequestContext.SecretRefs
-	if len(refs) != 2 || !containsSecretRef(refs, a.config.AccessKeyIDRef) || !containsSecretRef(refs, a.config.SecretAccessKeyRef) {
+	if !a.authorizedSecretRefs(request.Params.RequestContext.SecretRefs) {
 		return nil, errors.New("Wasabi credential references are not authorized for this invocation")
 	}
+	client, err := a.resolveClient()
+	if err != nil || client == nil || ctx.Err() != nil {
+		return nil, errors.New("Wasabi credentials are unavailable")
+	}
+	return client, nil
+}
+
+// authorizedSecretRefs reports exactly this profile's two key references.
+func (a *Adapter) authorizedSecretRefs(refs []adapter.SecretReference) bool {
+	return len(refs) == 2 && containsSecretRef(refs, a.config.AccessKeyIDRef) && containsSecretRef(refs, a.config.SecretAccessKeyRef)
+}
+
+// resolveClient builds the S3 client while both key values are resolved;
+// they are not kept beyond the call.
+func (a *Adapter) resolveClient() (s3Client, error) {
 	var client s3Client
 	err := a.credentials.WithCredential(a.config.AccessKeyIDRef, func(access []byte) error {
 		return a.credentials.WithCredential(a.config.SecretAccessKeyRef, func(secret []byte) error {
@@ -487,10 +338,7 @@ func (a *Adapter) openClient(ctx context.Context, request adapter.InvokeRequest)
 			return nil
 		})
 	})
-	if err != nil || client == nil || ctx.Err() != nil {
-		return nil, errors.New("Wasabi credentials are unavailable")
-	}
-	return client, nil
+	return client, err
 }
 
 func containsSecretRef(refs []adapter.SecretReference, reference string) bool {

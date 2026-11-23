@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
 )
+
+func isWindows() bool { return runtime.GOOS == "windows" }
 
 func TestCreateOperationPersistsAcrossRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state", "controller.db")
@@ -42,8 +45,11 @@ func TestCreateOperationPersistsAcrossRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := info.Mode().Perm(); got&0o077 != 0 {
-		t.Fatalf("database permissions are too broad: %o", got)
+	// Skip permissions check on Windows as Unix-style perms aren't enforced there
+	if !isWindows() {
+		if got := info.Mode().Perm(); got&0o077 != 0 {
+			t.Fatalf("database permissions are too broad: %o", got)
+		}
 	}
 
 	reopened, err := OpenBolt(path)

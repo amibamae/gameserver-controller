@@ -123,13 +123,21 @@ func invokeRefactorStream(h *captureHarness, r adapter.InvokeRequest, data strin
 	return err
 }
 
+type authorizationFailureCase struct {
+	name    string
+	setup   func(*captureHarness) (context.Context, string)
+	message string
+}
+
 func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
+	runAuthorizationRejectionCases(t, durableAuthorizationFailures())
+	runAuthorizationRejectionCases(t, targetAuthorizationFailures())
+	runAuthorizationRejectionCases(t, destinationAndInstanceAuthorizationFailures())
+}
+
+func durableAuthorizationFailures() []authorizationFailureCase {
 	stepIDPointer := func(id string) *string { return &id }
-	tests := []struct {
-		name    string
-		setup   func(*captureHarness) (context.Context, string)
-		message string
-	}{
+	return []authorizationFailureCase{
 		{"nil context", func(h *captureHarness) (context.Context, string) {
 			var ctx context.Context
 			return ctx, h.descriptor.AdapterID
@@ -183,6 +191,11 @@ func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
 			h.records.lock.Scope = "other-scope"
 			return context.Background(), h.descriptor.AdapterID
 		}, "capture requires the durable server lock"},
+	}
+}
+
+func targetAuthorizationFailures() []authorizationFailureCase {
+	return []authorizationFailureCase{
 		{"input targets another server", func(h *captureHarness) (context.Context, string) {
 			h.setInput(func(input map[string]any) { input["target"].(map[string]any)["server_id"] = "other-server" })
 			return context.Background(), h.descriptor.AdapterID
@@ -191,6 +204,11 @@ func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
 			h.setInput(func(input map[string]any) { input["target"].(map[string]any)["environment_id"] = "production" })
 			return context.Background(), h.descriptor.AdapterID
 		}, "capture target does not match durable operation"},
+	}
+}
+
+func destinationAndInstanceAuthorizationFailures() []authorizationFailureCase {
+	return []authorizationFailureCase{
 		{"destination without a transfer ID", func(h *captureHarness) (context.Context, string) {
 			reference := invokeRefactorDestination(time.Minute)
 			reference.TransferID = ""
@@ -220,9 +238,7 @@ func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
 		}, "capture destination is not a valid controller-bound stream"},
 		{"destination already claimed", func(h *captureHarness) (context.Context, string) {
 			invokeRefactorExternal(h, invokeRefactorDestination(time.Minute))
-			if _, err := h.request.Params.RequestContext.CreateStream("workflow-transfer"); err != nil {
-				h.t.Fatal(err)
-			}
+			preclaimTestCaptureDestination(h)
 			return context.Background(), h.descriptor.AdapterID
 		}, "capture destination is not a valid controller-bound stream"},
 		{"instance reference is not an instance", func(h *captureHarness) (context.Context, string) {
@@ -237,14 +253,14 @@ func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
 			return context.Background(), h.descriptor.AdapterID
 		}, "invalid capture instance"},
 	}
+}
+
+func runAuthorizationRejectionCases(t *testing.T, tests []authorizationFailureCase) {
+	t.Helper()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			h, counting := invokeRefactorHarness(t)
-			ctx, adapterID := test.setup(h)
-			_, err := h.runtime().Invoke(ctx, adapterID, h.request)
-			if err == nil || err.Error() != test.message {
-				t.Fatalf("Invoke error = %v, want %q", err, test.message)
-			}
+			err := invokeAuthorizationFailure(t, h, test)
 			if invokeRefactorSideEffects(err) {
 				t.Fatalf("authorization failure %v was reported as possibly side-effecting", err)
 			}
@@ -256,14 +272,32 @@ func TestInvokeRefactorAuthorizeRejections(t *testing.T) {
 	}
 }
 
+func invokeAuthorizationFailure(t *testing.T, h *captureHarness, test authorizationFailureCase) error {
+	t.Helper()
+	ctx, adapterID := test.setup(h)
+	_, err := h.runtime().Invoke(ctx, adapterID, h.request)
+	if err == nil || err.Error() != test.message {
+		t.Fatalf("Invoke error = %v, want %q", err, test.message)
+	}
+	return err
+}
+
 // TestInvokeRefactorAuthorizeCheckOrder breaks two adjacent checks at once
 // and requires the earlier check's message.
 func TestInvokeRefactorAuthorizeCheckOrder(t *testing.T) {
-	tests := []struct {
-		name    string
-		setup   func(*captureHarness) (context.Context, string)
-		message string
-	}{
+	for _, test := range authorizationCheckOrderCases() {
+		t.Run(test.name, func(t *testing.T) {
+			h, counting := invokeRefactorHarness(t)
+			invokeAuthorizationFailure(t, h, test)
+			if counting.opened != 0 || h.called {
+				t.Fatalf("rejected capture opened staging %d times, called=%v", counting.opened, h.called)
+			}
+		})
+	}
+}
+
+func authorizationCheckOrderCases() []authorizationFailureCase {
+	return []authorizationFailureCase{
 		{"context before operation", func(h *captureHarness) (context.Context, string) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
@@ -311,19 +345,6 @@ func TestInvokeRefactorAuthorizeCheckOrder(t *testing.T) {
 			return context.Background(), h.descriptor.AdapterID
 		}, "capture destination is not a valid controller-bound stream"},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			h, counting := invokeRefactorHarness(t)
-			ctx, adapterID := test.setup(h)
-			_, err := h.runtime().Invoke(ctx, adapterID, h.request)
-			if err == nil || err.Error() != test.message {
-				t.Fatalf("Invoke error = %v, want %q", err, test.message)
-			}
-			if counting.opened != 0 || h.called {
-				t.Fatalf("rejected capture opened staging %d times, called=%v", counting.opened, h.called)
-			}
-		})
-	}
 }
 
 func TestInvokeRefactorAuthorizeAcceptsBoundaries(t *testing.T) {
@@ -360,14 +381,21 @@ func TestInvokeRefactorAuthorizeAcceptsBoundaries(t *testing.T) {
 	}
 }
 
+type captureSetupFailureCase struct {
+	name        string
+	setup       func(*captureHarness, *invokeRefactorStaging)
+	message     string
+	sideEffects bool
+	discarded   bool
+}
+
 func TestInvokeRefactorStagingAndStreamSetup(t *testing.T) {
-	tests := []struct {
-		name        string
-		setup       func(*captureHarness, *invokeRefactorStaging)
-		message     string
-		sideEffects bool
-		discarded   bool
-	}{
+	runCaptureSetupFailureCases(t, stagingOpenFailures())
+	runCaptureSetupFailureCases(t, streamSetupFailures())
+}
+
+func stagingOpenFailures() []captureSetupFailureCase {
+	return []captureSetupFailureCase{
 		{"staging needs reconciliation", func(h *captureHarness, s *invokeRefactorStaging) {
 			s.err = ErrStagingNeedsReconciliation
 		}, invokeRefactorUncertainText, true, false},
@@ -381,249 +409,68 @@ func TestInvokeRefactorStagingAndStreamSetup(t *testing.T) {
 		{"staging returns no stage", func(h *captureHarness, s *invokeRefactorStaging) {
 			s.nilStage = true
 		}, "capture staging is unavailable", false, false},
+	}
+}
+
+func streamSetupFailures() []captureSetupFailureCase {
+	return []captureSetupFailureCase{
 		{"destination claimed before dispatch", func(h *captureHarness, s *invokeRefactorStaging) {
 			invokeRefactorExternal(h, invokeRefactorDestination(time.Minute))
-			s.onOpen = func() { _, _ = h.request.Params.RequestContext.CreateStream("workflow-transfer") }
+			s.onOpen = func() { preclaimTestCaptureDestination(h) }
 		}, "capture destination could not be claimed", false, true},
 		{"destination claimed and cleanup fails", func(h *captureHarness, s *invokeRefactorStaging) {
 			invokeRefactorExternal(h, invokeRefactorDestination(time.Minute))
-			s.onOpen = func() { _, _ = h.request.Params.RequestContext.CreateStream("workflow-transfer") }
+			s.onOpen = func() { preclaimTestCaptureDestination(h) }
 			h.sink.failDiscard = true
 		}, "capture staging cleanup failed before dispatch", false, true},
 		{"stream cannot be issued", func(h *captureHarness, s *invokeRefactorStaging) {
-			s.onOpen = func() {
-				_, _, _ = h.broker.IssueTracked(h.scope, 8, time.Now().Add(time.Minute), time.Now().Add(time.Minute), io.Discard)
-			}
+			s.onOpen = func() { fillTestCaptureBroker(h) }
 		}, "capture stream could not be issued", false, true},
 		{"stream cannot be issued and cleanup fails", func(h *captureHarness, s *invokeRefactorStaging) {
-			s.onOpen = func() {
-				_, _, _ = h.broker.IssueTracked(h.scope, 8, time.Now().Add(time.Minute), time.Now().Add(time.Minute), io.Discard)
-			}
+			s.onOpen = func() { fillTestCaptureBroker(h) }
 			h.sink.failDiscard = true
 		}, "capture staging cleanup failed before dispatch", false, true},
 	}
+}
+
+func preclaimTestCaptureDestination(h *captureHarness) {
+	h.t.Helper()
+	if _, err := h.request.Params.RequestContext.CreateStream("workflow-transfer"); err != nil {
+		h.t.Fatalf("claim capture destination during staging open: %v", err)
+	}
+}
+
+func fillTestCaptureBroker(h *captureHarness) {
+	h.t.Helper()
+	if _, _, err := h.broker.IssueTracked(h.scope, 8, time.Now().Add(time.Minute), time.Now().Add(time.Minute), io.Discard); err != nil {
+		h.t.Fatalf("fill capture broker during staging open: %v", err)
+	}
+}
+
+func runCaptureSetupFailureCases(t *testing.T, tests []captureSetupFailureCase) {
+	t.Helper()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			h, counting := invokeRefactorHarness(t)
-			test.setup(h, counting)
-			response, err := h.runtime().Invoke(context.Background(), h.descriptor.AdapterID, h.request)
-			if err == nil || err.Error() != test.message {
-				t.Fatalf("Invoke error = %v, want %q", err, test.message)
-			}
-			if invokeRefactorSideEffects(err) != test.sideEffects {
-				t.Fatalf("side effects = %v, want %v", invokeRefactorSideEffects(err), test.sideEffects)
-			}
-			if counting.opened != 1 || h.called || h.sink.sealed || h.sink.discarded != test.discarded {
-				t.Fatalf("opened=%d called=%v sealed=%v discarded=%v", counting.opened, h.called, h.sink.sealed, h.sink.discarded)
-			}
-			if response.Result.Output != nil || response.Result.Outcome != "" {
-				t.Fatalf("failed setup returned a response: %+v", response)
-			}
+			assertCaptureSetupFailure(t, test)
 		})
 	}
 }
 
-func TestInvokeRefactorResultClassification(t *testing.T) {
-	type outcome struct {
-		message   string // empty means success
-		sealed    bool
-		discarded bool
+func assertCaptureSetupFailure(t *testing.T, test captureSetupFailureCase) {
+	t.Helper()
+	h, counting := invokeRefactorHarness(t)
+	test.setup(h, counting)
+	response, err := h.runtime().Invoke(context.Background(), h.descriptor.AdapterID, h.request)
+	if err == nil || err.Error() != test.message {
+		t.Fatalf("Invoke error = %v, want %q", err, test.message)
 	}
-	tests := []struct {
-		name    string
-		setup   func(*captureHarness) context.Context
-		respond func(*captureHarness, context.Context, adapter.InvokeRequest) (adapter.InvokeResponse, error)
-		want    outcome
-		check   func(*testing.T, *captureHarness, adapter.InvokeResponse)
-	}{
-		{name: "captured", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return h.captured(r)
-		}, want: outcome{sealed: true}, check: func(t *testing.T, h *captureHarness, response adapter.InvokeResponse) {
-			if response.Result.Outcome != adapter.OutcomeCompleted || string(response.Result.Output) != string(h.sink.output) || h.sink.String() != "abc" || h.sink.receipt.Scope != h.scope {
-				t.Fatalf("captured response %+v, staged %q", response.Result, h.sink.String())
-			}
-		}},
-		{name: "captured to an external destination", setup: func(h *captureHarness) context.Context {
-			external := invokeRefactorExternal(h, invokeRefactorDestination(time.Minute))
-			h.t.Cleanup(func() {
-				if external.String() != "abc" {
-					h.t.Errorf("external destination received %q", external.String())
-				}
-			})
-			return context.Background()
-		}, respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return h.captured(r)
-		}, want: outcome{sealed: true}},
-		{name: "unknown outcome without an external reference", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return h.reply(r, adapter.OutcomeCompleted, invokeRefactorUnknownOutput(h))
-		}, want: outcome{discarded: true}, check: func(t *testing.T, h *captureHarness, response adapter.InvokeResponse) {
-			want, _ := json.Marshal(invokeRefactorUnknownOutput(h)["reconciliation_ref"])
-			if response.Result.Outcome != adapter.OutcomeUnknown || !sameJSON(response.Result.ExternalOperationRef, want) {
-				t.Fatalf("unknown outcome was not normalized: %+v", response.Result)
-			}
-		}},
-		{name: "unknown outcome with the same external reference", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			response, err := h.reply(r, adapter.OutcomeCompleted, invokeRefactorUnknownOutput(h))
-			response.Result.ExternalOperationRef, _ = json.Marshal(invokeRefactorUnknownOutput(h)["reconciliation_ref"])
-			return response, err
-		}, want: outcome{discarded: true}, check: func(t *testing.T, h *captureHarness, response adapter.InvokeResponse) {
-			if response.Result.Outcome != adapter.OutcomeUnknown || len(response.Result.ExternalOperationRef) == 0 {
-				t.Fatalf("unknown outcome was not normalized: %+v", response.Result)
-			}
-		}},
-		{name: "unknown outcome reported by the adapter as unknown", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return h.reply(r, adapter.OutcomeUnknown, invokeRefactorUnknownOutput(h))
-		}, want: outcome{discarded: true}, check: func(t *testing.T, h *captureHarness, response adapter.InvokeResponse) {
-			if response.Result.Outcome != adapter.OutcomeUnknown {
-				t.Fatalf("unknown outcome was not normalized: %+v", response.Result)
-			}
-		}},
-		{name: "unknown outcome referencing another adapter", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			output := invokeRefactorUnknownOutput(h)
-			output["reconciliation_ref"].(map[string]any)["adapter_id"] = "game.other"
-			return h.reply(r, adapter.OutcomeCompleted, output)
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "unknown outcome referencing another environment", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			output := invokeRefactorUnknownOutput(h)
-			output["reconciliation_ref"].(map[string]any)["environment_id"] = "production"
-			return h.reply(r, adapter.OutcomeCompleted, output)
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "unknown outcome with a different external reference", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			response, err := h.reply(r, adapter.OutcomeCompleted, invokeRefactorUnknownOutput(h))
-			response.Result.ExternalOperationRef = json.RawMessage(`{"adapter_id":"game.paper","environment_id":"staging","resource_kind":"operation","external_id":"other"}`)
-			return response, err
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "unknown outcome and cleanup fails", setup: func(h *captureHarness) context.Context {
-			h.sink.failDiscard = true
-			return context.Background()
-		}, respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return h.reply(r, adapter.OutcomeCompleted, invokeRefactorUnknownOutput(h))
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "unknown outcome for another capture", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			output := invokeRefactorUnknownOutput(h)
-			output["capture_id"] = "different-capture"
-			return h.reply(r, adapter.OutcomeCompleted, output)
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "rejected without bytes", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return h.reply(r, adapter.OutcomeCompleted, invokeRefactorRejectedOutput(h))
-		}, want: outcome{discarded: true}, check: func(t *testing.T, h *captureHarness, response adapter.InvokeResponse) {
-			if response.Result.Outcome != adapter.OutcomeCompleted || len(response.Result.Output) == 0 {
-				t.Fatalf("rejected response %+v", response.Result)
-			}
-		}},
-		{name: "rejected after writing bytes", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			if err := invokeRefactorStream(h, r, "abc", true); err != nil {
-				return adapter.InvokeResponse{}, err
-			}
-			return h.reply(r, adapter.OutcomeCompleted, invokeRefactorRejectedOutput(h))
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "rejected reported by the adapter as unknown", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return h.reply(r, adapter.OutcomeUnknown, invokeRefactorRejectedOutput(h))
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "rejected and cleanup fails", setup: func(h *captureHarness) context.Context {
-			h.sink.failDiscard = true
-			return context.Background()
-		}, respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return h.reply(r, adapter.OutcomeCompleted, invokeRefactorRejectedOutput(h))
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "captured for another capture", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			if err := invokeRefactorStream(h, r, "abc", true); err != nil {
-				return adapter.InvokeResponse{}, err
-			}
-			output := h.output()
-			output["capture_id"] = "different-capture"
-			return h.reply(r, adapter.OutcomeCompleted, output)
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "captured without a stream", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return h.reply(r, adapter.OutcomeCompleted, h.output())
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "captured with an incomplete stream", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			if err := invokeRefactorStream(h, r, "abc", false); err != nil {
-				return adapter.InvokeResponse{}, err
-			}
-			return h.reply(r, adapter.OutcomeCompleted, h.output())
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "captured with a different size", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			if err := invokeRefactorStream(h, r, "abc", true); err != nil {
-				return adapter.InvokeResponse{}, err
-			}
-			output := h.output()
-			output["size_bytes"] = 4
-			return h.reply(r, adapter.OutcomeCompleted, output)
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "captured with a different digest", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			if err := invokeRefactorStream(h, r, "abd", true); err != nil {
-				return adapter.InvokeResponse{}, err
-			}
-			return h.reply(r, adapter.OutcomeCompleted, h.output())
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "context canceled before sealing", setup: func(h *captureHarness) context.Context {
-			ctx, cancel := context.WithCancel(context.Background())
-			h.t.Cleanup(cancel)
-			h.respond = func(r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-				response, err := h.captured(r)
-				cancel()
-				return response, err
-			}
-			return ctx
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "seal fails", setup: func(h *captureHarness) context.Context {
-			h.sink.failSeal = true
-			return context.Background()
-		}, respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return h.captured(r)
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
-		{name: "adapter output fails its schema", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return h.reply(r, adapter.OutcomeCompleted, map[string]any{"outcome": "captured"})
-		}, want: outcome{message: "streamed adapter invocation failed", discarded: true}},
-		{name: "adapter fails", respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return adapter.InvokeResponse{}, errors.New("adapter exploded")
-		}, want: outcome{message: "streamed adapter invocation failed", discarded: true}},
-		{name: "adapter fails and cleanup fails", setup: func(h *captureHarness) context.Context {
-			h.sink.failDiscard = true
-			return context.Background()
-		}, respond: func(h *captureHarness, _ context.Context, r adapter.InvokeRequest) (adapter.InvokeResponse, error) {
-			return adapter.InvokeResponse{}, errors.New("adapter exploded")
-		}, want: outcome{message: invokeRefactorUncertainText, discarded: true}},
+	if invokeRefactorSideEffects(err) != test.sideEffects {
+		t.Fatalf("side effects = %v, want %v", invokeRefactorSideEffects(err), test.sideEffects)
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			h, counting := invokeRefactorHarness(t)
-			ctx := context.Background()
-			if test.setup != nil {
-				ctx = test.setup(h)
-			}
-			if test.respond != nil {
-				respond := test.respond
-				h.respond = func(r adapter.InvokeRequest) (adapter.InvokeResponse, error) { return respond(h, ctx, r) }
-			}
-			transfers := len(h.request.Params.RequestContext.StreamTransfers)
-			response, err := h.runtime().Invoke(ctx, h.descriptor.AdapterID, h.request)
-			if test.want.message == "" {
-				if err != nil {
-					t.Fatalf("Invoke error = %v", err)
-				}
-			} else {
-				if err == nil || err.Error() != test.want.message {
-					t.Fatalf("Invoke error = %v, want %q", err, test.want.message)
-				}
-				if !invokeRefactorSideEffects(err) {
-					t.Fatalf("dispatched failure %v was not reported as possibly side-effecting", err)
-				}
-				if response.Result.Output != nil || response.Result.Outcome != "" || response.Result.ExternalOperationRef != nil {
-					t.Fatalf("failed capture returned a response: %+v", response)
-				}
-			}
-			if counting.opened != 1 || !h.called || h.sink.sealed != test.want.sealed || h.sink.discarded != test.want.discarded {
-				t.Fatalf("opened=%d called=%v sealed=%v discarded=%v, want sealed=%v discarded=%v", counting.opened, h.called, h.sink.sealed, h.sink.discarded, test.want.sealed, test.want.discarded)
-			}
-			if len(h.request.Params.RequestContext.StreamTransfers) != transfers {
-				t.Fatal("Invoke mutated the caller's stream transfers")
-			}
-			invokeRefactorReleased(t, h)
-			if test.check != nil {
-				test.check(t, h, response)
-			}
-		})
+	if counting.opened != 1 || h.called || h.sink.sealed || h.sink.discarded != test.discarded {
+		t.Fatalf("opened=%d called=%v sealed=%v discarded=%v", counting.opened, h.called, h.sink.sealed, h.sink.discarded)
+	}
+	if response.Result.Output != nil || response.Result.Outcome != "" {
+		t.Fatalf("failed setup returned a response: %+v", response)
 	}
 }

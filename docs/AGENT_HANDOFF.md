@@ -1,6 +1,6 @@
 # Agent handoff
 
-Written 2026-11-11, last updated 2026-11-13. It is for another AI agent (Claude, ChatGPT Codex or another) or a human taking over when the previous session can't continue, for example after a usage limit. It reflects the state at the time of writing, so check `git log`, open PRs and remote branches before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`).
+Written 2026-11-11, last updated 2026-11-15. It is for another AI agent (Claude, ChatGPT Codex or another) or a human taking over when the previous session can't continue, for example after a usage limit. It reflects the state at the time of writing, so check `git log`, open PRs and remote branches before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`).
 
 Read [CLAUDE.md](../CLAUDE.md) first. Its rules are standing requirements from the project owner and apply to every agent, whatever tool runs it. [AGENTS.md](../AGENTS.md) points here for tools that read that file instead.
 
@@ -72,7 +72,17 @@ Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is cont
 | Claude | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | WIP pushed (12 commits), unfinished; no PR |
 | Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | WIP pushed (10 commits), unfinished; no PR |
 | Codex | `cmd/complexity-check/*`, its CI step | #260 merged | checker runs on PRs |
+| OpenCode | `plugins/velocity/src/**` | `feat/velocity-bridge-disable-start-locks` | **done locally** (2026-11-15): the 3 hard start-up locks (token-file perms, loopback bind, fallback in `velocity.toml`) are now disableable via a `[security]` table — `enforce-token-permissions` (default on), `enforce-loopback-bind` (default on), `enforce-fallback` (default **off**, since the controller registers the fallback backend at runtime). 41 tests green. 5 commits: `4049b0b`→`2cb8b4a`→`29b836e`→`6643885`→`6e7d2a0`. Owner-authorized to review and merge once green; review in progress, not yet pushed. |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
+
+**Next up (2026-11-15, design confirmed with the owner):** secure the bridge for a proxy on a separate machine from the controller. A follow-up branch, starting from the merged start-locks branch — do not start it while that branch is still open.
+
+- **Transport:** built-in TLS + mTLS + bearer token, all at once. The plugin terminates TLS and verifies the controller's client certificate against a CA bundle; the bearer token stays as per-request defense in depth. The owner provisions the server certificate (Let's Encrypt, any provider, or manual); client certificates come from a small owner-run offline CA (a handful of openssl commands, ~90-day expiry).
+- **Keys at the edge:** the plugin's server key never leaves the proxy machine and the controller only ever sees the public certificate; the controller's client key stays in its credential accessor, like the token.
+- **Topology B (optional terminator):** controller → TLS → terminator → TLS → plugin. The inner hop must be re-encrypted end to end; a plain-HTTP inner hop is forbidden and must be stated as unsafe in the docs, because it voids the plugin's mTLS check.
+- **Config:** a `[tls]` table in the plugin's `config.toml` with `tls-cert`, `tls-key`, and `controller-ca` paths. File-content checks and permission checks follow the existing start-up-lock / bypass-flag pattern from the current branch.
+- **Hot rotation (owner requirement, high availability):** the certificate, key, and CA are re-read from disk without a restart. A `TlsMaterialManager` watches the paths, validates a new set atomically (parse, key matches certificate, expiry, permissions), and swaps the `SSLContext`/`HttpsConfigurator` on the already-listening `HttpServer` with a single `setHttpsConfigurator` call; existing connections finish on the old material. A bad or world-readable new file is rejected and the last good material is kept. Rotation has a zero-downtime overlap window: during a swap the plugin accepts the union of old and new CA anchors (and the controller may present either old or new client certificate) until the operator removes the old material; a failed rotation is therefore always recoverable. The Go client rotates the same way: its transport's `GetClientCertificate` callback re-reads the keypair per handshake and the CA bundle is re-read alongside it. Let's Encrypt auto-renewal is just "certbot writes the files, the plugin notices".
+- **Scope:** plugin `[tls]` table + `TlsMaterialManager` with start-up and per-swap permission checks; Go client client-cert transport (cert/key from the credential accessor, CA file re-read); docs — `docs/PROXY_BRIDGE_API.md` (topologies A and B with the no-plain-inner-hop rule), `docs/CONFIGURATION.md` (TLS setup and rotation procedure). Tests: certificate/key permission checks, mTLS accept/reject, rotation keeps an existing connection working, a corrupted new file leaves the old material in place.
 
 **Dropped Claude WIP, kept for reference only:** `claude/r3-server-backup`, `claude/r3-server-destroy`, `claude/r3-supervised-pilot` and `claude/r3-controller-setup` hold unfinished work on Codex-owned files, based on an old `main`. Do not merge them. Codex may read them for ideas or delete them.
 
@@ -126,15 +136,14 @@ Claude's earlier backup, destroy, supervised-pilot and controller-setup agents w
 
 - **`main`:** check `git log`. Everything below is merged. For the code-health work, #179–#252, see "Current work" above.
 
-### Operator quick reference: start / stop / save / drain (docs, 2026-11-15)
+### Operator quick reference: start / stop / save / drain (docs, 2026-11-15) — **merged as PR #271**
 
-New operator-facing quick reference so a server operator can start, stop, save, or drain without re-reading the protocol. Docs-only; no protocol, schema, or code change, so no manifest regeneration.
+Operator-facing quick reference so a server operator can start, stop, save, or drain without re-reading the protocol. Docs-only; no protocol, schema, or code change, so no manifest regeneration.
 
-- Branch `feat/operator-quickref-start-stop-save-drain` (from `origin/main` at `01141ec`), commit `d31618f`, **not pushed or merged**.
+- Branch `feat/operator-quickref-start-stop-save-drain` (from `origin/main` at `01141ec`), commit `d31618f`, **merged to main as PR #271** (merge commit `64dd2c8`).
 - Files: new `docs/OPERATOR_OPERATIONS.md`; cross-link in `docs/ADAPTER_CONTRACTS.md`; index entry in `README.md`.
 - Invariants documented: start/stop are execution-adapter operations (`execution.unit.start` / `execution.unit.graceful_stop`); save is a game-adapter operation (`game.save.request`) with **no standalone standard operation** (it is a step inside `server.stop` and the `server.backup` consistency capture); drain is the proxy-bridge route `POST /v1/backends/{backend_id}/drain`; `server.stop` combines drain + save + graceful stop with defaults `drain=true`, `force=false` (force requires `approval_id`). The Velocity plugin exposes no start/stop/save route and never will.
-- Gates passed on the branch: `go vet`, `go run ./cmd/protocol-check` (162 schemas / 135 examples / 183 fixtures), `go run ./cmd/complexity-check -base origin/main` (clean), `go run ./cmd/config-check validate` (valid). The four `cmd/controller` TLS-permission test failures are pre-existing on this Windows host, not caused by this docs-only change.
-- Next step for the owner: review and merge as a docs-only PR (no CI gate for docs-only here).
+- Gates passed on the branch: `go vet`, `go run ./cmd/protocol-check` (162 schemas / 135 examples / 183 fixtures), `go run ./cmd/complexity-check -base origin/main` (clean), `go run ./cmd/config-check validate` (valid). The `cmd/controller` TLS-permission test failures are pre-existing on this Windows host; the full `go test` failure set on the branch is byte-identical to a clean detached baseline at `01141ec`, confirming no regression from this docs-only change.
 
   - All 12 draft PRs rebased and merged (#106, #108, #110, #112–#119, #121).
   - #158–#160 (another session): Velocity adapter and bridge plugin, Cloudflare DNS adapter, per-server `network` config, billing-aware scaling policy.
@@ -216,3 +225,36 @@ Keep new schemas in `0.21.0-draft` until R14.
   - Recording stores that log every write in order: `internal/workflow/engine_advance_test.go`.
   - For `cmd/protocol-check`, a byte-identical comparison of every evaluator's output across all 183 fixtures before and after.
 - **Repowise:** health scores come from the repowise MCP tools (`get_health`, `get_risk`, `setup_status` for the indexed commit). The owner triggers re-indexes; scores are only real after a re-index of the current `main`. The `refactoring_targets` pagination in `get_health` repeats the same 25 entries, so rank functions with a local complexity count instead.
+
+### PaperMC & systemd investigation (2026-11-16)
+
+Completed systematic investigation of systemd integration patterns for PaperMC server deployments:
+
+1. **Startup script flow** (`cmd/vultr-bootstrap/main.go`):
+   - Creates Vultr startup scripts via `StartupScriptRequest{Name, Type, Script}`
+   - Schema: ID (resource ref), Name (255 chars max), Type ("boot"|"pxe"), Script (base64-encoded, max 1 MiB UTF-8)
+   - Validation rejects null bytes, non-UTF-8, and oversized scripts
+
+2. **Systemd unit files** (`scripts/bootstrap/minecraft-debian.sh.tmpl`):
+   - `minecraft-restore.service`: One-shot oneshot service to restore from Wasabi (RemainAfterExit=yes)
+   - `minecraft-vanilla.service`: Main Minecraft Paper server, depends on restore completing
+   - `mcrcon.socket` + `mcrcon.service`: Socket activation for secure localhost RCON (25577)
+   - **No dedicated health check unit** - uses protocol-level unit inspection
+
+3. **Volume mounting pattern**:
+   - External Wasabi S3 storage, not block volumes
+   - rclone configuration written via `internal/pilothandoff/handoff.go`
+   - Restore script downloads from cloud; sync uploads to cloud on shutdown
+   - Cold starts: restore from Wasabi → start server
+
+4. **Health check implementation**:
+   - Protocol schemas for unit inspection, start/stop, force-stop, logs-read, health-inspect, delete
+   - No systemd health socket in bootstrap; uses `systemctl is-active` and journal logs
+   - Schema validation ensures consistent state reporting across adapters
+
+5. **Systemd credential integration**:
+   - All secrets use `systemd-credential://NAME` reference scheme
+   - Credentials stored encrypted in `/run/systemd/credentials/`
+   - Scope: Vultr API tokens, Wasabi credentials, SSH private keys
+
+Report saved to `INVESTIGATION_REPORT.md` with full code paths, example shapes, and behavioral patterns.

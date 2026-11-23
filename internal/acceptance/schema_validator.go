@@ -52,6 +52,16 @@ func (v *SchemaRequestValidator) ValidateOperationRequest(ctx context.Context, r
 	if record.RequestSnapshot.OperationType != record.OperationType {
 		return errors.New("request snapshot operation_type does not match operation")
 	}
+	if err := v.validateRequestSchema(record); err != nil {
+		return err
+	}
+	if err := validateRequestTarget(record); err != nil {
+		return err
+	}
+	return v.validateSecretReferences(ctx, record.RequestSnapshot.SecretRefs)
+}
+
+func (v *SchemaRequestValidator) validateRequestSchema(record store.OperationRecord) error {
 	request := struct {
 		OperationType string          `json:"operation_type"`
 		Parameters    json.RawMessage `json:"parameters"`
@@ -68,11 +78,12 @@ func (v *SchemaRequestValidator) ValidateOperationRequest(ctx context.Context, r
 	if err := v.schemas.ValidateJSON(requestSchema, encoded); err != nil {
 		return fmt.Errorf("operation request does not match the protocol schema: %w", err)
 	}
-	if err := validateRequestTarget(record); err != nil {
-		return err
-	}
+	return nil
+}
+
+func (v *SchemaRequestValidator) validateSecretReferences(ctx context.Context, refs []store.SecretReference) error {
 	secretSchema := "urn:gameserver-controller:" + v.schemas.ProtocolVersion() + ":common:secret-reference"
-	for index, ref := range record.RequestSnapshot.SecretRefs {
+	for index, ref := range refs {
 		if err := ctx.Err(); err != nil {
 			return err
 		}

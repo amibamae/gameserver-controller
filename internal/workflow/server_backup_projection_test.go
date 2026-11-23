@@ -43,12 +43,17 @@ func checkBackupLifecycleProjection(t *testing.T, tc backupProjectionCase) {
 	workflow := &ServerBackupWorkflow{}
 	got, changed, err := workflow.ProjectLifecycle(operation, store.StoredLogicalServer{Record: server})
 	if tc.wantError != "" {
-		if err == nil || err.Error() != tc.wantError || changed || got.ServerID != "" {
-			t.Fatalf("got %+v, changed %v, error %v; want %q", got, changed, err, tc.wantError)
-		}
+		checkRejectedBackupProjection(t, got, changed, err, tc.wantError)
 		return
 	}
 	if err != nil || !changed || got.LifecycleState != tc.want || got.DesiredState != tc.desired {
 		t.Fatalf("got %s/%s, changed %v, error %v; want %s/%s", got.LifecycleState, got.DesiredState, changed, err, tc.want, tc.desired)
+	}
+}
+
+func checkRejectedBackupProjection(t *testing.T, got store.LogicalServer, changed bool, err error, want string) {
+	t.Helper()
+	if err == nil || err.Error() != want || changed || got.ServerID != "" {
+		t.Fatalf("got %+v, changed %v, error %v; want %q", got, changed, err, want)
 	}
 }

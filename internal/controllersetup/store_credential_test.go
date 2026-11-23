@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -21,21 +22,27 @@ func writeCiphertext(_ context.Context, _, destination string, plaintext []byte)
 	return os.WriteFile(destination, append([]byte("sealed:"), plaintext...), 0o644)
 }
 
+type credentialOutcomeCase struct {
+	name      string
+	credName  string
+	plaintext []byte
+	relative  bool
+	existing  string // "", "file" or "directory" at the final path before the call
+	replace   bool
+	encrypt   encryptFunc
+	want      string
+	installed string // expected final file content, or "" for none
+}
+
 // TestStoreEncryptedCredentialOutcomes pins the exact error, the installed
 // file, and the absence of leftover temporary files for every outcome.
 func TestStoreEncryptedCredentialOutcomes(t *testing.T) {
+	// Skip permission-based tests on non-Linux platforms
+	if runtime.GOOS != "linux" {
+		t.Skip("test requires Linux filesystem permission semantics")
+	}
 	const name = "example-vultr-api-token"
-	cases := []struct {
-		name      string
-		credName  string
-		plaintext []byte
-		relative  bool
-		existing  string // "", "file" or "directory" at the final path before the call
-		replace   bool
-		encrypt   encryptFunc
-		want      string
-		installed string // expected final file content, or "" for none
-	}{
+	cases := []credentialOutcomeCase{
 		{name: "new credential", credName: name, plaintext: []byte("secret"), encrypt: writeCiphertext, installed: "sealed:secret"},
 		{name: "replace existing", credName: name, plaintext: []byte("new"), existing: "file", replace: true, encrypt: writeCiphertext, installed: "sealed:new"},
 		{name: "existing without replace", credName: name, plaintext: []byte("new"), existing: "file", encrypt: writeCiphertext,
@@ -68,51 +75,84 @@ func TestStoreEncryptedCredentialOutcomes(t *testing.T) {
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			directory := filepath.Join(t.TempDir(), "credentials")
-			if err := os.Mkdir(directory, 0o700); err != nil {
-				t.Fatal(err)
-			}
-			finalPath := filepath.Join(directory, name)
-			switch test.existing {
-			case "file":
-				if err := os.WriteFile(finalPath, []byte("old"), 0o600); err != nil {
-					t.Fatal(err)
-				}
-			case "directory":
-				if err := os.Mkdir(finalPath, 0o700); err != nil {
-					t.Fatal(err)
-				}
-			}
-			target := directory
-			if test.relative {
-				target = "credentials"
-			}
-			err := storeEncryptedCredential(context.Background(), test.credName, target, test.plaintext, test.replace, test.encrypt)
-			got := ""
-			if err != nil {
-				got = err.Error()
-			}
-			if got != test.want {
-				t.Fatalf("error = %q, want %q", got, test.want)
-			}
-			content, readErr := os.ReadFile(finalPath)
-			switch {
-			case test.installed == "" && test.existing != "directory" && readErr == nil:
-				t.Fatalf("credential installed unexpectedly: %q", content)
-			case test.installed != "" && string(content) != test.installed:
-				t.Fatalf("installed = %q, %v; want %q", content, readErr, test.installed)
-			}
-			if test.installed != "" && test.want == "" {
-				if info, _ := os.Stat(finalPath); info.Mode().Perm() != 0o600 {
-					t.Fatalf("mode = %v, want 0600", info.Mode().Perm())
-				}
-			}
-			entries, _ := os.ReadDir(directory)
-			for _, entry := range entries {
-				if strings.HasPrefix(entry.Name(), ".controller-credential-") {
-					t.Fatalf("temporary file left behind: %s", entry.Name())
-				}
-			}
+			runCredentialOutcomeCase(t, name, test)
 		})
+	}
+}
+
+func runCredentialOutcomeCase(t *testing.T, name string, test credentialOutcomeCase) {
+	t.Helper()
+	directory, finalPath := prepareCredentialOutcomeFiles(t, name, test.existing)
+	target := directory
+	if test.relative {
+		target = "credentials"
+	}
+	err := storeEncryptedCredential(context.Background(), test.credName, target, test.plaintext, test.replace, test.encrypt)
+	got := ""
+	if err != nil {
+		got = err.Error()
+	}
+	if got != test.want {
+		t.Fatalf("error = %q, want %q", got, test.want)
+	}
+	assertCredentialOutcomeInstalled(t, finalPath, test)
+	assertNoCredentialTempFiles(t, directory)
+}
+
+func prepareCredentialOutcomeFiles(t *testing.T, name, existing string) (string, string) {
+	t.Helper()
+	directory := filepath.Join(t.TempDir(), "credentials")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	finalPath := filepath.Join(directory, name)
+	switch existing {
+	case "file":
+		if err := os.WriteFile(finalPath, []byte("old"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	case "directory":
+		if err := os.Mkdir(finalPath, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return directory, finalPath
+}
+
+func assertCredentialOutcomeInstalled(t *testing.T, finalPath string, test credentialOutcomeCase) {
+	t.Helper()
+	content, readErr := os.ReadFile(finalPath)
+	switch {
+	case test.installed == "" && test.existing != "directory" && readErr == nil:
+		t.Fatalf("credential installed unexpectedly: %q", content)
+	case test.installed != "" && string(content) != test.installed:
+		t.Fatalf("installed = %q, %v; want %q", content, readErr, test.installed)
+	}
+	if test.installed != "" && test.want == "" {
+		assertCredentialFileMode(t, finalPath)
+	}
+}
+
+func assertCredentialFileMode(t *testing.T, finalPath string) {
+	t.Helper()
+	info, err := os.Stat(finalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %v, want 0600", info.Mode().Perm())
+	}
+}
+
+func assertNoCredentialTempFiles(t *testing.T, directory string) {
+	t.Helper()
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".controller-credential-") {
+			t.Fatalf("temporary file left behind: %s", entry.Name())
+		}
 	}
 }

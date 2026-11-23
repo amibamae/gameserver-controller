@@ -6,6 +6,9 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import com.sun.net.httpserver.HttpsConfigurator;
+import com.sun.net.httpserver.HttpsParameters;
+import com.sun.net.httpserver.HttpsServer;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -15,6 +18,8 @@ import java.security.MessageDigest;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 import org.slf4j.Logger;
 
 /**
@@ -27,24 +32,32 @@ final class BridgeHttpServer {
   private final BridgeService service;
   private final byte[] token;
   private final Logger logger;
+  private final boolean enforceLoopback;
+  private final SSLContext tlsContext;
   private HttpServer server;
   private ExecutorService executor;
 
-  BridgeHttpServer(BridgeService service, byte[] token, Logger logger) {
+  BridgeHttpServer(BridgeService service, byte[] token, boolean enforceLoopback, Logger logger) {
+    this(service, token, enforceLoopback, logger, null);
+  }
+
+  BridgeHttpServer(BridgeService service, byte[] token, boolean enforceLoopback, Logger logger,
+                   SSLContext tlsContext) {
     if (token.length < 16) {
       throw new IllegalArgumentException("bridge token must be at least 16 bytes");
     }
     this.service = service;
     this.token = ("Bearer " + new String(token, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
+    this.enforceLoopback = enforceLoopback;
     this.logger = logger;
+    this.tlsContext = tlsContext;
   }
 
-  /** Starts listening. The address must be a loopback address. */
   synchronized InetSocketAddress start(InetSocketAddress address) throws IOException {
-    if (address.getAddress() == null || !address.getAddress().isLoopbackAddress()) {
+    if (enforceLoopback && (address.getAddress() == null || !address.getAddress().isLoopbackAddress())) {
       throw new IllegalArgumentException("bridge must bind to a loopback address");
     }
-    server = HttpServer.create(address, 16);
+    server = createServer(address);
     executor = Executors.newFixedThreadPool(4, runnable -> {
       Thread thread = new Thread(runnable, "gsc-bridge-http");
       thread.setDaemon(true);
@@ -54,6 +67,22 @@ final class BridgeHttpServer {
     server.createContext("/v1/", this::handle);
     server.start();
     return server.getAddress();
+  }
+
+  private HttpServer createServer(InetSocketAddress address) throws IOException {
+    if (tlsContext == null) {
+      return HttpServer.create(address, 16);
+    }
+    HttpsServer https = HttpsServer.create(address, 16);
+    https.setHttpsConfigurator(new HttpsConfigurator(tlsContext) {
+      @Override
+      public void configure(HttpsParameters connection) {
+        SSLParameters parameters = tlsContext.getDefaultSSLParameters();
+        parameters.setNeedClientAuth(true);
+        connection.setSSLParameters(parameters);
+      }
+    });
+    return https;
   }
 
   synchronized void stop() {

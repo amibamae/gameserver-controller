@@ -7,16 +7,37 @@ For source or binary distributions that include a component below, include this 
 The Wasabi storage adapter uses the AWS SDK for Go v2, including its S3 client,
 transfer manager, credential provider, and event-stream modules.
 
+### Direct Dependencies (from go.mod)
+
 - Modules and versions: `github.com/aws/aws-sdk-go-v2 v1.39.4`,
   `github.com/aws/aws-sdk-go-v2/credentials v1.18.19`,
   `github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.0`,
   `github.com/aws/aws-sdk-go-v2/service/s3 v1.88.7`, and
-  `github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.2`, pinned in
+  `github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.2` (indirect), pinned in
   [go.mod](go.mod)
+
+### Transitive Dependencies (from go.sum)
+
+The following AWS SDK transitive dependencies are pulled in automatically:
+
+- `github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.11`
+- `github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.11`
+- `github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4`
+- `github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.11`
+- `github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.2`
+- `github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.2`
+- `github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.11`
+- `github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.11`
+- `github.com/aws/aws-sdk-go-v2/service/sso v1.29.8`
+- `github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.3`
+- `github.com/aws/aws-sdk-go-v2/service/sts v1.38.9`
+- `github.com/aws/smithy-go v1.23.1`
+
+All AWS SDK for Go v2 components are licensed under **Apache License 2.0**.
+
 - Upstream: [AWS SDK for Go v2](https://github.com/aws/aws-sdk-go-v2)
 - License: Apache License 2.0
-- Copyright: Copyright 2015 Amazon.com, Inc. or its affiliates. All Rights
-  Reserved. Copyright 2014-2015 Stripe, Inc.
+- Copyright: Copyright 2015 Amazon.com, Inc. or its affiliates. All Rights Reserved. Copyright 2014-2015 Stripe, Inc.
 - Full license: [licenses/aws-sdk-go-v2-LICENSE](licenses/aws-sdk-go-v2-LICENSE)
 - Upstream notice: [licenses/aws-sdk-go-v2-NOTICE](licenses/aws-sdk-go-v2-NOTICE)
 
@@ -34,10 +55,19 @@ The embedded operation store uses [bbolt](https://github.com/etcd-io/bbolt), mai
 
 These run in GitHub Actions workflows and are not distributed with the project or its binaries.
 
-- **Eclipse Temurin JDK 21**, installed by `actions/setup-java` with `distribution: temurin`: GNU GPL v2 with the Classpath Exception, from the Eclipse Adoptium project ([license](https://github.com/adoptium/jdk21u/blob/HEAD/LICENSE)). The JDK is only the build and test toolchain.
-- **GitHub Actions** (all MIT, Copyright (c) 2018 GitHub, Inc. and contributors): [`actions/checkout@v4`](https://github.com/actions/checkout), [`actions/setup-go@v5`](https://github.com/actions/setup-go), and [`actions/setup-java@v4`](https://github.com/actions/setup-java). Text: [licenses/github-actions-LICENSE](licenses/github-actions-LICENSE).
-- **Gradle 8.14.3**, pinned in `.github/workflows/velocity-plugin.yml`: Apache-2.0, by Gradle Inc. ([LICENSE](https://github.com/gradle/gradle/blob/v8.14.3/LICENSE)).
-- **`gradle/actions/setup-gradle@v4`**: MIT, Copyright (c) 2023 Gradle Inc. ([LICENSE](https://github.com/gradle/actions/blob/v4/LICENSE)). Later major versions bundle a proprietary "Enhanced Caching" component (`gradle-actions-caching`) under Gradle's own terms and enable it by default. The `v4` tag has no such component or license file, and this project does not use a later version. Check this before upgrading.
+### GitHub Actions Workflows
+
+All GitHub Actions used in [.github/workflows/](.github/workflows/) are MIT licensed:
+
+- **GitHub Actions** (all MIT, Copyright (c) 2018 GitHub, Inc. and contributors): [`actions/checkout@v7`](https://github.com/actions/checkout), [`actions/setup-go@v7`](https://github.com/actions/setup-go), [`actions/setup-java@v4`](https://github.com/actions/setup-java). Text: [licenses/github-actions-LICENSE](licenses/github-actions-LICENSE).
+
+### Eclipse Temurin JDK 21
+
+Installed by `actions/setup-java` with `distribution: temurin`: GNU GPL v2 with the Classpath Exception, from the Eclipse Adoptium project ([license](https://github.com/adoptium/jdk21u/blob/HEAD/LICENSE)). The JDK is only the build and test toolchain.
+
+### Gradle
+
+**Gradle and Gradle Wrapper 8.14.3**, pinned in [`gradle-wrapper.properties`](plugins/velocity/gradle/wrapper/gradle-wrapper.properties): Apache-2.0, by Gradle Inc. ([upstream license](https://github.com/gradle/gradle/blob/v8.14.3/LICENSE), [license text](licenses/gradle-LICENSE)).
 
 ## Debian packages installed on pilot VMs
 
@@ -47,7 +77,7 @@ The [VM bootstrap](scripts/bootstrap/minecraft-debian.sh.tmpl) installs these De
 - **curl**: curl license (MIT-style), Copyright Daniel Stenberg and contributors.
 - **fail2ban**: GPL-2+, Copyright Cyril Jaquier and contributors.
 - **OpenJDK 25 JRE (`openjdk-25-jre-headless`)**: GPL-2 with the Classpath Exception, from the OpenJDK project. Checked in the `openjdk-21` package's copyright file, whose upstream license is the same.
-- **OpenSSH server (`openssh-server`)**: the OpenSSH license (BSD-style, several parts), Copyright Tatu Ylonen, Markus Friedl, and contributors.
+- **OpenSSH server (`openssh-server`)** and client (**`openssh-client`**): the OpenSSH license (BSD-style, several parts), Copyright Tatu Ylonen, Markus Friedl, Theo de Raadt, Niels Provos, Dug Song, Damien Miller, and other contributors.
 - **rclone**: MIT (Expat), Copyright Nick Craig-Wood and contributors. It restores and syncs the world data with Wasabi.
 - **rsync**: GPL-3 with an exception for linking OpenSSL and xxhash, Copyright Andrew Tridgell, Wayne Davison, and others.
 - **sudo**: ISC, Copyright Todd C. Miller.
@@ -83,9 +113,24 @@ Include this notice and the full Apache 2.0 license with source or binary distri
 - Upstream source: [github.com/santhosh-tekuri/jsonschema](https://github.com/santhosh-tekuri/jsonschema/tree/v6.0.3)
 - Full license: [licenses/jsonschema-LICENSE](licenses/jsonschema-LICENSE)
 
+## go.yaml.in/yaml.v3
+
+The YAML v3 implementation for Go, indirect dependency of `gopkg.in/yaml.v3`.
+
+- Version: `v3.0.5`, pulled in via `gopkg.in/yaml.v3`
+- Upstream: [go-yaml/yaml](https://github.com/go-yaml/yaml/tree/v3.0.1)
+- License: MIT and Apache License 2.0; see the upstream license for file-level scope
+- Copyright notices: Canonical Ltd and Kirill Simonov, as stated in the upstream license
+- Full license: [licenses/yaml-LICENSE](licenses/yaml-LICENSE)
+- Upstream NOTICE: [licenses/yaml-NOTICE](licenses/yaml-NOTICE)
+
+Preserve both the license and NOTICE when distributing a build that includes this module.
+
 ## Go runtime and standard library
 
 Built Go executables include the Go runtime and the standard-library packages they use.
+
+### Go 1.23 Runtime
 
 - Toolchain: Go 1.23.12, as pinned in [go.mod](go.mod)
 - License: Go license (BSD-style)
@@ -94,7 +139,7 @@ Built Go executables include the Go runtime and the standard-library packages th
 
 When distributing binaries containing Go runtime or standard-library code, reproduce the copyright notice, license conditions, and disclaimer in the documentation or other materials provided with the distribution. See [the upstream Go license](https://go.dev/LICENSE).
 
-## golang.org/x/sys
+### golang.org/x/sys
 
 - Version: `v0.29.0`, pinned in [go.mod](go.mod)
 - Upstream: [golang.org/x/sys](https://github.com/golang/sys/tree/v0.29.0)
@@ -102,7 +147,7 @@ When distributing binaries containing Go runtime or standard-library code, repro
 - Copyright: Copyright 2009 The Go Authors
 - The pinned upstream license text matches [licenses/go-LICENSE](licenses/go-LICENSE) exactly; include that full text for x/sys as well.
 
-## golang.org/x/text
+### golang.org/x/text
 
 - Version: `v0.14.0`, pinned in [go.mod](go.mod)
 - Upstream: [golang.org/x/text](https://github.com/golang/text/tree/v0.14.0)
@@ -111,6 +156,8 @@ When distributing binaries containing Go runtime or standard-library code, repro
 - Full license: [licenses/x-text-LICENSE](licenses/x-text-LICENSE)
 
 ## gopkg.in/yaml.v3
+
+Direct dependency used for configuration parsing:
 
 - Version: `v3.0.1`, pinned in [go.mod](go.mod)
 - Upstream: [go-yaml/yaml](https://github.com/go-yaml/yaml/tree/v3.0.1)
@@ -153,15 +200,16 @@ The build uses the Rust toolchain (rustc and cargo, MIT OR Apache-2.0, by the Ru
 | `bit-set` | 0.8.0 | Apache-2.0 OR MIT | Alexis Beingessner | [source](https://github.com/contain-rs/bit-set) |  |
 | `bit-vec` | 0.8.0 | Apache-2.0 OR MIT | Alexis Beingessner | [source](https://github.com/contain-rs/bit-vec) |  |
 | `bitflags` | 2.13.2 | MIT OR Apache-2.0 | The Rust Project Developers | [source](https://github.com/bitflags/bitflags) |  |
-| `block-buffer` | 0.10.4 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/utils) |  |
+| `block-buffer` | 0.12.1 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/utils) |  |
 | `borrow-or-share` | 0.2.4 | MIT-0 | Scallop Ye | [source](https://github.com/yescallop/borrow-or-share) |  |
 | `bumpalo` | 3.20.3 | MIT OR Apache-2.0 | Nick Fitzgerald | [source](https://github.com/fitzgen/bumpalo) | non-Linux targets only; not built in CI |
 | `bytecount` | 0.6.9 | Apache-2.0/MIT | Andre Bogus, Joshua Landau | [source](https://github.com/llogiq/bytecount) |  |
 | `cfg-if` | 1.0.5 | MIT OR Apache-2.0 | Alex Crichton | [source](https://github.com/rust-lang/cfg-if) |  |
-| `cpufeatures` | 0.2.17 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/utils) |  |
-| `crypto-common` | 0.1.7 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/traits) |  |
+| `const-oid` | 0.10.3 | Apache-2.0 OR MIT | RustCrypto Developers | [source](https://github.com/RustCrypto/formats) |  |
+| `cpufeatures` | 0.3.1 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/utils) |  |
+| `crypto-common` | 0.2.2 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/traits) |  |
 | `data-encoding` | 2.11.1 | MIT | see repository | [source](https://github.com/ia0/data-encoding) |  |
-| `digest` | 0.10.7 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/traits) |  |
+| `digest` | 0.11.3 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/traits) |  |
 | `email_address` | 0.2.9 | MIT | Simon Johnston | [source](https://github.com/johnstonskj/rust-email_address) |  |
 | `equivalent` | 1.0.3 | Apache-2.0 OR MIT | see repository | [source](https://github.com/indexmap-rs/equivalent) |  |
 | `fancy-regex` | 0.20.2 | MIT | Raph Levien, Robin Stocker, Keith Hall | [source](https://github.com/fancy-regex/fancy-regex) |  |
@@ -172,11 +220,12 @@ The build uses the Rust toolchain (rustc and cargo, MIT OR Apache-2.0, by the Ru
 | `getrandom` | 0.3.4 | MIT OR Apache-2.0 | The Rand Project Developers | [source](https://github.com/rust-random/getrandom) |  |
 | `hashbrown` | 0.17.1 | MIT OR Apache-2.0 | see repository | [source](https://github.com/rust-lang/hashbrown) |  |
 | `heck` | 0.5.0 | MIT OR Apache-2.0 | see repository | [source](https://github.com/withoutboats/heck) |  |
+| `hybrid-array` | 0.4.15 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/hybrid-array) |  |
 | `itoa` | 1.0.19 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/itoa) |  |
 | `js-sys` | 0.3.107 | MIT OR Apache-2.0 | The wasm-bindgen Developers | [source](https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys) | non-Linux targets only; not built in CI |
-| `jsonschema` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) |  |
-| `jsonschema-regex` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) | no license file in the published crate; license from crate metadata |
-| `jsonschema-value` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) | no license file in the published crate; license from crate metadata |
+| `jsonschema` | 0.61.2 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) |  |
+| `jsonschema-regex` | 0.61.2 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) | no license file in the published crate; license from crate metadata |
+| `jsonschema-value` | 0.61.2 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) | no license file in the published crate; license from crate metadata |
 | `libc` | 0.2.191 | MIT OR Apache-2.0 | see repository | [source](https://github.com/rust-lang/libc) |  |
 | `lock_api` | 0.4.14 | MIT OR Apache-2.0 | Amanieu d'Antras | [source](https://github.com/Amanieu/parking_lot) |  |
 | `memchr` | 2.8.3 | Unlicense OR MIT | Andrew Gallant, bluss | [source](https://github.com/BurntSushi/memchr) |  |
@@ -200,7 +249,7 @@ The build uses the Rust toolchain (rustc and cargo, MIT OR Apache-2.0, by the Ru
 | `redox_syscall` | 0.5.18 | MIT | Jeremy Soller | [source](https://gitlab.redox-os.org/redox-os/syscall) | non-Linux targets only; not built in CI |
 | `ref-cast` | 1.0.27 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/ref-cast) |  |
 | `ref-cast-impl` | 1.0.27 | MIT OR Apache-2.0 | David Tolnay | [source](https://github.com/dtolnay/ref-cast) |  |
-| `referencing` | 0.61.1 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) |  |
+| `referencing` | 0.61.2 | MIT | Dmitry Dygalo | [source](https://github.com/Stranger6667/jsonschema) |  |
 | `regex` | 1.13.1 | MIT OR Apache-2.0 | The Rust Project Developers, Andrew Gallant | [source](https://github.com/rust-lang/regex) |  |
 | `regex-automata` | 0.4.18 | MIT OR Apache-2.0 | The Rust Project Developers, Andrew Gallant | [source](https://github.com/rust-lang/regex) |  |
 | `regex-syntax` | 0.8.11 | MIT OR Apache-2.0 | The Rust Project Developers, Andrew Gallant | [source](https://github.com/rust-lang/regex) |  |
@@ -211,7 +260,7 @@ The build uses the Rust toolchain (rustc and cargo, MIT OR Apache-2.0, by the Ru
 | `serde_core` | 1.0.229 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay | [source](https://github.com/serde-rs/serde) |  |
 | `serde_derive` | 1.0.229 | MIT OR Apache-2.0 | Erick Tryzelaar, David Tolnay | [source](https://github.com/serde-rs/serde) |  |
 | `serde_json` | 1.0.154 | MIT OR Apache-2.0 | see repository | [source](https://github.com/serde-rs/json) |  |
-| `sha2` | 0.10.9 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/hashes) |  |
+| `sha2` | 0.11.1 | MIT OR Apache-2.0 | RustCrypto Developers | [source](https://github.com/RustCrypto/hashes) |  |
 | `smallvec` | 1.16.5 | MIT OR Apache-2.0 | The Servo Project Developers | [source](https://github.com/servo/rust-smallvec) |  |
 | `strum` | 0.28.0 | MIT | Peter Glotfelty | [source](https://github.com/Peternator7/strum) |  |
 | `strum_macros` | 0.28.0 | MIT | Peter Glotfelty | [source](https://github.com/Peternator7/strum) |  |
@@ -263,10 +312,37 @@ The [Velocity bridge plugin](plugins/velocity) compiles against the Velocity API
 - **Error Prone annotations 2.21.1** (`com.google.errorprone:error_prone_annotations`): Apache-2.0, by Google LLC ([errorprone.info](https://errorprone.info)).
 - **GeAnTyRef 1.3.11** (`io.leangen.geantyref:geantyref`): Apache-2.0, by Bojan Tomic ([leangen/geantyref](https://github.com/leangen/geantyref)).
 - **Guava 31.0.1-jre** (`com.google.guava:guava`, with `failureaccess` 1.0.1 and the empty `listenablefuture` 9999.0 marker): Apache-2.0, by Google ([google/guava](https://github.com/google/guava)).
-- **J2ObjC annotations 1.3** (`com.google.j2objc:j2objc-annotations`): Apache-2.0, by Google ([google/j2objc](https://github.com/google/j2objc/)).
+- **J2ObjC annotations 1.3** (`com.google.j2objc:j2objc-annotations`): Apache-2.0, by Google ([google/j2objc/](github.com/google/j2objc/)).
 - **Jakarta Dependency Injection 2.0.1** (`jakarta.inject:jakarta.inject-api`) and **javax.inject 1** (`javax.inject:javax.inject`, through Guice): Apache-2.0 ([eclipse-ee4j/injection-api](https://github.com/eclipse-ee4j/injection-api); [atinject](http://code.google.com/p/atinject/)).
 - **JSR 305 annotations 3.0.2** (`com.google.code.findbugs:jsr305`): Apache-2.0, per its parent POM ([findbugs.sourceforge.net](http://findbugs.sourceforge.net/)).
 - **SnakeYAML 1.33** (`org.yaml:snakeyaml`, through Configurate): Apache-2.0, by Andrey Somov and contributors ([snakeyaml](https://bitbucket.org/snakeyaml/snakeyaml)).
 - **Typesafe Config 1.4.1** (`com.typesafe:config`, through Configurate): Apache-2.0, by Lightbend ([lightbend/config](https://github.com/lightbend/config)).
 
 Distributors of a Velocity proxy bundle follow Velocity's own license terms.
+
+## GitHub Actions Workflow Files
+
+The workflow files in [.github/workflows/](.github/workflows/) are project-owned and use AGPL-3.0-only, matching the project license:
+
+- `.github/workflows/conformance-rs.yml`: Conformance testing with Rust
+- `.github/workflows/go-validation.yml`: Go build and test validation
+- `.github/workflows/protocol-validation.yml`: Protocol conformance checking
+- `.github/workflows/supervised-pilot.yml`: Supervised pilot workflow
+- `.github/workflows/velocity-plugin.yml`: Velocity plugin compilation and testing
+
+## Notes on Dependency Distribution
+
+1. **Test-only dependencies**: Dependencies that appear only in `go.sum` (not `go.mod`) are for testing purposes and are not included in distributions unless vendored.
+
+2. **Rust conformance tool**: The `conformance-rs` Rust binary and its crates are an optional CI tool, not shipped with the main controller binary. They use their own Cargo.lock and license documentation.
+
+3. **Gradle Velocity plugin**: The plugin JAR declares compile-only dependencies; runtime libraries come from the running Velocity proxy. The plugin does not bundle these third-party libraries.
+
+4. **Distributing binaries**: When distributing Go-built binaries:
+   - Include this THIRD_PARTY_NOTICES.md file
+   - Include LICENSE and NOTICE files from the licenses/ directory as referenced
+   - Reproduce Go runtime copyright notice in documentation per BSD license terms
+
+## Last Updated
+
+November 16, 2026

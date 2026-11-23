@@ -37,22 +37,13 @@ func NewAuthentication(manager Authenticator, audience string, clock func() time
 				http.Error(w, "service unavailable", http.StatusServiceUnavailable)
 				return
 			}
-			values := r.Header.Values("Authorization")
-			if len(values) != 1 {
-				unauthorized(w)
-				return
-			}
-			scheme, token, hasToken := strings.Cut(values[0], " ")
-			if !hasToken || !strings.EqualFold(scheme, "Bearer") {
-				unauthorized(w)
-				return
-			}
-			if token == "" || strings.ContainsAny(token, " \t\r\n") {
+			token, ok := bearerToken(r.Header.Values("Authorization"))
+			if !ok {
 				unauthorized(w)
 				return
 			}
 			principal, err := manager.Authenticate(token, audience, clock().UTC())
-			if err != nil || principal.ActorID == "" || principal.KeyID == "" {
+			if err != nil || !hasPrincipalIdentity(principal) {
 				unauthorized(w)
 				return
 			}
@@ -60,6 +51,20 @@ func NewAuthentication(manager Authenticator, audience string, clock func() time
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}, nil
+}
+
+func bearerToken(values []string) (string, bool) {
+	if len(values) != 1 {
+		return "", false
+	}
+	scheme, token, hasToken := strings.Cut(values[0], " ")
+	if !hasToken || !strings.EqualFold(scheme, "Bearer") {
+		return "", false
+	}
+	if token == "" || strings.ContainsAny(token, " \t\r\n") {
+		return "", false
+	}
+	return token, true
 }
 
 // NewScopeAuthorization constructs a route-level exact scope check. Route
@@ -98,10 +103,14 @@ func PrincipalFromContext(ctx context.Context) (authkey.Principal, bool) {
 		return authkey.Principal{}, false
 	}
 	principal, ok := ctx.Value(contextKey{}).(authkey.Principal)
-	if !ok || principal.ActorID == "" || principal.KeyID == "" {
+	if !ok || !hasPrincipalIdentity(principal) {
 		return authkey.Principal{}, false
 	}
 	return clonePrincipal(principal), true
+}
+
+func hasPrincipalIdentity(principal authkey.Principal) bool {
+	return principal.ActorID != "" && principal.KeyID != ""
 }
 
 func clonePrincipal(principal authkey.Principal) authkey.Principal {

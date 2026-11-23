@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"path"
-	"sort"
 	"strings"
 
 	"github.com/dlclark/regexp2"
@@ -65,90 +63,6 @@ func Load() (*Registry, error) {
 		return nil, fmt.Errorf("open embedded protocol schemas: %w", err)
 	}
 	return LoadFromFS(root)
-}
-
-// LoadFromFS compiles a schema package rooted at index.json. The filesystem is
-// read-only from this package's perspective, and references outside the local
-// urn registry are rejected before compilation.
-func LoadFromFS(root fs.FS) (*Registry, error) {
-	indexBytes, err := fs.ReadFile(root, "index.json")
-	if err != nil {
-		return nil, fmt.Errorf("read schema index: %w", err)
-	}
-	var index indexDocument
-	if err := decodeStrictJSON(indexBytes, &index); err != nil {
-		return nil, fmt.Errorf("decode schema index: %w", err)
-	}
-	if index.ProtocolVersion == "" || index.JSONSchemaDialect != dialect202012 || len(index.Schemas) == 0 {
-		return nil, errors.New("schema index has an invalid protocol version, dialect, or empty schema list")
-	}
-
-	registry := &Registry{protocolVersion: index.ProtocolVersion, validators: make(map[string]*jsonschema.Schema, len(index.Schemas))}
-	rawSchemas := make(map[string][]byte, len(index.Schemas))
-	paths := make(map[string]struct{}, len(index.Schemas))
-	for _, entry := range index.Schemas {
-		clean := path.Clean(entry.Path)
-		if entry.Path == "" || clean != entry.Path || path.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, "../") || entry.ID == "" {
-			return nil, fmt.Errorf("unsafe or incomplete schema index entry: %#v", entry)
-		}
-		if _, exists := paths[entry.Path]; exists {
-			return nil, fmt.Errorf("duplicate schema path %q", entry.Path)
-		}
-		paths[entry.Path] = struct{}{}
-		data, err := fs.ReadFile(root, entry.Path)
-		if err != nil {
-			return nil, fmt.Errorf("read schema %q: %w", entry.Path, err)
-		}
-		var document map[string]any
-		if err := decodeStrictJSON(data, &document); err != nil {
-			return nil, fmt.Errorf("decode schema %q: %w", entry.Path, err)
-		}
-		if document["$id"] != entry.ID || document["$schema"] != dialect202012 {
-			return nil, fmt.Errorf("schema %q has an ID or dialect that does not match the index", entry.Path)
-		}
-		if _, exists := rawSchemas[entry.ID]; exists {
-			return nil, fmt.Errorf("duplicate schema ID %q", entry.ID)
-		}
-		rawSchemas[entry.ID] = data
-	}
-	if err := verifySchemaInventory(root, paths); err != nil {
-		return nil, err
-	}
-	for id, data := range rawSchemas {
-		var document any
-		if err := decodeStrictJSON(data, &document); err != nil {
-			return nil, fmt.Errorf("decode schema %q: %w", id, err)
-		}
-		if err := verifyLocalReferences(id, document, rawSchemas); err != nil {
-			return nil, err
-		}
-	}
-
-	compiler := jsonschema.NewCompiler()
-	compiler.AssertFormat()
-	compiler.UseRegexpEngine(compileECMA)
-	ids := make([]string, 0, len(rawSchemas))
-	for id := range rawSchemas {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		document, err := jsonschema.UnmarshalJSON(bytes.NewReader(rawSchemas[id]))
-		if err != nil {
-			return nil, fmt.Errorf("parse schema %q: %w", id, err)
-		}
-		if err := compiler.AddResource(id, document); err != nil {
-			return nil, fmt.Errorf("register schema %q: %w", id, err)
-		}
-	}
-	for _, id := range ids {
-		compiled, err := compiler.Compile(id)
-		if err != nil {
-			return nil, fmt.Errorf("compile schema %q: %w", id, err)
-		}
-		registry.validators[id] = compiled
-	}
-	return registry, nil
 }
 
 func verifySchemaInventory(root fs.FS, indexed map[string]struct{}) error {

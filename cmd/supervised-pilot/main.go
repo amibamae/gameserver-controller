@@ -56,7 +56,11 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) error {
-	return runWithSettings(args, stdout, stderr, runtimeSettings{})
+	err := runWithSettings(args, stdout, stderr, runtimeSettings{})
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	return err
 }
 
 func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSettings) error {
@@ -101,23 +105,17 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 	keyName := flags.String("name", "", "name for the SSH key in Vultr")
 	var sshKeyIDs stringListFlag
 	flags.Var(&sshKeyIDs, "ssh-key-id", "Vultr SSH key ID; repeat for multiple keys (required for provisioning)")
-	if err := flags.Parse(args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return nil
-		}
+
+	if err := parseFlags(flags, args[1:]); err != nil {
 		return err
-	}
-	if flags.NArg() != 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
-	}
-	if action == "history" {
-		if flags.NFlag() != 0 {
-			return errors.New("history is local and read-only; remove all flags")
-		}
-		return showHistory(stdout)
 	}
 
 	switch action {
+	case "history":
+		if flags.NFlag() != 0 {
+			return errors.New("history is local and read-only; remove all flags")
+		}
+		return doHistory(stdout)
 	case "status":
 		if err := allowOnlyFlags(flags, "host", "execute", "confirm-host"); err != nil {
 			return err
@@ -128,7 +126,7 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if *execute || *confirmHost != "" {
 			return errors.New("status is read-only; remove --execute and --confirm-host")
 		}
-		return showStatus(*host, stdout)
+		return doStatus(*host, stdout)
 	case "backup":
 		if err := allowOnlyFlags(flags, "host", "execute", "confirm-host", "timeout"); err != nil {
 			return err
@@ -139,7 +137,7 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if *timeout <= 0 || *timeout > 24*time.Hour {
 			return errors.New("--timeout must be greater than zero and no more than 24 hours")
 		}
-		return backup(*host, *execute, *confirmHost, *timeout, stdout, stderr)
+		return doBackup(*host, *execute, *confirmHost, *timeout, stdout, stderr)
 	case "provision":
 		if err := allowOnlyFlags(flags, "execute", "confirm-create", "timeout", "server-id", "environment", "region", "plan", "os-id", "hostname", "credential-ref", "operation-id", "ssh-key-id", "startup-script-id", "startup-script-sha256", "firewall-group-id", "controller-ip", "ssh-credential-ref"); err != nil {
 			return err
@@ -152,13 +150,12 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if err != nil {
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
-		access := provisionAccess{FirewallGroupID: *firewallGroupID, ControllerIP: *controllerIP, SSHCredentialRef: *sshCredentialRef}
-		return provisionVultr(provisionOptions{
+		return doProvision(provisionOptions{
 			execute: *execute, confirmation: *confirmCreate, timeout: *timeout,
 			policy: policy, statePath: statePath, serverID: *serverID, environment: *environmentID,
 			region: *region, plan: *plan, osID: *osID, hostname: *hostname,
 			sshKeyIDs: sshKeyIDs, startupScriptID: *startupScriptID, startupScriptSHA256: *startupScriptSHA256,
-			credentialRef: *credentialRef, operationID: *operationID, access: access,
+			credentialRef: *credentialRef, operationID: *operationID, access: provisionAccess{FirewallGroupID: *firewallGroupID, ControllerIP: *controllerIP, SSHCredentialRef: *sshCredentialRef},
 		}, stdout, stderr)
 	case "adopt":
 		if err := allowOnlyFlags(flags, "execute", "confirm-adopt", "timeout", "server-id", "environment", "instance-id", "expected-ip", "region", "plan", "os-id", "os-name", "credential-ref", "operation-id"); err != nil {
@@ -166,17 +163,17 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		}
 		policy, err := pilotcapacity.LoadEmbeddedPolicy()
 		if err != nil {
-			return err
+			return fmt.Errorf("load embedded capacity policy: %w", err)
 		}
 		statePath, err := settings.capacityStatePath()
 		if err != nil {
-			return err
+			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
 		providerOSID, err := vultrapi.ParseOSID(*osID)
 		if err != nil {
-			return err
+			return fmt.Errorf("parse Vultr OS ID: %w", err)
 		}
-		return adoptVultr(*execute, *confirmAdopt, *timeout, policy, statePath, *credentialRef, pilotvultr.AdoptionRequest{
+		return doAdoptVultr(*execute, *confirmAdopt, *timeout, policy, statePath, *credentialRef, pilotvultr.AdoptionRequest{
 			OperationID: *operationID, ServerID: *serverID, Environment: *environmentID, InstanceID: *instanceID,
 			IP: *expectedIP, Region: *region, Plan: *plan, OSID: providerOSID, OS: *osName,
 		}, stdout)
@@ -192,14 +189,14 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if !flagSet(flags, "timeout") {
 			handoffTimeout = 45 * time.Minute
 		}
-		return runHandoff(handoffOptions{Execute: *execute, Confirmation: *confirmHandoff, Timeout: handoffTimeout, OperationID: *operationID,
+		return doHandoff(handoffOptions{Execute: *execute, Confirmation: *confirmHandoff, Timeout: handoffTimeout, OperationID: *operationID,
 			CredentialRef: *credentialRef, SSHCredentialRef: *sshCredentialRef, WasabiAccessRef: *wasabiAccessRef, WasabiSecretRef: *wasabiSecretRef,
 			WasabiRegion: *wasabiRegion}, statePath, stdout, stderr)
 	case "register-ssh-key":
 		if err := allowOnlyFlags(flags, "execute", "public-key-file", "name", "credential-ref", "timeout"); err != nil {
 			return err
 		}
-		return runRegisterSSHKey(*execute, *publicKeyFile, *keyName, *credentialRef, min(*timeout, 2*time.Minute), stdout)
+		return doRegisterSSHKey(*execute, *publicKeyFile, *keyName, *credentialRef, min(*timeout, 2*time.Minute), stdout)
 	case "capacity":
 		if flags.NFlag() != 0 {
 			return errors.New("capacity reads the fixed local policy and state database; remove all flags")
@@ -212,7 +209,7 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if err != nil {
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
-		return showCapacity(policy, statePath, stdout)
+		return doShowCapacity(policy, statePath, stdout)
 	case "boot-status":
 		if err := allowOnlyFlags(flags, "server-id", "environment"); err != nil {
 			return err
@@ -227,10 +224,66 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		if err != nil {
 			return fmt.Errorf("resolve capacity state path: %w", err)
 		}
-		return showBootStatus(*serverID, *environmentID, statePath, time.Now().UTC(), stdout)
+		return doShowBootStatus(*serverID, *environmentID, statePath, time.Now().UTC(), stdout)
 	default:
 		return usage(stderr)
 	}
+}
+
+// parseFlags parses command-line flags and returns an error if parsing fails or extra args remain.
+func parseFlags(flags *flag.FlagSet, args []string) error {
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(flags.Args(), " "))
+	}
+	return nil
+}
+
+// doHistory shows the local history and returns an error if any flags are present.
+func doHistory(stdout io.Writer) error {
+	return showHistory(stdout)
+}
+
+// doStatus gets the status of a Minecraft server from systemd.
+func doStatus(host string, stdout io.Writer) error {
+	return showStatus(host, stdout)
+}
+
+// doBackup runs a backup operation on a Minecraft server.
+func doBackup(host string, execute bool, confirmHost string, timeout time.Duration, stdout, stderr io.Writer) error {
+	return backup(host, execute, confirmHost, timeout, stdout, stderr)
+}
+
+// doProvision provisions a new Vultr VM for a Minecraft server.
+func doProvision(opts provisionOptions, stdout, stderr io.Writer) error {
+	return provisionVultr(opts, stdout, stderr)
+}
+
+// doAdoptVultr adopts an existing Vultr instance for local management.
+func doAdoptVultr(execute bool, confirmAdopt string, timeout time.Duration, policy pilotcapacity.Policy, statePath string, credentialRef string, request pilotvultr.AdoptionRequest, stdout io.Writer) error {
+	return adoptVultr(execute, confirmAdopt, timeout, policy, statePath, credentialRef, request, stdout)
+}
+
+// doHandoff completes the SSH handoff to a newly provisioned or adopted server.
+func doHandoff(opts handoffOptions, statePath string, stdout, stderr io.Writer) error {
+	return runHandoff(opts, statePath, stdout, stderr)
+}
+
+// doRegisterSSHKey registers an SSH key with Vultr for use by new VMs.
+func doRegisterSSHKey(execute bool, publicKeyFile, keyName, credentialRef string, timeout time.Duration, stdout io.Writer) error {
+	return runRegisterSSHKey(execute, publicKeyFile, keyName, credentialRef, timeout, stdout)
+}
+
+// doShowCapacity shows the current capacity policy and state.
+func doShowCapacity(policy pilotcapacity.Policy, statePath string, stdout io.Writer) error {
+	return showCapacity(policy, statePath, stdout)
+}
+
+// doShowBootStatus checks boot status for a server in a specific environment.
+func doShowBootStatus(serverID, environmentID string, statePath string, now time.Time, stdout io.Writer) error {
+	return showBootStatus(serverID, environmentID, statePath, now, stdout)
 }
 
 func (settings runtimeSettings) capacityStatePath() (string, error) {
@@ -296,97 +349,6 @@ func showStatus(host string, stdout io.Writer) error {
 		fmt.Fprintf(stdout, "%s: active=%s sub=%s result=%s exit=%s invocation=%s\n",
 			unit, state.active, state.sub, state.result, state.exitCode, state.invocationID)
 	}
-	return nil
-}
-
-func backup(host string, execute bool, confirmation string, timeout time.Duration, stdout, stderr io.Writer) error {
-	if !execute {
-		fmt.Fprintf(stdout, "Dry run: would check %s on %s, start it, and inspect the resulting systemd invocation.\n", backupUnit, host)
-		fmt.Fprintln(stdout, "The Paper service remains online; this uses the existing backup service.")
-		fmt.Fprintf(stdout, "To run it, add --execute --confirm-host %s\n", host)
-		return nil
-	}
-	if confirmation != host {
-		return errors.New("backup not started: --confirm-host must exactly match --host")
-	}
-
-	operationID, err := newOperationID()
-	if err != nil {
-		return fmt.Errorf("create operation ID: %w", err)
-	}
-	auditPath, err := defaultAuditPath()
-	if err != nil {
-		return fmt.Errorf("resolve audit log path: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	before, err := readUnitState(ctx, host, backupUnit)
-	if err != nil {
-		return rejected(host, operationID, auditPath, "preflight_failed", fmt.Errorf("preflight %s on %s: %w", backupUnit, host, err))
-	}
-	if before.active == "failed" || before.result == "failed" {
-		return rejected(host, operationID, auditPath, "unit_failed", fmt.Errorf("refusing to retry failed unit %s; inspect its journal and clear the failure manually", backupUnit))
-	}
-	if before.active != "inactive" {
-		return rejected(host, operationID, auditPath, "unit_not_inactive", fmt.Errorf("refusing to start %s while its state is %q; inspect the unit manually first", backupUnit, before.active))
-	}
-	if err := appendAuditRecord(auditPath, operationID, "started", host, fmt.Sprintf("previous systemd invocation_id=%q", before.invocationID)); err != nil {
-		return fmt.Errorf("backup not started (operation %s): could not persist the audit record at %s: %w", operationID, auditPath, err)
-	}
-
-	fmt.Fprintf(stdout, "Starting %s on %s (timeout %s).\n", backupUnit, host, timeout)
-	fmt.Fprintf(stdout, "Operation ID: %s\nAudit log: %s\n", operationID, auditPath)
-	fmt.Fprintln(stdout, "No stop, restore, or destroy command will be sent.")
-	if output, err := remote(ctx, host, "sudo -n systemctl start --wait "+backupUnit); err != nil {
-		if output != "" {
-			fmt.Fprintln(stderr, output)
-		}
-		detail := fmt.Sprintf("systemctl start returned an error; remote outcome may be unknown (previous invocation_id=%q)", before.invocationID)
-		if auditErr := appendAuditRecord(auditPath, operationID, "outcome_unknown", host, detail); auditErr != nil {
-			return fmt.Errorf("backup outcome unknown (%v); audit update also failed: %w", err, auditErr)
-		}
-		return fmt.Errorf("backup outcome unknown; inspect %s on %s: %w", backupUnit, host, err)
-	}
-
-	after, err := readUnitState(ctx, host, backupUnit)
-	if err != nil {
-		detail := "start returned successfully, but post-run status could not be read"
-		if auditErr := appendAuditRecord(auditPath, operationID, "outcome_unknown", host, detail); auditErr != nil {
-			return fmt.Errorf("%s on %s: %v; audit update also failed: %w", backupUnit, host, err, auditErr)
-		}
-		return fmt.Errorf("backup outcome unknown; verify %s on %s: %w", backupUnit, host, err)
-	}
-	if !safeInvocationID.MatchString(after.invocationID) ||
-		(before.invocationID != "" && (!safeInvocationID.MatchString(before.invocationID) || before.invocationID == after.invocationID)) {
-		detail := fmt.Sprintf("systemd invocation ID is missing, malformed, or unchanged: before=%q after=%q", before.invocationID, after.invocationID)
-		if auditErr := appendAuditRecord(auditPath, operationID, "outcome_unknown", host, detail); auditErr != nil {
-			return fmt.Errorf("backup outcome unknown (%s); audit update also failed: %w", detail, auditErr)
-		}
-		return fmt.Errorf("backup outcome unknown; %s; inspect %s on %s before retrying", detail, backupUnit, host)
-	}
-	if !systemdInvocationFinished(after) {
-		detail := fmt.Sprintf("systemd start job returned before the unit reached a completed state: invocation_id=%q active=%q sub=%q", after.invocationID, after.active, after.sub)
-		if auditErr := appendAuditRecord(auditPath, operationID, "outcome_unknown", host, detail); auditErr != nil {
-			return fmt.Errorf("backup outcome unknown (%s); audit update also failed: %w", detail, auditErr)
-		}
-		return fmt.Errorf("backup outcome unknown; %s; inspect %s on %s before retrying", detail, backupUnit, host)
-	}
-	if after.active == "failed" || after.result != "success" || after.exitCode != "0" {
-		detail := fmt.Sprintf("systemd invocation_id=%q result=%q exit=%q active=%q", after.invocationID, after.result, after.exitCode, after.active)
-		if auditErr := appendAuditRecord(auditPath, operationID, "failed", host, detail); auditErr != nil {
-			return fmt.Errorf("%s did not report success (%s); audit update failed: %w", backupUnit, detail, auditErr)
-		}
-		return fmt.Errorf("%s did not report success (%s)", backupUnit, detail)
-	}
-	if err := appendAuditRecord(auditPath, operationID, "service_succeeded", host, fmt.Sprintf("systemd invocation_id=%s reported result=success and exit status 0; backup contents and storage integrity are not verified", after.invocationID)); err != nil {
-		return fmt.Errorf("%s reported success, but the result could not be recorded in %s: %w", backupUnit, auditPath, err)
-	}
-	fmt.Fprintf(stdout, "Backup service completed successfully on %s (operation %s).\n", host, operationID)
-	fmt.Fprintln(stdout, "This confirms the systemd unit result only; it does not verify backup contents or storage integrity.")
-	fmt.Fprintf(stdout, "%s: active=%s sub=%s result=%s exit=%s invocation=%s\n",
-		backupUnit, after.active, after.sub, after.result, after.exitCode, after.invocationID)
 	return nil
 }
 
