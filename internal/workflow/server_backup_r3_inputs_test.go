@@ -374,7 +374,7 @@ func TestBackupR3StreamExpectations(t *testing.T) {
 			want: "validation manifest has no exact object reference"},
 		{name: "validation of two empty objects", step: backupValidateStep,
 			change: withObjects(map[string]any{"data_set_id": "a", "size_bytes": 0}, map[string]any{"data_set_id": "b", "size_bytes": 7, "checksum": "c"}),
-			want: "validation manifest object count differs from accepted plan", wantSeen: "<not issued>"},
+			want:   "validation manifest object count differs from accepted plan", wantSeen: "<not issued>"},
 	} {
 		t.Run(test.name, func(t *testing.T) { test.run(t, f, backupR3Copy(operation)) })
 	}
