@@ -74,6 +74,7 @@ func destroyR3Backup() VerifiedServerBackup {
 		BackupID: destroyTestBackupID, ServerID: startTestServerID, EnvironmentID: startTestEnvID,
 		StorageProfile: destroyTestProfile, DataGenerationID: destroyTestGeneration,
 		SourceInstanceRef: json.RawMessage(startTestInstance), IntegrityVerified: true,
+		OffInstanceVerified: true, ConsistencyVerified: true, FinalWriteBoundaryVerified: true,
 	}
 }
 
