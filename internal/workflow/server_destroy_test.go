@@ -68,6 +68,7 @@ func newServerDestroyFixture(t *testing.T) serverDestroyFixture {
 		BackupID: destroyTestBackupID, ServerID: startTestServerID, EnvironmentID: startTestEnvID,
 		StorageProfile: destroyTestProfile, DataGenerationID: destroyTestGeneration,
 		SourceInstanceRef: json.RawMessage(startTestInstance), IntegrityVerified: true,
+		OffInstanceVerified: true, ConsistencyVerified: true, FinalWriteBoundaryVerified: true,
 	}}
 	authorizer := &testServerDestroyAuthorizer{}
 	workflow, err := NewServerDestroyWorkflow(base.store, base.registry, base.schemas, profiles, backups, authorizer)
