@@ -11,17 +11,17 @@
 
 Game Server Controller (GSC) is a language-neutral, provider-neutral lifecycle controller. The first Go implementation uses a local bbolt operation store, durable operations, actor-scoped idempotency, logical server locks, versioned adapter contracts, and reconciliation of ambiguous provider effects. The concrete reference network uses a persistent Velocity proxy/lobby, with a Paper backend created on demand on a standard Debian VM through Vultr, a verified world restored from Wasabi, and players transferred **only after fresh, exact-instance readiness**. Bootstrap scripts prepare provider-standard OS images; snapshots and custom VM images are not prerequisites. Existing gameplay must continue independently while the controller or database is unavailable. Automatic production VM destruction is currently disabled and remains disabled.
 
-We reviewed several architectures: single Go+bbolt with systemd recovery; active/passive Go+bbolt with replicated local state; multiple active Go controllers and a transactional PostgreSQL/Patroni/etcd HA store; Elixir/Erlang OTP as an optional additional runtime; independent regional controller cells; selectively replicated read services; and long-term high-assurance/distributed-systems research. We also considered Kubernetes/Agones, application management panels such as Pterodactyl, Ansible, provider snapshots, colocation and alternative databases. These are not all needed for a small deployment of roughly ten Minecraft players.
+We reviewed several architectures: single Go+bbolt with systemd recovery; active/passive Go+bbolt with replicated local state; three Go controllers with one elected primary and two standby authorities backed by transactional PostgreSQL/Patroni/etcd HA; Elixir/Erlang OTP as an optional additional runtime; independent regional controller cells; selectively replicated read services; and long-term high-assurance/distributed-systems research. We also considered Kubernetes/Agones, application management panels such as Pterodactyl, Ansible, provider snapshots, colocation and alternative databases. These are not all needed for a small deployment of roughly ten Minecraft players.
 
 The design must balance correctness, incremental implementation, operational cost, implementation-language portability, and failure isolation. This ADR formalizes the preferred direction while leaving advanced implementation details for follow-up ADRs. **It does not claim 99.99%, 99.999%, 99.9999% or 99.99999999% has been achieved.**
 
 ## 2. Decision summary
 
 1. **Keep a lightweight standalone Go+bbolt controller as the default.** Harden recovery and monitor it. A narrowly scoped four-nines target can be pursued on this profile, but a single VM/disk remains a failure domain, so no availability guarantee is inferred.
-2. **Add optional HA without changing the public protocol.** Start with multiple active Go controllers using a transactional PostgreSQL store, Patroni primary failover and appropriate quorum coordination (initial candidate: three etcd voters). Keep bbolt fully supported and do not make PostgreSQL a mandatory dependency.
+2. **Add optional HA with one controller primary and two standby controllers, without changing the public protocol.** Elect a single mutating controller primary backed by a transactional PostgreSQL store, Patroni database failover and quorum-based controller election (initial candidate: three etcd voters). Standbys serve safe reads or forward mutations and may take over only after fencing, recovery and promotion. Keep bbolt fully supported; PostgreSQL is not mandatory.
 3. **Make durable resource ownership and fencing the correctness authority.** Keep operation resource locks independent of expiring worker claims, reconcile uncertain side effects, and never claim exactly-once cloud mutations.
 4. **Develop Elixir/Erlang OTP, if desired, as a separate conformant implementation or runtime option.** OTP's supervision is useful but not a substitute for durable distributed ownership, transactional authority or provider-side reconciliation.
-5. **Treat regional cells as an optional later deployment profile.** Each region owns its authoritative state and explicitly assigned resources. Failover and failback require verified fencing and reconciliation; no heartbeat-only automatic multi-region mutation takeover.
+5. **Treat regional cells as an optional later two-level primary/standby profile.** Each region has one elected controller primary with standby replicas. A logical server/world is owned by **one regional primary cell at a time**; other regions remain standbys *for that world* until explicit fenced transfer. A region may simultaneously own its own worlds and be standby for another region's worlds. No heartbeat-only promotion.
 6. **Use service-specific availability targets.** Four nines first, five nines for advanced transactional services, six nines for selected fault-isolated reads or status functions, and ten nines as ongoing research rather than a product SLA.
 7. **Keep the gameplay data plane independent of the controller control plane.** Routine controller, database and management-API outages do not automatically stop a healthy Velocity/Paper session. Destructive automation stays disabled until separately approved.
 8. **Adopt a gated eleven-nines world-protection product requirement.** Wasabi advertises eleven-nines durability for already stored objects; GSC must separately implement continuous write protection, final complete capture, recoverability, latest-world authority and anti-rollback. The high-assurance profile may not claim its eleven-nines objective before sufficient evidence. No current end-to-end guarantee is implied.
@@ -32,7 +32,7 @@ The design must balance correctness, incremental implementation, operational cos
 | --- | --- | --- |
 | Single Go+bbolt controller on one VM, managed by systemd | **Default / implement first** | Cheapest, simplest and compatible with current code. Can restart quickly and reconcile durable operations, but machine, storage and network remain single failure domains. |
 | Go+bbolt active/passive with shared file or naïve file replication | **Do not adopt as the default HA design** | bbolt's one-process file ownership does not provide cluster-wide commit consensus. Copying, network-mounting or promoting state without tested fencing risks state rollback and duplicate provider operations. A carefully fenced replication solution may be researched, but is not automatically simpler than PostgreSQL. |
-| Three active Go API/workers + PostgreSQL/Patroni + quorum DCS | **Preferred optional HA reference design** | Strong transactional coordination and familiar operational tooling. Synchronous durability can deliberately suspend mutation acceptance, and safe leader fencing and recovery must be validated. |
+| One elected controller primary plus two warm standby controllers, PostgreSQL/Patroni and quorum DCS | **Preferred optional HA reference design** | Exactly one mutating controller authority per cell, with safe read-only standbys, monotonic fencing, deliberate election and state reconciliation. Database leadership is a separate responsibility. |
 | Elixir/Erlang OTP implementation with supervised processes | **Optional parallel implementation** | Supervision and isolation help runtime recovery. The BEAM cluster itself must not be considered the authoritative distributed lock or commit mechanism, and an Elixir rewrite is not a four-nines prerequisite. |
 | Three independent regional controller cells | **Optional long-term design** | Limits regional failure blast radius. Requires per-resource mutating ownership, state reconciliation and conservative DR; not a globally active writable database. |
 | Dedicated replicated read/status plane | **Advanced, scoped six-nines candidate** | Can keep contractually valid historical views readable through storage outages; freshness, authorization and status semantics must remain explicit. Does not make mutations six-nines available. |
@@ -72,68 +72,112 @@ Operator / management CLI or API
 
 ### B. Optional HA: one authoritative transactional cell
 
+Use a **single elected primary controller (master authority) and two warm standby controllers (replicas)**. Only the primary can accept new mutating requests or dispatch side effects. Standbys may serve authorized consistent reads or forward writes to the primary without independently acknowledging acceptance. Operational documentation calls these roles **primary/standby**.
+
 ~~~text
-Operators / management clients
-                |
-         Redundant ingress
-          /      |      \
-       Go A     Go B     Go C
-    API/worker API/worker API/worker
-          \      |      /
-         Transactional store contract
-                   |
-       PostgreSQL / Patroni cluster
-           Primary + 2 standbys
-                   |
-          3-member DCS quorum
-       (etcd candidate, independent)
-                   |
-       Workflow ownership + fencing
-                   |
-         Versioned external adapters
+               Operator / management clients
+                           |
+                    Redundant ingress
+                   /       |       \
+             Go A         Go B         Go C
+            PRIMARY      STANDBY      STANDBY
+            writer       read/relay   read/relay
+                   \       |       /
+              Controller leadership quorum
+                  + monotonic fencing epoch
+                           |
+                 Transactional store
+                           |
+                PostgreSQL / Patroni
+                 DB primary + 2 standbys
+                           |
+                   3-member DCS quorum
+                   (etcd candidate)
+                           |
+              PRIMARY controller workflow runner
+                           |
+             Versioned, exact-target adapters
 ~~~
 
-- API and worker replicas can run concurrently, but **each conflicting logical resource has one authorized mutating owner**.
-- Shared database commits are the authority for operation acceptance, locks and claims, not process-local memory, proxy identity or cluster membership.
-- Separate expiring worker claim from durable operation resource lock; use monotonic claim generation and compare-and-swap updates. A lease timeout does not prove the old worker's side effects stopped.
-- Patroni, leader promotion and synchronous settings need explicit independent failure-domain deployment and tested fencing. When durability cannot be preserved, **pause mutation acceptance**, not silently weaken consistency.
-- Keep published adapter and management protocols unchanged; do not turn PostgreSQL schema details into wire protocol requirements.
+**Controller leadership and database leadership are independent.** A Patroni PostgreSQL-primary promotion does not automatically appoint a new *controller* primary. A controller primary also must not accept mutations while the authoritative database is unwritable or unsafe.
+
+| Controller role | Mutations and acceptance | External side effects | Reads |
+| --- | --- | --- | --- |
+| **Primary** | May accept only after durable authoritative transaction and current-epoch verification | Sole dispatcher of new mutating steps, subject to durable resource locks | Authorized reads |
+| **Standby** | Forward to current primary or return an explicit not-primary/retry response | No mutating dispatch, provider deletion, backup pruning, restore, rollback or world promotion | Authorized reads with freshness limits |
+| **Former primary / candidate** | No writes until valid new election/fencing | No new effects; preserve and reconcile in-flight evidence | Safe read-only operation |
+
+**Election, failover and failback:**
+
+1. Commit a unique primary identity and **monotonically increasing fencing epoch**, protected by quorum-backed leader election and transactional compare-and-swap. Expired heartbeats alone do not prove the old primary is inactive.
+2. Check the current primary epoch before every mutating operation acceptance and *every* external adapter dispatch; preserve atomic per-world resource locks and durable operation intent. An expired worker claim does not release the durable operation lock.
+3. **Fence the former primary's ability to issue new side effects** through an appropriately designed dispatch/credential boundary wherever feasible. Database fencing blocks stale commits but cannot revoke an already-sent Vultr, Wasabi or game command. If actual fencing is uncertain, **fail closed**.
+4. A standby promotes only after establishing a higher authority epoch, verifying the authoritative PostgreSQL writer and reconciling accepted operations and external effects. Inspect ambiguous provider responses; do not blindly retry provisioning, destruction, restores or player transfers.
+5. During quorum loss, ambiguity or leader election, stop accepting/dispatching mutations; retain existing healthy Paper/Velocity gameplay independently. Standbys do not signal authoritative-write readiness.
+6. Failback requires a fresh fenced handover, not automatic return of authority to a former primary. Advertise separate process liveness, read readiness and authoritative-write readiness.
+7. This is **active/passive for mutations**, not three active mutating workers. Preserve the protocol's language-neutral contracts and the standalone Go+bbolt profile.
 
 ### C. Single-VM software QA topology (not production HA)
 
 ~~~text
 One isolated test VM
   3 separately configured Go controllers
+  1 controller primary + 2 standbys
   3 PostgreSQL processes (primary + 2 standbys)
   3 etcd voter processes
   independent local ports, directories and identities
   synthetic provider responses and fault injection
 ~~~
 
-This proves software orchestration only: process loss, DB promotion behavior, claims, partition simulations, old-primary scenarios and recovery. The single VM, hypervisor, disk and power supply are still common failure domains. Production HA distributes controllers, PostgreSQL nodes, quorum voters and redundant routing across independent hosts/networks when possible.
+This proves software orchestration only: primary election and standby promotion, controller process loss, DB promotion behavior, claims, partition simulations, stale-primary fencing and recovery. The single VM, hypervisor, disk and power supply are still common failure domains. Production HA distributes controllers, PostgreSQL nodes, quorum voters and redundant routing across independent hosts/networks when possible.
 
-### D. Optional multi-region: independent authoritative cells
+### D. Optional multi-region: independent authoritative cells with primary/standby authority
+
+Apply the **same primary/standby authority model at two levels**:
+
+1. **Controller authority inside each region:** each cell has **one elected, fenced controller primary** and two warm standby controllers (or an explicitly justified standby count). Each cell maintains an independent transactional database, local quorum and region-specific operation history.
+2. **Regional authority for each logical server/world:** **one region is the primary owning cell** for that resource. Other regions are **standby cells for the same resource** and have no right to mutate it until a separately fenced, explicit transfer. One region may own World X and act as standby for World Y simultaneously.
 
 ~~~text
-            Global discovery (optional)
-                /      |      \
-         Region A   Region B   Region C
-           API        API        API
-        workers     workers     workers
-        local DB    local DB    local DB
-          |           |           |
-     owned set A  owned set B  owned set C
-                |
-       Explicit, fenced transfer
-       and verified reconciliation
+                  Global discovery (optional)
+                      /             \
+              REGION A             REGION B
+         +-----------------+  +-----------------+
+         | Go A1 PRIMARY   |  | Go B1 PRIMARY   |
+         | Go A2 STANDBY   |  | Go B2 STANDBY   |
+         | Go A3 STANDBY   |  | Go B3 STANDBY   |
+         | PostgreSQL HA   |  | PostgreSQL HA   |
+         | local quorum    |  | local quorum    |
+         +-----------------+  +-----------------+
+                |                    |
+           World X OWNER       World X STANDBY
+           World Y STANDBY     World Y OWNER
+                 \                  /
+                Explicit, independently
+                 fenced ownership transfer
+                 + verified reconciliation
+                            |
+             Exactly one authorized writer
+             per logical server/world globally
 ~~~
 
-- One cell owns any given logical resource for mutations at a time, even when it manages servers located elsewhere.
-- Cells do not share a single writable multi-region authority by default.
-- A healthy cell should not have to synchronously contact all other regions for its ordinary requests.
-- Cross-region recovery uses bounded, documented RPO/RTO, controlled promotion and failback, old-owner fencing, and real-provider inventory reconciliation.
-- Network partition or stale heartbeat alone MUST NOT trigger two independent mutating owners. If effective fencing cannot be verified, fail closed and require operator intervention.
-- Async replicated disaster-recovery state may lag or lose previously acknowledged transactions. Never blindly replay an incomplete restored history.
+**Two different failovers, two different epochs:**
+
+- **Local controller failover:** e.g. A1 to A2, changing the controller primary **within Region A** while Region A continues to own World X. Requires the single-cell authority, fencing and recovery protocol from Section B.
+- **Cross-region resource failover:** e.g. World X's owning cell moves **from Region A to Region B**. This is a distinct change in global ownership, not merely promotion of B1's local controller role. Require a verified cross-region ownership epoch, old-owner/provider/game-writer fencing and durable operation/world-head reconciliation.
+
+**Regional ownership and transfer rules:**
+
+1. Persist a globally unique world lineage and per-resource owning-cell identity, monotonic **regional ownership epoch**, exact authoritative world-head, latest verified backup and protected continuous journal references where supported.
+2. **No two regions may mutate the same logical world at once.** Two independent writable regional databases and exchanged heartbeats are not enough to establish cross-region fencing. A shared independent ownership witness/consensus authority or verifiably revoked old-region credentials and writers is required for takeover.
+3. Network partition or missed regional heartbeat does not prove that the owner stopped. If old-region control/instance fencing cannot be verified, **block automated takeover** and allow only safe operator-assisted recovery, preserving worlds and evidence.
+4. Regional standby promotion must check acknowledged operation history, external provider inventory and authoritative world-head ancestry. An asynchronously replicated copy may be behind; do not silently lose acknowledged mutations or fresh player data. If a zero-loss requirement is in scope, the continuous acknowledged-write protection design and evidence gates of Section 7B.2 apply before enabling it.
+5. A newly owning region's elected **local controller primary** first acquires committed cross-region ownership, then reconciles ambiguous effects, stages only a verified authoritative world into an isolated stopped target, and proves the previous game writer fenced before activation.
+6. After fresh exact-instance Paper readiness, the authorized Velocity proxy may transfer waiting players. Do not route players to two simultaneous writable instances or an older world.
+7. Failback requires a new audited fenced ownership transfer. A recovered former owner remains a **standby** for that world and must not reclaim ownership by restarting its controller.
+8. Each healthy region should not need synchronous communication with every other region for routine requests; cross-region *ownership transfer* necessarily needs trustworthy authority/witness or independently verified old-owner shutdown. Mutating clients must reach the **owning region's elected controller primary**; other cells may serve clearly freshness-labelled, authorized read-only status.
+
+This is **independent regional cells with one authoritative owning region per resource**, not an implicitly safe global multi-primary writer or globally writable database. Local and global controller elections, PostgreSQL primary promotion and game-writer fencing must all be kept distinct. Preserving existing gameplay and avoiding false eleven-nines durability promises take priority over fast but unsafe automatic failover.
 
 ### E. Selected six-nines historical/read architecture
 
@@ -172,9 +216,9 @@ The following override any uptime optimization:
 The operation-store abstraction MUST express transactionally enforceable domain semantics, not just generic CRUD: atomic acceptance, actor-scoped dedupe, immutable request/plan snapshots, version-checked updates, durable lock acquisition/release, claim issuance and renewal, claim generations, outcome uncertainty and recovery listing.
 
 - **Go+bbolt today:** one controller process holds a local exclusive file lock, with atomic write transactions under ADR 0005. A periodic due-work scanner must rediscover accepted eligible operations even if the in-memory queue drops a notification. Restart recovery alone is insufficient for liveness.
-- **Optional distributed store:** PostgreSQL transactions and explicit consistency guarantees. Only a committed durable transaction may acknowledge acceptance. A client timeout around a commit must be investigated by idempotency lookup rather than risking duplicate acceptance.
+- **Optional distributed store and primary authority:** PostgreSQL transactions and explicit consistency guarantees; exactly one quorum-elected **controller primary per region** may acknowledge and dispatch mutations, and only for that region's currently owned resources. Mutations must validate local controller epoch and, in multi-region, per-world regional ownership epoch. Standbys never independently acknowledge mutating requests. A client timeout around a commit must be investigated by idempotency lookup rather than risking duplicate acceptance.
 - **Durable resource lock versus worker execution claim:** an operation lock remains across claim expiry, worker restarts or takeovers. The next worker must reconcile the previous attempt before causing more external effects.
-- **Scheduling:** bounded workers, observable queues, bounded retries, per-resource serialized mutations, backpressure and fairness. Optional monitoring/notification failure cannot block unrelated safe workflows.
+- **Scheduling:** only the elected primary runs mutating workers for resources owned by its cell; use bounded workers, observable queues, bounded retries, durable per-resource serialization, backpressure and fairness. Standbys do not dispatch mutations. Optional monitoring/notification failure cannot block unrelated safe workflows.
 - **Recovery:** restore versioned state and idempotency keyring safely, inspect external resources and side effects, and account for potential database rewind or out-of-band changes before continuing.
 - **Replication limits:** strict synchronous PostgreSQL replication may block writes if the required synchronous standby is lost. That is an explicit safety/availability tradeoff, not something to hide with a misleading liveness check.
 - **Independent testing:** verify split-brain prevention, at-most-one valid mutating authority (not false exactly-once effects), stale-worker rejection, commit ambiguity, restored-state reconciliation and full-disk behavior.
@@ -432,7 +476,10 @@ Every profile requires a documented, repeatable acceptance suite, plus longer-ru
 | Controller process crashes or restarts | Persisted operations/locks survive; recover and reconcile without duplicate effects |
 | Bounded in-memory queue overflows | Durable eligible work is eventually rescheduled without requiring restart |
 | Local bbolt disk full / corrupted / restored | Do not silently accept work; fail closed; restore from consistent backup and keyring |
-| PostgreSQL primary lost or old primary isolated | One authoritative writer; safe promotion/fencing; no double dispatch or falsely acknowledged commit |
+| PostgreSQL primary lost or old primary isolated | One authoritative database writer; safe Patroni promotion/fencing; no double dispatch or falsely acknowledged commit |
+| Controller primary crashes or loses quorum while standbys run | Standbys must not dispatch until elected with a higher fencing epoch and old-primary effects reconciled |
+| Former controller primary reconnects after standby promotion | Reject stale-epoch writes and adapter dispatches; no automatic failback |
+| Regional owning cell unreachable or split-brain witness fails | Standby region cannot seize that world without old-owner/world-writer fencing, verified state and a committed cross-region ownership epoch |
 | Synchronous standby / quorum lost | Explicit safe refusal of writes where required rather than unacknowledged unsafe operation |
 | DB commit succeeds but client times out | Determine acceptance by durable idempotency binding, not duplicate insertion |
 | Worker claim expires mid-provider request | New worker rejects stale commit and reconciles external outcome before acting |
@@ -468,8 +515,8 @@ Reliability work is an optional, partly parallel track:
 
 - **R0:** define SLIs, fault domains, RPO/RTO, current gaps, ownership proof and ADRs; verify report claims against actual code.
 - **R1:** harden standalone Go+bbolt: restart, durable rescheduling, safe reconciliation, backup and restoration tests, independent monitoring. Require final stopped-world backup and exact-generation verification before any separately approved destructive workflow.
-- **R2:** design and implement optional transactional PostgreSQL backend, claims, fencing, three-controller/three-DB/three-etcd single-VM QA; preserve standalone.
-- **R3:** distribute optional HA services across independent production failure domains, test primary loss, failback, rolling upgrades and rollback; target four-nines-capable architecture.
+- **R2:** design and implement optional transactional PostgreSQL backend, **one controller primary plus two standbys**, claims, quorum election and fencing, three-controller/three-DB/three-etcd single-VM QA; preserve standalone.
+- **R3:** distribute optional HA services across independent production failure domains; test primary-controller loss, standby promotion, stale-primary rejection, separate DB failover, multi-region old-owner fencing, failback, rolling upgrades and rollback; target four-nines-capable architecture.
 - **R4:** eliminate avoidable shared dependencies; improve critical five-nines availability and operational evidence.
 - **R5:** implement selectively isolated six-nines reads and historical status, independently validate their service contracts; evidence-gated success. Independently build and validate continuous write protection, permanent no-controller-delete archival, eleven-nines world-generation recoverability and no-stale-world promotion, without equating Wasabi's object claim to end-to-end guarantees.
 - **R6:** continuously research ten-nines impossibility boundaries and potential long-term designs without committing expensive infrastructure.
@@ -489,7 +536,7 @@ Parallel contributors/agents may independently investigate storage, workflow exe
 3. Database failover policy, strict synchronous settings, Patroni/DCS version and deployment, PITR and keyring backup.
 4. Work dispatch boundary and methods to reconcile non-fenceable provider API actions.
 5. Monitoring SLI definitions, synthetic probing, freshness-labelled read contracts and auth revocation behavior.
-6. Regional cell identity, ownership transfer protocol, DR RPO/RTO, rollback/failback and failure-domain requirements.
+6. Local single-primary/two-standby controller election, independent database-primary election, cross-region cell identity and per-world ownership transfer protocol, fencing, witness design, DR RPO/RTO, rollback/failback and failure-domain requirements.
 7. Whether an independent Elixir/OTP implementation provides measured value without compromising protocol portability.
 8. How to establish and independently verify any advertised availability figure.
 9. Ordered world-head revisions, lineage ancestry, verified game-save barriers, anti-rewind anchors, crash-safe fenced activation, CAS and deliberately approved rollback provenance.
@@ -500,6 +547,6 @@ Parallel contributors/agents may independently investigate storage, workflow exe
 
 ## 11. Proposed acceptance criteria for this ADR
 
-Before marking **Accepted**, maintainers should review that the deployment tiers, nine-hour routine backup rotation (five default, zero unlimited), independently configurable pre-rollback snapshot retention (five default, zero unlimited), pre-rollback warnings and exact operator approval, non-destructive server removal, permanent archived/protected-backup retention, continuous fresh-write durability requirement, final backup and anti-rollback safety design, safety invariants, initial Go+bbolt investment, optional HA/OTP decisions, per-resource owner model, failure testing, budget tradeoffs and tier-specific SLIs accurately reflect project intent. Reconcile the roadmap regression separately. Acceptance of the *architecture direction* does not authorize deploying production clusters, adding dependencies or announcing achieved SLOs.
+Before marking **Accepted**, maintainers should review that **single controller-primary/two-standby authority within an HA cell**, **one owning region per logical world with explicit fenced cross-region transfer**, the deployment tiers, nine-hour routine backup rotation (five default, zero unlimited), independently configurable pre-rollback snapshot retention (five default, zero unlimited), pre-rollback warnings and exact operator approval, non-destructive server removal, permanent archived/protected-backup retention, continuous fresh-write durability requirement, final backup and anti-rollback safety design, safety invariants, initial Go+bbolt investment, optional HA/OTP decisions, per-resource owner model, failure testing, budget tradeoffs and tier-specific SLIs accurately reflect project intent. Reconcile the roadmap regression separately. Acceptance of the *architecture direction* does not authorize deploying production clusters, adding dependencies or announcing achieved SLOs.
 
 Related accepted ADRs remain authoritative where implementation is still limited to standalone. Follow-up implementation PRs require passing checks, security review, conformance and tests, and must preserve existing safe game-server behavior.
