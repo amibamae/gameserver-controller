@@ -313,7 +313,9 @@ func TestDestroyR3HasValidServerDestroyResult(t *testing.T) {
 		t.Fatal(err)
 	}
 	editResult := func(edit func(result, data map[string]any)) func(*testing.T, *store.OperationRecord, *schemaRuntime) {
-		return func(t *testing.T, o *store.OperationRecord, _ *schemaRuntime) { o.Result = destroyR3EditResult(t, o.Result, edit) }
+		return func(t *testing.T, o *store.OperationRecord, _ *schemaRuntime) {
+			o.Result = destroyR3EditResult(t, o.Result, edit)
+		}
 	}
 	tests := []struct {
 		name   string
@@ -392,7 +394,9 @@ func TestDestroyR3ProjectLifecycle(t *testing.T) {
 		{name: "another operation type", change: func(o *store.OperationRecord, _ *store.LogicalServer) { o.OperationType = "server.stop" }, err: destroyR3Projection},
 		{name: "another server", change: func(_ *store.OperationRecord, s *store.LogicalServer) { s.ServerID = "other" }, err: destroyR3Projection},
 		{name: "another environment", change: func(_ *store.OperationRecord, s *store.LogicalServer) { s.EnvironmentID = "other" }, err: destroyR3Projection},
-		{name: "another instance", change: func(o *store.OperationRecord, _ *store.LogicalServer) { o.Target.InstanceRef = json.RawMessage(otherDestroyInstance) }, err: destroyR3Projection},
+		{name: "another instance", change: func(o *store.OperationRecord, _ *store.LogicalServer) {
+			o.Target.InstanceRef = json.RawMessage(otherDestroyInstance)
+		}, err: destroyR3Projection},
 		{name: "stopped before dispatch", change: func(o *store.OperationRecord, s *store.LogicalServer) {
 			s.LifecycleState, o.Status, o.Steps[2].Attempt, o.Steps[2].Status = protocolstate.ServerStopped, protocolstate.OperationRunning, 0, protocolstate.StepPending
 		}},
