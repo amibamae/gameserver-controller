@@ -77,6 +77,17 @@ class TestFreshPaperRecovery(unittest.TestCase):
                 with self.assertRaises(live.UnsafeStagingTarget):
                     live.verify_recovered(before, after, target())
 
+    def test_wrong_environment_unit_or_malformed_evidence_is_rejected(self):
+        for altered in [
+            {**sample(NEW, 1001), "environment": "production"},
+            {**sample(NEW, 1001), "unit": "another.service"},
+            {**sample(NEW, 1001), "probe": []},
+            [],
+        ]:
+            with self.subTest(after=altered):
+                with self.assertRaises(live.UnsafeStagingTarget):
+                    live.verify_recovered(sample(), altered, target())
+
     def test_probe_rejects_mismatched_pretend_staging_instance(self):
         wrong = {**sample(), "instance_id": "not-this-instance"}
         with patch.object(live, "ssh", return_value=wrong) as ssh:
