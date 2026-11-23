@@ -66,7 +66,7 @@ func (p pilotCommand) dispatch(action string) error {
 
 func (p pilotCommand) runHistoryAction() error {
 	if p.flags.NFlag() != 0 {
-		return errors.New("history is local and read-only; remove all p.flags")
+		return errors.New("history is local and read-only; remove all flags")
 	}
 	return doHistory(p.stdout)
 }
@@ -113,7 +113,7 @@ func (p pilotCommand) runProvisionAction() error {
 		execute: p.boolean("execute"), confirmation: p.str("confirm-create"), timeout: p.duration("timeout"),
 		policy: policy, statePath: statePath, serverID: p.str("server-id"), environment: p.str("environment"),
 		region: p.str("region"), plan: p.str("plan"), osID: p.str("os-id"), hostname: p.str("hostname"),
-		p.sshKeyIDs: p.sshKeyIDs, startupScriptID: p.str("startup-script-id"), startupScriptSHA256: p.str("startup-script-sha256"),
+		sshKeyIDs: p.sshKeyIDs, startupScriptID: p.str("startup-script-id"), startupScriptSHA256: p.str("startup-script-sha256"),
 		credentialRef: p.str("credential-ref"), operationID: p.str("operation-id"), access: provisionAccess{FirewallGroupID: p.str("firewall-group-id"), ControllerIP: p.str("controller-ip"), SSHCredentialRef: p.str("ssh-credential-ref")},
 	}, p.stdout, p.stderr)
 }
@@ -182,7 +182,7 @@ func (p pilotCommand) runRegisterSSHKeyAction() error {
 
 func (p pilotCommand) runCapacityAction() error {
 	if p.flags.NFlag() != 0 {
-		return errors.New("capacity reads the fixed local policy and state database; remove all p.flags")
+		return errors.New("capacity reads the fixed local policy and state database; remove all flags")
 	}
 	policy, err := pilotcapacity.LoadEmbeddedPolicy()
 	if err != nil {
