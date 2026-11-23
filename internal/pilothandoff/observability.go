@@ -26,7 +26,39 @@ type victoriaLogsPayload struct {
 	Token         string `json:"token"`
 }
 
-var logTokenPattern = regexp.MustCompile(`^[!-~]{16,1024}$`)
+var logTokenPattern = regexp.MustCompile(`^[!-~]+package pilothandoff
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/url"
+	"regexp"
+	"strings"
+
+	"github.com/amibamae/gameserver-controller/internal/hosthandoff"
+)
+
+// VictoriaLogsConfig controls optional lifecycle-only log forwarding.
+// Its secret is delivered on pinned SSH stdin, never command arguments.
+type VictoriaLogsConfig struct {
+	OperationID, VultrCredentialRef, IngestCredentialRef string
+	Endpoint, PrivacyMode                                string
+}
+
+type victoriaLogsPayload struct {
+	Endpoint      string `json:"endpoint"`
+	EnvironmentID string `json:"environment_id"`
+	InstanceID    string `json:"instance_id"`
+	PrivacyMode   string `json:"privacy_mode"`
+	Token         string `json:"token"`
+}
+
+)
+
+func validLogToken(token []byte) bool {
+	return len(token) >= 16 && len(token) <= 1024 && logTokenPattern.Match(token)
+}
 
 // ConfigureVictoriaLogs delivers privacy settings and a private ingress token
 // after the current VM host key has been pinned and the firewall finalized.
@@ -75,7 +107,7 @@ func (r Runner) sendVictoriaLogsCredential(ctx context.Context, target Target, h
 		return errors.New("observability credential resolver is required")
 	}
 	return r.Credentials.WithCredential(ref, func(token []byte) error {
-		if !logTokenPattern.Match(token) {
+		if !validLogToken(token) {
 			return errors.New("observability token must have 16-1024 printable non-space characters")
 		}
 		payload.Token = string(token)
