@@ -38,7 +38,7 @@ func TestPilotR3DispatchMessages(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"unknown action", []string{"destroy"}, `unknown action "destroy"; expected status, backup, history, boot-status, provision, adopt, handoff, register-ssh-key, or capacity`},
+		{"unknown action", []string{"destroy"}, `unknown action "destroy"; expected status, backup, history, boot-status, provision, adopt, handoff, observability, register-ssh-key, or capacity`},
 		{"unexpected argument", []string{"capacity", "extra"}, "unexpected arguments: extra"},
 		{"unexpected arguments", []string{"status", "--host", "h", "a", "b"}, "unexpected arguments: a b"},
 		{"undefined flag", []string{"status", "--bogus"}, "flag provided but not defined: -bogus"},
@@ -142,7 +142,7 @@ func pilotR3CheckUsageFlags(t *testing.T, stderr string) {
 			t.Fatalf("help %q lacks %q", stderr, line)
 		}
 	}
-	if count := strings.Count(stderr, "\n  -"); count != 29 {
+	if count := strings.Count(stderr, "\n  -"); count != 33 {
 		t.Fatalf("help lists %d flags", count)
 	}
 }
