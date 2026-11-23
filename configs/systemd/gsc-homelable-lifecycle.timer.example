@@ -1,0 +1,12 @@
+# Not installed or enabled by the controller or bootstrap.
+[Unit]
+Description=Optional GSC managed-only Homelable topology sync timer
+
+[Timer]
+OnBootSec=120s
+OnUnitInactiveSec=5min
+Persistent=true
+Unit=gsc-homelable-lifecycle.service
+
+[Install]
+WantedBy=timers.target
