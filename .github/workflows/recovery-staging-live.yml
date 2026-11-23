@@ -1,0 +1,104 @@
+name: Real Vultr staging verification (manual only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Observe Paper readiness or verify a staged Wasabi scratch restore
+        type: choice
+        required: true
+        options:
+          - observe
+          - verify-restore
+      server_id:
+        description: Exact recovery-test-... server ID
+        type: string
+        required: true
+      instance_id:
+        description: Exact disposable Vultr UUID; must match its metadata
+        type: string
+        required: true
+      backup_source:
+        description: "For verify-restore only: stagingwasabi:.../recovery-staging/.../backup-id"
+        type: string
+        required: false
+      marker_sha256:
+        description: For verify-restore only, SHA-256 of recovery-test-marker.txt
+        type: string
+        required: false
+      acknowledgement:
+        description: Enter STAGING_ONLY to allow read-only observation or scratch restoration
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gsc-live-recovery-${{ inputs.instance_id }}
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    if: ${{ inputs.acknowledgement == 'STAGING_ONLY' }}
+    runs-on: ubuntu-latest
+    environment: recovery-staging
+    timeout-minutes: 25
+    env:
+      MODE: ${{ inputs.mode }}
+      SERVER_ID: ${{ inputs.server_id }}
+      INSTANCE_ID: ${{ inputs.instance_id }}
+      BACKUP_SOURCE: ${{ inputs.backup_source }}
+      MARKER_SHA256: ${{ inputs.marker_sha256 }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate inputs and install pinned SSH identity
+        env:
+          STAGING_HOST: ${{ vars.GSC_RECOVERY_STAGING_HOST }}
+          STAGING_USER: ${{ vars.GSC_RECOVERY_STAGING_USER }}
+          STAGING_SSH_KEY: ${{ secrets.GSC_RECOVERY_STAGING_SSH_KEY }}
+          STAGING_KNOWN_HOSTS: ${{ secrets.GSC_RECOVERY_STAGING_KNOWN_HOSTS }}
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          from importlib.machinery import SourceFileLoader
+          live = SourceFileLoader("staging_live", "scripts/recovery/staging_live.py").load_module()
+          hostname = os.environ.get("STAGING_HOST", "")
+          username = os.environ.get("STAGING_USER", "")
+          key = os.environ.get("STAGING_SSH_KEY", "")
+          known = os.environ.get("STAGING_KNOWN_HOSTS", "")
+          if not re.fullmatch(r"[a-zA-Z0-9.-]{1,253}", hostname):
+              raise SystemExit("staging SSH host variable is missing or invalid")
+          if username != "gsc-stage-tester" or not key or not known:
+              raise SystemExit("staging SSH account or pinned credentials unavailable")
+          target = live.Target("staging", os.environ["SERVER_ID"], os.environ["INSTANCE_ID"],
+                               "gsc-recovery-runner", "minecraft-vanilla.service")
+          target.validate()
+          config = pathlib.Path.home() / ".ssh"
+          config.mkdir(mode=0o700, exist_ok=True)
+          key_path = config / "gsc_staging"
+          known_path = config / "known_hosts"
+          key_path.write_text(key)
+          key_path.chmod(0o600)
+          known_path.write_text(known)
+          known_path.chmod(0o600)
+          (config / "config").write_text(
+              "Host gsc-recovery-runner\n"
+              f"  HostName {hostname}\n"
+              f"  User {username}\n"
+              f"  IdentityFile {key_path}\n"
+              f"  UserKnownHostsFile {known_path}\n"
+              "  StrictHostKeyChecking yes\n"
+              "  IdentitiesOnly yes\n"
+              "  BatchMode yes\n"
+          )
+          (config / "config").chmod(0o600)
+          pathlib.Path("staging-target.json").write_text(json.dumps(target.__dict__))
+          PY
+      - name: Verify exact isolated Vultr VM and current Paper invocation
+        run: python3 scripts/recovery/staging_live.py --target staging-target.json observe
+      - name: Restore a selected staging Wasabi backup into scratch and verify marker
+        if: ${{ inputs.mode == 'verify-restore' }}
+        run: |
+          python3 scripts/recovery/staging_live.py --target staging-target.json verify-restore \
+            --source "$BACKUP_SOURCE" --marker-sha256 "$MARKER_SHA256"
