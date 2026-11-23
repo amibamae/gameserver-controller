@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/hosthandoff"
 )
@@ -104,7 +103,3 @@ func validVictoriaLogsEndpoint(value string) bool {
 		parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == "" &&
 		parsed.Path == "/insert/jsonline" && parsed.Opaque == ""
 }
-
-// Keep the compiler's reference to time.Duration for explicit bounded SSH
-// contexts at the call site; the CLI supplies the timeout via context.
-var _ time.Duration
