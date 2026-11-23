@@ -16,11 +16,11 @@ import (
 )
 
 type observabilityOptions struct {
-	Execute bool
-	Confirmation, OperationID string
+	Execute                                                bool
+	Confirmation, OperationID                              string
 	VultrCredentialRef, SSHCredentialRef, LogCredentialRef string
-	Endpoint, PrivacyMode string
-	Timeout time.Duration
+	Endpoint, PrivacyMode                                  string
+	Timeout                                                time.Duration
 }
 
 // runObservability is dry-run by default and never logs endpoint or token.
