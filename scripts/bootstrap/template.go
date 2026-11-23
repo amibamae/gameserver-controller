@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-//go:embed minecraft-debian.sh.tmpl
+//go:embed minecraft-debian.sh.tmpl victorialogs_export.py
 var files embed.FS
 
 var (
@@ -65,6 +65,10 @@ func Render(settings Settings) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read embedded bootstrap template: %w", err)
 	}
+	shipper, err := files.ReadFile("victorialogs_export.py")
+	if err != nil {
+		return nil, fmt.Errorf("read embedded VictoriaLogs exporter: %w", err)
+	}
 
 	// Get heap values from plan; default to 2GB min/max if plan unknown.
 	planRAM, ok := vultrPlanToRAM[settings.Plan]
@@ -82,6 +86,7 @@ func Render(settings Settings) ([]byte, error) {
 		"@@WASABI_REMOTE_PATH@@": settings.WasabiRemotePath,
 		"@@JAVA_HEAP_MIN@@":      strconv.Itoa(heapMin),
 		"@@JAVA_HEAP_MAX@@":      strconv.Itoa(heapMax),
+		"@@VICTORIALOGS_EXPORT_PY@@": strings.TrimSuffix(string(shipper), "\n"),
 	}
 	result := string(template)
 	for marker, value := range values {
