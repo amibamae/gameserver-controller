@@ -294,7 +294,7 @@ If any source/head relationship or writer authority is unknown, **fail closed**,
 
 ### 7A.4a Configurable five-backup routine rotation and protection boundaries
 
-The existing Go \`internal/backuppolicy\` policy and \`configs/controller.example.yaml\` **already specify**:
+The existing Go `internal/backuppolicy` policy and `configs/controller.example.yaml` **already specify**:
 
 ~~~yaml
 lifecycle:
@@ -307,20 +307,20 @@ lifecycle:
       # keep_last: 0 # alternative: disable routine pruning, retain indefinitely
 ~~~
 
-**Current implementation status:** \`backuppolicy.Resolve\` preserves explicit zero; \`PruneCandidates\` selects the oldest verified, unprotected candidates only after the new backup has been verified. **The controller runtime does not yet schedule these backups or perform retention cleanup** (see [configuration](../CONFIGURATION.md)). This ADR states the future behavior; it does not assert that deletions or recurring backups are running now.
+**Current implementation status:** `backuppolicy.Resolve` preserves explicit zero; `PruneCandidates` selects oldest verified, unprotected candidates; callers must invoke it only after the new backup has been verified. **The controller runtime does not yet schedule these backups or perform retention cleanup** (see [configuration](../CONFIGURATION.md)). This ADR states the future behavior; it does not assert that deletions or recurring backups are running now.
 
-For an **active** logical server, when \`keep_last: 5\` is selected, the intended sequence is:
+For an **active** logical server, when `keep_last: 5` is selected, the intended sequence is:
 
 1. Create backup #6 with a **new immutable backup ID and exact object keys**, never in-place overwrite backup #1 or reuse the same version reference.
 2. Verify full game/world capture, source generation/lineage, all required object checksums, upload completion and independent readback. If any step is uncertain or fails, **keep every previous backup**.
 3. Refresh authoritative world-head/backup dependencies and classify every version as *ordinary eligible rotation*, *current authoritative recovery*, *final stopped-world copy*, *pinned rollback/migration/restore dependency*, *Object Lock protected*, or *archived*. Any unknown classification is protected by default.
-4. Only then may a **separately scoped retention worker** remove the oldest **verified, unprotected routine** backup version(s) needed to meet \`keep_last\`. Execute exact version-specific, authorized storage deletes with audit and failed/partial-delete reconciliation; never delete a live backup head, required dependency or protected object. If retention or Object Lock forbids a deletion, keep the extra copy; the configured five is a target, **not a hard data-loss-inducing quota**.
+4. Only then may a **separately scoped retention worker** remove the oldest **verified, unprotected routine** backup version(s) needed to meet `keep_last`. Execute exact version-specific, authorized storage deletes with audit and failed/partial-delete reconciliation; never delete a live backup head, required dependency or protected object. If retention or Object Lock forbids a deletion, keep the extra copy; the configured five is a target, **not a hard data-loss-inducing quota**.
 5. Treat the backup group and manifest atomically for eligibility: do not prune partial sets or a manifest still needed to reconstruct a world. Never count an unfinished or unverified upload toward the five good backups.
-6. When \`keep_last: 0\`, or when a logical server is archived/removed, issue **no scheduled backup-prune deletes** for that server. A switch to unlimited retention affects future pruning and **does not recover copies already lawfully pruned**.
+6. When `keep_last: 0`, or when a logical server is archived/removed, issue **no scheduled backup-prune deletes** for that server. A switch to unlimited retention affects future pruning and **does not recover copies already lawfully pruned**.
 
 Scheduled retention is **not** an operator's Remove/Delete Server action. At archival, stop rotation first and preserve all surviving snapshots and the protected archive catalog; do not purge the remaining five simply because the active server listing is removed. Final verified recovery and anti-rollback anchors may be preserved separately from the routine five-copy ring.
 
-For the high-assurance profile, the normal controller/runtime and management API must not possess broad \`DeleteObject\`, \`DeleteObjects\`, \`DeleteBucket\`, lifecycle-expiry-management or retention-bypass authority. **If routine pruning is enabled**, use narrowly constrained, independently auditable maintenance credentials restricted to the eligible routine-backup prefix and exact versions, with protections preventing deletion of the protected archive/final-recovery namespace. Do not promise that Wasabi IAM alone can express all manifest/world-head business rules: the controller must perform authoritative policy checks as well as enforce physical access separation. The high-assurance immutable Object Lock retention term can prevent pruning; do not bypass it to force five copies.
+For the high-assurance profile, the normal controller/runtime and management API must not possess broad `DeleteObject`, `DeleteObjects`, `DeleteBucket`, lifecycle-expiry-management or retention-bypass authority. **If routine pruning is enabled**, use narrowly constrained, independently auditable maintenance credentials restricted to the eligible routine-backup prefix and exact versions, with protections preventing deletion of the protected archive/final-recovery namespace. Do not promise that Wasabi IAM alone can express all manifest/world-head business rules: the controller must perform authoritative policy checks as well as enforce physical access separation. The high-assurance immutable Object Lock retention term can prevent pruning; do not bypass it to force five copies.
 
 Never equate scheduled pruning with assurance that five surviving snapshots provide end-to-end eleven-nines durability. Protect the current committed head, continuous write journal and independently controlled recovery copies with separate retention rules.
 
