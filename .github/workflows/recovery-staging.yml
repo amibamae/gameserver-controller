@@ -1,0 +1,56 @@
+name: Recovery staging safety
+
+on:
+  push:
+    paths:
+      - "internal/recovery/**"
+      - "internal/workflow/server_destroy*"
+      - "scripts/bootstrap/**"
+      - "scripts/observability/test_minecraft_probe.py"
+      - "plugins/velocity/**"
+      - ".github/workflows/recovery-staging.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "internal/recovery/**"
+      - "internal/workflow/server_destroy*"
+      - "scripts/bootstrap/**"
+      - "scripts/observability/test_minecraft_probe.py"
+      - "plugins/velocity/**"
+      - ".github/workflows/recovery-staging.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Same-VM recovery and backup gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Recovery policy and bootstrap tests
+        run: go test -count=1 ./internal/recovery ./scripts/bootstrap
+      - name: Reject unverified recovery point at VM destroy
+        run: go test -count=1 ./internal/workflow -run '^TestServerDestroyRejectsIncompleteFinalRecoveryPoint$'
+      - name: Read-only Minecraft log probes
+        run: python3 -m unittest discover -s scripts/observability -p 'test_*.py'
+  proxy:
+    name: Drained Velocity backend does not route prematurely
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/velocity
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Recovery routing tests
+        run: ./gradlew --no-daemon test --tests '*BackendRegistryRecoveryTest'
