@@ -525,28 +525,40 @@ func (w *ServerDestroyWorkflow) ProjectLifecycle(operation store.OperationRecord
 	destroyStep := operationStep(operation, destroyProviderStep)
 	switch current.Record.LifecycleState {
 	case protocolstate.ServerStopped, protocolstate.ServerFailed:
-		if destroyStep.Attempt > 0 || destroyStep.Status != protocolstate.StepPending {
-			next.LifecycleState = protocolstate.ServerDestroying
-			next.DesiredState = "destroyed"
-			return next, true, nil
-		}
+		return w.handleLifecycleStoppedOrFailed(next, operation, destroyStep)
 	case protocolstate.ServerDestroying:
-		if operation.Status == protocolstate.OperationSucceeded {
-			if !hasValidServerDestroyResult(operation, current.Record, w.schemas) {
-				return store.LogicalServer{}, false, errors.New("terminal server.destroy result lacks exact backup and provider-absence evidence")
-			}
-			next.LifecycleState = protocolstate.ServerDestroyed
-			next.DesiredState = "destroyed"
-			next.InstanceRef = nil
-			return next, true, nil
-		}
-		if operation.Status == protocolstate.OperationFailed {
-			next.LifecycleState = protocolstate.ServerFailed
-			next.DesiredState = "destroyed"
-			return next, true, nil
-		}
+		return w.handleLifecycleDestroying(next, operation, destroyStep)
 	}
 	return current.Record, false, nil
+}
+
+// handleLifecycleStoppedOrFailed handles the stopped or failed state for server destroy.
+func (w *ServerDestroyWorkflow) handleLifecycleStoppedOrFailed(next store.LogicalServer, operation store.OperationRecord, destroyStep store.OperationStep) (store.LogicalServer, bool, error) {
+	if destroyStep.Attempt > 0 || destroyStep.Status != protocolstate.StepPending {
+		next.LifecycleState = protocolstate.ServerDestroying
+		next.DesiredState = "destroyed"
+		return next, true, nil
+	}
+	return next, false, nil
+}
+
+// handleLifecycleDestroying handles the destroying state for server destroy.
+func (w *ServerDestroyWorkflow) handleLifecycleDestroying(next store.LogicalServer, operation store.OperationRecord, destroyStep store.OperationStep) (store.LogicalServer, bool, error) {
+	if operation.Status == protocolstate.OperationSucceeded {
+		if !hasValidServerDestroyResult(operation, next, w.schemas) {
+			return store.LogicalServer{}, false, errors.New("terminal server.destroy result lacks exact backup and provider-absence evidence")
+		}
+		next.LifecycleState = protocolstate.ServerDestroyed
+		next.DesiredState = "destroyed"
+		next.InstanceRef = nil
+		return next, true, nil
+	}
+	if operation.Status == protocolstate.OperationFailed {
+		next.LifecycleState = protocolstate.ServerFailed
+		next.DesiredState = "destroyed"
+		return next, true, nil
+	}
+	return next, false, nil
 }
 
 func hasValidServerDestroyResult(operation store.OperationRecord, server store.LogicalServer, schemas schemaRuntime) bool {
