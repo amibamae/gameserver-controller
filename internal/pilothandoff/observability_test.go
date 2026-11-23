@@ -47,11 +47,11 @@ func TestVictoriaLogsRejectsUnsafePrivacyBeforeConnecting(t *testing.T) {
 
 func TestVictoriaLogsTokenPatternRejectsLineBreaks(t *testing.T) {
 	for _, token := range []string{"short", "bad\n" + strings.Repeat("x", 18), "bad space" + strings.Repeat("x", 18)} {
-		if logTokenPattern.Match([]byte(token)) {
+		if validLogToken([]byte(token)) {
 			t.Fatalf("accepted unsafe token %q", token)
 		}
 	}
-	if !logTokenPattern.Match([]byte(strings.Repeat("x", 32))) {
+	if !validLogToken([]byte(strings.Repeat("x", 32))) {
 		t.Fatal("rejected valid token")
 	}
 }
