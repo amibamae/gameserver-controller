@@ -155,6 +155,10 @@ func bindBackupValidationObject(operation store.OperationRecord, dataSet ServerB
 	if stringValueMap(object, "data_set_id") != dataSet.DataSetID {
 		return fmt.Errorf("manifest object %d is bound to the wrong data set", index)
 	}
+	// data_set_id is a planner-only correlation hint, not a field in the
+	// protocol backup-manifest object schema. Drop it after validating the
+	// exact binding so the persisted manifest remains schema compliant.
+	delete(object, "data_set_id")
 	stream["object_ref"] = put.ObjectRef
 	return nil
 }
