@@ -14,10 +14,10 @@ func autoLogTestOptions() handoffOptions {
 	return handoffOptions{
 		Execute: true, AutoVictoriaLogs: true, Confirmation: "vanilla@staging/instance-1",
 		OperationID: "0123456789abcdef0123456789abcdef",
-		Timeout: time.Hour, CredentialRef: defaultVultrCredential,
-		SSHCredentialRef: defaultSSHCredential,
+		Timeout:     time.Hour, CredentialRef: defaultVultrCredential,
+		SSHCredentialRef:  defaultSSHCredential,
 		LogsCredentialRef: "systemd-credential://gsc-victorialogs-ingest-token",
-		LogsPrivacyMode: "lifecycle", LogsEndpoint: "https://logs.example/insert/jsonline",
+		LogsPrivacyMode:   "lifecycle", LogsEndpoint: "https://logs.example/insert/jsonline",
 	}
 }
 
