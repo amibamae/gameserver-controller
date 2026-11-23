@@ -105,6 +105,11 @@ func (r Runner) sendVictoriaLogs(ctx context.Context, target Target, handoff *ho
 	return nil
 }
 
+// ValidVictoriaLogsEndpoint checks the exact authenticated HTTPS ingestion URL.
+func ValidVictoriaLogsEndpoint(value string) bool {
+	return validVictoriaLogsEndpoint(value)
+}
+
 func validVictoriaLogsEndpoint(value string) bool {
 	if value == "" || len(value) > 2048 || strings.ContainsAny(value, "\r\n\t ") {
 		return false
