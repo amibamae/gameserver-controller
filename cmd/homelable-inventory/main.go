@@ -35,12 +35,23 @@ func snapshot(design string, reservations []store.CapacityReservation) lifecycle
 		if state == "" {
 			continue
 		}
-		name := fmt.Sprintf("%s @ %s (%s)", r.ServerID, r.EnvironmentID, r.OperationID[:8])
+		name := lifecycleNodeName(r)
 		result.Nodes = append(result.Nodes, lifecycleNode{
 			OperationID: r.OperationID, Name: name, Type: "vm", State: state,
 		})
 	}
 	return result
+}
+
+// Homelable labels include a six-character prefix and allow 80 characters.
+// Keep the operation suffix intact if an otherwise valid server ID is long.
+func lifecycleNodeName(r store.CapacityReservation) string {
+	suffix := fmt.Sprintf(" @ %s (%s)", r.EnvironmentID, r.OperationID[:8])
+	server := r.ServerID
+	if len(server)+len(suffix) > 74 {
+		server = server[:74-len(suffix)]
+	}
+	return server + suffix
 }
 
 // Uncertain destruction must never be represented as a retired VM.
