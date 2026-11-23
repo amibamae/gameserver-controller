@@ -18,7 +18,7 @@ import victorialogs_bridge as bridge
 
 MAX_RECORDS = 250
 MAX_LINE = 262144
-UNIT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}\\.service$")
+UNIT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}\.service$")
 CURSOR = re.compile(r"^[A-Za-z0-9_.;:=-]{1,4096}$")
 
 
@@ -66,10 +66,10 @@ def read_journal(unit, cursor):
             line = process.stdout.readline(MAX_LINE + 1)
             if not line:
                 break
-            if not line.endswith(b"\\n"):
+            if not line.endswith(b"\n"):
                 # This message is too large. Drain the remainder without
                 # retaining it or leaking it to the destination.
-                while line and not line.endswith(b"\\n"):
+                while line and not line.endswith(b"\n"):
                     line = process.stdout.readline(MAX_LINE + 1)
                 continue
             records.append(line)
@@ -104,7 +104,7 @@ def save_cursor(path, cursor):
     fd, temp_path = tempfile.mkstemp(prefix=".cursor-", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as output:
-            output.write(cursor + "\\n")
+            output.write(cursor + "\n")
             output.flush()
             os.fsync(output.fileno())
         os.replace(temp_path, path)
