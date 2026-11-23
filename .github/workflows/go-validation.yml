@@ -12,15 +12,8 @@ on:
       - "docs/ROADMAP.md"
       - ".github/workflows/go-validation.yml"
   pull_request:
-    paths:
-      - "**.go"
-      - "go.mod"
-      - "go.sum"
-      - "configs/**"
-      - "internal/pilotcapacity/**"
-      - "docs/CONFIGURATION.md"
-      - "docs/ROADMAP.md"
-      - ".github/workflows/go-validation.yml"
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
