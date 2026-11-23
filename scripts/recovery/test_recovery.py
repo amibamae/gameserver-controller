@@ -92,7 +92,7 @@ class RecoveryPolicyTests(unittest.TestCase):
         self.assertFalse(recovery.allowed_attempt(
             {"attempts": [500, 510]}, 1000)[0])
         self.assertFalse(recovery.allowed_attempt(
-            {"attempts": [1000, 2000, 3000]}, 90000 if False else 3100)[0])
+            {"attempts": [1000, 2000, 3000]}, 3100)[0])
         self.assertFalse(recovery.allowed_attempt(
             {"attempts": [1000]}, 1100)[0])
         self.assertTrue(recovery.allowed_attempt({"attempts": [1000]}, 5000)[0])
