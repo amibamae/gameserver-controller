@@ -11,12 +11,12 @@ import (
 	"testing"
 )
 
-// TestEveryActionIsDispatched keeps pilotActions and runWithSettings in step:
+// TestEveryActionIsDispatched keeps pilotActions and the CLI dispatcher in step:
 // each listed action must have its own branch, and each branch must be listed.
 // The pilot once accepted handoff and register-ssh-key while its error message
 // still named only the seven older actions.
 func TestEveryActionIsDispatched(t *testing.T) {
-	file, err := parser.ParseFile(token.NewFileSet(), "main.go", nil, 0)
+	file, err := parser.ParseFile(token.NewFileSet(), "action_dispatch.go", nil, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,8 +28,37 @@ func TestEveryActionIsDispatched(t *testing.T) {
 	slices.Sort(dispatched)
 	slices.Sort(listed)
 	if !slices.Equal(dispatched, listed) {
-		t.Fatalf("runWithSettings dispatches %v, pilotActions lists %v", dispatched, listed)
+		t.Fatalf("pilotCommand.dispatch handles %v, pilotActions lists %v", dispatched, listed)
 	}
+}
+
+func TestRunWithSettingsCallsDispatcher(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), "main.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "runWithSettings" {
+			continue
+		}
+		delegates := false
+		ast.Inspect(fn.Body, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			selector, ok := call.Fun.(*ast.SelectorExpr)
+			if ok && selector.Sel.Name == "dispatch" {
+				delegates = true
+			}
+			return true
+		})
+		if delegates {
+			return
+		}
+	}
+	t.Fatal("runWithSettings must invoke the command dispatcher after parsing flags")
 }
 
 func dispatchedPilotActions(t *testing.T, file *ast.File) []string {
@@ -37,7 +66,7 @@ func dispatchedPilotActions(t *testing.T, file *ast.File) []string {
 	var dispatched []string
 	for _, decl := range file.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Name.Name != "runWithSettings" {
+		if !ok || fn.Name.Name != "dispatch" {
 			continue
 		}
 		ast.Inspect(fn.Body, func(node ast.Node) bool {
@@ -45,7 +74,7 @@ func dispatchedPilotActions(t *testing.T, file *ast.File) []string {
 			case *ast.SwitchStmt:
 				dispatched = appendSwitchActions(t, dispatched, expr)
 			case *ast.BinaryExpr:
-				// history is handled before the switch: if action == "history".
+				// Recognize direct comparisons if a command needs a special case.
 				if ident, ok := expr.X.(*ast.Ident); ok && ident.Name == "action" && expr.Op == token.EQL {
 					dispatched = append(dispatched, stringLiteral(t, expr.Y))
 				}

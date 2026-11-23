@@ -17,7 +17,6 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/credential"
 	"github.com/amibamae/gameserver-controller/internal/pilotcapacity"
 	"github.com/amibamae/gameserver-controller/internal/pilotvultr"
-	"github.com/amibamae/gameserver-controller/internal/vultrapi"
 )
 
 const (
@@ -75,34 +74,38 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 
 	flags := flag.NewFlagSet("gsc-pilot "+action, flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	host := flags.String("host", "", "SSH config alias or user@host for the Minecraft server")
-	execute := flags.Bool("execute", false, "execute the selected action; mutating actions are dry runs by default")
-	confirmHost := flags.String("confirm-host", "", "repeat the exact SSH target to approve a backup run")
-	confirmAdopt := flags.String("confirm-adopt", "", "repeat <server-id>@<environment>/<instance-id> to approve local managed ownership")
-	instanceID := flags.String("instance-id", "", "exact existing Vultr instance ID for adoption")
-	expectedIP := flags.String("expected-ip", "", "expected public IPv4 address for adoption")
-	osName := flags.String("os-name", "", "exact expected Vultr operating system name for adoption")
-	confirmCreate := flags.String("confirm-create", "", "repeat <server-id>@<environment> to approve billable Vultr VM creation")
-	timeout := flags.Duration("timeout", time.Hour, "maximum time to wait for the selected operation")
-	serverID := flags.String("server-id", "", "stable logical server ID for Vultr provisioning")
-	environmentID := flags.String("environment", "", "configured environment ID: production, staging, or testing")
-	region := flags.String("region", "", "Vultr region ID")
-	plan := flags.String("plan", "", "Vultr plan ID")
-	osID := flags.String("os-id", "", "Vultr OS offering ID")
-	hostname := flags.String("hostname", "", "optional VM hostname")
-	credentialRef := flags.String("credential-ref", defaultVultrCredential, "systemd credential reference for the Vultr API key")
-	operationID := flags.String("operation-id", "", "reuse the exact operation ID to reconcile a create or repeat an adoption")
-	startupScriptID := flags.String("startup-script-id", "", "exact Vultr bootstrap startup-script ID")
-	startupScriptSHA256 := flags.String("startup-script-sha256", "", "expected SHA-256 digest printed by gsc-bootstrap")
-	firewallGroupID := flags.String("firewall-group-id", "", "Vultr firewall group that admits SSH only from --controller-ip (required for provisioning)")
-	controllerIP := flags.String("controller-ip", "", "the controller's fixed public IP address (required for provisioning and handoff)")
-	sshCredentialRef := flags.String("ssh-credential-ref", defaultSSHCredential, "systemd credential reference for the controller's SSH private key")
-	confirmHandoff := flags.String("confirm-handoff", "", "repeat <server-id>@<environment>/<instance-id> to approve the SSH handoff")
-	wasabiRegion := flags.String("wasabi-region", "", "Wasabi region of the backup bucket, for example us-east-1")
-	wasabiAccessRef := flags.String("wasabi-access-key-ref", defaultWasabiAccessKey, "systemd credential reference for the VM's Wasabi access key ID")
-	wasabiSecretRef := flags.String("wasabi-secret-key-ref", defaultWasabiSecretKey, "systemd credential reference for the VM's Wasabi secret access key")
-	publicKeyFile := flags.String("public-key-file", "", "controller SSH public key file to register with Vultr")
-	keyName := flags.String("name", "", "name for the SSH key in Vultr")
+	flags.String("host", "", "SSH config alias or user@host for the Minecraft server")
+	flags.Bool("execute", false, "execute the selected action; mutating actions are dry runs by default")
+	flags.String("confirm-host", "", "repeat the exact SSH target to approve a backup run")
+	flags.String("confirm-adopt", "", "repeat <server-id>@<environment>/<instance-id> to approve local managed ownership")
+	flags.String("instance-id", "", "exact existing Vultr instance ID for adoption")
+	flags.String("expected-ip", "", "expected public IPv4 address for adoption")
+	flags.String("os-name", "", "exact expected Vultr operating system name for adoption")
+	flags.String("confirm-create", "", "repeat <server-id>@<environment> to approve billable Vultr VM creation")
+	flags.Duration("timeout", time.Hour, "maximum time to wait for the selected operation")
+	flags.String("server-id", "", "stable logical server ID for Vultr provisioning")
+	flags.String("environment", "", "configured environment ID: production, staging, or testing")
+	flags.String("region", "", "Vultr region ID")
+	flags.String("plan", "", "Vultr plan ID")
+	flags.String("os-id", "", "Vultr OS offering ID")
+	flags.String("hostname", "", "optional VM hostname")
+	flags.String("credential-ref", defaultVultrCredential, "systemd credential reference for the Vultr API key")
+	flags.String("operation-id", "", "reuse the exact operation ID to reconcile a create or repeat an adoption")
+	flags.String("startup-script-id", "", "exact Vultr bootstrap startup-script ID")
+	flags.String("startup-script-sha256", "", "expected SHA-256 digest printed by gsc-bootstrap")
+	flags.String("firewall-group-id", "", "Vultr firewall group that admits SSH only from --controller-ip (required for provisioning)")
+	flags.String("controller-ip", "", "the controller's fixed public IP address (required for provisioning and handoff)")
+	flags.String("ssh-credential-ref", defaultSSHCredential, "systemd credential reference for the controller's SSH private key")
+	flags.String("confirm-handoff", "", "repeat <server-id>@<environment>/<instance-id> to approve the SSH handoff")
+	flags.String("confirm-observability", "", "repeat <server-id>@<environment>/<instance-id> to authorize private log settings")
+	flags.String("logs-endpoint", "", "HTTPS ingestion reverse proxy with /insert/jsonline path")
+	flags.String("logs-privacy", "lifecycle", "log privacy mode: lifecycle or disabled (never raw player logs)")
+	flags.String("logs-credential-ref", credential.SystemdReferenceScheme+"gsc-victorialogs-ingest-token", "systemd credential reference for VictoriaLogs ingestion only")
+	flags.String("wasabi-region", "", "Wasabi region of the backup bucket, for example us-east-1")
+	flags.String("wasabi-access-key-ref", defaultWasabiAccessKey, "systemd credential reference for the VM's Wasabi access key ID")
+	flags.String("wasabi-secret-key-ref", defaultWasabiSecretKey, "systemd credential reference for the VM's Wasabi secret access key")
+	flags.String("public-key-file", "", "controller SSH public key file to register with Vultr")
+	flags.String("name", "", "name for the SSH key in Vultr")
 	var sshKeyIDs stringListFlag
 	flags.Var(&sshKeyIDs, "ssh-key-id", "Vultr SSH key ID; repeat for multiple keys (required for provisioning)")
 
@@ -110,124 +113,9 @@ func runWithSettings(args []string, stdout, stderr io.Writer, settings runtimeSe
 		return err
 	}
 
-	switch action {
-	case "history":
-		if flags.NFlag() != 0 {
-			return errors.New("history is local and read-only; remove all flags")
-		}
-		return doHistory(stdout)
-	case "status":
-		if err := allowOnlyFlags(flags, "host", "execute", "confirm-host"); err != nil {
-			return err
-		}
-		if !safeSSHHost.MatchString(*host) || strings.HasPrefix(*host, "-") {
-			return errors.New("--host is required and must be a simple SSH alias or user@host")
-		}
-		if *execute || *confirmHost != "" {
-			return errors.New("status is read-only; remove --execute and --confirm-host")
-		}
-		return doStatus(*host, stdout)
-	case "backup":
-		if err := allowOnlyFlags(flags, "host", "execute", "confirm-host", "timeout"); err != nil {
-			return err
-		}
-		if !safeSSHHost.MatchString(*host) || strings.HasPrefix(*host, "-") {
-			return errors.New("--host is required and must be a simple SSH alias or user@host")
-		}
-		if *timeout <= 0 || *timeout > 24*time.Hour {
-			return errors.New("--timeout must be greater than zero and no more than 24 hours")
-		}
-		return doBackup(*host, *execute, *confirmHost, *timeout, stdout, stderr)
-	case "provision":
-		if err := allowOnlyFlags(flags, "execute", "confirm-create", "timeout", "server-id", "environment", "region", "plan", "os-id", "hostname", "credential-ref", "operation-id", "ssh-key-id", "startup-script-id", "startup-script-sha256", "firewall-group-id", "controller-ip", "ssh-credential-ref"); err != nil {
-			return err
-		}
-		policy, err := pilotcapacity.LoadEmbeddedPolicy()
-		if err != nil {
-			return fmt.Errorf("load embedded capacity policy: %w", err)
-		}
-		statePath, err := settings.capacityStatePath()
-		if err != nil {
-			return fmt.Errorf("resolve capacity state path: %w", err)
-		}
-		return doProvision(provisionOptions{
-			execute: *execute, confirmation: *confirmCreate, timeout: *timeout,
-			policy: policy, statePath: statePath, serverID: *serverID, environment: *environmentID,
-			region: *region, plan: *plan, osID: *osID, hostname: *hostname,
-			sshKeyIDs: sshKeyIDs, startupScriptID: *startupScriptID, startupScriptSHA256: *startupScriptSHA256,
-			credentialRef: *credentialRef, operationID: *operationID, access: provisionAccess{FirewallGroupID: *firewallGroupID, ControllerIP: *controllerIP, SSHCredentialRef: *sshCredentialRef},
-		}, stdout, stderr)
-	case "adopt":
-		if err := allowOnlyFlags(flags, "execute", "confirm-adopt", "timeout", "server-id", "environment", "instance-id", "expected-ip", "region", "plan", "os-id", "os-name", "credential-ref", "operation-id"); err != nil {
-			return err
-		}
-		policy, err := pilotcapacity.LoadEmbeddedPolicy()
-		if err != nil {
-			return fmt.Errorf("load embedded capacity policy: %w", err)
-		}
-		statePath, err := settings.capacityStatePath()
-		if err != nil {
-			return fmt.Errorf("resolve capacity state path: %w", err)
-		}
-		providerOSID, err := vultrapi.ParseOSID(*osID)
-		if err != nil {
-			return fmt.Errorf("parse Vultr OS ID: %w", err)
-		}
-		return doAdoptVultr(*execute, *confirmAdopt, *timeout, policy, statePath, *credentialRef, pilotvultr.AdoptionRequest{
-			OperationID: *operationID, ServerID: *serverID, Environment: *environmentID, InstanceID: *instanceID,
-			IP: *expectedIP, Region: *region, Plan: *plan, OSID: providerOSID, OS: *osName,
-		}, stdout)
-	case "handoff":
-		if err := allowOnlyFlags(flags, "execute", "confirm-handoff", "timeout", "operation-id", "credential-ref", "ssh-credential-ref", "wasabi-region", "wasabi-access-key-ref", "wasabi-secret-key-ref"); err != nil {
-			return err
-		}
-		statePath, err := settings.capacityStatePath()
-		if err != nil {
-			return fmt.Errorf("resolve capacity state path: %w", err)
-		}
-		handoffTimeout := *timeout
-		if !flagSet(flags, "timeout") {
-			handoffTimeout = 45 * time.Minute
-		}
-		return doHandoff(handoffOptions{Execute: *execute, Confirmation: *confirmHandoff, Timeout: handoffTimeout, OperationID: *operationID,
-			CredentialRef: *credentialRef, SSHCredentialRef: *sshCredentialRef, WasabiAccessRef: *wasabiAccessRef, WasabiSecretRef: *wasabiSecretRef,
-			WasabiRegion: *wasabiRegion}, statePath, stdout, stderr)
-	case "register-ssh-key":
-		if err := allowOnlyFlags(flags, "execute", "public-key-file", "name", "credential-ref", "timeout"); err != nil {
-			return err
-		}
-		return doRegisterSSHKey(*execute, *publicKeyFile, *keyName, *credentialRef, min(*timeout, 2*time.Minute), stdout)
-	case "capacity":
-		if flags.NFlag() != 0 {
-			return errors.New("capacity reads the fixed local policy and state database; remove all flags")
-		}
-		policy, err := pilotcapacity.LoadEmbeddedPolicy()
-		if err != nil {
-			return fmt.Errorf("load embedded capacity policy: %w", err)
-		}
-		statePath, err := settings.capacityStatePath()
-		if err != nil {
-			return fmt.Errorf("resolve capacity state path: %w", err)
-		}
-		return doShowCapacity(policy, statePath, stdout)
-	case "boot-status":
-		if err := allowOnlyFlags(flags, "server-id", "environment"); err != nil {
-			return err
-		}
-		if !safePilotServerID.MatchString(*serverID) {
-			return errors.New("--server-id is required and must be a lower-case identifier")
-		}
-		if *environmentID != "production" && *environmentID != "staging" && *environmentID != "testing" {
-			return errors.New("--environment must be production, staging, or testing")
-		}
-		statePath, err := settings.capacityStatePath()
-		if err != nil {
-			return fmt.Errorf("resolve capacity state path: %w", err)
-		}
-		return doShowBootStatus(*serverID, *environmentID, statePath, time.Now().UTC(), stdout)
-	default:
-		return usage(stderr)
-	}
+	return (pilotCommand{
+		flags: flags, settings: settings, stdout: stdout, stderr: stderr, sshKeyIDs: sshKeyIDs,
+	}).dispatch(action)
 }
 
 // parseFlags parses command-line flags and returns an error if parsing fails or extra args remain.

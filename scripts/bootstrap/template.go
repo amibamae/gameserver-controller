@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-//go:embed minecraft-debian.sh.tmpl
+//go:embed minecraft-debian.sh.tmpl victorialogs_export.py victorialogs_configure.py
 var files embed.FS
 
 var (
@@ -65,6 +65,14 @@ func Render(settings Settings) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read embedded bootstrap template: %w", err)
 	}
+	shipper, err := files.ReadFile("victorialogs_export.py")
+	if err != nil {
+		return nil, fmt.Errorf("read embedded VictoriaLogs exporter: %w", err)
+	}
+	configurer, err := files.ReadFile("victorialogs_configure.py")
+	if err != nil {
+		return nil, fmt.Errorf("read embedded VictoriaLogs configurer: %w", err)
+	}
 
 	// Get heap values from plan; default to 2GB min/max if plan unknown.
 	planRAM, ok := vultrPlanToRAM[settings.Plan]
@@ -76,12 +84,14 @@ func Render(settings Settings) ([]byte, error) {
 	heapMax := int(planRAM)
 
 	values := map[string]string{
-		"@@CONTROLLER_IP@@":      settings.ControllerIP,
-		"@@MINECRAFT_PORT@@":     strconv.Itoa(int(settings.MinecraftPort)),
-		"@@VOICE_CHAT_PORT@@":    strconv.Itoa(int(settings.VoiceChatPort)),
-		"@@WASABI_REMOTE_PATH@@": settings.WasabiRemotePath,
-		"@@JAVA_HEAP_MIN@@":      strconv.Itoa(heapMin),
-		"@@JAVA_HEAP_MAX@@":      strconv.Itoa(heapMax),
+		"@@CONTROLLER_IP@@":             settings.ControllerIP,
+		"@@MINECRAFT_PORT@@":            strconv.Itoa(int(settings.MinecraftPort)),
+		"@@VOICE_CHAT_PORT@@":           strconv.Itoa(int(settings.VoiceChatPort)),
+		"@@WASABI_REMOTE_PATH@@":        settings.WasabiRemotePath,
+		"@@JAVA_HEAP_MIN@@":             strconv.Itoa(heapMin),
+		"@@JAVA_HEAP_MAX@@":             strconv.Itoa(heapMax),
+		"@@VICTORIALOGS_EXPORT_PY@@":    strings.TrimSuffix(string(shipper), "\n"),
+		"@@VICTORIALOGS_CONFIGURE_PY@@": strings.TrimSuffix(string(configurer), "\n"),
 	}
 	result := string(template)
 	for marker, value := range values {

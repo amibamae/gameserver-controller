@@ -114,6 +114,7 @@ var PilotCredentialNames = []string{
 	"vultr-pilot-api-token",
 	"gsc-pilot-vm-wasabi-access-key-id",
 	"gsc-pilot-vm-wasabi-secret-access-key",
+	"gsc-victorialogs-ingest-token",
 }
 
 // PilotSSHKeyName is the credential holding the controller's SSH private key.
