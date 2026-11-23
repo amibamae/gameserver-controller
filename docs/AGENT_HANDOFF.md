@@ -20,6 +20,20 @@ The owner requires this for all work. The full text is in CLAUDE.md, "Code healt
 
 If the repowise tools aren't available, you can measure complexity with a cyclomatic-complexity tool such as `gocyclo`. Don't add any tool to the repository or CI without a `THIRD_PARTY_NOTICES.md` entry whose license you have checked at its source.
 
+## Staged Minecraft recovery work (2026-11-23)
+
+Feature branch: `feat/recover-paper-before-vm-replacement-20261123` (not merged or deployed).
+This work is staging policy and tests, **not** a live auto-restart integration.
+
+- `internal/recovery` plans same-VM recovery from two matching health samples. For a running game it orders proxy drain, `game.save.request`, protocol `execution.unit.restart`, new-runtime inspection, game readiness and proxy re-registration. Failed exited units use the `execution.unit.start` path. It refuses a new/unknown instance.
+- `scripts/bootstrap/minecraft_probe.py` reads redacted journald status bound to one systemd invocation; the bootstrap deploys it on newly provisioned hosts without enabling a recovery timer. New Python and Go tests cover fatal logs, stale/unknown health, old `Done` markers and identity changes.
+- `plugins/velocity/.../BackendRegistryRecoveryTest.java` confirms a drained backend stays unroutable through successful TCP checks and proxy restoration. Velocity CI passed.
+- `server.destroy` requires the verified backup resolver to attest that the recovery point is off the VM, consistent and includes final saved writes, in addition to its existing generation, manifest, checksum and authorization checks. New tests reject missing attestation before provider deletion. This is fail-closed until a real resolver supplies evidence.
+- A direct-SSH Python restart daemon prototyped earlier was **removed**: it bypassed the controller's game-save/restart contract and could permit premature routing.
+- `docs/RECOVERY_POLICY.md` documents the staged design, 11-nines object-durability distinction, and Wasabi backup-before-deletion expectations. VictoriaLogs and Homelable remain optional.
+
+Next tasks: wire this policy into durable server recovery operations with bounded retries and startup reconciliation, ensure new-incarnation Paper readiness gates bridge re-registration, implement independent verified-backup evidence in the real resolver, and stage-test on a disposable VM. Existing `controller serve` registers only `server.define`. Do not claim automatic recovery is deployed.
+
 ## Current work: raising code health (resume here)
 
 **Priority (2026-11-14).** Raise code health across the repository before starting roadmap features. Keep the existing target of 7–8 for the repository average and report scores for each changed file. Use the hosted index to rank candidates and the same local analyzer on base and branch to measure patches. The hosted index was last observed at `354ee6a`, before the backup merge.
