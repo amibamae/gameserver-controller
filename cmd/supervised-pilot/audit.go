@@ -16,7 +16,44 @@ import (
 )
 
 var safeOperationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
-var safePilotTarget = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}@(production|staging|testing)$`)
+var safePilotTarget = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}@(production|staging|testing)package main
+
+import (
+	"bufio"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"time"
+)
+
+var safeOperationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
+)
+var safePilotInstanceTarget = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}@(production|staging|testing)/[A-Za-z0-9][A-Za-z0-9-]{0,127}package main
+
+import (
+	"bufio"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"time"
+)
+
+var safeOperationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
+)
 
 type auditRecord struct {
 	OperationID string `json:"operation_id"`
@@ -157,6 +194,10 @@ func validAuditRecord(record auditRecord) bool {
 		return record.Service == "vultr.instance.adopt" && safePilotTarget.MatchString(record.Target) && validAdoptionAuditEvent(record.Event)
 	case "provision":
 		return record.Service == "vultr.instance.create" && safePilotTarget.MatchString(record.Target) && validProvisionAuditEvent(record.Event)
+	case "handoff":
+		return record.Service == "vm.ssh.handoff" && safePilotInstanceTarget.MatchString(record.Target) && validHandoffAuditEvent(record.Event)
+	case "observability":
+		return record.Service == "vm.ssh.observability" && safePilotInstanceTarget.MatchString(record.Target) && validObservabilityAuditEvent(record.Event)
 	default:
 		return false
 	}
@@ -182,4 +223,22 @@ func validProvisionAuditEvent(event string) bool {
 
 func validAdoptionAuditEvent(event string) bool {
 	return event == "adoption_requested" || event == "adoption_failed" || event == "adoption_confirmed"
+}
+
+func validHandoffAuditEvent(event string) bool {
+	switch event {
+	case "handoff_requested", "handoff_failed", "handoff_completed", "host_key_mismatch":
+		return true
+	default:
+		return false
+	}
+}
+
+func validObservabilityAuditEvent(event string) bool {
+	switch event {
+	case "observability_requested", "observability_failed", "observability_completed":
+		return true
+	default:
+		return false
+	}
 }
