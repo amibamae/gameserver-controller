@@ -16,18 +16,28 @@ const (
 // Observation identifies one game-health sample from an exact managed runtime.
 // An unknown or missing field is not evidence permitting an automatic restart.
 type Observation struct {
-	ServerID, EnvironmentID, InstanceID, UnitID, ReleaseID, RuntimeID string
-	Health, UnitState, Reason                                       string
-	ObservedAt                                                      time.Time
+	ServerID      string
+	EnvironmentID string
+	InstanceID    string
+	UnitID        string
+	ReleaseID     string
+	RuntimeID     string
+	Health        string
+	UnitState     string
+	Reason        string
+	ObservedAt    time.Time
 }
 
 // Plan is a sequence of existing protocol operations on one exact VM.
 // These steps are advisory until the controller's durable workflow implements
 // them; no provider create/destroy operation is ever returned.
 type Plan struct {
-	InstanceID, UnitID, ReleaseID, PreviousRuntimeID string
-	SampledAt                                        time.Time
-	Steps                                            []string
+	InstanceID        string
+	UnitID            string
+	ReleaseID         string
+	PreviousRuntimeID string
+	SampledAt         time.Time
+	Steps             []string
 }
 
 var ErrInsufficientEvidence = errors.New("recovery requires two fresh, matching, confirmed failures on one managed runtime")
@@ -93,10 +103,13 @@ func freshFailures(before, after Observation, now time.Time) bool {
 // Readiness is a game-adapter observation, not a proxy reachability probe.
 // The caller must independently validate its source and all required checks.
 type Readiness struct {
-	InstanceID, UnitID, ReleaseID, RuntimeID string
-	ObservedAt                               time.Time
-	ReadyLogAt                               time.Time
-	AllRequiredChecksPassed                  bool
+	InstanceID              string
+	UnitID                  string
+	ReleaseID               string
+	RuntimeID               string
+	ObservedAt              time.Time
+	ReadyLogAt              time.Time
+	AllRequiredChecksPassed bool
 }
 
 // MayReregister forbids proxy routing before the NEW runtime's fresh Done
