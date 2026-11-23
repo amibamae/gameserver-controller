@@ -46,7 +46,7 @@ func TestBackupR3ResolveStepInputResults(t *testing.T) {
 	checksum := map[string]any{"algorithm": "sha256", "digest": backupTestDigest}
 	manifest := decodeObject(stepField(operationStep(f.operation, backupValidateStep).Input, "manifest"))
 	manifest["consistency"] = map[string]any{"mode": "offline", "evidence": "runtime stopped"}
-	manifest["objects"] = []any{map[string]any{"data_set_id": "world", "object_ref": objectRef, "size_bytes": 32,
+	manifest["objects"] = []any{map[string]any{"object_ref": objectRef, "size_bytes": 32,
 		"checksum_algorithm": "sha256", "checksum": backupTestDigest}}
 	for _, test := range []struct {
 		step string
@@ -367,14 +367,14 @@ func TestBackupR3StreamExpectations(t *testing.T) {
 			wantSeen: "controller_to_adapter [{DataSetID:world SizeBytes:0 MaximumBytes:1 SHA256:" + digest + "}]"},
 		{name: "validation", step: backupValidateStep, want: "1 transfers", wantSeen: "controller_to_adapter [{DataSetID:world SizeBytes:32 MaximumBytes:32 SHA256:" + digest + "}]"},
 		{name: "validation input not JSON", step: backupValidateStep, change: rawInput(backupValidateStep, `nope`), want: "invalid character 'o' in literal null (expecting 'u')"},
-		{name: "validation without objects", step: backupValidateStep, change: withObjects(), want: "0 transfers", wantSeen: "<not issued>"},
+		{name: "validation without objects", step: backupValidateStep, change: withObjects(), want: "validation manifest object count differs from accepted plan", wantSeen: "<not issued>"},
 		{name: "validation object without a size", step: backupValidateStep, change: withObjects(map[string]any{"data_set_id": "world"}),
 			want: "validation manifest has an invalid object size"},
 		{name: "validation object without a data set", step: backupValidateStep, change: withObjects(map[string]any{"size_bytes": 3, "checksum": "c"}),
-			want: "validation manifest has an object without a data set ID"},
+			want: "validation manifest has no exact object reference"},
 		{name: "validation of two empty objects", step: backupValidateStep,
 			change: withObjects(map[string]any{"data_set_id": "a", "size_bytes": 0}, map[string]any{"data_set_id": "b", "size_bytes": 7, "checksum": "c"}),
-			want:   "2 transfers", wantSeen: "controller_to_adapter [{DataSetID:a SizeBytes:0 MaximumBytes:1 SHA256:} {DataSetID:b SizeBytes:7 MaximumBytes:7 SHA256:c}]"},
+			want: "validation manifest object count differs from accepted plan", wantSeen: "<not issued>"},
 	} {
 		t.Run(test.name, func(t *testing.T) { test.run(t, f, backupR3Copy(operation)) })
 	}
@@ -419,9 +419,8 @@ func TestBackupR3StreamTransferChecks(t *testing.T) {
 		{name: "expires after the deadline", step: backupR3Upload, alter: each(expires(2 * time.Minute)), want: unsafe},
 		{name: "expires after five minutes", step: backupR3Upload, deadline: 10 * time.Minute, alter: each(expires(6 * time.Minute)), want: unsafe},
 		{name: "expires within five minutes", step: backupR3Upload, deadline: 10 * time.Minute, alter: each(expires(4 * time.Minute)), want: "1 transfers"},
-		{name: "reused transfer ID", step: backupValidateStep, change: twoObjects,
-			alter: each(func(transfer *adapter.StreamTransfer) { transfer.Reference.TransferID = strings.Repeat("a", 64) }),
-			want:  "stream broker reused a transfer ID within one invocation"},
+		{name: "extra validation objects cannot request streams", step: backupValidateStep, change: twoObjects,
+			want: "validation manifest object count differs from accepted plan"},
 		{name: "no verifier", step: backupR3Upload, alter: each(func(transfer *adapter.StreamTransfer) { transfer.Verify = nil }), want: binding},
 		{name: "upload without a source", step: backupR3Upload, alter: each(func(transfer *adapter.StreamTransfer) { transfer.Source = nil }), want: binding},
 		{name: "upload with a sink", step: backupR3Upload, alter: each(func(transfer *adapter.StreamTransfer) { transfer.Sink = backupR3NopSink{io.Discard} }), want: binding},
@@ -431,6 +430,24 @@ func TestBackupR3StreamTransferChecks(t *testing.T) {
 		}), want: binding},
 	} {
 		t.Run(test.name, func(t *testing.T) { test.run(t, f, backupR3Copy(operation)) })
+	}
+}
+
+// A broker must not reuse one one-use transfer handle for two different
+// data sets, even if the caller already supplied a valid two-object plan.
+func TestBackupR3DuplicateStreamHandlesRejected(t *testing.T) {
+	f := newBackupR3Fixture(t, false)
+	expectations := []ServerBackupStreamExpectation{
+		{DataSetID: "world", SizeBytes: 1, MaximumBytes: 1, SHA256: backupTestDigest},
+		{DataSetID: "nether", SizeBytes: 1, MaximumBytes: 1, SHA256: backupTestDigest},
+	}
+	transfers := backupR3Transfers(expectations, "controller_to_adapter")
+	transfers[1].Reference.TransferID = transfers[0].Reference.TransferID
+	now := time.Now().UTC()
+	bounds := backupStreamBounds{direction: "controller_to_adapter", deadline: now.Add(time.Minute), now: now}
+	err := f.workflow.validateIssuedBackupStreams(transfers, expectations, bounds)
+	if err == nil || err.Error() != "stream broker reused a transfer ID within one invocation" {
+		t.Fatalf("duplicate one-use transfer = %v, want rejection", err)
 	}
 }
 
