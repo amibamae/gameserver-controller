@@ -57,7 +57,7 @@ def lifecycle_message(unit, message):
     return None
 
 
-def convert_event(record, environment, instance, include_raw):
+def convert_event(record, environment, instance):
     unit = record.get("_SYSTEMD_UNIT", "")
     if record.get("SYSLOG_IDENTIFIER") == "gsc-bootstrap":
         unit = "gsc-bootstrap"
@@ -68,15 +68,18 @@ def convert_event(record, environment, instance, include_raw):
     if not isinstance(message, str) or not isinstance(timestamp, str) or not timestamp.isdigit():
         return None
     code = lifecycle_message(unit, message)
-    if code is None and not include_raw:
+    if code is None or len(timestamp) > 20:
         return None
-    time_value = datetime.datetime.fromtimestamp(
-        int(timestamp) / 1000000, datetime.timezone.utc
-    ).isoformat()
+    try:
+        time_value = datetime.datetime.fromtimestamp(
+            int(timestamp) / 1000000, datetime.timezone.utc
+        ).isoformat()
+    except (ValueError, OverflowError):
+        return None
     event = {
         "_time": time_value,
-        "_msg": message[:4096] if include_raw else code,
-        "event_type": code or "raw_game_log",
+        "_msg": code,
+        "event_type": code,
         "source_unit": unit,
         "environment_id": environment,
         "instance_id": instance,
@@ -84,11 +87,11 @@ def convert_event(record, environment, instance, include_raw):
     return event
 
 
-def collect(cursor, environment, instance, include_raw):
+def collect(cursor, environment, instance):
     command = ["journalctl", "--no-pager", "--output=json",
                "--unit=minecraft-vanilla.service",
                "--unit=minecraft-restore.service", "--identifier=gsc-bootstrap"]
-    command += ["--after-cursor=" + cursor] if cursor else ["--since=-1 hour"]
+    command += ["--after-cursor=" + cursor] if cursor else ["--since=1 hour ago"]
     events = []
     last_cursor = cursor
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -105,7 +108,7 @@ def collect(cursor, environment, instance, include_raw):
             new_cursor = record.get("__CURSOR")
             if not isinstance(new_cursor, str) or len(new_cursor) > 4096:
                 continue
-            event = convert_event(record, environment, instance, include_raw)
+            event = convert_event(record, environment, instance)
             last_cursor = new_cursor
             if event is not None:
                 events.append(event)
@@ -159,10 +162,6 @@ def main():
     endpoint = ingest_endpoint(os.environ.get("GSC_VL_ENDPOINT", ""))
     if not ID_PATTERN.fullmatch(environment) or not ID_PATTERN.fullmatch(instance):
         raise ValueError("environment and instance identifiers are required")
-    raw = os.environ.get("GSC_VL_RAW_GAME_LOGS", "0") == "1"
-    consent = os.environ.get("GSC_VL_PLAYER_LOG_CONSENT", "0") == "1"
-    if raw and not consent:
-        raise ValueError("raw game logs require explicit player-log consent")
     credentials_dir = Path(os.environ.get("CREDENTIALS_DIRECTORY", ""))
     if not credentials_dir.is_absolute():
         raise ValueError("systemd credential directory is required")
@@ -172,7 +171,7 @@ def main():
     state_dir = Path(os.environ.get("STATE_DIRECTORY", "/var/lib/gsc-victorialogs"))
     cursor_file = state_dir / "cursor"
     cursor = cursor_file.read_text(encoding="utf-8").strip() if cursor_file.exists() else ""
-    events, next_cursor = collect(cursor, environment, instance, raw)
+    events, next_cursor = collect(cursor, environment, instance)
     upload(endpoint, token, events)
     save_cursor(cursor_file, next_cursor)
 
