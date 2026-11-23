@@ -516,6 +516,8 @@ Description=Vanilla No Grief Minecraft Paper Server
 After=network-online.target minecraft-restore.service
 Wants=network-online.target
 Requires=minecraft-restore.service
+StartLimitIntervalSec=900
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -527,13 +529,11 @@ ExecStart=/usr/local/sbin/minecraft-start.sh
 
 Restart=on-failure
 RestartSec=10
-StartLimitIntervalSec=900
-StartLimitBurst=3
 TimeoutStopSec=120
 SuccessExitStatus=0 143
 
 NoNewPrivileges=true
-PrivateTmp=true=true
+PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
 ReadWritePaths=/opt/minecraft/vanilla_no_grief
