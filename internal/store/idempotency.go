@@ -50,7 +50,7 @@ func validateIdempotencyProof(proof IdempotencyProof) error {
 	activeFound := false
 	seen := make(map[string]struct{}, len(proof.Candidates))
 	for _, candidate := range proof.Candidates {
-		if !validKeyVersion(candidate.KeyVersion) || len(candidate.Digest) != 32 || len(candidate.BindingDigest) != 32 {
+		if !candidate.valid() {
 			return fmt.Errorf("%w: invalid idempotency verifier", ErrInvalidRecord)
 		}
 		if _, ok := seen[candidate.KeyVersion]; ok {
@@ -63,6 +63,10 @@ func validateIdempotencyProof(proof IdempotencyProof) error {
 		return fmt.Errorf("%w: active key verifier is missing", ErrInvalidRecord)
 	}
 	return nil
+}
+
+func (candidate IdempotencyVerifier) valid() bool {
+	return validKeyVersion(candidate.KeyVersion) && len(candidate.Digest) == 32 && len(candidate.BindingDigest) == 32
 }
 
 func validateLockScopes(scopes []string) ([]string, error) {

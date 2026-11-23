@@ -379,7 +379,7 @@ func findCapacityReservationForInstance(bucket *bolt.Bucket, serverID, environme
 	var matchedKey []byte
 	var match CapacityReservation
 	err := forEachCapacityReservation(bucket, func(key []byte, current CapacityReservation) error {
-		if current.ServerID != serverID || current.EnvironmentID != environmentID || current.ProviderInstanceID != providerInstanceID ||
+		if !capacityReservationMatchesInstance(current, serverID, environmentID, providerInstanceID) ||
 			(adapterID != "" && current.ProviderAdapterID != adapterID) {
 			return nil
 		}
@@ -395,6 +395,11 @@ func findCapacityReservationForInstance(bucket *bolt.Bucket, serverID, environme
 		err = ErrCapacityNotFound
 	}
 	return matchedKey, match, err
+}
+
+func capacityReservationMatchesInstance(reservation CapacityReservation, serverID, environmentID, providerInstanceID string) bool {
+	return reservation.ServerID == serverID && reservation.EnvironmentID == environmentID &&
+		reservation.ProviderInstanceID == providerInstanceID
 }
 
 // capacityReadyAllowed reports whether readiness at readyAt may be recorded:
