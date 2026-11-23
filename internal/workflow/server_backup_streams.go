@@ -105,7 +105,7 @@ func (w *ServerBackupWorkflow) expectedStreamTransfers(ctx context.Context, oper
 	case "storage.object.put", "storage.object.get":
 		return w.expectedStorageBackupStream(ctx, operation, step, input)
 	case "game.backup.validate":
-		return expectedValidationBackupStreams(input)
+		return expectedValidationBackupStreams(step.Input, input)
 	default:
 		return nil, "", nil
 	}
@@ -136,27 +136,55 @@ func (w *ServerBackupWorkflow) expectedStorageBackupStream(ctx context.Context, 
 	return []ServerBackupStreamExpectation{{DataSetID: dataSet.DataSetID, SizeBytes: size, MaximumBytes: maxInt64(size, 1), SHA256: stringValueMap(checksum, "digest")}}, direction, nil
 }
 
-func expectedValidationBackupStreams(input json.RawMessage) ([]ServerBackupStreamExpectation, string, error) {
-	var decoded map[string]any
+// expectedValidationBackupStreams derives the data-set IDs from the accepted
+// immutable plan, not from the external schema-valid manifest. Dataset hints
+// must never be emitted into the game adapter's backup-manifest payload.
+func expectedValidationBackupStreams(planned, input json.RawMessage) ([]ServerBackupStreamExpectation, string, error) {
+	var decoded, accepted map[string]any
 	if err := json.Unmarshal(input, &decoded); err != nil {
 		return nil, "", err
 	}
+	if err := json.Unmarshal(planned, &accepted); err != nil {
+		return nil, "", errors.New("accepted validation plan is invalid")
+	}
 	manifest := asStringMap(decoded["manifest"])
-	expectations := make([]ServerBackupStreamExpectation, 0, len(asAnySlice(manifest["objects"])))
-	for _, rawObject := range asAnySlice(manifest["objects"]) {
-		object := asStringMap(rawObject)
-		size, err := integerFromAny(object["size_bytes"])
+	plannedManifest := asStringMap(accepted["manifest"])
+	objects := asAnySlice(manifest["objects"])
+	plannedObjects := asAnySlice(plannedManifest["objects"])
+	if len(objects) != len(plannedObjects) {
+		return nil, "", errors.New("validation manifest object count differs from accepted plan")
+	}
+	expectations := make([]ServerBackupStreamExpectation, 0, len(objects))
+	for i, raw := range objects {
+		expectation, err := validationObjectExpectation(raw, plannedObjects[i])
 		if err != nil {
-			return nil, "", errors.New("validation manifest has an invalid object size")
+			return nil, "", err
 		}
-		dataSetID := stringValueMap(object, "data_set_id")
-		checksum := stringValueMap(object, "checksum")
-		if dataSetID == "" {
-			return nil, "", errors.New("validation manifest has an object without a data set ID")
-		}
-		expectations = append(expectations, ServerBackupStreamExpectation{DataSetID: dataSetID, SizeBytes: size, MaximumBytes: maxInt64(size, 1), SHA256: checksum})
+		expectations = append(expectations, expectation)
 	}
 	return expectations, "controller_to_adapter", nil
+}
+
+func validationObjectExpectation(raw, planned any) (ServerBackupStreamExpectation, error) {
+	object := asStringMap(raw)
+	size, err := integerFromAny(object["size_bytes"])
+	if err != nil {
+		return ServerBackupStreamExpectation{}, errors.New("validation manifest has an invalid object size")
+	}
+	dataSetID := stringValueMap(asStringMap(planned), "data_set_id")
+	if dataSetID == "" {
+		return ServerBackupStreamExpectation{}, errors.New("accepted validation plan has an object without a data set ID")
+	}
+	if _, hint := object["data_set_id"]; hint {
+		return ServerBackupStreamExpectation{}, errors.New("validation manifest contains a planner-only data set ID")
+	}
+	if len(asStringMap(object["object_ref"])) == 0 {
+		return ServerBackupStreamExpectation{}, errors.New("validation manifest has no exact object reference")
+	}
+	checksum := stringValueMap(object, "checksum")
+	return ServerBackupStreamExpectation{
+		DataSetID: dataSetID, SizeBytes: size, MaximumBytes: maxInt64(size, 1), SHA256: checksum,
+	}, nil
 }
 
 func (w *ServerBackupWorkflow) verifyStreams(ctx context.Context, operation store.OperationRecord, stepID string, expectations []ServerBackupStreamExpectation) error {
