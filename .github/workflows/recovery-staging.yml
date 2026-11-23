@@ -8,6 +8,7 @@ on:
       - "internal/workflow/server_destroy*"
       - "scripts/bootstrap/**"
       - "scripts/observability/test_minecraft_probe.py"
+      - "scripts/recovery/**"
       - "plugins/velocity/**"
       - ".github/workflows/recovery-staging.yml"
   pull_request:
@@ -19,6 +20,7 @@ on:
       - "internal/workflow/server_destroy*"
       - "scripts/bootstrap/**"
       - "scripts/observability/test_minecraft_probe.py"
+      - "scripts/recovery/**"
       - "plugins/velocity/**"
       - ".github/workflows/recovery-staging.yml"
   workflow_dispatch:
@@ -42,6 +44,8 @@ jobs:
         run: go test -count=1 ./internal/workflow -run '^(TestServerDestroyRejectsIncompleteFinalRecoveryPoint|TestStoredBackupResolver.*|TestFinalRecoveryBoundary.*)$'
       - name: Read-only Minecraft log probes
         run: python3 -m unittest discover -s scripts/observability -p 'test_*.py'
+      - name: Isolated live-staging harness safety tests (offline mocks only)
+        run: python3 -m unittest discover -s scripts/recovery -p 'test_*.py'
   proxy:
     name: Drained Velocity backend does not route prematurely
     runs-on: ubuntu-latest
