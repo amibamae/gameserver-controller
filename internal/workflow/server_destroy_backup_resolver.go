@@ -92,7 +92,7 @@ func offlineBackupBindsCurrentServer(operation store.OperationRecord, server sto
 	if operation.ProtocolVersion != schemas.ProtocolVersion() || !equalJSON(operation.Target.InstanceRef, server.InstanceRef) {
 		return false
 	}
-	if operation.Target.ServerID != server.ServerID || operation.Target.EnvironmentID != server.EnvironmentID || server.StorageProfile != profile {
+	if operation.Target.ServerID != server.ServerID || operation.Target.EnvironmentID != server.EnvironmentID || server.StorageProfile == "" {
 		return false
 	}
 	if server.DataGenerationStatus != "known" || server.DataGenerationID == "" || backupResumeAfterBackup(operation) {
@@ -192,7 +192,7 @@ func (r *StoredBackupResolver) recheckBackupObject(ctx context.Context, server s
 		Container        string `json:"container"`
 		Key              string `json:"key"`
 	}
-	if json.Unmarshal(object.ObjectRef, &ref) != nil || !backupObjectIsRemoteAndUnique(ref.AdapterID, ref.StorageProfileID, ref.EnvironmentID, ref.Container, ref.Key, server, profile, backupID) {
+	if json.Unmarshal(object.ObjectRef, &ref) != nil || !backupObjectIsRemoteAndUnique(ref.AdapterID, ref.StorageProfileID, ref.EnvironmentID, ref.Container, ref.Key, server, backupID) {
 		return errors.New("backup object reference is not in the remote per-backup namespace")
 	}
 	reading, err := r.objects.Readback(ctx, object.ObjectRef)
@@ -205,8 +205,8 @@ func (r *StoredBackupResolver) recheckBackupObject(ctx context.Context, server s
 	return nil
 }
 
-func backupObjectIsRemoteAndUnique(adapterID, storageProfile, environment, container, key string, server store.LogicalServer, profile, backupID string) bool {
-	if adapterID == "" || storageProfile != profile || environment != server.EnvironmentID || container == "" {
+func backupObjectIsRemoteAndUnique(adapterID, storageProfile, environment, container, key string, server store.LogicalServer, backupID string) bool {
+	if adapterID == "" || storageProfile != server.StorageProfile || environment != server.EnvironmentID || container == "" {
 		return false
 	}
 	prefix := url.PathEscape(server.ServerID) + "/" + url.PathEscape(backupID) + "/"
