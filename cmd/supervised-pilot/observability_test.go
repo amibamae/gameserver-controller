@@ -19,9 +19,9 @@ func TestObservabilityRefusesRawLogsBeforeAccessingCredentials(t *testing.T) {
 			OperationID: "0123456789abcdef0123456789abcdef",
 			PrivacyMode: tc.privacy, Endpoint: tc.endpoint,
 			VultrCredentialRef: defaultVultrCredential,
-			SSHCredentialRef: defaultSSHCredential,
-			LogCredentialRef: "systemd-credential://gsc-victorialogs-ingest-token",
-			Timeout: time.Minute,
+			SSHCredentialRef:   defaultSSHCredential,
+			LogCredentialRef:   "systemd-credential://gsc-victorialogs-ingest-token",
+			Timeout:            time.Minute,
 		}, "/nonexistent-pilot-state.db", io.Discard)
 		if err == nil || err.Error() != tc.want {
 			t.Fatalf("privacy %q: error = %v, want %q", tc.privacy, err, tc.want)
