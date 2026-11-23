@@ -23,50 +23,16 @@ type observabilityOptions struct {
 	Timeout time.Duration
 }
 
-// runObservability is dry-run by default. The only execution path sends
-// private settings to the exact active VM using the saved pinned SSH host key.
+// runObservability is dry-run by default and never logs endpoint or token.
 func runObservability(o observabilityOptions, statePath string, out io.Writer) error {
-	if !safeOperationID.MatchString(o.OperationID) {
-		return errors.New("--operation-id must be a 32-character provision operation ID")
+	if err := validateObservabilityOptions(o); err != nil {
+		return err
 	}
-	if o.Timeout <= 0 || o.Timeout > 2*time.Hour {
-		return errors.New("--timeout must be greater than zero and at most 2h")
-	}
-	for _, ref := range []string{o.VultrCredentialRef, o.SSHCredentialRef, o.LogCredentialRef} {
-		if !safeCredentialRef.MatchString(ref) {
-			return errors.New("observability credential references must be systemd-credential://NAME")
-		}
-	}
-	if o.PrivacyMode != "lifecycle" && o.PrivacyMode != "disabled" {
-		return errors.New("--logs-privacy must be lifecycle or disabled")
-	}
-	if o.PrivacyMode == "lifecycle" && o.Endpoint == "" {
-		return errors.New("--logs-endpoint is required for lifecycle log export")
-	}
-	if o.PrivacyMode == "disabled" && o.Endpoint != "" {
-		return errors.New("disabled log export must not have an endpoint")
-	}
-	if _, err := os.Stat(statePath); err != nil {
-		return errors.New("pilot state database not found; provision and hand off first")
-	}
-	repository, err := store.OpenBolt(statePath)
+	repository, target, err := loadObservabilityTarget(o.OperationID, statePath)
 	if err != nil {
-		return errors.New("could not open pilot state database")
+		return err
 	}
 	defer repository.Close()
-	reservation, err := repository.GetCapacityReservation(o.OperationID)
-	if err != nil {
-		return errors.New("no provisioned VM for the requested operation")
-	}
-	record, err := repository.GetHostHandoff(o.OperationID)
-	if err != nil {
-		return errors.New("the VM has no completed SSH host-key handoff")
-	}
-	target := reservation.ServerID + "@" + reservation.EnvironmentID + "/" + reservation.ProviderInstanceID
-	if reservation.State != store.CapacityActive || reservation.ProviderInstanceID == "" ||
-		record.State != hosthandoff.Rotated || !record.BootstrapReady || !record.SecurityFinalized {
-		return errors.New("observability requires an active VM and completed SSH security handoff")
-	}
 	if !o.Execute {
 		if o.Confirmation != "" {
 			return errors.New("--confirm-observability requires --execute")
@@ -78,6 +44,70 @@ func runObservability(o observabilityOptions, statePath string, out io.Writer) e
 	if o.Confirmation != target {
 		return fmt.Errorf("--confirm-observability must match %q", target)
 	}
+	return applyObservability(o, repository, target, out)
+}
+
+func validateObservabilityOptions(o observabilityOptions) error {
+	if !safeOperationID.MatchString(o.OperationID) {
+		return errors.New("--operation-id must be a 32-character provision operation ID")
+	}
+	if o.Timeout <= 0 || o.Timeout > 2*time.Hour {
+		return errors.New("--timeout must be greater than zero and at most 2h")
+	}
+	for _, ref := range []string{o.VultrCredentialRef, o.SSHCredentialRef, o.LogCredentialRef} {
+		if !safeCredentialRef.MatchString(ref) {
+			return errors.New("observability credential references must be systemd-credential://NAME")
+		}
+	}
+	switch o.PrivacyMode {
+	case "lifecycle":
+		if o.Endpoint == "" {
+			return errors.New("--logs-endpoint is required for lifecycle log export")
+		}
+	case "disabled":
+		if o.Endpoint != "" {
+			return errors.New("disabled log export must not have an endpoint")
+		}
+	default:
+		return errors.New("--logs-privacy must be lifecycle or disabled")
+	}
+	return nil
+}
+
+func loadObservabilityTarget(operationID, statePath string) (*store.BoltStore, string, error) {
+	if _, err := os.Stat(statePath); err != nil {
+		return nil, "", errors.New("pilot state database not found; provision and hand off first")
+	}
+	repository, err := store.OpenBolt(statePath)
+	if err != nil {
+		return nil, "", errors.New("could not open pilot state database")
+	}
+	reservation, err := repository.GetCapacityReservation(operationID)
+	if err != nil {
+		repository.Close()
+		return nil, "", errors.New("no provisioned VM for the requested operation")
+	}
+	record, err := repository.GetHostHandoff(operationID)
+	if err != nil {
+		repository.Close()
+		return nil, "", errors.New("the VM has no completed SSH host-key handoff")
+	}
+	if !observabilityReady(reservation, record) {
+		repository.Close()
+		return nil, "", errors.New("observability requires an active VM and completed SSH security handoff")
+	}
+	target := reservation.ServerID + "@" + reservation.EnvironmentID + "/" + reservation.ProviderInstanceID
+	return repository, target, nil
+}
+
+func observabilityReady(reservation store.CapacityReservation, record store.HostHandoffRecord) bool {
+	if reservation.State != store.CapacityActive || reservation.ProviderInstanceID == "" {
+		return false
+	}
+	return record.State == hosthandoff.Rotated && record.BootstrapReady && record.SecurityFinalized
+}
+
+func applyObservability(o observabilityOptions, repository *store.BoltStore, target string, out io.Writer) error {
 	auditPath, err := defaultAuditPath()
 	if err != nil {
 		return errors.New("observability audit log unavailable; refusing change")
