@@ -34,7 +34,11 @@ type ServerDestroyProfileResolver interface {
 // VerifiedServerBackup is returned only after the resolver has checked the
 // immutable manifest, every object and checksum, environment ownership, and
 // current data generation. SourceInstanceRef binds the backup to the exact
-// managed instance being destroyed. The resolver must independently prove the\n// backup is off the instance, internally consistent, and includes writes up\n// to the final quiesced runtime boundary. A stale backup in the same data\n// generation is not adequate proof that the last world changes were saved.\ntype VerifiedServerBackup struct {
+// managed instance being destroyed. The resolver must independently prove the
+// backup is off the instance, internally consistent, and includes writes up
+// to the final quiesced runtime boundary. A stale backup in the same data
+// generation is not adequate proof that the last world changes were saved.
+type VerifiedServerBackup struct {
 	BackupID                   string
 	ServerID                   string
 	EnvironmentID              string
