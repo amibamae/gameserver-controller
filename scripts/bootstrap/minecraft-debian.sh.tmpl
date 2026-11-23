@@ -103,6 +103,17 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
     rsync \
     python3
 
+section "Installing private Minecraft health probe"
+
+# The probe reads only the current systemd invocation and returns fixed
+# redacted reason codes. It does not restart Minecraft or contact Vultr.
+install -d -m 0755 /usr/local/libexec/gsc
+cat > /usr/local/libexec/gsc/minecraft_probe.py <<'GSC_MC_PROBE'
+@@MINECRAFT_PROBE_PY@@
+GSC_MC_PROBE
+chmod 0755 /usr/local/libexec/gsc/minecraft_probe.py
+chown root:root /usr/local/libexec/gsc/minecraft_probe.py
+
 section "Installing optional VictoriaLogs lifecycle exporter"
 
 # Installation alone does not enable log collection. The trusted controller
@@ -516,6 +527,8 @@ ExecStart=/usr/local/sbin/minecraft-start.sh
 
 Restart=on-failure
 RestartSec=10
+StartLimitIntervalSec=900
+StartLimitBurst=3
 TimeoutStopSec=120
 SuccessExitStatus=0 143
 
@@ -644,6 +657,7 @@ cat > /etc/sudoers.d/minecraft-admin <<EOF_SUDO
 minecraft-admin ALL=(root) NOPASSWD: $ADMIN_FINALIZER
 minecraft-admin ALL=(root) NOPASSWD: $RCLONE_INSTALLER
 minecraft-admin ALL=(root) NOPASSWD: /usr/local/sbin/gsc-configure-victorialogs
+minecraft-admin ALL=(root) NOPASSWD: /usr/local/libexec/gsc/minecraft_probe.py
 minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl start minecraft-vanilla.service
 minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl stop minecraft-vanilla.service
 minecraft-admin ALL=(root) NOPASSWD: /usr/bin/systemctl restart minecraft-vanilla.service
