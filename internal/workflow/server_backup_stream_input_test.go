@@ -109,8 +109,8 @@ func TestBackupStreamTransferChecksPreserveErrorOrder(t *testing.T) {
 			w := &ServerBackupWorkflow{schemas: acceptAllTestSchemas{}, transfers: backupStreamCharacterizationBroker{transfers: tc.transfers}}
 			step := store.OperationStep{
 				CapabilityName: "game.backup.validate",
-				Input: json.RawMessage(`{"manifest":{"objects":[{"data_set_id":"one","size_bytes":4},{"data_set_id":"two","size_bytes":4}]}}`),
-				ResolvedInput: json.RawMessage(`{"manifest":{"objects":[{"size_bytes":4,"object_ref":{"key":"first"}},{"size_bytes":4,"object_ref":{"key":"second"}}]}}`),
+				Input:          json.RawMessage(`{"manifest":{"objects":[{"data_set_id":"one","size_bytes":4},{"data_set_id":"two","size_bytes":4}]}}`),
+				ResolvedInput:  json.RawMessage(`{"manifest":{"objects":[{"size_bytes":4,"object_ref":{"key":"first"}},{"size_bytes":4,"object_ref":{"key":"second"}}]}}`),
 			}
 			transfers, err := w.StreamTransfersForStep(context.Background(), store.OperationRecord{}, step, tc.deadline)
 			if err == nil || err.Error() != tc.err || transfers != nil {
