@@ -35,15 +35,15 @@ type ServerDestroyProfileResolver interface {
 // immutable manifest, every object and checksum, environment ownership, and
 // current data generation. SourceInstanceRef binds the backup to the exact
 // managed instance being destroyed. The resolver must independently prove the\n// backup is off the instance, internally consistent, and includes writes up\n// to the final quiesced runtime boundary. A stale backup in the same data\n// generation is not adequate proof that the last world changes were saved.\ntype VerifiedServerBackup struct {
-	BackupID          string
-	ServerID          string
-	EnvironmentID     string
-	StorageProfile    string
-	DataGenerationID  string
-	SourceInstanceRef json.RawMessage
-	IntegrityVerified         bool
-	OffInstanceVerified       bool
-	ConsistencyVerified       bool
+	BackupID                   string
+	ServerID                   string
+	EnvironmentID              string
+	StorageProfile             string
+	DataGenerationID           string
+	SourceInstanceRef          json.RawMessage
+	IntegrityVerified          bool
+	OffInstanceVerified        bool
+	ConsistencyVerified        bool
 	FinalWriteBoundaryVerified bool
 }
 
