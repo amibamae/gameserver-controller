@@ -61,7 +61,7 @@ func TestStoredBackupResolverRequiresFreshFullRemoteReadback(t *testing.T) {
 	calls := 0
 	reader := recordedRemoteReadback{
 		result: BackupObjectReadback{Remote: true, SizeBytes: 32, SHA256: backupTestDigest},
-		calls: &calls,
+		calls:  &calls,
 	}
 	schemas := newBackupR3Fixture(t, false).workflow.schemas
 	resolver, err := NewStoredBackupResolver(recordedBackupSource{record: store.StoredOperation{Record: op}}, reader, schemas)
