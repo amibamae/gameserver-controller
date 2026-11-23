@@ -26,35 +26,7 @@ type victoriaLogsPayload struct {
 	Token         string `json:"token"`
 }
 
-var logTokenPattern = regexp.MustCompile(`^[!-~]+package pilothandoff
-
-import (
-	"context"
-	"encoding/json"
-	"errors"
-	"net/url"
-	"regexp"
-	"strings"
-
-	"github.com/amibamae/gameserver-controller/internal/hosthandoff"
-)
-
-// VictoriaLogsConfig controls optional lifecycle-only log forwarding.
-// Its secret is delivered on pinned SSH stdin, never command arguments.
-type VictoriaLogsConfig struct {
-	OperationID, VultrCredentialRef, IngestCredentialRef string
-	Endpoint, PrivacyMode                                string
-}
-
-type victoriaLogsPayload struct {
-	Endpoint      string `json:"endpoint"`
-	EnvironmentID string `json:"environment_id"`
-	InstanceID    string `json:"instance_id"`
-	PrivacyMode   string `json:"privacy_mode"`
-	Token         string `json:"token"`
-}
-
-)
+var logTokenPattern = regexp.MustCompile(`^[!-~]+$`)
 
 func validLogToken(token []byte) bool {
 	return len(token) >= 16 && len(token) <= 1024 && logTokenPattern.Match(token)
