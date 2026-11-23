@@ -8,8 +8,18 @@ import time
 
 UNIT = "minecraft-vanilla.service"
 INVOCATION = re.compile(r"^[0-9a-f]{32}$")
-DONE = re.compile(r"\bDone \([^\n)]{1,50}\)!")
-FATAL = tuple(re.compile(p, re.IGNORECASE) for p in (
+# Anchor matches after known Paper console prefixes. Chat messages and plugin
+# text must never be accepted as a Paper readiness or fatal crash signal.
+DONE = re.compile(
+    r"^(?:\[\d{2}:\d{2}:\d{2} INFO\]:\s*|"
+    r"\[\d{2}:\d{2}:\d{2}\] \[[A-Za-z0-9._ -]+/INFO\]:\s*)?"
+    r"Done \(\d+(?:\.\d+)?s\)!"
+)
+ERROR_PREFIX = (
+    r"^(?:\[\d{2}:\d{2}:\d{2} (?:WARN|ERROR|FATAL)\]:\s*|"
+    r"\[\d{2}:\d{2}:\d{2}\] \[[A-Za-z0-9._ -]+/(?:WARN|ERROR|FATAL)\]:\s*)?"
+)
+FATAL = tuple(re.compile(ERROR_PREFIX + pattern, re.IGNORECASE) for pattern in (
     r"Encountered an unexpected exception",
     r"Exception in server tick loop",
     r"Failed to start the minecraft server",
@@ -17,6 +27,7 @@ FATAL = tuple(re.compile(p, re.IGNORECASE) for p in (
     r"java\.lang\.OutOfMemoryError",
     r"A single server tick took .*considered to be crashed",
 ))
+
 STARTUP_GRACE_SECONDS = 600
 MAX_JOURNAL_LINES = 250
 
@@ -51,9 +62,9 @@ def classify(fields, messages, uptime_seconds):
     ready_at = -1
     fatal_at = -1
     for index, line in enumerate(messages):
-        if DONE.search(line):
+        if DONE.match(line):
             ready_at = index
-        if any(pattern.search(line) for pattern in FATAL):
+        if any(pattern.match(line) for pattern in FATAL):
             fatal_at = index
     if fatal_at > ready_at:
         return "unhealthy", "fatal_current_invocation"
