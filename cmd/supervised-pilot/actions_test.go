@@ -32,7 +32,6 @@ func TestEveryActionIsDispatched(t *testing.T) {
 	}
 }
 
-
 func TestRunWithSettingsCallsDispatcher(t *testing.T) {
 	file, err := parser.ParseFile(token.NewFileSet(), "main.go", nil, 0)
 	if err != nil {
