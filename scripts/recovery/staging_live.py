@@ -109,6 +109,21 @@ if not prefix.endswith("/") or not source.startswith(prefix):
     raise SystemExit("remote backup is outside approved staging-only scope")
 if not re.fullmatch(r"stagingwasabi:[a-z0-9-]*staging[a-z0-9-]*/recovery-staging/recovery-test-[a-z0-9-]+/[a-z0-9-]+", source):
     raise SystemExit("remote backup source is not an isolated test prefix")
+# Refuse an unbounded download or one that could fill the staging disk.
+inventory = subprocess.run(["rclone", "size", "--json", source],
+                           capture_output=True, text=True, timeout=90, check=False)
+if inventory.returncode or len(inventory.stdout) > 16384:
+    raise SystemExit("could not independently bound staging backup size")
+limits = json.loads(inventory.stdout)
+total = limits.get("bytes")
+count = limits.get("count")
+if not isinstance(total, int) or not isinstance(count, int):
+    raise SystemExit("unverifiable staging backup byte and file count")
+if total <= 0 or total > 8 * 1024**3 or count <= 0 or count > 50000:
+    raise SystemExit("staging backup exceeds the safe restore limits")
+disk = os.statvfs(root)
+if disk.f_bavail * disk.f_frsize < total * 2 + 512 * 1024**2:
+    raise SystemExit("insufficient isolated scratch capacity for backup copy")
 destination = pathlib.Path(tempfile.mkdtemp(prefix="gsc-restore-", dir=root))
 result = subprocess.run(["rclone", "copy", "--checksum", source, str(destination)],
                         capture_output=True, text=True, timeout=900, check=False)
