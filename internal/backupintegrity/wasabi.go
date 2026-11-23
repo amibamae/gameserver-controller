@@ -36,7 +36,7 @@ func NewWasabiReader(client Getter, adapterID, profile, environment, bucket stri
 	if client == nil || adapterID == "" || profile == "" {
 		return nil, errors.New("remote S3 client, exact adapter/profile/environment/bucket and byte limit are required")
 	}
-	if environment == "" || bucket == "" || maxBytes < 1 {
+	if environment == "" || bucket == "" || maxBytes < 1 || maxBytes > 9007199254740991 {
 		return nil, errors.New("remote S3 client, exact adapter/profile/environment/bucket and byte limit are required")
 	}
 	return &WasabiReader{
@@ -77,6 +77,9 @@ func (r *WasabiReader) Readback(ctx context.Context, raw json.RawMessage) (workf
 		return workflow.BackupObjectReadback{}, errors.New("remote backup object has no content")
 	}
 	defer output.Body.Close()
+	if ref.VersionID != "" && aws.ToString(output.VersionId) != ref.VersionID {
+		return workflow.BackupObjectReadback{}, errors.New("remote backup object version does not match requested immutable version")
+	}
 	digest := sha256.New()
 	read, err := io.Copy(digest, io.LimitReader(output.Body, r.maxBytes+1))
 	if err != nil {
