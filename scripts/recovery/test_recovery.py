@@ -33,6 +33,32 @@ class MinecraftProbeTests(unittest.TestCase):
             FIELDS, ["Failed to start the minecraft server", "Done (8.1s)!"], 200),
             ("healthy", "paper_ready"))
 
+    def test_paper_console_formats_are_accepted(self):
+        for line in (
+            "[11:00:00 INFO]: Done (8.1s)! For help, type help",
+            "[11:00:00] [Server thread/INFO]: Done (8.1s)! For help",
+        ):
+            with self.subTest(line=line):
+                self.assertEqual(minecraft_probe.classify(FIELDS, [line], 200),
+                                 ("healthy", "paper_ready"))
+
+    def test_player_chat_cannot_spoof_fatal_log(self):
+        lines = ["Done (8.1s)!",
+                 "[11:00:00 INFO]: <Steve> Exception in server tick loop"]
+        self.assertEqual(minecraft_probe.classify(FIELDS, lines, 200),
+                         ("healthy", "paper_ready"))
+
+    def test_player_chat_cannot_spoof_readiness(self):
+        lines = ["[11:00:00 INFO]: <Steve> Done (8.1s)!"]
+        self.assertEqual(minecraft_probe.classify(FIELDS, lines, 200),
+                         ("starting", "awaiting_paper_ready"))
+
+    def test_error_level_fatal_log_triggers_failure(self):
+        lines = ["[11:00:00 INFO]: Done (8.1s)!",
+                 "[11:00:01 ERROR]: Exception in server tick loop"]
+        self.assertEqual(minecraft_probe.classify(FIELDS, lines, 200),
+                         ("unhealthy", "fatal_current_invocation"))
+
     def test_initializing_does_not_restart(self):
         self.assertEqual(minecraft_probe.classify(FIELDS, [], 200),
                          ("starting", "awaiting_paper_ready"))
