@@ -101,8 +101,8 @@ func TestReRegisterOnlyAfterFreshDoneOnNewRuntime(t *testing.T) {
 	ready := Readiness{
 		InstanceID: plan.InstanceID, UnitID: plan.UnitID,
 		ReleaseID: plan.ReleaseID, RuntimeID: "new-invocation-id",
-		ReadyLogAt: now.Add(-time.Minute),
-		ObservedAt: now,
+		ReadyLogAt:              now.Add(-time.Minute),
+		ObservedAt:              now,
 		AllRequiredChecksPassed: true,
 	}
 	if !MayReregister(plan, ready, now) {
