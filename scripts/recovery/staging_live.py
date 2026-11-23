@@ -71,7 +71,7 @@ print(json.dumps({"environment":"staging", "purpose":marker["purpose"],
 # It runs on the remote isolated instance with its separately scoped rclone
 # credentials already configured. No object gets deleted or overwritten.
 REMOTE_RESTORE = r'''
-import base64, hashlib, json, os, pathlib, re, stat, subprocess, sys, tempfile
+import base64, hashlib, json, os, pathlib, re, stat, subprocess, sys, tempfile, time, urllib.request
 p = "/etc/gsc-recovery-staging.json"
 s = os.lstat(p)
 if not stat.S_ISREG(s.st_mode) or s.st_uid != 0 or (s.st_mode & 0o022):
@@ -83,6 +83,21 @@ if marker.get("environment") != "staging" or marker.get("purpose") != "minecraft
 args = json.loads(base64.urlsafe_b64decode(sys.argv[1]))
 if marker.get("instance_id") != args["instance_id"] or marker.get("server_id") != args["server_id"]:
     raise SystemExit("wrong target VM or server")
+# Verify the instance independently on this second connection too. The first
+# read-only preflight cannot authorize a later connection to a different VM.
+with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
+        "http://169.254.169.254/v1/identity/token", timeout=3) as reply:
+    token = reply.read(8192).decode("ascii")
+parts = token.split(".")
+if len(parts) != 3:
+    raise SystemExit("invalid Vultr metadata response")
+claim = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+if claim.get("iss") != "https://api.vultr.com/v2/oidc/identity/instance":
+    raise SystemExit("Vultr metadata issuer mismatch")
+if claim.get("sub") != "instance:" + args["instance_id"]:
+    raise SystemExit("Vultr instance changed since preflight")
+if claim.get("resource_type") != "instance" or claim.get("exp", 0) <= time.time():
+    raise SystemExit("Vultr instance metadata is not current")
 if marker.get("restore_root") != "/srv/gsc-recovery-restore":
     raise SystemExit("remote scratch root is not the required isolated path")
 root = pathlib.Path("/srv/gsc-recovery-restore")
@@ -133,6 +148,8 @@ class Target:
             "environment", "server_id", "instance_id", "ssh_alias", "unit"
         }:
             raise UnsafeStagingTarget("target configuration must have exactly five identity fields")
+        if any(not isinstance(value, str) for value in document.values()):
+            raise UnsafeStagingTarget("staging target fields must all be strings")
         target = cls(**document)
         target.validate()
         return target
@@ -191,12 +208,19 @@ def observe(target):
 def verify_recovered(before, after, target):
     """Do not accept TCP reachability or a Done from the old invocation."""
     for observation in (before, after):
-        if observation.get("instance_id") != target.instance_id:
-            raise UnsafeStagingTarget("a different Vultr VM was involved")
-        if observation.get("server_id") != target.server_id:
-            raise UnsafeStagingTarget("server identity changed during recovery")
-    old = before.get("probe", {})
-    new = after.get("probe", {})
+        if not isinstance(observation, dict):
+            raise UnsafeStagingTarget("recovery evidence must be an observation object")
+        for field, value in (("instance_id", target.instance_id),
+                             ("server_id", target.server_id),
+                             ("unit", target.unit),
+                             ("environment", target.environment),
+                             ("purpose", PURPOSE)):
+            if observation.get(field) != value:
+                raise UnsafeStagingTarget("target identity changed during recovery")
+    old = before.get("probe")
+    new = after.get("probe")
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        raise UnsafeStagingTarget("recovery evidence has no valid Paper probe")
     if old.get("status") != "healthy" or new.get("status") != "healthy":
         raise UnsafeStagingTarget("Paper was not confirmed ready before and after recovery")
     old_id, new_id = old.get("invocation_id", ""), new.get("invocation_id", "")
