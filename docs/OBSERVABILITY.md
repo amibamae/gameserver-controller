@@ -1,6 +1,6 @@
 # Optional VictoriaLogs and Homelable observability
 
-**Status: opt-in integration tools and SSH configuration are implemented; no production deployment is performed.** These tools do not control world heads, ownership, backups, destructive actions, or player routing. Logs and topology availability never gate normal Paper/Velocity gameplay.
+**Status: opt-in integration tools and SSH configuration are implemented; no production deployment is performed.** See [the follow-up lifecycle guide](OBSERVABILITY_LIFECYCLE.md) for optional automatic handoff setup, a durable controller collector, managed-only Homelable updates and staging recovery tests. **Both integrations remain disabled by default.** These tools do not control world heads, ownership, backups, destructive actions, or player routing. Logs and topology availability never gate normal Paper/Velocity gameplay.
 
 ## Responsibilities and boundaries
 
