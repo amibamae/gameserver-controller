@@ -1,0 +1,25 @@
+{
+  "design_id": "replace-with-your-existing-design-id",
+  "nodes": [
+    {
+      "name": "Controller",
+      "type": "server"
+    },
+    {
+      "name": "Velocity proxy",
+      "type": "server"
+    },
+    {
+      "name": "Minecraft lobby",
+      "type": "vm"
+    },
+    {
+      "name": "Disposable Vultr backend",
+      "type": "vm"
+    },
+    {
+      "name": "Wasabi storage",
+      "type": "nas"
+    }
+  ]
+}
