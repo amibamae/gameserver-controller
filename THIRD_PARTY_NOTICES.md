@@ -3,9 +3,9 @@
 For source or binary distributions that include a component below, include this file and its linked license and attribution material with the distribution. Go module versions match [go.mod](go.mod). Test-only modules recorded only in go.sum are omitted because their source is not vendored or linked into project binaries. The repository's AGPL-3.0 license does not replace the separate terms attached to these components.
 
 
-## Python 3 interpreter (optional observability runtime)
+## Python 3 interpreter (optional observability and recovery runtime)
 
-- **Component:** Python 3, supplied by the system's Debian `python3` package and by the GitHub Actions Ubuntu runner. The optional VictoriaLogs forwarding scripts and Homelable topology helper use only Python's standard library; Python's runtime is **not bundled or vendored** in GSC.
+- **Component:** Python 3, supplied by the system's Debian `python3` package and by the GitHub Actions Ubuntu runner. The optional VictoriaLogs forwarding scripts, Homelable topology helper, and Minecraft health/recovery scripts use only Python's standard library; Python's runtime is **not bundled or vendored** in GSC.
 - **Version:** the supported Python 3 version selected by the target Debian distribution / GitHub runner, rather than a fixed version shipped with this project. Check the installed distro package before deployment.
 - **License:** Python Software Foundation License Version 2 (PSF-2.0) and applicable historical notices bundled with the runtime; see [official Python licensing and attribution](https://docs.python.org/3/license.html) and [CPython license file](https://github.com/python/cpython/blob/main/LICENSE).
 - **Attribution:** Copyright © Python Software Foundation and contributors. The distribution packages retain their own notices. GSC is not distributing the interpreter in this repository.
