@@ -348,60 +348,90 @@ func (w *ServerProvisionWorkflow) ProjectLifecycle(operation store.OperationReco
 	created, createErr := provisionCreateStepOutput(operation)
 	switch current.Record.LifecycleState {
 	case protocolstate.ServerUnprovisioned:
-		if operation.Status != protocolstate.OperationPending {
-			next.LifecycleState = protocolstate.ServerProvisioning
-			return next, true, nil
-		}
+		return w.handleLifecycleUnprovisioned(next, operation)
 	case protocolstate.ServerProvisioning:
-		if operation.Status == protocolstate.OperationFailed {
-			next.LifecycleState = protocolstate.ServerFailed
-			return next, true, nil
-		}
-		if createErr == nil {
-			next.InstanceRef = append(json.RawMessage(nil), created.InstanceRef...)
-			next.LifecycleState = protocolstate.ServerPreparing
-			next.DataGenerationID = provisionDataGeneration(operation.OperationID)
-			next.DataGenerationStatus = "unknown"
-			return next, true, nil
-		}
+		return w.handleLifecycleProvisioning(next, operation, created, createErr)
 	case protocolstate.ServerPreparing:
-		if operation.Status == protocolstate.OperationFailed {
-			next.LifecycleState = protocolstate.ServerFailed
-			return next, true, nil
-		}
-		if operationStep(operation, provisionStartUnitStep).Status != protocolstate.StepPending {
-			if !provisionInstallSucceeded(operation) {
-				return store.LogicalServer{}, false, errors.New("server.provision cannot start before the exact game release is installed")
-			}
-			next.LifecycleState = protocolstate.ServerStarting
-			next.DataGenerationID = provisionDataGeneration(operation.OperationID)
-			next.DataGenerationStatus = "known"
-			return next, true, nil
-		}
+		return w.handleLifecyclePreparing(next, operation)
 	case protocolstate.ServerStarting:
-		if operation.Status == protocolstate.OperationFailed {
-			next.LifecycleState = protocolstate.ServerFailed
-			return next, true, nil
-		}
-		if operationStep(operation, provisionReadinessStep).Status != protocolstate.StepPending {
-			next.LifecycleState = protocolstate.ServerValidating
-			return next, true, nil
-		}
+		return w.handleLifecycleStarting(next, operation)
 	case protocolstate.ServerValidating:
-		if operation.Status == protocolstate.OperationFailed {
-			next.LifecycleState = protocolstate.ServerDegraded
-			return next, true, nil
-		}
-		if operation.Status == protocolstate.OperationSucceeded {
-			if !hasValidProvisionResult(operation.Result, operation.Target, current.Record.InstanceRef, w.schemas) {
-				return store.LogicalServer{}, false, errors.New("terminal server.provision result lacks exact instance and readiness evidence")
-			}
-			next.LifecycleState = protocolstate.ServerReady
-			next.DesiredState = "running"
-			return next, true, nil
-		}
+		return w.handleLifecycleValidating(next, operation)
 	}
 	return current.Record, false, nil
+}
+
+// handleLifecycleUnprovisioned handles the unprovisioned state for server provision.
+func (w *ServerProvisionWorkflow) handleLifecycleUnprovisioned(next store.LogicalServer, operation store.OperationRecord) (store.LogicalServer, bool, error) {
+	if operation.Status != protocolstate.OperationPending {
+		next.LifecycleState = protocolstate.ServerProvisioning
+		return next, true, nil
+	}
+	return next, false, nil
+}
+
+// handleLifecycleProvisioning handles the provisioning state for server provision.
+func (w *ServerProvisionWorkflow) handleLifecycleProvisioning(next store.LogicalServer, operation store.OperationRecord, created provisionCreateOutput, createErr error) (store.LogicalServer, bool, error) {
+	if operation.Status == protocolstate.OperationFailed {
+		next.LifecycleState = protocolstate.ServerFailed
+		return next, true, nil
+	}
+	if createErr == nil {
+		next.InstanceRef = append(json.RawMessage(nil), created.InstanceRef...)
+		next.LifecycleState = protocolstate.ServerPreparing
+		next.DataGenerationID = provisionDataGeneration(operation.OperationID)
+		next.DataGenerationStatus = "unknown"
+		return next, true, nil
+	}
+	return next, false, nil
+}
+
+// handleLifecyclePreparing handles the preparing state for server provision.
+func (w *ServerProvisionWorkflow) handleLifecyclePreparing(next store.LogicalServer, operation store.OperationRecord) (store.LogicalServer, bool, error) {
+	if operation.Status == protocolstate.OperationFailed {
+		next.LifecycleState = protocolstate.ServerFailed
+		return next, true, nil
+	}
+	if operationStep(operation, provisionStartUnitStep).Status != protocolstate.StepPending {
+		if !provisionInstallSucceeded(operation) {
+			return store.LogicalServer{}, false, errors.New("server.provision cannot start before the exact game release is installed")
+		}
+		next.LifecycleState = protocolstate.ServerStarting
+		next.DataGenerationID = provisionDataGeneration(operation.OperationID)
+		next.DataGenerationStatus = "known"
+		return next, true, nil
+	}
+	return next, false, nil
+}
+
+// handleLifecycleStarting handles the starting state for server provision.
+func (w *ServerProvisionWorkflow) handleLifecycleStarting(next store.LogicalServer, operation store.OperationRecord) (store.LogicalServer, bool, error) {
+	if operation.Status == protocolstate.OperationFailed {
+		next.LifecycleState = protocolstate.ServerFailed
+		return next, true, nil
+	}
+	if operationStep(operation, provisionReadinessStep).Status != protocolstate.StepPending {
+		next.LifecycleState = protocolstate.ServerValidating
+		return next, true, nil
+	}
+	return next, false, nil
+}
+
+// handleLifecycleValidating handles the validating state for server provision.
+func (w *ServerProvisionWorkflow) handleLifecycleValidating(next store.LogicalServer, operation store.OperationRecord) (store.LogicalServer, bool, error) {
+	if operation.Status == protocolstate.OperationFailed {
+		next.LifecycleState = protocolstate.ServerDegraded
+		return next, true, nil
+	}
+	if operation.Status == protocolstate.OperationSucceeded {
+		if !hasValidProvisionResult(operation.Result, operation.Target, next.InstanceRef, w.schemas) {
+			return store.LogicalServer{}, false, errors.New("terminal server.provision result lacks exact instance and readiness evidence")
+		}
+		next.LifecycleState = protocolstate.ServerReady
+		next.DesiredState = "running"
+		return next, true, nil
+	}
+	return next, false, nil
 }
 
 func provisionDataGeneration(operationID string) string {
