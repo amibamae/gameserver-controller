@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/amibamae/gameserver-controller/internal/hosthandoff"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
