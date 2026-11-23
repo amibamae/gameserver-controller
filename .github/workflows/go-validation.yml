@@ -8,6 +8,8 @@ on:
       - "go.sum"
       - "configs/**"
       - "internal/pilotcapacity/**"
+      - "scripts/bootstrap/**"
+      - "scripts/recovery/**"
       - "docs/CONFIGURATION.md"
       - "docs/ROADMAP.md"
       - ".github/workflows/go-validation.yml"
