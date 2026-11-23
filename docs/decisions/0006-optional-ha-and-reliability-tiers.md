@@ -24,7 +24,7 @@ The design must balance correctness, incremental implementation, operational cos
 5. **Treat regional cells as an optional later two-level primary/standby profile.** Each region has one elected controller primary with standby replicas. A logical server/world is owned by **one regional primary cell at a time**; other regions remain standbys *for that world* until explicit fenced transfer. A region may simultaneously own its own worlds and be standby for another region's worlds. No heartbeat-only promotion.
 6. **Use service-specific availability targets.** Four nines first, five nines for advanced transactional services, six nines for selected fault-isolated reads or status functions, and ten nines as ongoing research rather than a product SLA.
 7. **Keep the gameplay data plane independent of the controller control plane.** Routine controller, database and management-API outages do not automatically stop a healthy Velocity/Paper session. Destructive automation stays disabled until separately approved.
-8. **Adopt a gated eleven-nines world-protection product requirement.** Wasabi advertises eleven-nines durability for already stored objects; GSC must separately implement continuous write protection, final complete capture, recoverability, latest-world authority and anti-rollback. The high-assurance profile may not claim its eleven-nines objective before sufficient evidence. No current end-to-end guarantee is implied.
+8. **Adopt a gated eleven-nines world-protection product requirement.** Wasabi advertises eleven-nines durability for already stored objects; GSC must separately implement continuous write protection, final complete capture, recoverability, latest-world authority and anti-rollback. Prefer direct VM-to-Wasabi uploads followed by independently verified **metadata-only promotion** under controller authority (Section 7A.4c), rather than controller-relayed bulk world transfers or physical copies between backup pools. The high-assurance profile may not claim its eleven-nines objective before sufficient evidence. No current end-to-end guarantee is implied.
 
 ## 3. Architecture alternatives we reviewed
 
@@ -398,6 +398,56 @@ lifecycle:
 
 **Current implementation boundary:** the repository already implements and tests configurable routine `keep_last: 5` and `keep_last: 0` policy selection; `rollback_retention.keep_last`, its separate inventory, operator warnings, snapshot capture and pruning workflow are **new proposed capabilities**, not implemented configuration or runtime behavior. Add a versioned contract/configuration change, tests and a recovery runbook before shipping them.
 
+### 7A.4c Direct VM-to-Wasabi upload with metadata-only world promotion (preferred)
+
+**Decision:** The disposable Vultr VM SHOULD upload a consistent backup **once, directly to Wasabi**, using unique object keys in a controller-authorized **pending upload namespace**. After independent verification, the controller **atomically promotes an immutable manifest reference**, rather than downloading/re-uploading, physically moving/renaming, or copying the world data into separate Wasabi folders. The bootstrap of a new Vultr VM downloads **only the exact selected verified object versions**, directly from Wasabi. Wasabi "folders" are key prefixes, not physical directories.
+
+~~~text
+Disposable Vultr VM (Paper save + quiesced snapshot)
+        |
+        | direct HTTPS multipart upload, once
+        v
+Wasabi immutable objects: incoming/<env>/<server>/<backup-id>/*
+        |
+        v
+PENDING -> independently VERIFIED (manifest + SHA-256 + lineage)
+        |
+        | atomic controller-authority epoch + world-head CAS
+        v
+Controller's authoritative catalog (logical references only)
+        |
+        +-- Live verified head (one current designated generation)
+        +-- Regular backups (every 9h; 5 default; 0 unlimited)
+        +-- Pre-rollback snapshots (5 default; 0 unlimited)
+        |
+        v
+New Vultr VM bootstrap -> direct exact-version download
+                       -> local inactive restore and validation
+                       -> fresh Paper readiness -> Velocity /send
+~~~
+
+The live-head catalog pointer describes the **latest designated verified recoverable** generation, not necessarily all recent unbacked in-memory gameplay changes. The Section 7B.2 continuous journal/acknowledged-write requirement is still necessary for a zero-RPO fresh-data claim; a verified nine-hour snapshot alone does not guarantee it.
+
+**Proposed transaction and data-path contract:**
+
+1. **Prepare:** The elected controller primary durably accepts the exact backup operation and fixes its authorized source instance, environment, world lineage, ownership epoch, data generation and required world/player/plugin data sets. A game save and quiescence barrier proves snapshot consistency; online backup modes must provide equivalent verified evidence.
+2. **Upload authorization:** The controller grants the authenticated disposable VM short-lived, exact-operation and exact-new-key rights (for example presigned multipart PUT requests or narrowly scoped Wasabi STS credentials). Restrict bucket, environment, prefix, object identity, size and expiry. Never grant access to backup deletion, other servers, protected history, bucket configuration or retention bypass. Never put long-lived credentials, signed URLs or sensitive tokens in cloud-init, logs, command lines or operation records. An upload token has **no permission to publish an authoritative world**.
+3. **Direct transfer:** The source VM streams the snapshot bytes to Wasabi over TLS, with bounded multipart uploads, retries tied to the original immutable object identity and local byte-count/SHA-256 capture. A failed or ambiguous upload stays **pending**. A provider success response, HEAD result or ETag is not by itself sufficient verification.
+4. **Independent verification:** A trusted component independent of the source VM confirms **every exact object version**, size, SHA-256 or specifically verified alternative, required data-set inventory, immutable manifest, consistency evidence, game compatibility, lineage and write-barrier. Prefer locating this verifier near Wasabi to avoid routing bulk bytes through the distant controller. If full readback is required, perform it: **bandwidth optimization cannot replace independent verification**. The current Wasabi adapter does not advertise `storage.object.verify_checksum`; an in-region independent verifier is **proposed, not implemented**. All objects of a multi-object world remain pending until the *whole* manifest is complete and checked.
+5. **Metadata-only promotion:** Persist an independently verified immutable backup manifest. Under the per-world lock and current controller/regional primary fencing epochs, commit an atomic compare-and-swap assigning its exact manifest+object versions to the authorized **live head** and/or a regular or pre-rollback history slot. This is **not** an S3 MOVE or COPY operation and does not duplicate world bytes. One immutable physical object may be referenced by multiple logical views. Pending uploads must never appear to bootstrap or be eligible for manual VM destruction.
+6. **Freshness and rollback:** Normal world-head promotion requires a valid successor generation and no unseen active-world writes; an intentional rollback follows Section 7A.4b: explicit warnings, a new verified **pre-rollback live-world snapshot**, approval and a new descendant recovery revision. No stale/incomparable world may become authoritative merely because it uploaded last.
+7. **Direct restore:** Bootstrap receives short-lived **read-only** access scoped to the specific committed manifest and exact object versions. Download from Wasabi **directly** onto the new VM, validate hashes, contents and game compatibility, restore into an inactive local root, verify owner epoch and write-barrier, then start Paper. Velocity transfers players only after fresh exact-instance readiness.
+8. **Two independent five-entry histories:** The routine pool defaults to `retention.keep_last: 5` with one backup every nine hours, while the **separate** pre-rollback pool defaults to proposed `rollback_retention.keep_last: 5`; either may independently be set to `0` for unlimited retention. These are **lists of references**, not mandatory duplicate archive copies. The sixth verified entry may retire the oldest *eligible* reference of its own pool **only after** commit and safety checks. No object/version can be deleted while referenced by the other pool, live head, archived server, required final save, protected rollback or migration, in-progress restore, continuous journal or independent anti-rollback checkpoint. Unknown reference state blocks pruning. Protected objects may make the count exceed five.
+9. **Pending-object cleanup:** A separately restricted maintenance worker may abort expired unfinished multipart uploads and clean genuinely orphaned **never-promoted** temporary data after durable reconciliation and a safe grace period. It cannot delete any verified, published, protected, still-referenced or uncertain object. When a server is removed from active management, preserve all surviving world versions and **stop both rotation policies**.
+10. **Fail closed:** Controller failure, two primaries, multipart interruption, duplicate request, broken manifest, restored old controller database, version-ID mismatch, expired temporary credential or changed source generation must not cause a stale/partial world to be published. Maintain independent recovery anchors for catalog and manifested data; normal approved destruction still needs the Section 7A.2 final stopped-world backup gate. Automatic production VM destruction remains disabled.
+
+**Why references instead of physical movement:** Wasabi documents presigned S3 uploads, scoped temporary STS credentials, multipart operations, and a provider-specific HTTP MOVE capability ([presigned access](https://docs.wasabi.com/docs/how-do-i-generate-pre-signed-urls-for-temporary-access-with-wasabi), [STS](https://docs.wasabi.com/docs/aws-sts-with-wasabi), [object operations](https://docs.wasabi.com/apidocs/operations-on-objects)). MOVE changes keys and can invalidate exact-version references; COPY creates an additional object and requires further verification. The current Go Wasabi adapter's server-side `storage.object.copy` is limited to **5 GiB per copy**. Neither MOVE nor COPY should be required for routine promotion. If a third-party backend cannot support safe direct upload, retain the current bounded controller-stream path as a portable fallback, rather than violating adapter semantics.
+
+**Implementation boundary and required follow-up:** Today the Go repository has `internal/capturestream`, controller-bound game capture streams, and a Wasabi adapter that spools and uploads via the controller. They are **not yet connected as a complete production backup lifecycle**. The direct upload path, scoped host authorization, independent in-region verifier and metadata-only promotion are **new proposed work** requiring versioned language-neutral adapter/transport contracts, audit/replay defenses, test fixtures and conformance tests. Do not silently reuse a controller stream token as an S3 capability. No live bucket, credentials or production instance is changed by this ADR.
+
+**Performance and safety tests:** With disposable staging data, measure Vultr-to-Wasabi upload bytes and time, controller ingress/egress, verifier readback traffic, bootstrap restore time, CPU/RAM/disk, Wasabi storage/API costs and incomplete multipart cleanup. Fault-inject two simultaneous uploads, lost multipart completion, corrupted data, missing playerdata, premature publication, duplicate head CAS, old-primary action, shared object referenced by both history pools, Object Lock preventing pruning, and failed restore. The optimization is successful only if **one VM upload and one next-VM restore download** suffice in the normal path *without sacrificing independently verified integrity*.
+
+
 ### 7A.5 Separate eleven-nines objectives and measurable safety rules
 
 | Property | Proposed measure | Honest claim boundary |
@@ -485,6 +535,10 @@ Every profile requires a documented, repeatable acceptance suite, plus longer-ru
 | Worker claim expires mid-provider request | New worker rejects stale commit and reconciles external outcome before acting |
 | Vultr API times out after creating a VM | Inspect provider state and exact resource identity; avoid duplicate instance creation |
 | Wasabi upload returns success but readback fails | Backup is not verified; destructive cleanup stays blocked |
+| Direct VM upload completes but controller verification or catalog commit fails | Leave immutable object pending, preserve existing live/backup heads, reconcile before retry |
+| Backup is referenced by both regular and rollback history during pruning | Retire eligible logical reference only; deny deleting the shared object/version while another valid reference exists |
+| Expired upload permission or orphaned multipart data | Refuse publication; only separately scoped maintenance may clean reconciled, never-promoted temporary artifacts |
+| New VM requests a pending or stale backup key | Bootstrap refuses; read only the committed exact verified manifest/version and perform independent restore checks |
 | Source continues writing after purported final backup | Final write-barrier proof fails; no destruction or transfer; capture again after quiescence |
 | Restore selects stale/incomparable generation | Refuse activation and preserve both worlds for audit and reconciliation |
 | Operator removes a logical server from management | Archive and hide from active listings, preserve protected world backup versions and metadata; no S3 DeleteObject or VM destruction without separate approval |
@@ -541,12 +595,13 @@ Parallel contributors/agents may independently investigate storage, workflow exe
 8. How to establish and independently verify any advertised availability figure.
 9. Ordered world-head revisions, lineage ancestry, verified game-save barriers, anti-rewind anchors, crash-safe fenced activation, CAS and deliberately approved rollback provenance.
 10. World-data loss/error-budget model, multi-object completeness, Wasabi Object Lock/versioning profile, **independently configurable routine and pre-rollback retention (each default five and zero unlimited), operator-confirmed rollback versus permanent archive/critical-backup non-deletion**, continuous durability/journaling boundary and independently verified recovery copies.
+12. Versioned direct VM-to-object-storage upload/restore transport, short-lived source/target-bound credentials, trusted near-storage verification, transactional manifest publication, shared-object reference-aware retention, pending-object reconciliation and performance conformance.
 11. A new versioned, language-neutral server archive/decommission operation and distinct provider-instance destroy operation with correct behavior if final backup verification fails.
 
 **Non-decisions:** no requirement to adopt Kubernetes/Agones, Ansible, Pterodactyl, alternative distributed databases, colocation, special hardware or an Elixir rewrite; no declaration that any availability, eleven-nines world durability or stale-overwrite target has been achieved; no automatic production destruction or live Wasabi setting changes. No lifecycle operation may delete protected world data simply because a logical server is removed.
 
 ## 11. Proposed acceptance criteria for this ADR
 
-Before marking **Accepted**, maintainers should review that **single controller-primary/two-standby authority within an HA cell**, **one owning region per logical world with explicit fenced cross-region transfer**, the deployment tiers, nine-hour routine backup rotation (five default, zero unlimited), independently configurable pre-rollback snapshot retention (five default, zero unlimited), pre-rollback warnings and exact operator approval, non-destructive server removal, permanent archived/protected-backup retention, continuous fresh-write durability requirement, final backup and anti-rollback safety design, safety invariants, initial Go+bbolt investment, optional HA/OTP decisions, per-resource owner model, failure testing, budget tradeoffs and tier-specific SLIs accurately reflect project intent. Reconcile the roadmap regression separately. Acceptance of the *architecture direction* does not authorize deploying production clusters, adding dependencies or announcing achieved SLOs.
+Before marking **Accepted**, maintainers should review that **single controller-primary/two-standby authority within an HA cell**, **one owning region per logical world with explicit fenced cross-region transfer**, the deployment tiers, **direct VM-to-Wasabi one-time upload, independently verified metadata-only promotion and direct bootstrap restore**, nine-hour routine backup rotation (five default, zero unlimited), independently configurable pre-rollback snapshot retention (five default, zero unlimited), pre-rollback warnings and exact operator approval, non-destructive server removal, permanent archived/protected-backup retention, continuous fresh-write durability requirement, final backup and anti-rollback safety design, safety invariants, initial Go+bbolt investment, optional HA/OTP decisions, per-resource owner model, failure testing, budget tradeoffs and tier-specific SLIs accurately reflect project intent. Reconcile the roadmap regression separately. Acceptance of the *architecture direction* does not authorize deploying production clusters, adding dependencies or announcing achieved SLOs.
 
 Related accepted ADRs remain authoritative where implementation is still limited to standalone. Follow-up implementation PRs require passing checks, security review, conformance and tests, and must preserve existing safe game-server behavior.
