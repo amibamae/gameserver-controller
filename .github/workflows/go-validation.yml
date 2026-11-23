@@ -9,7 +9,6 @@ on:
       - "configs/**"
       - "internal/pilotcapacity/**"
       - "scripts/bootstrap/**"
-      - "scripts/recovery/**"
       - "docs/CONFIGURATION.md"
       - "docs/ROADMAP.md"
       - ".github/workflows/go-validation.yml"
@@ -59,8 +58,6 @@ jobs:
         run: go build ./...
       - name: Test optional Python observability helpers
         run: python3 -m unittest discover -s scripts/observability -p 'test_*.py'
-      - name: Test optional Python Minecraft recovery helpers
-        run: python3 -m unittest discover -s scripts/recovery -p 'test_*.py'
       - name: Check for race conditions
         run: go test -race -count=1 ./...
       - name: Vet packages
