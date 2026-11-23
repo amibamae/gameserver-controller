@@ -147,23 +147,30 @@ func decodeAuditRecord(raw []byte, auditPath string, lineNumber int) (auditRecor
 	return record, recordedAt, nil
 }
 
+// validAuditRecord checks the event's exact operation and permitted action.
+// Target and event checks stay separate to keep the policy easy to audit.
 func validAuditRecord(record auditRecord) bool {
 	if !safeOperationID.MatchString(record.OperationID) {
 		return false
 	}
+	service, targetOK, eventOK := auditActionRule(record)
+	return record.Service == service && targetOK && eventOK
+}
+
+func auditActionRule(record auditRecord) (string, bool, bool) {
 	switch record.Action {
 	case "backup":
-		return record.Service == backupUnit && safeSSHHost.MatchString(record.Target) && validBackupAuditEvent(record.Event)
+		return backupUnit, safeSSHHost.MatchString(record.Target), validBackupAuditEvent(record.Event)
 	case "adopt":
-		return record.Service == "vultr.instance.adopt" && safePilotTarget.MatchString(record.Target) && validAdoptionAuditEvent(record.Event)
+		return "vultr.instance.adopt", safePilotTarget.MatchString(record.Target), validAdoptionAuditEvent(record.Event)
 	case "provision":
-		return record.Service == "vultr.instance.create" && safePilotTarget.MatchString(record.Target) && validProvisionAuditEvent(record.Event)
+		return "vultr.instance.create", safePilotTarget.MatchString(record.Target), validProvisionAuditEvent(record.Event)
 	case "handoff":
-		return record.Service == "vm.ssh.handoff" && safePilotInstanceTarget.MatchString(record.Target) && validHandoffAuditEvent(record.Event)
+		return "vm.ssh.handoff", safePilotInstanceTarget.MatchString(record.Target), validHandoffAuditEvent(record.Event)
 	case "observability":
-		return record.Service == "vm.ssh.observability" && safePilotInstanceTarget.MatchString(record.Target) && validObservabilityAuditEvent(record.Event)
+		return "vm.ssh.observability", safePilotInstanceTarget.MatchString(record.Target), validObservabilityAuditEvent(record.Event)
 	default:
-		return false
+		return "", false, false
 	}
 }
 
