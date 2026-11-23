@@ -16,7 +16,8 @@ import (
 )
 
 type observabilityOptions struct {
-	Execute, Confirmation, OperationID string
+	Execute bool
+	Confirmation, OperationID string
 	VultrCredentialRef, SSHCredentialRef, LogCredentialRef string
 	Endpoint, PrivacyMode string
 	Timeout time.Duration
@@ -66,7 +67,7 @@ func runObservability(o observabilityOptions, statePath string, out io.Writer) e
 		record.State != hosthandoff.Rotated || !record.BootstrapReady || !record.SecurityFinalized {
 		return errors.New("observability requires an active VM and completed SSH security handoff")
 	}
-	if o.Execute == "" {
+	if !o.Execute {
 		if o.Confirmation != "" {
 			return errors.New("--confirm-observability requires --execute")
 		}
@@ -74,7 +75,7 @@ func runObservability(o observabilityOptions, statePath string, out io.Writer) e
 			target, o.PrivacyMode, target)
 		return nil
 	}
-	if o.Execute != "true" || o.Confirmation != target {
+	if o.Confirmation != target {
 		return fmt.Errorf("--confirm-observability must match %q", target)
 	}
 	auditPath, err := defaultAuditPath()
