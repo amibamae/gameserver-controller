@@ -40,3 +40,15 @@ func TestInventoryDefaultsToNoAccess(t *testing.T) {
 		t.Fatalf("unexpected database access result: %v %q", err, out.String())
 	}
 }
+
+func TestLongServerIdentifierFitsHomelableLabel(t *testing.T) {
+	reservation := store.CapacityReservation{
+		ServerID: strings.Repeat("x", 64), EnvironmentID: "production",
+		ProviderInstanceID: "instance-1", OperationID: strings.Repeat("a", 32),
+		State: store.CapacityActive,
+	}
+	name := snapshot("canvas", []store.CapacityReservation{reservation}).Nodes[0].Name
+	if len(name) > 74 || !strings.HasSuffix(name, "(aaaaaaaa)") {
+		t.Fatalf("long Homelable name loses identity: %q", name)
+	}
+}
