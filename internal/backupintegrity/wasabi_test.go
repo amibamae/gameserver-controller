@@ -16,14 +16,14 @@ import (
 )
 
 type fakeGetter struct {
-	content []byte
-	length  int64
-	failure error
+	content     []byte
+	length      int64
+	failure     error
 	dropVersion bool
-	calls   int
-	bucket  string
-	key     string
-	version string
+	calls       int
+	bucket      string
+	key         string
+	version     string
 }
 
 func (f *fakeGetter) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
