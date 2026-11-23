@@ -71,6 +71,7 @@ The first deployment uses provider-supported Debian images and reviewed, version
 - [Configuration and secret references](docs/CONFIGURATION.md)
 - [Durable workflow engine](docs/WORKFLOW_ENGINE.md)
 - [Secret management](docs/SECRET_MANAGEMENT.md)
+- [Optional VictoriaLogs and Homelable observability](docs/OBSERVABILITY.md)
 - [Optional no-proxy DNS handoff](docs/NO_PROXY_DNS_HANDOFF.md)
 - [Security model](docs/SECURITY_MODEL.md)
 - [Protocol overview](protocol/README.md)
