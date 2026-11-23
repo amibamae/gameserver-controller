@@ -24,12 +24,12 @@ type Getter interface {
 // WasabiReader reads the complete remote object and computes its own SHA-256.
 // It never returns bytes, log messages or storage credentials.
 type WasabiReader struct {
-	client     Getter
-	adapter    string
-	profile    string
+	client      Getter
+	adapter     string
+	profile     string
 	environment string
-	bucket     string
-	maxBytes   int64
+	bucket      string
+	maxBytes    int64
 }
 
 func NewWasabiReader(client Getter, adapterID, profile, environment, bucket string, maxBytes int64) (*WasabiReader, error) {
@@ -43,12 +43,12 @@ func NewWasabiReader(client Getter, adapterID, profile, environment, bucket stri
 }
 
 type objectRef struct {
-	AdapterID       string `json:"adapter_id"`
+	AdapterID        string `json:"adapter_id"`
 	StorageProfileID string `json:"storage_profile_id"`
-	EnvironmentID   string `json:"environment_id"`
-	Container       string `json:"container"`
-	Key             string `json:"key"`
-	VersionID       string `json:"version_id"`
+	EnvironmentID    string `json:"environment_id"`
+	Container        string `json:"container"`
+	Key              string `json:"key"`
+	VersionID        string `json:"version_id"`
 }
 
 func (r *WasabiReader) Readback(ctx context.Context, raw json.RawMessage) (workflow.BackupObjectReadback, error) {
