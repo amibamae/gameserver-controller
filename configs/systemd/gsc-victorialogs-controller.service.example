@@ -1,0 +1,22 @@
+# Copy and adjust this opt-in example before enabling the matching timer.
+# Replace /opt/gameserver-controller with the real checkout and set an HTTPS
+# ingress gateway. No credentials are embedded in the unit.
+[Unit]
+Description=Optional privacy-filtered GSC controller journal export
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+SupplementaryGroups=systemd-journal
+StateDirectory=gsc-victorialogs-controller
+LoadCredential=token:/etc/gsc-observability/controller.token
+ExecStart=/usr/bin/python3 /opt/gameserver-controller/scripts/observability/victorialogs_collector.py --endpoint https://logs.example.invalid/insert/jsonline --unit gameserver-controller.service
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+MemoryMax=64M
+CPUQuota=20%
