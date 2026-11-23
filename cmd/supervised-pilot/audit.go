@@ -16,44 +16,8 @@ import (
 )
 
 var safeOperationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
-var safePilotTarget = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}@(production|staging|testing)package main
-
-import (
-	"bufio"
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strconv"
-	"time"
-)
-
-var safeOperationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
-)
-var safePilotInstanceTarget = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}@(production|staging|testing)/[A-Za-z0-9][A-Za-z0-9-]{0,127}package main
-
-import (
-	"bufio"
-	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-	"regexp"
-	"strconv"
-	"time"
-)
-
-var safeOperationID = regexp.MustCompile(`^[0-9a-f]{32}$`)
-)
+var safePilotTarget = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}@(production|staging|testing)$`)
+var safePilotInstanceTarget = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}@(production|staging|testing)/[A-Za-z0-9][A-Za-z0-9-]{0,127}$`)
 
 type auditRecord struct {
 	OperationID string `json:"operation_id"`
