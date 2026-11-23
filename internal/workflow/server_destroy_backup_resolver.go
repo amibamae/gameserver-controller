@@ -186,11 +186,11 @@ func (r *StoredBackupResolver) recheckBackupObject(ctx context.Context, server s
 		return errors.New("backup object has incomplete size or SHA-256 evidence")
 	}
 	var ref struct {
-		AdapterID       string `json:"adapter_id"`
+		AdapterID        string `json:"adapter_id"`
 		StorageProfileID string `json:"storage_profile_id"`
-		EnvironmentID   string `json:"environment_id"`
-		Container       string `json:"container"`
-		Key             string `json:"key"`
+		EnvironmentID    string `json:"environment_id"`
+		Container        string `json:"container"`
+		Key              string `json:"key"`
 	}
 	if json.Unmarshal(object.ObjectRef, &ref) != nil || !backupObjectIsRemoteAndUnique(ref.AdapterID, ref.StorageProfileID, ref.EnvironmentID, ref.Container, ref.Key, server, profile, backupID) {
 		return errors.New("backup object reference is not in the remote per-backup namespace")
