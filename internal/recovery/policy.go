@@ -77,10 +77,17 @@ func sameRuntime(before, after Observation) bool {
 	if before.UnitID == "" || before.ReleaseID == "" || before.RuntimeID == "" {
 		return false
 	}
+	return sameLogicalTarget(before, after) && sameGameRuntime(before, after)
+}
+
+func sameLogicalTarget(before, after Observation) bool {
 	return before.ServerID == after.ServerID &&
 		before.EnvironmentID == after.EnvironmentID &&
-		before.InstanceID == after.InstanceID &&
-		before.UnitID == after.UnitID &&
+		before.InstanceID == after.InstanceID
+}
+
+func sameGameRuntime(before, after Observation) bool {
+	return before.UnitID == after.UnitID &&
 		before.ReleaseID == after.ReleaseID &&
 		before.RuntimeID == after.RuntimeID
 }
