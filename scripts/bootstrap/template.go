@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-//go:embed minecraft-debian.sh.tmpl victorialogs_export.py victorialogs_configure.py
+//go:embed minecraft-debian.sh.tmpl victorialogs_export.py victorialogs_configure.py minecraft_probe.py
 var files embed.FS
 
 var (
@@ -73,6 +73,10 @@ func Render(settings Settings) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read embedded VictoriaLogs configurer: %w", err)
 	}
+	probe, err := files.ReadFile("minecraft_probe.py")
+	if err != nil {
+		return nil, fmt.Errorf("read embedded Minecraft health probe: %w", err)
+	}
 
 	// Get heap values from plan; default to 2GB min/max if plan unknown.
 	planRAM, ok := vultrPlanToRAM[settings.Plan]
@@ -92,6 +96,7 @@ func Render(settings Settings) ([]byte, error) {
 		"@@JAVA_HEAP_MAX@@":             strconv.Itoa(heapMax),
 		"@@VICTORIALOGS_EXPORT_PY@@":    strings.TrimSuffix(string(shipper), "\n"),
 		"@@VICTORIALOGS_CONFIGURE_PY@@": strings.TrimSuffix(string(configurer), "\n"),
+		"@@MINECRAFT_PROBE_PY@@": strings.TrimSuffix(string(probe), "\n"),
 	}
 	result := string(template)
 	for marker, value := range values {
