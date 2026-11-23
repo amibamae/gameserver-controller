@@ -111,10 +111,8 @@ func backupCaptureServerMatches(target OperationTarget, server LogicalServer) bo
 
 func writeBackupInitialState(operations *bolt.Bucket, key []byte, current StoredOperation, state protocolstate.ServerState) (StoredOperation, error) {
 	record := current.Record
-	for _, step := range record.Steps {
-		if step.Status != protocolstate.StepPending || step.Attempt != 0 {
-			return StoredOperation{}, fmt.Errorf("%w: backup context must precede dispatch", ErrInvalidRecord)
-		}
+	if backupCaptureStepsStarted(record.Steps) {
+		return StoredOperation{}, fmt.Errorf("%w: backup context must precede dispatch", ErrInvalidRecord)
 	}
 	record.BackupInitialLifecycleState = state
 	if record.BackupInitialLifecycleState == "" || validateRecord(record) != nil {
@@ -130,4 +128,13 @@ func writeBackupInitialState(operations *bolt.Bucket, key []byte, current Stored
 		return result, err
 	}
 	return result, operations.Put(key, encoded)
+}
+
+func backupCaptureStepsStarted(steps []OperationStep) bool {
+	for _, step := range steps {
+		if step.Status != protocolstate.StepPending || step.Attempt != 0 {
+			return true
+		}
+	}
+	return false
 }
