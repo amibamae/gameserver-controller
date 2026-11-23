@@ -34,15 +34,17 @@ type ServerDestroyProfileResolver interface {
 // VerifiedServerBackup is returned only after the resolver has checked the
 // immutable manifest, every object and checksum, environment ownership, and
 // current data generation. SourceInstanceRef binds the backup to the exact
-// managed instance being destroyed.
-type VerifiedServerBackup struct {
+// managed instance being destroyed. The resolver must independently prove the\n// backup is off the instance, internally consistent, and includes writes up\n// to the final quiesced runtime boundary. A stale backup in the same data\n// generation is not adequate proof that the last world changes were saved.\ntype VerifiedServerBackup struct {
 	BackupID          string
 	ServerID          string
 	EnvironmentID     string
 	StorageProfile    string
 	DataGenerationID  string
 	SourceInstanceRef json.RawMessage
-	IntegrityVerified bool
+	IntegrityVerified         bool
+	OffInstanceVerified       bool
+	ConsistencyVerified       bool
+	FinalWriteBoundaryVerified bool
 }
 
 // ServerDestroyBackupResolver must return a durable, integrity-verified
@@ -224,6 +226,9 @@ func (w *ServerDestroyWorkflow) verifiedBackup(ctx context.Context, server store
 	}
 	if !verifiedBackupBindsServer(backup, server, parameters) {
 		return VerifiedServerBackup{}, errors.New("verified backup does not bind the exact server, environment, storage profile, instance, and current data generation")
+	}
+	if !backup.OffInstanceVerified || !backup.ConsistencyVerified || !backup.FinalWriteBoundaryVerified {
+		return VerifiedServerBackup{}, errors.New("server.destroy requires an off-instance consistent backup covering the final write boundary")
 	}
 	return backup, nil
 }
