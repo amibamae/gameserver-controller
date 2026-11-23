@@ -11,6 +11,16 @@ This branch adds **staging-safe recovery policy, a read-only Paper log probe, an
 
 The original prototype contained a separate Python controller daemon issuing `systemctl restart` directly. **It was removed** because this bypassed the protocol's save-and-restart requirements and risked re-enabling proxy routing before game readiness.
 
+### Verified backup resolver: new implementation, not yet enabled
+
+`internal/workflow/server_destroy_backup_resolver.go` now includes `StoredBackupResolver`: a trust boundary which reads a **completed, successful, schema-validated offline `server.backup` operation**, compares the exact source instance, backup-policy ID, current world generation, and the stopped lifecycle event boundary, then independently rechecks every named remote object before producing the destruction evidence flags. A stale backup in the same generation is rejected when another lifecycle operation follows it. `server.backup` itself was also corrected to remove the planner-only `data_set_id` hint from the schema-validated manifest after binding the data set.
+
+`internal/backupintegrity/wasabi.go` provides a bounded AWS-SDK `GetObject` reader. It uses the configured remote storage **profile** (different from the backup **policy** ID), pins the requested object version when given, checks the returned version, streams the entire object through a local SHA-256 hasher, and returns only size/checksum evidence. Missing objects, partial reads, mismatched checksums/versions and uncertain results fail closed. The controller must configure credentials outside backup manifests and logs.
+
+**Neither component is wired into production `controller serve` yet**. The application currently lacks the game/execution adapters and authenticated provider/backup credentials required for a live recovery or destructive operation. Even after wiring, all game writes must be fenced by the controller at the final quiesced boundary; out-of-band edits cannot be proven absent from an operation history. Do not equate a stored truth flag, an S3 object readback, or a "11 nines" claim with proof of a complete recoverable world.
+
+For an isolated staging rehearsal see [RECOVERY_STAGING_RUNBOOK.md](RECOVERY_STAGING_RUNBOOK.md). It is not safe to use a production VM or world for fault injection.
+
 ## Required in-place recovery sequence
 
 For a running Paper process with two independently confirmed unhealthy observations from the **same** exact systemd incarnation:
