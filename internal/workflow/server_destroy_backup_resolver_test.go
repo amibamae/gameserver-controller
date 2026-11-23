@@ -68,7 +68,7 @@ func TestStoredBackupResolverRequiresFreshFullRemoteReadback(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := resolver.ResolveVerifiedServerBackup(context.Background(), server, server.StorageProfile, op.OperationID)
+	result, err := resolver.ResolveVerifiedServerBackup(context.Background(), server, "profile-1", op.OperationID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestStoredBackupResolverBlocksOldOrUnverifiableRecoveryPoints(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if result, err := resolver.ResolveVerifiedServerBackup(context.Background(), current, current.StorageProfile, backup.OperationID); err == nil {
+			if result, err := resolver.ResolveVerifiedServerBackup(context.Background(), current, "profile-1", backup.OperationID); err == nil {
 				t.Fatalf("unsafe backup accepted: %#v", result)
 			}
 		})
