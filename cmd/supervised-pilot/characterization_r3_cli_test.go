@@ -58,7 +58,7 @@ func TestPilotR3DispatchMessages(t *testing.T) {
 		{"boot-status server", []string{"boot-status", "--environment", "staging"}, "--server-id is required and must be a lower-case identifier"},
 		{"boot-status environment", []string{"boot-status", "--server-id", "pilot-test", "--environment", "qa"}, "--environment must be production, staging, or testing"},
 		{"adopt flags", []string{"adopt", "--host", "h"}, "remove flags not supported by this action: --host"},
-		{"adopt os id", []string{"adopt", "--os-id", "abc"}, "--os-id must be a positive Vultr OS ID"},
+		{"adopt os id", []string{"adopt", "--os-id", "abc"}, "parse Vultr OS ID: invalid Vultr API request: provider OS ID must be a positive integer"},
 		{"handoff flags", []string{"handoff", "--host", "h"}, "remove flags not supported by this action: --host"},
 		{"handoff timeout", []string{"handoff", "--operation-id", pilotR3OperationID, "--wasabi-region", "us-east-1", "--timeout", "7h"}, "--timeout must be greater than zero and no more than 6h"},
 		{"register flags", []string{"register-ssh-key", "--host", "h"}, "remove flags not supported by this action: --host"},
