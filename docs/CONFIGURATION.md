@@ -108,6 +108,7 @@ While a server is running, the controller adds or removes servers only inside th
 ```yaml
 controller:
   capacity:
+    max_servers: 3               # overall capacity limit (see below)
     migration_targets:
       enabled: true        # default true
       max_servers: 1       # default 1; 0 means no limit
@@ -131,6 +132,7 @@ A **migration target server** is the new server a migration moves to. It runs al
 
 - `migration_targets.enabled` decides whether a migration may start a migration target server alongside the live one. Set it to `false` if you never want a migration target running next to a live server.
 - `migration_targets.max_servers` is the most migration target servers that may run at the same time. It is a limit, not an on/off switch: to stop migration target servers entirely, set `enabled: false` rather than changing this number. `0` removes the limit.
+- `controller.capacity.max_servers` is the overall capacity limit: the maximum number of managed servers the controller may run at once, **counting every live server and every migration target server that is running alongside one**. Raising `migration_targets.max_servers` does not raise this overall limit. If you run several migrations at once, or expect a migration target to run next to more live servers than your current `capacity.max_servers` allows, raise `controller.capacity.max_servers` so the total (live servers + migration targets) fits, or the migration will be rejected for exceeding capacity.
 - `scaling.vertical.enabled` is a separate option that turns vertical auto-scaling on or off for one server. When on, the controller moves the server one rung up or down its plan ladder at a time, through a migration to a migration target server (see [core design](CORE_DESIGN.md#vertical-auto-scaling-planned)). Vertical scaling needs migration target servers, so it stays inactive while `migration_targets.enabled` is `false` for that server. A migration is the only case where more than two managed servers may run. The thresholds that trigger a move are not designed yet.
 
 Manual scaling needs no configuration. An operator schedules a move to any plan with one of three timings: `immediate`, `end_of_billing_period` or `next_start`. A manual move pauses auto-scaling for that server until it completes, and a per-server command can turn auto-scaling off or on, overriding `scaling.vertical.enabled` until the override is cleared. See [manual scaling](CORE_DESIGN.md#manual-scaling-planned).
