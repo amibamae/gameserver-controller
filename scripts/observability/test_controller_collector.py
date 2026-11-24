@@ -65,11 +65,49 @@ class CollectorTests(unittest.TestCase):
             path.write_text("s=1;i=0\n", encoding="utf-8")
             with patch.object(collector.subprocess, "Popen", return_value=process):
                 with self.assertRaises(ValueError) as failure:
-                    collector.collect_once("https://logs.example", "private", path,
+                    collector.collect_once(collector.Destination("https://logs.example", "private"), path,
                                            "gameserver-controller.service", collector.read_journal,
                                            lambda *_: self.fail("network must not be called"))
             self.assertEqual(str(failure.exception), "journal reader failed; cursor retained")
             self.assertEqual(path.read_text(encoding="utf-8"), "s=1;i=0\n")
+
+    def test_oversized_journal_record_is_drained_before_reading_next_record(self):
+        oversized = b"x" * (collector.MAX_LINE + 10) + b"\n"
+        valid = json.dumps(event_record("s=1;i=2")).encode() + b"\n"
+        process = Mock(stdout=io.BytesIO(oversized + valid))
+        process.poll.return_value = 0
+        process.wait.return_value = 0
+        with patch.object(collector.subprocess, "Popen", return_value=process):
+            events, cursor = collector.read_journal("gameserver-controller.service", "")
+        self.assertEqual(len(events), 1)
+        self.assertEqual(cursor, "s=1;i=2")
+
+    def test_journal_read_error_still_terminates_and_waits_for_reader(self):
+        process = Mock()
+        process.stdout.readline.side_effect = OSError("journal pipe unavailable")
+        process.poll.return_value = None
+        process.wait.return_value = -15
+        with patch.object(collector.subprocess, "Popen", return_value=process):
+            with self.assertRaises(OSError) as failure:
+                collector.read_journal("gameserver-controller.service", "")
+        self.assertEqual(str(failure.exception), "journal pipe unavailable")
+        process.terminate.assert_called_once_with()
+        process.wait.assert_called_once_with(timeout=5)
+
+    def test_journal_reader_preserves_filtered_tail_cursor_and_decode_output(self):
+        records = [event_record(), event_record("s=1;i=2", "player.private"),
+                   {"__CURSOR": "s=1;i=4", "MESSAGE": "private raw log"},
+                   {"__CURSOR": "bad cursor", "MESSAGE": "invalid cursor"}]
+        lines = [json.dumps(record).encode() + b"\n" for record in records]
+        lines.insert(1, b"not json\n")
+        process = Mock(stdout=io.BytesIO(b"".join(lines)))
+        process.poll.return_value = 0
+        process.wait.return_value = 0
+        expected = collector.decode_records(lines)
+        with patch.object(collector.subprocess, "Popen", return_value=process):
+            self.assertEqual(collector.read_journal("gameserver-controller.service", ""), expected)
+        self.assertEqual(len(expected[0]), 1)
+        self.assertEqual(expected[1], "s=1;i=4")
 
     def test_failed_cursor_replace_keeps_previous_position_for_replay(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -79,7 +117,7 @@ class CollectorTests(unittest.TestCase):
             sender = Mock()
             with patch.object(collector.os, "replace", side_effect=OSError("disk unavailable")):
                 with self.assertRaises(OSError) as failure:
-                    collector.collect_once("https://logs.example", "private", path,
+                    collector.collect_once(collector.Destination("https://logs.example", "private"), path,
                                            "gameserver-controller.service", reader, sender)
             self.assertEqual(str(failure.exception), "disk unavailable")
             reader.assert_called_once_with("gameserver-controller.service", "s=1;i=0")
@@ -146,11 +184,11 @@ class CollectorTests(unittest.TestCase):
             def fail(*args):
                 raise OSError("endpoint offline")
             with self.assertRaises(OSError):
-                collector.collect_once("https://logs.example", "private", path,
+                collector.collect_once(collector.Destination("https://logs.example", "private"), path,
                                        "gameserver-controller.service", reader, fail)
             self.assertFalse(path.exists())
             self.assertEqual(collector.collect_once(
-                "https://logs.example", "private", path, "gameserver-controller.service",
+                collector.Destination("https://logs.example", "private"), path, "gameserver-controller.service",
                 reader, lambda *_: None), 1)
             self.assertEqual(path.read_text().strip(), "s=1;i=3")
             self.assertEqual([x[1] for x in calls], ["", "s=1;i=3"][:1] + [""])
@@ -158,7 +196,7 @@ class CollectorTests(unittest.TestCase):
     def test_success_without_allowed_events_advances_cursor(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "cursor"
-            collector.collect_once("https://logs.example", "private", path, "gameserver-controller.service",
+            collector.collect_once(collector.Destination("https://logs.example", "private"), path, "gameserver-controller.service",
                                    lambda unit, cursor: ([], "s=1;i=4"), lambda *_: None)
             self.assertEqual(path.read_text().strip(), "s=1;i=4")
 
@@ -167,7 +205,7 @@ class CollectorTests(unittest.TestCase):
             path = Path(directory) / "cursor"
             path.write_text("malicious cursor with spaces", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "invalid saved journal cursor"):
-                collector.collect_once("https://logs.example", "private", path, "gameserver-controller.service",
+                collector.collect_once(collector.Destination("https://logs.example", "private"), path, "gameserver-controller.service",
                                        lambda *_: self.fail("journal must not be read"),
                                        lambda *_: self.fail("network must not be called"))
 

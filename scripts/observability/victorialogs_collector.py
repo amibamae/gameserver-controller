@@ -6,6 +6,7 @@ systemd LoadCredential file; never put secrets in flags, URLs or environment.
 The journal cursor moves only after VictoriaLogs acknowledges the batch.
 """
 import argparse
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,12 @@ MAX_RECORDS = 250
 MAX_LINE = 262144
 UNIT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.@-]{0,127}\.service$")
 CURSOR = re.compile(r"^[A-Za-z0-9_.;:=-]{1,4096}$")
+
+
+@dataclass(frozen=True)
+class Destination:
+    endpoint: str
+    token: str
 
 
 def journal_event(record):
@@ -53,41 +60,61 @@ def decode_records(lines):
     return events, cursor
 
 
-def read_journal(unit, cursor):
+def journal_command(unit, cursor):
     if not UNIT.fullmatch(unit):
         raise ValueError("invalid controller service name")
     command = ["journalctl", "--no-pager", "--output=json", "--unit=" + unit]
     # Until the first acknowledged batch there is no durable cursor. A rolling
     # time window would silently lose retained entries during an ingestion outage.
     command += ["--after-cursor=" + cursor] if cursor else ["--since=@0"]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    records = []
+    return command
+
+
+def read_journal_record(stream):
+    line = stream.readline(MAX_LINE + 1)
+    if not line:
+        return None
+    if line.endswith(b"\n"):
+        return line
+    # Drain an oversized message without retaining or forwarding its contents.
+    while line and not line.endswith(b"\n"):
+        line = stream.readline(MAX_LINE + 1)
+    return b""
+
+
+def journal_records(stream):
+    """Yield bounded records for immediate filtering without retaining raw logs."""
+    for _ in range(MAX_RECORDS):
+        line = read_journal_record(stream)
+        if line is None:
+            break
+        if line:
+            yield line
+
+
+def finish_journal(process):
     stopped = False
+    if process.poll() is None:
+        process.terminate()
+        stopped = True
     try:
-        for _ in range(MAX_RECORDS):
-            line = process.stdout.readline(MAX_LINE + 1)
-            if not line:
-                break
-            if not line.endswith(b"\n"):
-                # This message is too large. Drain the remainder without
-                # retaining it or leaking it to the destination.
-                while line and not line.endswith(b"\n"):
-                    line = process.stdout.readline(MAX_LINE + 1)
-                continue
-            records.append(line)
-    finally:
-        if process.poll() is None:
-            process.terminate()
-            stopped = True
-        try:
-            code = process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
-            raise ValueError("journal reader timed out")
+        code = process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        raise ValueError("journal reader timed out")
     if code != 0 and not (stopped and code == -15):
         raise ValueError("journal reader failed; cursor retained")
-    return decode_records(records)
+
+
+def read_journal(unit, cursor):
+    process = subprocess.Popen(journal_command(unit, cursor), stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL)
+    try:
+        result = decode_records(journal_records(process.stdout))
+    finally:
+        finish_journal(process)
+    return result
 
 
 def read_cursor(path):
@@ -120,11 +147,11 @@ def save_cursor(path, cursor):
             os.unlink(temp_path)
 
 
-def collect_once(endpoint, token, path, unit, reader=read_journal, sender=bridge.deliver):
+def collect_once(destination, path, unit, reader=read_journal, sender=bridge.deliver):
     """At-least-once: network failure never advances the durable cursor."""
     cursor = read_cursor(path)
     events, next_cursor = reader(unit, cursor)
-    sender(events, endpoint, token)
+    sender(events, destination.endpoint, destination.token)
     save_cursor(path, next_cursor)
     return len(events)
 
@@ -146,7 +173,7 @@ def main():
         if not token or any(ch.isspace() for ch in token):
             raise ValueError("invalid private ingestion token")
         os.umask(0o077)
-        collect_once(endpoint, token, state / "cursor", options.unit)
+        collect_once(Destination(endpoint, token), state / "cursor", options.unit)
     except (OSError, ValueError, subprocess.SubprocessError):
         print("controller VictoriaLogs forwarding unavailable; cursor retained for retry", file=sys.stderr)
         return 1
