@@ -41,37 +41,45 @@ func CheckRestartDispatch(record store.OperationRecord, binding EvidenceBinding,
 	if !validRecoveryBinding(record, binding) || now.IsZero() {
 		return RestartProof{}, ErrUnsafeRestart
 	}
-	inspect, ok := succeededStep(record, binding.InspectStepID, "execution.unit.inspect")
-	if !ok {
-		return RestartProof{}, ErrUnsafeRestart
-	}
-	runtimeID, inspectedAt, err := checkedUnitInspect(inspect.Output, binding)
-	if err != nil || runtimeID == "" {
-		return RestartProof{}, ErrUnsafeRestart
-	}
-	drain, ok := succeededStep(record, binding.DrainStepID, "integration.proxy.backend.drain")
-	if !ok || !confirmedDrain(drain.Output, binding, now) {
-		return RestartProof{}, ErrUnsafeRestart
-	}
-	saved, ok := succeededStep(record, binding.SaveStepID, "game.save.request")
-	if !ok {
-		return RestartProof{}, ErrUnsafeRestart
-	}
-	savedAt, err := confirmedSave(saved.Output, binding)
-	if err != nil || savedAt.Before(inspectedAt) || savedAt.Before(record.CreatedAt) {
-		return RestartProof{}, ErrUnsafeRestart
-	}
-	if savedAt.After(now) || now.Sub(savedAt) > 3*time.Minute {
+	proof, save, err := confirmedRestartDependencies(record, binding, now)
+	if err != nil {
 		return RestartProof{}, ErrUnsafeRestart
 	}
 	restart := operationStepByID(record, binding.RestartStepID)
 	if restart.StepID == "" || restart.CapabilityName != "execution.unit.restart" {
 		return RestartProof{}, ErrUnsafeRestart
 	}
-	if !restartInputMatches(restart, runtimeID, binding, saved.Output) {
+	if !restartInputMatches(restart, proof.RuntimeID, binding, save) {
 		return RestartProof{}, ErrUnsafeRestart
 	}
-	return RestartProof{RuntimeID: runtimeID, SavedAt: savedAt}, nil
+	return proof, nil
+}
+
+func confirmedRestartDependencies(record store.OperationRecord, binding EvidenceBinding, now time.Time) (RestartProof, json.RawMessage, error) {
+	inspect, ok := succeededStep(record, binding.InspectStepID, "execution.unit.inspect")
+	if !ok {
+		return RestartProof{}, nil, ErrUnsafeRestart
+	}
+	runtimeID, inspectedAt, err := checkedUnitInspect(inspect.Output, binding)
+	if err != nil || runtimeID == "" {
+		return RestartProof{}, nil, ErrUnsafeRestart
+	}
+	drain, ok := succeededStep(record, binding.DrainStepID, "integration.proxy.backend.drain")
+	if !ok || !confirmedDrain(drain.Output, binding, now) {
+		return RestartProof{}, nil, ErrUnsafeRestart
+	}
+	saved, ok := succeededStep(record, binding.SaveStepID, "game.save.request")
+	if !ok {
+		return RestartProof{}, nil, ErrUnsafeRestart
+	}
+	savedAt, err := confirmedSave(saved.Output, binding)
+	if err != nil || savedAt.Before(inspectedAt) || savedAt.Before(record.CreatedAt) {
+		return RestartProof{}, nil, ErrUnsafeRestart
+	}
+	if savedAt.After(now) || now.Sub(savedAt) > 3*time.Minute {
+		return RestartProof{}, nil, ErrUnsafeRestart
+	}
+	return RestartProof{RuntimeID: runtimeID, SavedAt: savedAt}, saved.Output, nil
 }
 
 func validRecoveryBinding(record store.OperationRecord, binding EvidenceBinding) bool {
@@ -87,9 +95,10 @@ func validRecoveryBinding(record store.OperationRecord, binding EvidenceBinding)
 	if !equalDocument(record.Target.InstanceRef, binding.InstanceRef) {
 		return false
 	}
-	return len(binding.UnitRef) != 0 && binding.InspectStepID != "" &&
-		binding.DrainStepID != "" && binding.SaveStepID != "" &&
-		binding.RestartStepID != ""
+	if len(binding.UnitRef) == 0 || binding.InspectStepID == "" {
+		return false
+	}
+	return binding.DrainStepID != "" && binding.SaveStepID != "" && binding.RestartStepID != ""
 }
 
 func succeededStep(record store.OperationRecord, id, capability string) (store.OperationStep, bool) {
@@ -205,9 +214,13 @@ func restartInputMatches(step store.OperationStep, runtimeID string, binding Evi
 		!input.Target.matches(binding) {
 		return false
 	}
-	if input.ReleaseID != binding.ReleaseID || input.ExpectedRuntimeID != runtimeID ||
-		input.SaveStepID != binding.SaveStepID || input.Force ||
-		input.GraceSeconds < 1 || input.GraceSeconds > 120 {
+	if input.ReleaseID != binding.ReleaseID || input.ExpectedRuntimeID != runtimeID {
+		return false
+	}
+	if input.SaveStepID != binding.SaveStepID || input.Force {
+		return false
+	}
+	if input.GraceSeconds < 1 || input.GraceSeconds > 120 {
 		return false
 	}
 	return equalDocument(input.SaveConfirmation, save)
@@ -224,6 +237,14 @@ func CheckNewRuntimeProof(record store.OperationRecord, binding EvidenceBinding,
 	if !ok {
 		return "", errors.New("restart did not complete in the durable operation")
 	}
+	newID, err := verifiedRestartOutput(restarted.Output, binding, old.RuntimeID)
+	if err != nil {
+		return "", err
+	}
+	return verifyNewRuntimeObservation(record, binding, newInspectStep, newID, now)
+}
+
+func verifiedRestartOutput(raw json.RawMessage, binding EvidenceBinding, oldID string) (string, error) {
 	var output struct {
 		UnitRef                 json.RawMessage `json:"unit_ref"`
 		Target                  targetIdentity  `json:"target"`
@@ -236,25 +257,35 @@ func CheckNewRuntimeProof(record store.OperationRecord, binding EvidenceBinding,
 		ForceUsed               bool            `json:"force_used"`
 		PersistentDataPreserved bool            `json:"persistent_data_preserved"`
 	}
-	if json.Unmarshal(restarted.Output, &output) != nil ||
-		!equalDocument(output.UnitRef, binding.UnitRef) || !output.Target.matches(binding) {
-		return "", errors.New("restart output does not bind exact target")
+	if json.Unmarshal(raw, &output) != nil || !equalDocument(output.UnitRef, binding.UnitRef) {
+		return "", errors.New("restart output does not bind exact unit")
 	}
-	if output.ReleaseID != binding.ReleaseID || output.PreviousRuntimeID != old.RuntimeID ||
-		output.RuntimeID == "" || output.RuntimeID == old.RuntimeID {
+	if !output.Target.matches(binding) || output.ReleaseID != binding.ReleaseID {
+		return "", errors.New("restart output does not bind exact host and release")
+	}
+	if output.PreviousRuntimeID != oldID || output.RuntimeID == "" || output.RuntimeID == oldID {
 		return "", errors.New("restart did not yield a new runtime on the same release")
 	}
-	if output.Outcome != "completed" || output.State != "running" ||
-		!output.CleanStopConfirmed || output.ForceUsed || !output.PersistentDataPreserved {
+	if output.Outcome != "completed" || output.State != "running" {
+		return "", errors.New("restart outcome was not completed and running")
+	}
+	if !output.CleanStopConfirmed || output.ForceUsed || !output.PersistentDataPreserved {
 		return "", errors.New("restart lacks confirmed graceful stop and data preservation")
 	}
-	next, ok := succeededStep(record, newInspectStep, "execution.unit.inspect")
+	return output.RuntimeID, nil
+}
+
+func verifyNewRuntimeObservation(record store.OperationRecord, binding EvidenceBinding, stepID, expectedID string, now time.Time) (string, error) {
+	next, ok := succeededStep(record, stepID, "execution.unit.inspect")
 	if !ok {
 		return "", errors.New("new runtime inspection was not confirmed")
 	}
 	observedID, observedAt, err := checkedUnitInspect(next.Output, binding)
-	if err != nil || observedID != output.RuntimeID || observedAt.After(now) || now.Sub(observedAt) > 2*time.Minute {
+	if err != nil || observedID != expectedID {
 		return "", errors.New("fresh new runtime inspection does not match completed restart")
+	}
+	if observedAt.After(now) || now.Sub(observedAt) > 2*time.Minute {
+		return "", errors.New("new runtime inspection is stale or from the future")
 	}
 	return observedID, nil
 }
