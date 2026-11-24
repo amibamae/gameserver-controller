@@ -158,8 +158,8 @@ func TestRecoveryRestartFailsClosedWithoutSpecificEvidence(t *testing.T) {
 func TestRecoverySaveMustBeFreshAndAfterObservedRuntime(t *testing.T) {
 	record, binding, now := recoveryEvidenceFixture(t)
 	for name, date := range map[string]time.Time{
-		"stale":  now.Add(-4 * time.Minute),
-		"future": now.Add(time.Minute),
+		"stale":          now.Add(-4 * time.Minute),
+		"future":         now.Add(time.Minute),
 		"before inspect": record.CreatedAt.Add(2 * time.Second),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -169,8 +169,8 @@ func TestRecoverySaveMustBeFreshAndAfterObservedRuntime(t *testing.T) {
 			save["saved_at"] = date.Format(time.RFC3339Nano)
 			copy.Steps[2].Output, _ = json.Marshal(save)
 			copy.Steps[3].ResolvedInput = json.RawMessage(strings.ReplaceAll(
-				string(copy.Steps[3].ResolvedInput), `"saved_at":"` + record.CreatedAt.Add(40*time.Second).Format(time.RFC3339Nano) + `"`,
-				`"saved_at":"` + date.Format(time.RFC3339Nano) + `"`))
+				string(copy.Steps[3].ResolvedInput), `"saved_at":"`+record.CreatedAt.Add(40*time.Second).Format(time.RFC3339Nano)+`"`,
+				`"saved_at":"`+date.Format(time.RFC3339Nano)+`"`))
 			if _, err := CheckRestartDispatch(copy, binding, now); err == nil {
 				t.Fatal("unsafe timestamp accepted")
 			}
