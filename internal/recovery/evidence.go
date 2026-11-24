@@ -23,6 +23,7 @@ type EvidenceBinding struct {
 	DrainStepID   string
 	SaveStepID    string
 	RestartStepID string
+	Health        HealthBinding
 }
 
 var ErrUnsafeRestart = errors.New("recovery restart has no complete, fresh, exact-target save and drain evidence")
@@ -41,8 +42,12 @@ func CheckRestartDispatch(record store.OperationRecord, binding EvidenceBinding,
 	if !validRecoveryBinding(record, binding) || now.IsZero() {
 		return RestartProof{}, ErrUnsafeRestart
 	}
-	proof, save, err := confirmedRestartDependencies(record, binding, now)
+	trigger, err := CheckRecoveryTrigger(record, binding, binding.Health, now)
 	if err != nil {
+		return RestartProof{}, ErrUnsafeRestart
+	}
+	proof, save, err := confirmedRestartDependencies(record, binding, now)
+	if err != nil || proof.RuntimeID != trigger.PreviousRuntimeID {
 		return RestartProof{}, ErrUnsafeRestart
 	}
 	restart := operationStepByID(record, binding.RestartStepID)
