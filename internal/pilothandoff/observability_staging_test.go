@@ -148,24 +148,29 @@ func TestStagingObservabilitySSHFailureAndRecovery(t *testing.T) {
 			if err == nil || err.Error() != want {
 				t.Fatalf("failure = %v; want %q", err, want)
 			}
-			ssh.result, ssh.runErr = Result{}, nil
-			if err := w.runner.ConfigureVictoriaLogs(context.Background(), stagedVictoriaLogs()); err != nil {
-				t.Fatalf("retry after SSH recovery: %v", err)
-			}
-			if ssh.runCalls != 2 || ssh.expectedKey != w.swapKey {
-				t.Fatalf("calls = %d, expected host key = %q", ssh.runCalls, ssh.expectedKey)
-			}
-			if ssh.command != "sudo -n /usr/local/sbin/gsc-configure-victorialogs" {
-				t.Fatalf("unexpected remote command %q", ssh.command)
-			}
-			var payload victoriaLogsPayload
-			if err := json.Unmarshal(ssh.payload, &payload); err != nil {
-				t.Fatal(err)
-			}
-			if payload.PrivacyMode != "lifecycle" || payload.Token != strings.Repeat("x", 32) {
-				t.Fatal("retry did not deliver the private lifecycle policy on stdin")
-			}
+			assertStagingObservabilityRetry(t, w, ssh)
 		})
+	}
+}
+
+func assertStagingObservabilityRetry(t *testing.T, w *world, ssh *stagingSSH) {
+	t.Helper()
+	ssh.result, ssh.runErr = Result{}, nil
+	if err := w.runner.ConfigureVictoriaLogs(context.Background(), stagedVictoriaLogs()); err != nil {
+		t.Fatalf("retry after SSH recovery: %v", err)
+	}
+	if ssh.runCalls != 2 || ssh.expectedKey != w.swapKey {
+		t.Fatalf("calls = %d, expected host key = %q", ssh.runCalls, ssh.expectedKey)
+	}
+	if ssh.command != "sudo -n /usr/local/sbin/gsc-configure-victorialogs" {
+		t.Fatalf("unexpected remote command %q", ssh.command)
+	}
+	var payload victoriaLogsPayload
+	if err := json.Unmarshal(ssh.payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.PrivacyMode != "lifecycle" || payload.Token != strings.Repeat("x", 32) {
+		t.Fatal("retry did not deliver the private lifecycle policy on stdin")
 	}
 }
 

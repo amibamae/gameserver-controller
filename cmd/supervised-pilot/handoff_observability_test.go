@@ -44,7 +44,10 @@ func TestAutomaticObservabilityFailureDoesNotFailHandoff(t *testing.T) {
 	calls := 0
 	applyAutomaticObservability(opts, "test.db", &stdout, &stderr, func(o observabilityOptions, path string, out io.Writer) error {
 		calls++
-		if !o.Execute || o.OperationID != opts.OperationID || o.Confirmation != opts.Confirmation || path != "test.db" || o.Timeout != 2*time.Minute {
+		if !o.Execute || o.OperationID != opts.OperationID || o.Confirmation != opts.Confirmation || o.Timeout != 2*time.Minute {
+			t.Fatalf("unexpected automatic configuration: %+v, %s", o, path)
+		}
+		if path != "test.db" {
 			t.Fatalf("unexpected automatic configuration: %+v, %s", o, path)
 		}
 		return errors.New("private-token-secret-that-must-not-be-logged")
