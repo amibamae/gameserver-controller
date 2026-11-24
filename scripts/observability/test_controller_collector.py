@@ -1,8 +1,10 @@
 """Offline fault-injection coverage for the optional durable controller collector."""
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
 import victorialogs_collector as collector
 
@@ -21,6 +23,81 @@ def event_record(cursor="s=1;i=1", event_type="integration.proxy.recovered"):
 
 
 class CollectorTests(unittest.TestCase):
+    def test_first_collection_reads_retained_history_without_a_rolling_window(self):
+        process = Mock(stdout=io.BytesIO(json.dumps(event_record()).encode() + b"\n"))
+        process.poll.return_value = 0
+        process.wait.return_value = 0
+        with patch.object(collector.subprocess, "Popen", return_value=process) as start:
+            events, cursor = collector.read_journal("gameserver-controller.service", "")
+        self.assertIn("--since=@0", start.call_args.args[0])
+        self.assertEqual(len(events), 1)
+        self.assertEqual(cursor, "s=1;i=1")
+
+    def test_journal_reader_resumes_from_saved_cursor(self):
+        process = Mock(stdout=io.BytesIO())
+        process.poll.return_value = 0
+        process.wait.return_value = 0
+        with patch.object(collector.subprocess, "Popen", return_value=process) as start:
+            self.assertEqual(collector.read_journal("gameserver-controller.service", "s=1;i=1"),
+                             ([], None))
+        self.assertIn("--after-cursor=s=1;i=1", start.call_args.args[0])
+        self.assertFalse(any(arg.startswith("--since=") for arg in start.call_args.args[0]))
+
+    def test_journal_batch_is_bounded_and_resumes_at_last_processed_record(self):
+        records = [json.dumps(event_record(f"s=1;i={index}")).encode() + b"\n"
+                   for index in range(collector.MAX_RECORDS + 1)]
+        process = Mock(stdout=io.BytesIO(b"".join(records)))
+        process.poll.return_value = None
+        process.wait.return_value = -15
+        with patch.object(collector.subprocess, "Popen", return_value=process):
+            events, cursor = collector.read_journal("gameserver-controller.service", "")
+        self.assertEqual(len(events), collector.MAX_RECORDS)
+        self.assertEqual(cursor, f"s=1;i={collector.MAX_RECORDS - 1}")
+        self.assertEqual(process.stdout.readline(), records[-1])
+        process.terminate.assert_called_once_with()
+
+    def test_journal_failure_does_not_deliver_or_advance_saved_cursor(self):
+        process = Mock(stdout=io.BytesIO(json.dumps(event_record()).encode() + b"\n"))
+        process.poll.return_value = 1
+        process.wait.return_value = 1
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cursor"
+            path.write_text("s=1;i=0\n", encoding="utf-8")
+            with patch.object(collector.subprocess, "Popen", return_value=process):
+                with self.assertRaises(ValueError) as failure:
+                    collector.collect_once("https://logs.example", "private", path,
+                                           "gameserver-controller.service", collector.read_journal,
+                                           lambda *_: self.fail("network must not be called"))
+            self.assertEqual(str(failure.exception), "journal reader failed; cursor retained")
+            self.assertEqual(path.read_text(encoding="utf-8"), "s=1;i=0\n")
+
+    def test_failed_cursor_replace_keeps_previous_position_for_replay(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cursor"
+            path.write_text("s=1;i=0\n", encoding="utf-8")
+            reader = Mock(return_value=([{"event_type": "safe"}], "s=1;i=1"))
+            sender = Mock()
+            with patch.object(collector.os, "replace", side_effect=OSError("disk unavailable")):
+                with self.assertRaises(OSError) as failure:
+                    collector.collect_once("https://logs.example", "private", path,
+                                           "gameserver-controller.service", reader, sender)
+            self.assertEqual(str(failure.exception), "disk unavailable")
+            reader.assert_called_once_with("gameserver-controller.service", "s=1;i=0")
+            sender.assert_called_once()
+            self.assertEqual(collector.read_cursor(path), "s=1;i=0")
+            self.assertEqual(list(path.parent.iterdir()), [path])
+
+    def test_journal_timeout_kills_reader_and_does_not_return_partial_batch(self):
+        process = Mock(stdout=io.BytesIO())
+        process.poll.return_value = None
+        process.wait.side_effect = [collector.subprocess.TimeoutExpired("journalctl", 5), 0]
+        with patch.object(collector.subprocess, "Popen", return_value=process):
+            with self.assertRaises(ValueError) as failure:
+                collector.read_journal("gameserver-controller.service", "s=1;i=0")
+        self.assertEqual(str(failure.exception), "journal reader timed out")
+        process.terminate.assert_called_once_with()
+        process.kill.assert_called_once_with()
+
     def test_journal_filter_only_exports_safe_fields(self):
         lines = [json.dumps(event_record()).encode(),
                  json.dumps({"__CURSOR": "s=1;i=2", "MESSAGE": "player chat: secret"}).encode()]

@@ -57,7 +57,9 @@ def read_journal(unit, cursor):
     if not UNIT.fullmatch(unit):
         raise ValueError("invalid controller service name")
     command = ["journalctl", "--no-pager", "--output=json", "--unit=" + unit]
-    command += ["--after-cursor=" + cursor] if cursor else ["--since=1 hour ago"]
+    # Until the first acknowledged batch there is no durable cursor. A rolling
+    # time window would silently lose retained entries during an ingestion outage.
+    command += ["--after-cursor=" + cursor] if cursor else ["--since=@0"]
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     records = []
     stopped = False
