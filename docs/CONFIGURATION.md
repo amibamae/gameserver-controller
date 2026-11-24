@@ -15,6 +15,20 @@ references; it contains no credential values. It defines a production boundary
 but includes only a staging test-server profile, so you do not have to adopt a
 live production server into controller-managed inventory.
 
+## Read-only controller diagnostics
+
+Run `controller doctor --config PATH` to validate a controller configuration, including any
+adjacent `adapters.d/` profiles. Without `--config`, the doctor uses a nonempty
+`CONFIG_PATH`, then `configs/controller.example.yaml` relative to the current directory.
+These defaults apply only to `doctor`; `serve` still requires an explicit `--config`.
+
+The command prints a JSON array of diagnostic results. It exits nonzero if any result is
+an error. If systemd provided `CREDENTIALS_DIRECTORY`, the doctor checks the directory
+metadata without reading credentials or changing permissions. Without that variable, it
+reports that it skipped the check. It does not start the controller, open its state store,
+or probe any local or remote integrations. A passing result does not prove that the
+running service is healthy.
+
 ## Version 1 shape
 
 The validator requires `schema_version: 1`, local controller mode, a bbolt state-store path, bounded operation timeouts and retry defaults, and enabled local audit.
