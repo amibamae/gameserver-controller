@@ -82,6 +82,11 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 	if err != nil {
 		return err
 	}
+	return serveHTTPS(ctx, value, configPath, stdout, tlsConfig)
+}
+
+func serveHTTPS(ctx context.Context, value config.Config, configPath string, stdout io.Writer, tlsConfig *tls.Config) error {
+	management := value.Controller.ManagementAPI
 	runtime, err := controllerruntime.Build(ctx, value, configPath, controllerruntime.Options{
 		CredentialDirectory: os.Getenv("CREDENTIALS_DIRECTORY"),
 		ControllerVersion:   buildIdentity,
