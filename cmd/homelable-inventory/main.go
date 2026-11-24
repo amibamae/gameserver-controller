@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
@@ -46,12 +47,20 @@ func snapshot(design string, reservations []store.CapacityReservation) lifecycle
 // Homelable labels include a six-character prefix and allow 80 characters.
 // Keep the operation suffix intact if an otherwise valid server ID is long.
 func lifecycleNodeName(r store.CapacityReservation) string {
-	suffix := fmt.Sprintf(" @ %s (%s)", r.EnvironmentID, r.OperationID[:8])
-	server := r.ServerID
-	if len(server)+len(suffix) > 74 {
-		server = server[:74-len(suffix)]
-	}
+	// Bound both identifiers; retain the complete operation identity in notes.
+	environment := boundedLabelPart(r.EnvironmentID, 28)
+	suffix := fmt.Sprintf(" @ %s (%s)", environment, r.OperationID[:8])
+	server := boundedLabelPart(r.ServerID, 74-len([]rune(suffix)))
 	return server + suffix
+}
+
+func boundedLabelPart(value string, limit int) string {
+	// Store identifiers may contain Unicode. Truncate characters, not UTF-8 bytes.
+	runes := []rune(strings.ToValidUTF8(value, ""))
+	if len(runes) > limit {
+		runes = runes[:limit]
+	}
+	return string(runes)
 }
 
 // Uncertain destruction must never be represented as a retired VM.
@@ -82,11 +91,15 @@ func run(args []string, stdout io.Writer) error {
 	if _, err := os.Stat(*path); err != nil {
 		return errors.New("pilot database does not exist")
 	}
-	db, err := store.OpenBolt(*path)
+	db, err := store.OpenBoltReadOnly(*path)
 	if err != nil {
 		return errors.New("could not read pilot database")
 	}
-	defer db.Close()
+	defer func() {
+		// The read-only handle has no pending writes; there is no recovery action
+		// available if releasing its local file handle fails during process exit.
+		_ = db.Close()
+	}()
 	reservations, err := db.ListCapacityReservations()
 	if err != nil {
 		return errors.New("could not read capacity reservations")

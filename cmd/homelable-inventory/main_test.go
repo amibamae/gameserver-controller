@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
@@ -30,6 +31,15 @@ func TestSnapshotUsesConfirmedLifecycleStateOnly(t *testing.T) {
 		if node.OperationID != base.OperationID || node.Type != "vm" || strings.Contains(node.Name, "instance-1") {
 			t.Fatalf("snapshot leaked resource details: %+v", node)
 		}
+	}
+}
+
+func TestLongEnvironmentAndUnicodeIdentifiersFitHomelableLabel(t *testing.T) {
+	r := store.CapacityReservation{ServerID: strings.Repeat("界", 200),
+		EnvironmentID: strings.Repeat("界", 200), OperationID: strings.Repeat("a", 32)}
+	name := lifecycleNodeName(r)
+	if !utf8.ValidString(name) || len([]rune(name)) > 74 || !strings.HasSuffix(name, "(aaaaaaaa)") {
+		t.Fatalf("invalid bounded label: %q", name)
 	}
 }
 

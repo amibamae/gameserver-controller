@@ -30,26 +30,32 @@ def read_snapshot(path):
         raise ValueError("invalid lifecycle inventory size")
     result, seen = [], set()
     for node in nodes:
-        if not isinstance(node, dict) or set(node) != {"operation_id", "name", "type", "state"}:
-            raise ValueError("invalid managed node fields")
-        op, name, kind, state = (node[k] for k in ("operation_id", "name", "type", "state"))
-        if not isinstance(op, str) or not OPERATION_ID.fullmatch(op) or op in seen:
-            raise ValueError("duplicate or invalid operation identity")
-        if not isinstance(name, str) or not name or len(name) > 80:
-            raise ValueError("invalid lifecycle node name")
-        if any(ord(ch) < 32 for ch in name):
-            raise ValueError("invalid lifecycle node name")
-        if kind != "vm" or state not in STATES:
-            raise ValueError("unsupported node type or lifecycle state")
-        seen.add(op)
-        label = api.MANAGED_PREFIX + name
-        result.append({"label": label[:80], "type": "vm", "design_id": design,
-                       "notes": OWNERSHIP_PREFIX + op, "state": state})
+        result.append(managed_node(node, design, seen))
     return design, result
 
 
-def preflight(existing, nodes):
-    """Validate every proposed update before performing any mutation."""
+def managed_node(node, design, seen):
+    if not isinstance(node, dict) or set(node) != {"operation_id", "name", "type", "state"}:
+        raise ValueError("invalid managed node fields")
+    op, name, kind, state = (node[k] for k in ("operation_id", "name", "type", "state"))
+    if not isinstance(op, str) or not OPERATION_ID.fullmatch(op) or op in seen:
+        raise ValueError("duplicate or invalid operation identity")
+    if not valid_name(name):
+        raise ValueError("invalid lifecycle node name")
+    if kind != "vm" or not isinstance(state, str) or state not in STATES:
+        raise ValueError("unsupported node type or lifecycle state")
+    seen.add(op)
+    return {"label": (api.MANAGED_PREFIX + name)[:80], "type": "vm", "design_id": design,
+            "notes": OWNERSHIP_PREFIX + op, "state": state}
+
+
+def valid_name(name):
+    if not isinstance(name, str) or not name or len(name) > 80:
+        return False
+    return not any(ord(ch) < 32 for ch in name)
+
+
+def index_existing(existing):
     by_marker, by_label = {}, {}
     if not isinstance(existing, list):
         raise ValueError("Homelable node list is invalid")
@@ -61,6 +67,15 @@ def preflight(existing, nodes):
             by_label.setdefault(label, []).append(node)
         if isinstance(marker, str) and marker.startswith(OWNERSHIP_PREFIX):
             by_marker.setdefault(marker, []).append(node)
+    return by_marker, by_label
+
+
+def preflight(existing, nodes):
+    """Validate every proposed update before performing any mutation."""
+    labels = [node["label"] for node in nodes]
+    if len(set(labels)) != len(labels):
+        raise ValueError("duplicate desired node label")
+    by_marker, by_label = index_existing(existing)
     for node in nodes:
         matches = by_marker.get(node["notes"], [])
         if len(matches) > 1:

@@ -18,6 +18,9 @@ Homelable binary, Python package, systemd binary, or upstream source code is
 copied, linked, vendored, or shipped by the controller. These integrations
 remain disabled by default. Versions of operator-deployed services and system
 tools are selected by the operator or by the host OS, not pinned by GSC.
+The upstream license files linked below were checked on 2026-11-23. No new
+third-party dependency or bundled upstream material was added by the lifecycle
+reconciliation and collector recovery fixes.
 
 - **VictoriaLogs Community Edition** ([upstream](https://github.com/VictoriaMetrics/VictoriaLogs),
   [license](https://github.com/VictoriaMetrics/VictoriaLogs/blob/master/LICENSE)):

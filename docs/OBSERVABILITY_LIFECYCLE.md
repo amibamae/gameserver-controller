@@ -30,7 +30,7 @@ No change to automatic destruction policy. VM destruction remains disabled unles
 
 The original `victorialogs_bridge.py` remains a one-shot filter. The new `victorialogs_collector.py` collects up to 250 journald records per invocation from an explicitly selected controller service, extracts only the existing allowlisted `integration.proxy.*` JSON events, and sends them to the configured HTTPS ingestion gateway. It never forwards raw journald entries.
 
-The collector reads a systemd-loaded ingestion token, writes a private journal cursor in `$STATE_DIRECTORY/cursor`, and **advances it only after an acknowledged batch**. Failed ingestion replays the same entries on the next run, so the delivery contract is at-least-once; duplicate events are possible if the process crashes after upload but before its cursor is saved. An expired or corrupt cursor fails closed and needs operator review rather than silently skipping older records. Journal retention must be long enough for expected collector outages.
+The collector reads a systemd-loaded ingestion token, writes a private journal cursor in `$STATE_DIRECTORY/cursor`, and **advances it only after an acknowledged batch**. Its first invocation starts at the beginning of retained journal history, then drains the backlog in bounded batches. Failed ingestion replays the same entries on the next run, so the delivery contract is at-least-once; duplicate events are possible if the process crashes after upload but before its cursor is saved. An expired or corrupt cursor fails closed and needs operator review rather than silently skipping older records. Journal retention must be long enough for expected collector outages.
 
 Example units are in [configs/systemd](../configs/systemd/):
 
@@ -43,15 +43,19 @@ They are examples only. To deploy, inspect and adjust the paths/service name and
 
 `go run ./cmd/homelable-inventory --state-db /path/to/existing/pilot.db --design-id <existing-design-id>` exports the locally recorded provider state as JSON **without calling Vultr or Homelable**. No IPs, credentials or player information are included. It exports a VM only when the provider instance is known. A confirmed absent or destroyed instance is `retired`; an uncertain destruction remains `active`. A missing entry never causes deletion or inferred retirement.
 
+The exporter opens only an existing current-schema database in read-only mode; it never creates or migrates a database or changes its permissions. bbolt requires a shared file lock for this read: a controller holding the database's exclusive writer lock prevents export. The exporter fails after a bounded wait, leaving topology unchanged; retry when the short-lived pilot command releases the database. Do not copy a live bbolt file with an ordinary file-copy command to bypass this lock.
+
 Use `homelable_lifecycle.py --url https://homelable.internal --snapshot /path/to/snapshot.json` for an entirely offline preview. The `--apply --token-file /private/jwt` form is opt-in. On apply, the script:
 
 1. Reads existing nodes in the designated Homelable design.
 2. Identifies owned nodes by the exact, controller-generated `gsc-managed-operation:<operation-id>` marker in `notes`.
-3. Refuses ambiguous identities or a manually created node with the same label.
+3. Refuses ambiguous identities, duplicate desired labels, or a manually created node with the same label.
 4. Creates missing **active** managed nodes, or patches **only status** (`online` for confirmed-present, `offline` for retired). `online` means provider presence, **not** confirmed Paper readiness.
 5. Never sends `DELETE`, edits a foreign node, or uses the destructive whole-canvas `canvas/save` API. Missing retired nodes are not recreated.
 
 A retired node stays visible as historical topology. Manually changing or removing its ownership marker stops automated updates. A token expiry or API outage only leaves topology stale; it cannot gate Minecraft. Homelable's local JWTs expire after approximately 24 hours by default; renew the narrowly controlled token as needed and keep the UI/API on a private network. <https://github.com/Pouzor/homelable/blob/main/docs/api.md>
+
+The ownership marker is a client-side safety check, not an API permission boundary. Homelable's bearer JWT represents the account's authority; keep that credential private and use a dedicated account/design where supported. The reconciler sends status-only patches and never removes nodes, but cannot atomically prevent an operator from editing a node between the list and patch requests. Avoid concurrent ownership edits during reconciliation.
 
 For operator-owned periodic reconciliation, build the inventory command into a local binary and configure the example systemd units:
 
