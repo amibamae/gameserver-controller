@@ -45,6 +45,8 @@ They are examples only. To deploy, inspect and adjust the paths/service name and
 
 The exporter opens only an existing current-schema database in read-only mode; it never creates or migrates a database or changes its permissions. bbolt requires a shared file lock for this read: a controller holding the database's exclusive writer lock prevents export. The exporter fails after a bounded wait, leaving topology unchanged; retry when the short-lived pilot command releases the database. Do not copy a live bbolt file with an ordinary file-copy command to bypass this lock.
 
+The reconciler accepts at most **50 inventory nodes**, including retained retired instances. Capacity history currently has no automatic retirement pruning, so this is a deployment limit even when few VMs remain active. More than 50 exported nodes fails validation before token access or any API call; it never silently truncates the inventory or marks omitted nodes retired. Keep this integration disabled for larger inventories until reviewed pagination is available. Do not delete controller history to fit the limit. Homelable list responses are also limited to 1 MiB and fail closed when larger; existing topology remains unchanged.
+
 Use `homelable_lifecycle.py --url https://homelable.internal --snapshot /path/to/snapshot.json` for an entirely offline preview. The `--apply --token-file /private/jwt` form is opt-in. On apply, the script:
 
 1. Reads existing nodes in the designated Homelable design.
