@@ -74,6 +74,26 @@ Customer applications should receive scoped API credentials, never Vultr, Wasabi
 
 This hosted deployment is a future product option, not a current commitment or implementation. Keep the API contract transport-independent so local and hosted deployments can share it, while treating multi-tenancy as a separate security milestone rather than assuming it follows automatically from hosting the existing binary.
 
+## Controller resilience (future)
+
+**Status:** Planned. The controller is currently a local single-controller design with a local bbolt state store and one process of ownership at a time. Multi-controller operation and automatic self-healing are future work and are not implemented.
+
+### Multiple controllers with failover
+
+An operator may run two or three controllers to reduce downtime when one fails. The extra replicas are optional: they are a resilience upgrade for operators who want the highest uptime, not a requirement. When more than one controller is present, the controllers must decide who takes over before any of them acts, and exactly one of them is the active controller at a time.
+
+For this to be safe, the design must keep the existing invariants intact: the durable operation store, per-server locks, idempotency, and audit must remain authoritative and shared across the replicas, so a takeover never runs two controllers against the same state or double-dispatches an operation. Election must be explicit and auditable: a controller that takes over must record why the previous active controller was considered failed, and recovery must be a restart-recovery pass (no new adapter calls) rather than a speculative one.
+
+### Self-healing controller
+
+A controller should be able to recover itself. When it detects that it cannot safely continue, it can spin up a replacement controller on the machine it is already running on to take over its duties. Self-replace reduces the need for multiple replicas: a single controller that can replace itself covers the common failure modes. The optional extra controllers above remain useful for the highest-uptime operators, who combine self-healing with peer failover.
+
+Self-replace must stay inside the same safety boundaries as any other lifecycle action: it is an audited operation, it must verify the exact target and environment before acting, and it must never bypass lifecycle policy, authorization, or the durable store. The replacement must start from the same durable state, not a fresh or partial one.
+
+### Controller auto-update
+
+The controller should be able to update itself automatically, but this is future work and is only in scope once the rest of the controller lifecycle is implemented. Auto-update must respect the same release discipline as every other artifact: immutable versioned releases, validation before promotion, compatibility and world-format checks, and an operator-approved path for anything that could affect a running server. It must never replace a running controller with an unvalidated build, and it must coordinate with self-healing and failover so an update never drops ownership of live state.
+
 ## Production and staging boundaries
 
 - **Production** owns the live world and production backup write credentials. Staging cannot write there.

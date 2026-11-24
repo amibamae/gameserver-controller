@@ -459,30 +459,42 @@ func (w *ServerStopWorkflow) ProjectLifecycle(operation store.OperationRecord, c
 	saveStep := operationStep(operation, stopSaveGameStep)
 	switch current.Record.LifecycleState {
 	case protocolstate.ServerReady:
-		if operation.Status == protocolstate.OperationFailed {
-			next.LifecycleState = protocolstate.ServerDegraded
-			return next, true, nil
-		}
-		if saveStep.Status != protocolstate.StepPending {
-			next.LifecycleState = protocolstate.ServerStopping
-			next.DesiredState = "stopped"
-			return next, true, nil
-		}
+		return w.handleLifecycleReady(next, operation, saveStep)
 	case protocolstate.ServerStopping:
-		if operation.Status == protocolstate.OperationSucceeded {
-			if !hasValidStopResult(operation.Result, operation.Target, current.Record.InstanceRef, w.schemas) {
-				return store.LogicalServer{}, false, errors.New("terminal server.stop result lacks exact save and termination evidence")
-			}
-			next.LifecycleState = protocolstate.ServerStopped
-			next.DesiredState = "stopped"
-			return next, true, nil
-		}
-		if operation.Status == protocolstate.OperationFailed {
-			next.LifecycleState = protocolstate.ServerFailed
-			return next, true, nil
-		}
+		return w.handleLifecycleStopping(next, operation, saveStep)
 	}
 	return current.Record, false, nil
+}
+
+// handleLifecycleReady handles the ready state for server stop.
+func (w *ServerStopWorkflow) handleLifecycleReady(next store.LogicalServer, operation store.OperationRecord, saveStep store.OperationStep) (store.LogicalServer, bool, error) {
+	if operation.Status == protocolstate.OperationFailed {
+		next.LifecycleState = protocolstate.ServerDegraded
+		return next, true, nil
+	}
+	if saveStep.Status != protocolstate.StepPending {
+		next.LifecycleState = protocolstate.ServerStopping
+		next.DesiredState = "stopped"
+		return next, true, nil
+	}
+	return next, false, nil
+}
+
+// handleLifecycleStopping handles the stopping state for server stop.
+func (w *ServerStopWorkflow) handleLifecycleStopping(next store.LogicalServer, operation store.OperationRecord, saveStep store.OperationStep) (store.LogicalServer, bool, error) {
+	if operation.Status == protocolstate.OperationSucceeded {
+		if !hasValidStopResult(operation.Result, operation.Target, next.InstanceRef, w.schemas) {
+			return store.LogicalServer{}, false, errors.New("terminal server.stop result lacks exact save and termination evidence")
+		}
+		next.LifecycleState = protocolstate.ServerStopped
+		next.DesiredState = "stopped"
+		return next, true, nil
+	}
+	if operation.Status == protocolstate.OperationFailed {
+		next.LifecycleState = protocolstate.ServerFailed
+		return next, true, nil
+	}
+	return next, false, nil
 }
 
 func hasValidStopResult(raw json.RawMessage, target store.OperationTarget, instanceRef json.RawMessage, schemas schemaRuntime) bool {

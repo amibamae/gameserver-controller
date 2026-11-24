@@ -116,6 +116,10 @@ func TestVerifyRecoveryIndexesRejectsInconsistentIndexes(t *testing.T) {
 			bucket := tx.Bucket(idempotencyBucket)
 			mustPut(t, bucket, []byte("v1:"+strings.Repeat("z", 64)), bucket.Get(f.verifierKey))
 		}, ErrCorruptStore, "invalid idempotency verifier index"},
+		{"verifier key version differs from entry", func(t *testing.T, tx *bolt.Tx, f recoveryIndexFixture) {
+			bucket := tx.Bucket(idempotencyBucket)
+			mustPut(t, bucket, []byte("v2:"+strings.Repeat("a", 64)), bucket.Get(f.verifierKey))
+		}, ErrCorruptStore, "invalid idempotency verifier index"},
 		{"entry for an unrecorded key version", func(t *testing.T, tx *bolt.Tx, f recoveryIndexFixture) {
 			bucket := tx.Bucket(idempotencyBucket)
 			var entry idempotencyEntry

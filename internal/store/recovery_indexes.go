@@ -60,12 +60,8 @@ func verifyIdempotencyIndex(idempotency *bolt.Bucket, knownVersions map[string]s
 		if err != nil {
 			return nil, err
 		}
-		parts := strings.SplitN(string(key), ":", 2)
-		if len(parts) != 2 || parts[0] != entry.KeyVersion || len(parts[1]) != 64 {
-			return nil, fmt.Errorf("%w: invalid idempotency verifier index", ErrCorruptStore)
-		}
-		if _, err := hex.DecodeString(parts[1]); err != nil {
-			return nil, fmt.Errorf("%w: invalid idempotency verifier index", ErrCorruptStore)
+		if err := verifyIdempotencyVerifierIndex(key, entry.KeyVersion); err != nil {
+			return nil, err
 		}
 		if _, ok := knownVersions[entry.KeyVersion]; !ok {
 			return nil, fmt.Errorf("%w: idempotency entry references an unknown key version", ErrCorruptStore)
@@ -76,6 +72,17 @@ func verifyIdempotencyIndex(idempotency *bolt.Bucket, knownVersions map[string]s
 		idempotencyByOperation[entry.OperationID] = entry
 	}
 	return idempotencyByOperation, nil
+}
+
+func verifyIdempotencyVerifierIndex(key []byte, version string) error {
+	parts := strings.SplitN(string(key), ":", 2)
+	if len(parts) != 2 || parts[0] != version || len(parts[1]) != 64 {
+		return fmt.Errorf("%w: invalid idempotency verifier index", ErrCorruptStore)
+	}
+	if _, err := hex.DecodeString(parts[1]); err != nil {
+		return fmt.Errorf("%w: invalid idempotency verifier index", ErrCorruptStore)
+	}
+	return nil
 }
 
 // verifyOperationLockIndex checks the reverse lock index: each entry lists the

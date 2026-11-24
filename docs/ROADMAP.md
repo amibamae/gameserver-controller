@@ -161,6 +161,14 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - Welcome adapter and tooling contributions in other languages; do not require them for release.
 - Review trust boundaries and compatibility for plugins and extensions.
 
+## Controller resilience and self-maintenance (future)
+
+**Status:** Planned, not required now. These items are for future implementation, after the single-controller lifecycle is complete and stable. None of them are release gates today; see the [architecture notes](ARCHITECTURE.md#controller-resilience-future).
+
+- Run two or three controllers for peer failover: the controllers elect who takes over, and exactly one is active at a time. Shared durable store, per-server locks, idempotency, and audit must stay authoritative across replicas so a takeover never double-dispatches an operation. Optional for operators who want the highest uptime.
+- Self-healing controller: detect an unsafe state and spin up a replacement controller on the same machine to take over its duties, reducing the need for multiple replicas. Must be an audited lifecycle operation that verifies the exact target and environment, never bypasses lifecycle policy or authorization, and starts the replacement from the same durable state.
+- Controller auto-update: update the controller itself automatically, respecting release discipline (immutable versioned releases, validation before promotion, compatibility and world-format checks, operator approval for anything affecting a running server), and coordinate with self-healing and failover so an update never drops ownership of live state. Only in scope once the rest of the controller lifecycle is implemented.
+
 ## Future management clients
 
 Web, desktop, and mobile clients may develop in parallel; the controller does not depend on them.
