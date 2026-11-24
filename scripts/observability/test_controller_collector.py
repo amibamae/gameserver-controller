@@ -178,6 +178,24 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(events, [])
         self.assertEqual(cursor, "s=1;i=1")
 
+    def test_invalid_event_fields_are_dropped_without_blocking_later_records(self):
+        for field in ("event_type", "severity"):
+            for value in ([], {}, None, 7, True, "not-allowlisted"):
+                with self.subTest(field=field, value=value):
+                    malformed = event_record()
+                    message = json.loads(malformed["MESSAGE"])
+                    message[field] = value
+                    malformed["MESSAGE"] = json.dumps(message)
+                    self.assertEqual(collector.decode_records([json.dumps(malformed).encode()]),
+                                     ([], "s=1;i=1"))
+                    events, cursor = collector.decode_records([
+                        json.dumps(malformed).encode(),
+                        json.dumps(event_record("s=1;i=2")).encode(),
+                    ])
+                    self.assertEqual(len(events), 1)
+                    self.assertEqual(events[0]["event_type"], "integration.proxy.recovered")
+                    self.assertEqual(cursor, "s=1;i=2")
+
 
 if __name__ == "__main__":
     unittest.main()
