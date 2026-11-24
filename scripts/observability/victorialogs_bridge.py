@@ -43,6 +43,13 @@ def endpoint_url(raw):
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, params, ""))
 
 
+def allowed_event(original):
+    event_type = original.get("event_type")
+    severity = original.get("severity")
+    return (isinstance(event_type, str) and isinstance(severity, str) and
+            event_type in EVENTS and severity in SEVERITIES)
+
+
 def sanitized_event(line):
     if len(line) > MAX_LINE:
         return None
@@ -52,7 +59,7 @@ def sanitized_event(line):
         return None
     if not isinstance(original, dict) or original.get("message") != "integration event":
         return None
-    if original.get("event_type") not in EVENTS or original.get("severity") not in SEVERITIES:
+    if not allowed_event(original):
         return None
     fields = ("event_id", "event_type", "severity",
               "environment_id", "adapter_id", "occurred_at")

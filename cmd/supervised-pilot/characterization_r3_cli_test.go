@@ -38,7 +38,7 @@ func TestPilotR3DispatchMessages(t *testing.T) {
 		args []string
 		want string
 	}{
-		{"unknown action", []string{"destroy"}, `unknown action "destroy"; expected status, backup, history, boot-status, provision, adopt, handoff, register-ssh-key, or capacity`},
+		{"unknown action", []string{"destroy"}, `unknown action "destroy"; expected status, backup, history, boot-status, provision, adopt, handoff, observability, register-ssh-key, or capacity`},
 		{"unexpected argument", []string{"capacity", "extra"}, "unexpected arguments: extra"},
 		{"unexpected arguments", []string{"status", "--host", "h", "a", "b"}, "unexpected arguments: a b"},
 		{"undefined flag", []string{"status", "--bogus"}, "flag provided but not defined: -bogus"},
@@ -126,23 +126,5 @@ func TestPilotR3HistoryOutput(t *testing.T) {
 		if _, _, err := pilotR3Run(t, "", "history"); pilotR3ErrorText(err) != wantErr {
 			t.Fatalf("history error = %q, want %q", pilotR3ErrorText(err), wantErr)
 		}
-	}
-}
-
-func pilotR3CheckUsageFlags(t *testing.T, stderr string) {
-	t.Helper()
-	for _, line := range []string{
-		"  -confirm-create string\n    \trepeat <server-id>@<environment> to approve billable Vultr VM creation\n",
-		"  -credential-ref string\n    \tsystemd credential reference for the Vultr API key (default \"systemd-credential://vultr-pilot-api-token\")\n",
-		"  -ssh-key-id value\n    \tVultr SSH key ID; repeat for multiple keys (required for provisioning)\n",
-		"  -timeout duration\n    \tmaximum time to wait for the selected operation (default 1h0m0s)\n",
-		"  -execute\n    \texecute the selected action; mutating actions are dry runs by default\n",
-	} {
-		if !strings.Contains(stderr, line) {
-			t.Fatalf("help %q lacks %q", stderr, line)
-		}
-	}
-	if count := strings.Count(stderr, "\n  -"); count != 29 {
-		t.Fatalf("help lists %d flags", count)
 	}
 }

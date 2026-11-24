@@ -194,18 +194,7 @@ func newWorld(t *testing.T, impostorFirst, impostorAfter bool) *world {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = repository.Close() })
-	if _, _, err := repository.ReserveCapacity(store.CapacityReservation{OperationID: operationID, ServerID: "pilot", EnvironmentID: "staging",
-		CapacityGroup: "shared", Provider: "vultr", ResourceKey: resourceKey}, 1, 1); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := repository.ClaimCapacityCreateWithHandoff(operationID, hosthandoff.New(oneTimePublic, time.Now(), 0)); err != nil {
-		t.Fatal(err)
-	}
-	reservation, _ := repository.GetCapacityReservation(operationID)
-	if _, err := repository.ObserveCapacity(operationID, store.CapacityProviderObservation{Provider: "vultr", ResourceKey: resourceKey,
-		ProviderInstanceID: instanceID, State: "present", ObservedAt: reservation.CreatedAt.Add(time.Second)}); err != nil {
-		t.Fatal(err)
-	}
+	reserveHandoffFixture(t, repository, oneTimePublic)
 
 	provider := &fakeProvider{}
 	remote := Remote{
@@ -230,6 +219,25 @@ func newWorld(t *testing.T, impostorFirst, impostorAfter bool) *world {
 		},
 	}
 	return w
+}
+
+func reserveHandoffFixture(t *testing.T, repository *store.BoltStore, oneTimePublic ed25519.PublicKey) {
+	t.Helper()
+	if _, _, err := repository.ReserveCapacity(store.CapacityReservation{OperationID: operationID, ServerID: "pilot", EnvironmentID: "staging",
+		CapacityGroup: "shared", Provider: "vultr", ResourceKey: resourceKey}, 1, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.ClaimCapacityCreateWithHandoff(operationID, hosthandoff.New(oneTimePublic, time.Now(), 0)); err != nil {
+		t.Fatal(err)
+	}
+	reservation, err := repository.GetCapacityReservation(operationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.ObserveCapacity(operationID, store.CapacityProviderObservation{Provider: "vultr", ResourceKey: resourceKey,
+		ProviderInstanceID: instanceID, State: "present", ObservedAt: reservation.CreatedAt.Add(time.Second)}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (w *world) exists(name string) bool {
