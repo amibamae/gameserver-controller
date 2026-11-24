@@ -97,26 +97,26 @@ def reconcile(base, design, nodes, token, apply=False):
     for node in nodes:
         matches = by_marker.get(node["notes"], [])
         target = matches[0] if matches else None
-        desired = "online" if node["state"] == "active" else "offline"
-        if target is None:
-            if desired == "offline":
-                changes.append("retired and absent: " + node["label"])
-                continue
-            payload = {k: node[k] for k in ("label", "type", "design_id", "notes")}
-            # A new topology node is not a source of actual Minecraft readiness.
-            payload["status"] = desired
-            created = api.http_json(base, "/api/v1/nodes", token, "POST", payload)
-            if not isinstance(created, dict) or not isinstance(created.get("id"), str):
-                raise ValueError("Homelable did not return the node ID")
-            changes.append("created: " + node["label"])
-            continue
-        if target.get("status") == desired:
-            changes.append("unchanged: " + node["label"])
-            continue
-        api.http_json(base, "/api/v1/nodes/" + target["id"], token, "PATCH",
-                      {"status": desired})
-        changes.append("updated: " + node["label"] + " => " + desired)
+        changes.append(reconcile_node(base, node, token, target))
     return changes
+
+
+def reconcile_node(base, node, token, target):
+    desired = "online" if node["state"] == "active" else "offline"
+    if target is None:
+        if desired == "offline":
+            return "retired and absent: " + node["label"]
+        payload = {k: node[k] for k in ("label", "type", "design_id", "notes")}
+        # A new topology node is not a source of actual Minecraft readiness.
+        payload["status"] = desired
+        created = api.http_json(base, "/api/v1/nodes", token, "POST", payload)
+        if not isinstance(created, dict) or not isinstance(created.get("id"), str):
+            raise ValueError("Homelable did not return the node ID")
+        return "created: " + node["label"]
+    if target.get("status") == desired:
+        return "unchanged: " + node["label"]
+    api.http_json(base, "/api/v1/nodes/" + target["id"], token, "PATCH", {"status": desired})
+    return "updated: " + node["label"] + " => " + desired
 
 
 def main():

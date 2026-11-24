@@ -16,6 +16,23 @@ def node(state="active"):
 
 
 class LifecycleTests(unittest.TestCase):
+    def test_unchanged_node_never_patches(self):
+        desired = {"label": "GSC / vanilla", "state": "active"}
+        with patch.object(lifecycle.api, "http_json") as http:
+            action = lifecycle.reconcile_node("https://homelable.example", desired, "jwt",
+                                              {"status": "online"})
+        self.assertEqual(action, "unchanged: GSC / vanilla")
+        http.assert_not_called()
+
+    def test_create_response_requires_node_identity(self):
+        desired = {"label": "GSC / vanilla", "state": "active", "type": "vm",
+                   "design_id": "canvas", "notes": lifecycle.OWNERSHIP_PREFIX + OP}
+        for response in (None, {}, {"id": 123}):
+            with self.subTest(response=response), patch.object(lifecycle.api, "http_json", return_value=response):
+                with self.assertRaises(ValueError) as caught:
+                    lifecycle.reconcile_node("https://homelable.example", desired, "jwt", None)
+                self.assertEqual(str(caught.exception), "Homelable did not return the node ID")
+
     def test_snapshot_validation_errors(self):
         valid = {"design_id": "canvas", "nodes": [node()]}
         cases = [([], "invalid lifecycle snapshot"),
