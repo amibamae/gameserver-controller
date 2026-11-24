@@ -39,12 +39,16 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	if len(args) > 0 && args[0] == "operation-status" {
+		return operationStatus(args[1:], stdout, stderr)
+	}
 	if len(args) == 1 && args[0] == "version" {
 		_, err := fmt.Fprintln(stdout, buildIdentity)
 		return err
 	}
 	if len(args) == 0 || args[0] != "serve" {
 		fmt.Fprintln(stderr, "usage: controller serve --config PATH")
+		fmt.Fprintln(stderr, "       controller operation-status --store PATH OPERATION_ID")
 		return errors.New("unsupported command")
 	}
 	flags := flag.NewFlagSet("controller serve", flag.ContinueOnError)
