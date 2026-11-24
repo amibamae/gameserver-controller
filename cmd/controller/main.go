@@ -43,14 +43,21 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		_, err := fmt.Fprintln(stdout, buildIdentity)
 		return err
 	}
+	if len(args) > 0 && args[0] == "doctor" {
+		return runDoctor(args[1:], stdout, stderr)
+	}
 	if len(args) == 0 || args[0] != "serve" {
-		fmt.Fprintln(stderr, "usage: controller serve --config PATH")
+		fmt.Fprintln(stderr, "usage: controller serve --config PATH\n       controller version\n       controller doctor [--config PATH]")
 		return errors.New("unsupported command")
 	}
+	return runServe(ctx, args[1:], stdout, stderr)
+}
+
+func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("controller serve", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	configPath := flags.String("config", "", "validated controller YAML configuration")
-	if err := flags.Parse(args[1:]); err != nil {
+	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
