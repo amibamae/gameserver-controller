@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 import victorialogs_collector as collector
 
@@ -97,6 +97,35 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(str(failure.exception), "journal reader timed out")
         process.terminate.assert_called_once_with()
         process.kill.assert_called_once_with()
+
+    def test_cursor_persistence_syncs_file_before_replace_and_directory_after(self):
+        output = MagicMock()
+        output.__enter__.return_value = output
+        output.fileno.return_value = 101
+        operations = Mock()
+        operations.attach_mock(output.write, "write")
+        operations.attach_mock(output.flush, "flush")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cursor"
+            with (patch.object(collector.tempfile, "mkstemp", return_value=(101, "pending")),
+                  patch.object(collector.os, "fdopen", return_value=output),
+                  patch.object(collector.os, "O_DIRECTORY", 0x10000, create=True),
+                  patch.object(collector.os, "fsync") as sync,
+                  patch.object(collector.os, "replace") as replace,
+                  patch.object(collector.os, "open", return_value=102) as open_directory,
+                  patch.object(collector.os, "close") as close_directory,
+                  patch.object(collector.os.path, "exists", return_value=False)):
+                operations.attach_mock(sync, "fsync")
+                operations.attach_mock(replace, "replace")
+                operations.attach_mock(open_directory, "open")
+                operations.attach_mock(close_directory, "close")
+                collector.save_cursor(path, "s=1;i=1")
+            self.assertEqual(operations.mock_calls, [
+                call.write("s=1;i=1\n"), call.flush(), call.fsync(101),
+                call.replace("pending", path),
+                call.open(path.parent, collector.os.O_RDONLY | 0x10000),
+                call.fsync(102), call.close(102),
+            ])
 
     def test_journal_filter_only_exports_safe_fields(self):
         lines = [json.dumps(event_record()).encode(),
