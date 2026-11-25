@@ -35,17 +35,22 @@ func servingConfig(t *testing.T) (config.Config, string) {
 		TLSCertificate: filepath.Join(t.TempDir(), "tls.crt"),
 		TLSPrivateKey:  filepath.Join(t.TempDir(), "tls.key"),
 	}
+	configureTestIdempotencyKey(t, &value)
+	writeServerCertificate(t, value.Controller.ManagementAPI.TLSCertificate, value.Controller.ManagementAPI.TLSPrivateKey)
+	if err := config.Validate(value); err != nil {
+		t.Fatalf("validate test configuration: %v", err)
+	}
+	return value, configPath
+}
+
+func configureTestIdempotencyKey(t *testing.T, value *config.Config) {
+	t.Helper()
 	credentials := t.TempDir()
 	if err := os.WriteFile(filepath.Join(credentials, "controller-idempotency-key-v1"), bytes.Repeat([]byte{9}, 32), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("CREDENTIALS_DIRECTORY", credentials)
 	value.Controller.IdempotencyKeys = config.IdempotencyKeys{Active: "v1", Versions: map[string]string{"v1": "systemd-credential://controller-idempotency-key-v1"}}
-	writeServerCertificate(t, value.Controller.ManagementAPI.TLSCertificate, value.Controller.ManagementAPI.TLSPrivateKey)
-	if err := config.Validate(value); err != nil {
-		t.Fatalf("validate test configuration: %v", err)
-	}
-	return value, configPath
 }
 
 func TestRunCommandLine(t *testing.T) {
@@ -133,7 +138,7 @@ func TestServeClosesTheStoreWhenTheAddressIsTaken(t *testing.T) {
 	}
 	defer occupied.Close()
 	var stdout bytes.Buffer
-	err = serve(context.Background(), value, configPath, &stdout)
+	err = serveTestHTTPS(context.Background(), value, configPath, &stdout)
 	if err == nil || !strings.HasPrefix(err.Error(), "listen for management API: ") {
 		t.Fatalf("serve error = %v, want a listen error", err)
 	}
@@ -173,7 +178,7 @@ func TestServeReportsReadinessAndStopsWithItsContext(t *testing.T) {
 	stdout := &syncBuffer{}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- serve(ctx, value, configPath, stdout) }()
+	go func() { done <- serveTestHTTPS(ctx, value, configPath, stdout) }()
 	ready := "Management HTTPS listener ready at " + value.Controller.ManagementAPI.ListenAddress + "\n"
 	deadline := time.Now().Add(5 * time.Second)
 	for !strings.Contains(stdout.String(), ready) {
@@ -203,7 +208,7 @@ func TestServeWithoutStdoutStillServes(t *testing.T) {
 	value, configPath := servingConfig(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- serve(ctx, value, configPath, nil) }()
+	go func() { done <- serveTestHTTPS(ctx, value, configPath, nil) }()
 	client := testHTTPSClient(t, value.Controller.ManagementAPI.TLSCertificate)
 	defer client.CloseIdleConnections()
 	response := requestUntilResponse(t, client, value.Controller.ManagementAPI.ListenAddress, "")

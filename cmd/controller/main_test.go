@@ -15,25 +15,41 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/authkey"
+	"github.com/amibamae/gameserver-controller/internal/config"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
-func TestServeRunsOnlyConfiguredAuthenticatedHTTPSListener(t *testing.T) {
-	value, configPath := servingConfig(t)
-	issued := issueTestKey(t, value.Controller.StateStore.Path)
+// Windows cannot represent the Unix private-key mode required at startup.
+// Exercise the same TLS listener with the fixture certificate on that platform.
+func serveTestHTTPS(ctx context.Context, value config.Config, configPath string, out io.Writer) error {
+	if runtime.GOOS != "windows" {
+		return serve(ctx, value, configPath, out)
+	}
+	api := value.Controller.ManagementAPI
+	pair, err := tls.LoadX509KeyPair(api.TLSCertificate, api.TLSPrivateKey)
+	if err != nil {
+		return err
+	}
+	// These listener tests inspect operations only. Submission and its systemd
+	// credential are exercised through the production startup path on Unix.
+	value.Controller.IdempotencyKeys = config.IdempotencyKeys{}
+	return serveHTTPS(ctx, value, configPath, out, &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{pair}})
+}
+
+func startTestHTTPS(t *testing.T, value config.Config, configPath string) *http.Client {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- serve(ctx, value, configPath, io.Discard) }()
-	var client *http.Client
-	defer func() {
-		if client != nil {
-			client.CloseIdleConnections()
-		}
+	client := testHTTPSClient(t, value.Controller.ManagementAPI.TLSCertificate)
+	go func() { done <- serveTestHTTPS(ctx, value, configPath, io.Discard) }()
+	t.Cleanup(func() {
+		client.CloseIdleConnections()
 		cancel()
 		select {
 		case err := <-done:
@@ -43,9 +59,14 @@ func TestServeRunsOnlyConfiguredAuthenticatedHTTPSListener(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			t.Error("HTTPS server did not shut down")
 		}
-	}()
+	})
+	return client
+}
 
-	client = testHTTPSClient(t, value.Controller.ManagementAPI.TLSCertificate)
+func TestServeRunsOnlyConfiguredAuthenticatedHTTPSListener(t *testing.T) {
+	value, configPath := servingConfig(t)
+	issued := issueTestKey(t, value.Controller.StateStore.Path)
+	client := startTestHTTPS(t, value, configPath)
 	response := requestUntilResponse(t, client, value.Controller.ManagementAPI.ListenAddress, "")
 	response.Body.Close()
 	if response.StatusCode != http.StatusUnauthorized || response.Header.Get("Content-Type") != "application/problem+json" {
@@ -57,8 +78,22 @@ func TestServeRunsOnlyConfiguredAuthenticatedHTTPSListener(t *testing.T) {
 		t.Fatalf("valid scoped key should reach operation lookup and get 404, got %d", response.StatusCode)
 	}
 
-	// Define a server over HTTPS; the runner takes the operation to succeeded.
+}
+
+func TestServeDefinesServerWithSystemdCredential(t *testing.T) {
+	value, configPath := servingConfig(t)
+	if runtime.GOOS == "windows" {
+		err := serve(context.Background(), value, configPath, io.Discard)
+		if err == nil || err.Error() != "TLS private key permissions must deny group write/execute and all other-user access" {
+			t.Fatalf("serve with unsupported key file permissions: %v", err)
+		}
+		return
+	}
+	issued := issueTestKey(t, value.Controller.StateStore.Path)
+	client := startTestHTTPS(t, value, configPath)
 	base := "https://" + value.Controller.ManagementAPI.ListenAddress
+	probe := requestUntilResponse(t, client, value.Controller.ManagementAPI.ListenAddress, "")
+	probe.Body.Close()
 	definition := `{"operation_type":"server.define","parameters":{"server_id":"server-1","environment_id":"staging","display_name":"Server 1","hosting_profile":"vultr-small","storage_profile":"wasabi-worlds","game":{"adapter_id":"game.paper","release_channel":"stable"},"execution":{"adapter_id":"execution.systemd","profile":"paper-default"}}}`
 	request, err := http.NewRequest(http.MethodPost, base+"/v1/servers", strings.NewReader(definition))
 	if err != nil {
@@ -66,7 +101,7 @@ func TestServeRunsOnlyConfiguredAuthenticatedHTTPSListener(t *testing.T) {
 	}
 	request.Header.Set("Authorization", "Bearer "+issued.Secret)
 	request.Header.Set("Idempotency-Key", "define-server-1")
-	response, err = client.Do(request)
+	response, err := client.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
