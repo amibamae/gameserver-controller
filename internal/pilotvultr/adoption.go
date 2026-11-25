@@ -128,57 +128,82 @@ func (a *Adopter) Adopt(ctx context.Context, request AdoptionRequest) (store.Cap
 		if err != nil {
 			return ErrAdoptionMismatch
 		}
-		live := make(map[string]vultrapi.Instance, len(inventory))
-		for _, instance := range inventory {
-			if !safeAdoptionID(instance.ID) {
-				return ErrAdoptionMismatch
-			}
-			if _, exists := live[instance.ID]; exists {
-				return ErrAdoptionMismatch
-			}
-			live[instance.ID] = instance
+		live, err := adoptionInventory(inventory)
+		if err != nil {
+			return err
 		}
 		reservations, err := a.store.ListCapacityReservations()
 		if err != nil {
 			return err
 		}
-		for _, reservation := range reservations {
-			if reservation.Provider != providerID || a.policy.ReleasedStates[string(reservation.State)] {
-				continue
-			}
-			instance, exists := live[reservation.ProviderInstanceID]
-			if reservation.State != store.CapacityActive || !exists {
-				return ErrAdoptionMismatch
-			}
-			if reservation.Adoption != nil {
-				if !matchesAdoption(instance, *reservation.Adoption) {
-					return ErrAdoptionMismatch
-				}
-			} else if instance.Label != reservation.ResourceKey {
-				return ErrAdoptionMismatch
-			}
+		if err := verifyAdoptionReservations(reservations, live, a.policy); err != nil {
+			return err
 		}
 		expected := store.CapacityAdoption{InstanceID: request.InstanceID, IP: request.IP, Region: request.Region,
 			Plan: request.Plan, OSID: request.OSID, OS: request.OS}
 		candidate, exists := live[request.InstanceID]
 		// A managed create label may belong to an unresolved operation. That
 		// operation must be reconciled instead of bypassed through adoption.
-		if !exists || strings.HasPrefix(candidate.Label, "gsc-managed-") || !matchesAdoption(candidate, expected) {
+		if !validAdoptionCandidate(candidate, exists, expected) {
 			return ErrAdoptionMismatch
 		}
 		observed, err := a.provider.GetInstance(ctx, token, request.InstanceID)
-		if err != nil || !matchesAdoption(observed, expected) || observed.Label != candidate.Label || ctx.Err() != nil {
+		if !validAdoptionObservation(observed, candidate, expected, err, ctx) {
 			return ErrAdoptionMismatch
 		}
 		expected.ObservedAt = time.Now().UTC()
-		// Hash identity into the resource key so unrelated labels cannot collide.
-		digest := sha256.Sum256([]byte(request.InstanceID))
-		result, err = a.store.AdoptCapacity(store.CapacityReservation{OperationID: request.OperationID, ServerID: request.ServerID,
-			EnvironmentID: request.Environment, CapacityGroup: groupID, Provider: providerID, ProviderAdapterID: "hosting.vultr",
-			ResourceKey: "adopted-vultr-" + hex.EncodeToString(digest[:])}, expected, a.policy.MaxInstancesTotal, group.MaxInstances)
+		result, err = a.persistAdoption(request, groupID, group.MaxInstances, expected)
 		return err
 	})
 	return result, err
+}
+
+func adoptionInventory(inventory []vultrapi.Instance) (map[string]vultrapi.Instance, error) {
+	live := make(map[string]vultrapi.Instance, len(inventory))
+	for _, instance := range inventory {
+		if !safeAdoptionID(instance.ID) {
+			return nil, ErrAdoptionMismatch
+		}
+		if _, exists := live[instance.ID]; exists {
+			return nil, ErrAdoptionMismatch
+		}
+		live[instance.ID] = instance
+	}
+	return live, nil
+}
+
+func verifyAdoptionReservations(reservations []store.CapacityReservation, live map[string]vultrapi.Instance, policy pilotcapacity.Policy) error {
+	for _, reservation := range reservations {
+		if reservation.Provider != providerID || policy.ReleasedStates[string(reservation.State)] {
+			continue
+		}
+		instance, exists := live[reservation.ProviderInstanceID]
+		if reservation.State != store.CapacityActive || !exists {
+			return ErrAdoptionMismatch
+		}
+		if reservation.Adoption != nil && !matchesAdoption(instance, *reservation.Adoption) {
+			return ErrAdoptionMismatch
+		}
+		if reservation.Adoption == nil && instance.Label != reservation.ResourceKey {
+			return ErrAdoptionMismatch
+		}
+	}
+	return nil
+}
+
+func validAdoptionCandidate(candidate vultrapi.Instance, exists bool, expected store.CapacityAdoption) bool {
+	return exists && !strings.HasPrefix(candidate.Label, "gsc-managed-") && matchesAdoption(candidate, expected)
+}
+
+func validAdoptionObservation(observed, candidate vultrapi.Instance, expected store.CapacityAdoption, err error, ctx context.Context) bool {
+	return err == nil && matchesAdoption(observed, expected) && observed.Label == candidate.Label && ctx.Err() == nil
+}
+
+func (a *Adopter) persistAdoption(request AdoptionRequest, groupID string, maxGroup int, expected store.CapacityAdoption) (store.CapacityReservation, error) {
+	digest := sha256.Sum256([]byte(request.InstanceID))
+	return a.store.AdoptCapacity(store.CapacityReservation{OperationID: request.OperationID, ServerID: request.ServerID,
+		EnvironmentID: request.Environment, CapacityGroup: groupID, Provider: providerID, ProviderAdapterID: "hosting.vultr",
+		ResourceKey: "adopted-vultr-" + hex.EncodeToString(digest[:])}, expected, a.policy.MaxInstancesTotal, maxGroup)
 }
 
 func matchesAdoption(instance vultrapi.Instance, expected store.CapacityAdoption) bool {
