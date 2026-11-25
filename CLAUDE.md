@@ -1,5 +1,9 @@
 # Instructions for AI assistants working in this repository
 
+## Use Repowise first
+
+When the repowise MCP tools are available, call them before grepping or reading files to answer where, how, or why questions about this codebase: `get_overview` to orient, `get_answer` or `search_codebase` to find code, `get_context` for a file's docs and owners, `get_risk` before editing a widely imported file, and `get_why` before changing an established pattern. The index can lag behind your checkout, so read the source before you edit it.
+
 ## Third-party software: disclose and credit
 
 The project owner requires this for all work, including future conversations.
