@@ -85,18 +85,10 @@ func adapterProfileFileNames(entries []fs.DirEntry) ([]string, error) {
 	return names, nil
 }
 
-func readAdapterFile(path string) (AdapterProfile, error) {
-	data, err := readAdapterFileBytes(path)
-	if err != nil {
-		return AdapterProfile{}, err
-	}
-	return decodeAdapterProfile(data)
-}
-
 func readAdapterFileBytes(path string) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
-		return nil, errors.New("cannot be read")
+		return nil, err
 	}
 	if !info.Mode().IsRegular() {
 		return nil, errors.New("must be a regular file, not a symlink")
@@ -109,7 +101,7 @@ func readAdapterFileBytes(path string) ([]byte, error) {
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, errors.New("cannot be read")
+		return nil, err
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, maxAdapterFileBytes+1))
