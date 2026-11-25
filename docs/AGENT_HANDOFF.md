@@ -226,6 +226,10 @@ Keep new schemas in `0.21.0-draft` until R14.
   - For `cmd/protocol-check`, a byte-identical comparison of every evaluator's output across all 183 fixtures before and after.
 - **Repowise:** health scores come from the repowise MCP tools (`get_health`, `get_risk`, `setup_status` for the indexed commit). The owner triggers re-indexes; scores are only real after a re-index of the current `main`. The `refactoring_targets` pagination in `get_health` repeats the same 25 entries, so rank functions with a local complexity count instead.
 
+### Config validation refactor (2026-11-25)
+
+Repowise scored `internal/config/config.go` at 3.45 on `fb544c7` and reported complexity 30 for `Validate`. [PR #433](https://github.com/amibamae/gameserver-controller/pull/433) splits validation by profile type and shares the validated environment index across adapter checks. On the original base (`d1a75e0`) and the refactored branch, the config package passes the same characterization test for duplicate IDs, network validation, lifecycle rules and storage isolation. Re-index the merged commit to measure the file scores.
+
 ### PaperMC & systemd investigation (2026-11-16)
 
 Completed systematic investigation of systemd integration patterns for PaperMC server deployments:
