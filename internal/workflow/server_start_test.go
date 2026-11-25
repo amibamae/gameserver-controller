@@ -166,10 +166,7 @@ type serverStartFixture struct {
 
 func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome adapter.Outcome, providerState string) serverStartFixture {
 	t.Helper()
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	registry, err := adapter.NewRegistry(schemas)
 	if err != nil {
 		t.Fatal(err)
