@@ -115,6 +115,13 @@ All GitHub Actions used in [.github/workflows/](.github/workflows/) are MIT lice
 
 - **GitHub Actions** (all MIT, Copyright (c) 2018 GitHub, Inc. and contributors): [`actions/checkout@v7`](https://github.com/actions/checkout), [`actions/setup-go@v7`](https://github.com/actions/setup-go), [`actions/setup-java@v4`](https://github.com/actions/setup-java). Text: [licenses/github-actions-LICENSE](licenses/github-actions-LICENSE).
 
+### Runner command-line tools
+
+The [Repowise runtime evidence workflow](.github/workflows/repowise-evidence.yml) uses these tools as preinstalled on the GitHub Actions Ubuntu runner. The version is whatever the runner image provides; this project does not install or distribute them.
+
+- **curl**: curl license (MIT-style), Copyright Daniel Stenberg and contributors ([upstream license](https://github.com/curl/curl/blob/master/COPYING)).
+- **jq**: MIT-style license, Copyright (C) 2012 Stephen Dolan ([upstream license](https://github.com/jqlang/jq/blob/master/COPYING)). Checked at the upstream COPYING file in November 2026.
+
 ### Eclipse Temurin JDK 21
 
 Installed by `actions/setup-java` with `distribution: temurin`: GNU GPL v2 with the Classpath Exception, from the Eclipse Adoptium project ([license](https://github.com/adoptium/jdk21u/blob/HEAD/LICENSE)). The JDK is only the build and test toolchain.
