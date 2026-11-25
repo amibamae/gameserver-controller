@@ -242,6 +242,7 @@ func Validate(value Config) error {
 		checkServerAdapter(&problems, label+".adapters.execution", server.Adapters.Execution, "execution", adapterByID, true)
 		checkServerAdapter(&problems, label+".adapters.game", server.Adapters.Game, "game", adapterByID, true)
 		checkServerAdapter(&problems, label+".adapters.integration", server.Adapters.Integration, "integration", adapterByID, false)
+		validateServerNetwork(&problems, label, server, adapterByID)
 		validateServerLifecycleRules(&problems, add, label, server.Lifecycle)
 	}
 	validateStorageSecretIsolation(&problems, value.Servers, environmentByID, adapterByID)
