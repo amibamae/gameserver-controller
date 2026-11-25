@@ -20,40 +20,14 @@ var (
 	pathPart           = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$`)
 )
 
-// VultrPlan constants map plan name to RAM for heap configuration.
-const (
-	vultrVC2  = 2 * 1024 * 1024 * 1024  // 2 GiB
-	vultrVC4  = 4 * 1024 * 1024 * 1024  // 4 GiB
-	vultrVC6  = 6 * 1024 * 1024 * 1024  // 6 GiB
-	vultrVC8  = 8 * 1024 * 1024 * 1024  // 8 GiB
-	vultrVC10 = 10 * 1024 * 1024 * 1024 // 10 GiB
-	vultrVC11 = 11 * 1024 * 1024 * 1024 // 11 GiB
-	vultrVC12 = 12 * 1024 * 1024 * 1024 // 12 GiB
-	vultrVC16 = 16 * 1024 * 1024 * 1024 // 16 GiB
-	vultrVC32 = 32 * 1024 * 1024 * 1024 // 32 GiB
-)
-
-// vultrPlanToRAM maps plan name to RAM in bytes.
-var vultrPlanToRAM = map[string]uint64{
-	"vc2-1-0150":  vultrVC2,
-	"vc4-1-0150":  vultrVC4,
-	"vc6-1-0150":  vultrVC6,
-	"vc8-1-0150":  vultrVC8,
-	"vc10-1-0150": vultrVC10,
-	"vc11-1-0150": vultrVC11,
-	"vc12-1-0150": vultrVC12,
-	"vc16-1-0150": vultrVC16,
-	"vc32-1-0150": vultrVC32,
-}
-
 // Settings contains deployment values that are intentionally absent from the
-// checked-in bootstrap template.
+// checked-in bootstrap template. The Java heap is not one of them: the start
+// script sizes it from the VM's memory, so one rendered script fits every plan.
 type Settings struct {
 	ControllerIP     string
 	MinecraftPort    uint16
 	VoiceChatPort    uint16
 	WasabiRemotePath string
-	Plan             string
 }
 
 // Render validates settings and returns a complete bootstrap script.
@@ -74,22 +48,11 @@ func Render(settings Settings) ([]byte, error) {
 		return nil, fmt.Errorf("read embedded VictoriaLogs configurer: %w", err)
 	}
 
-	// Get heap values from plan; default to 2GB min/max if plan unknown.
-	planRAM, ok := vultrPlanToRAM[settings.Plan]
-	if !ok || planRAM == 0 {
-		planRAM = vultrVC2 // fallback to vc2 size
-	}
-	// Use 50% of plan RAM for min heap, same as max for simplicity.
-	heapMin := int(planRAM / 2)
-	heapMax := int(planRAM)
-
 	values := map[string]string{
 		"@@CONTROLLER_IP@@":             settings.ControllerIP,
 		"@@MINECRAFT_PORT@@":            strconv.Itoa(int(settings.MinecraftPort)),
 		"@@VOICE_CHAT_PORT@@":           strconv.Itoa(int(settings.VoiceChatPort)),
 		"@@WASABI_REMOTE_PATH@@":        settings.WasabiRemotePath,
-		"@@JAVA_HEAP_MIN@@":             strconv.Itoa(heapMin),
-		"@@JAVA_HEAP_MAX@@":             strconv.Itoa(heapMax),
 		"@@VICTORIALOGS_EXPORT_PY@@":    strings.TrimSuffix(string(shipper), "\n"),
 		"@@VICTORIALOGS_CONFIGURE_PY@@": strings.TrimSuffix(string(configurer), "\n"),
 	}
@@ -109,7 +72,7 @@ func Render(settings Settings) ([]byte, error) {
 // rules and storage operations to an unintended target.
 func (s Settings) Validate() error {
 	network, err := parseControllerIP(s.ControllerIP)
-	if err != nil || network.IP.To4() == nil || !network.IP.IsGlobalUnicast() || network.IP.IsPrivate() || network.IP.IsLoopback() || network.IP.IsLinkLocalUnicast() {
+	if err != nil || !publicIPv4(network.IP) {
 		return fmt.Errorf("%w: controller IP must be a public IPv4 address or CIDR", ErrInvalidSettings)
 	}
 	if prefix, _ := network.Mask.Size(); prefix < 16 {
@@ -118,14 +81,29 @@ func (s Settings) Validate() error {
 	if s.MinecraftPort == 0 || s.VoiceChatPort == 0 || s.MinecraftPort == s.VoiceChatPort {
 		return fmt.Errorf("%w: Minecraft and voice chat ports must be distinct nonzero ports", ErrInvalidSettings)
 	}
-	path := s.WasabiRemotePath
-	if !pathPart.MatchString(path) || strings.Contains(path, "..") || strings.Contains(path, "//") || strings.HasPrefix(path, "/") || strings.HasSuffix(path, "/") {
+	if !safeRemotePath(s.WasabiRemotePath) {
 		return fmt.Errorf("%w: Wasabi remote path must be a bucket name with an optional safe prefix", ErrInvalidSettings)
 	}
-	if s.Plan == "" {
-		return fmt.Errorf("%w: Vultr plan must be specified (e.g., vc2-1-0150, vc4-1-0150)", ErrInvalidSettings)
-	}
 	return nil
+}
+
+// publicIPv4 reports whether ip is a global unicast IPv4 address that is not
+// private, loopback or link-local.
+func publicIPv4(ip net.IP) bool {
+	if ip.To4() == nil || !ip.IsGlobalUnicast() {
+		return false
+	}
+	return !ip.IsPrivate() && !ip.IsLoopback() && !ip.IsLinkLocalUnicast()
+}
+
+// safeRemotePath reports whether path is a bucket name with an optional
+// prefix: allowed characters only, no "..", no empty segment, and no slash at
+// either end.
+func safeRemotePath(path string) bool {
+	if !pathPart.MatchString(path) || strings.Contains(path, "..") {
+		return false
+	}
+	return !strings.Contains(path, "//") && !strings.HasPrefix(path, "/") && !strings.HasSuffix(path, "/")
 }
 
 // parseControllerIP accepts a bare IPv4 address (treated as /32) or a CIDR.

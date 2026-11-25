@@ -11,7 +11,6 @@ func TestVictoriaLogsInstalledDisabledAndSSHConfigured(t *testing.T) {
 		MinecraftPort:    25565,
 		VoiceChatPort:    24454,
 		WasabiRemotePath: "example-bucket/backups",
-		Plan:             "vc2-1-0150",
 	})
 	if err != nil {
 		t.Fatal(err)

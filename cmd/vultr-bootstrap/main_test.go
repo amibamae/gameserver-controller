@@ -71,6 +71,21 @@ func TestUploadReadsSystemdCredentialAndPrintsOnlyMetadata(t *testing.T) {
 	}
 }
 
+// The start script sizes the Java heap from the VM's memory, so the upload no
+// longer takes a Vultr plan; an old command line fails instead of being
+// silently accepted.
+func TestUploadRejectsThePlanFlag(t *testing.T) {
+	fake := &fakeCreator{}
+	var stdout, stderr strings.Builder
+	err := run(append(validArgs(), "--plan", "vc2-1c-2gb"), &stdout, &stderr, fake)
+	if err == nil || err.Error() != "flag provided but not defined: -plan" {
+		t.Fatalf("run() error = %v, want the undefined -plan flag", err)
+	}
+	if fake.calls != 0 || stdout.Len() != 0 {
+		t.Fatalf("rejected upload called the provider %d times and printed %q", fake.calls, stdout.String())
+	}
+}
+
 func validArgs() []string {
-	return []string{"upload", "--name", "gsc-minecraft-debian", "--controller-ip", "203.0.113.10", "--minecraft-port", "25565", "--voice-chat-port", "24454", "--plan", "vc2-1-0150", "--wasabi-remote-path", "example-bucket/backups"}
+	return []string{"upload", "--name", "gsc-minecraft-debian", "--controller-ip", "203.0.113.10", "--minecraft-port", "25565", "--voice-chat-port", "24454", "--wasabi-remote-path", "example-bucket/backups"}
 }
