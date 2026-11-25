@@ -228,7 +228,7 @@ Keep new schemas in `0.21.0-draft` until R14.
 
 ### Config validation refactor (2026-11-25)
 
-Repowise's current indexed health report ranks `internal/config/config.go` as the lowest production file (3.45), with `Validate` as the primary complexity finding. A focused branch, `codex/config-health`, was created from `origin/main` at `d1a75e0`. Commit `96ac059` extracts server lifecycle checks into `validateServerLifecycleRules` without changing validation order or messages. The unchanged `origin/main` config tests already fail in the network-profile and backend-hostname cases; the same failures reproduce before this change. Do not merge this branch until that baseline regression is resolved or explicitly accepted. The branch is intentionally not pushed while its baseline suite is red.
+Repowise scored `internal/config/config.go` at 3.45 on `fb544c7` and reported complexity 30 for `Validate`. [PR #433](https://github.com/amibamae/gameserver-controller/pull/433) splits validation by profile type and shares the validated environment index across adapter checks. On the original base (`d1a75e0`) and the refactored branch, the config package passes the same characterization test for duplicate IDs, network validation, lifecycle rules and storage isolation. Re-index the merged commit to measure the file scores.
 
 ### PaperMC & systemd investigation (2026-11-16)
 
