@@ -226,6 +226,10 @@ Keep new schemas in `0.21.0-draft` until R14.
   - For `cmd/protocol-check`, a byte-identical comparison of every evaluator's output across all 183 fixtures before and after.
 - **Repowise:** health scores come from the repowise MCP tools (`get_health`, `get_risk`, `setup_status` for the indexed commit). The owner triggers re-indexes; scores are only real after a re-index of the current `main`. The `refactoring_targets` pagination in `get_health` repeats the same 25 entries, so rank functions with a local complexity count instead.
 
+### Config validation refactor (2026-11-25)
+
+Repowise's current indexed health report ranks `internal/config/config.go` as the lowest production file (3.45), with `Validate` as the primary complexity finding. A focused branch, `codex/config-health`, was created from `origin/main` at `d1a75e0`. Commit `96ac059` extracts server lifecycle checks into `validateServerLifecycleRules` without changing validation order or messages. The unchanged `origin/main` config tests already fail in the network-profile and backend-hostname cases; the same failures reproduce before this change. Do not merge this branch until that baseline regression is resolved or explicitly accepted. The branch is intentionally not pushed while its baseline suite is red.
+
 ### PaperMC & systemd investigation (2026-11-16)
 
 Completed systematic investigation of systemd integration patterns for PaperMC server deployments:
