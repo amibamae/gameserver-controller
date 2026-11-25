@@ -237,8 +237,8 @@ Completed systematic investigation of systemd integration patterns for PaperMC s
 
 2. **Systemd unit files** (`scripts/bootstrap/minecraft-debian.sh.tmpl`):
    - `minecraft-restore.service`: One-shot oneshot service to restore from Wasabi (RemainAfterExit=yes)
-   - `minecraft-vanilla.service`: Main Minecraft Paper server, depends on restore completing
-   - `mcrcon.socket` + `mcrcon.service`: Socket activation for secure localhost RCON (25577)
+   - `minecraft-vanilla.service`: Main Minecraft Paper server, depends on restore completing; its start script sizes the Java heap from the VM's memory
+   - No RCON: the mcrcon units added on 2026-11-16 could not work and stopped the bootstrap, so they were removed. Minecraft's own RCON is set in the restored `server.properties`, which the bootstrap does not write.
    - **No dedicated health check unit** - uses protocol-level unit inspection
 
 3. **Volume mounting pattern**:

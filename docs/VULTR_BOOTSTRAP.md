@@ -8,8 +8,8 @@ in memory, and creates a new Vultr startup script. It does not update or delete
 existing startup scripts and does not create a VM.
 
 The command requires the controller IP (the controller's public IPv4 address,
-or a public IPv4 CIDR no broader than `/16`), two distinct valid ports, the Vultr
-plan used to size the Minecraft heap, and a safe Wasabi bucket or prefix. The rendered firewall allows
+or a public IPv4 CIDR no broader than `/16`), two distinct valid ports, and a
+safe Wasabi bucket or prefix. The rendered firewall allows
 Minecraft and voice chat traffic only from the controller IP, and the security
 finalizer restricts SSH to it as well. It defaults
 to a dry run. A dry run prints the startup-script name,
@@ -23,9 +23,16 @@ gsc-bootstrap upload \
   --controller-ip <controller-public-ipv4-or-cidr> \
   --minecraft-port <port> \
   --voice-chat-port <port> \
-  --plan <vultr-plan> \
   --wasabi-remote-path <bucket-or-bucket-prefix>
 ```
+
+The script does not depend on the VM's plan, so one upload serves every plan.
+The Minecraft start script sizes the Java heap from the VM's memory each time
+the server starts. It keeps a quarter of the memory, and at least 768 MiB, for
+the system, the JVM's own memory, and the backup and log tools, and starts the
+heap at half of that maximum. A VM with less than 1280 MiB of memory is too
+small: the server refuses to start and logs the reason. A resized VM gets a
+matching heap at its next start.
 
 After review, add `--execute --confirm-upload gsc-minecraft-debian` to create
 one new script record. Choose a new name for each approved revision. The exact
