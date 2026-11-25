@@ -76,18 +76,9 @@ func readSchemaIndex(root string) (string, []any, error) {
 // inside protocol/schemas and appear once in the index, and the file must
 // be a Draft 2020-12 schema whose unique $id matches the entry.
 func (pkg *protocolPackage) loadIndexedSchema(rawEntry any, indexedPaths map[string]bool) error {
-	entryMap := asObject(rawEntry)
-	if entryMap == nil {
-		return fmt.Errorf("schema index entries must be objects")
-	}
-	relative, okPath := entryMap["path"].(string)
-	id, okID := entryMap["id"].(string)
-	if !okPath || !okID || relative == "" || id == "" {
-		return fmt.Errorf("schema index entry is missing path or id: %#v", rawEntry)
-	}
-	clean := filepath.Clean(filepath.FromSlash(relative))
-	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("unsafe schema path in index: %s", relative)
+	relative, id, clean, err := indexedSchemaEntry(rawEntry)
+	if err != nil {
+		return err
 	}
 	if indexedPaths[relative] {
 		return fmt.Errorf("duplicate schema path in index: %s", relative)
@@ -118,6 +109,23 @@ func (pkg *protocolPackage) loadIndexedSchema(rawEntry any, indexedPaths map[str
 	pkg.schemaDocs[id] = docMap
 	pkg.rawSchemas[id] = data
 	return nil
+}
+
+func indexedSchemaEntry(rawEntry any) (relative, id, clean string, err error) {
+	entryMap := asObject(rawEntry)
+	if entryMap == nil {
+		return "", "", "", fmt.Errorf("schema index entries must be objects")
+	}
+	relative, okPath := entryMap["path"].(string)
+	id, okID := entryMap["id"].(string)
+	if !okPath || !okID || relative == "" || id == "" {
+		return "", "", "", fmt.Errorf("schema index entry is missing path or id: %#v", rawEntry)
+	}
+	clean = filepath.Clean(filepath.FromSlash(relative))
+	if filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", "", "", fmt.Errorf("unsafe schema path in index: %s", relative)
+	}
+	return relative, id, clean, nil
 }
 
 func (pkg *protocolPackage) checkSchemaInventory(indexed map[string]bool) error {
