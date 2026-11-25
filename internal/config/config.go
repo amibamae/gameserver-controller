@@ -242,19 +242,7 @@ func Validate(value Config) error {
 		checkServerAdapter(&problems, label+".adapters.execution", server.Adapters.Execution, "execution", adapterByID, true)
 		checkServerAdapter(&problems, label+".adapters.game", server.Adapters.Game, "game", adapterByID, true)
 		checkServerAdapter(&problems, label+".adapters.integration", server.Adapters.Integration, "integration", adapterByID, false)
-		validateServerNetwork(&problems, label, server, adapterByID)
-		if server.Lifecycle.IdleShutdown != "" {
-			idle, err := time.ParseDuration(server.Lifecycle.IdleShutdown)
-			add(err == nil && idle > 0 && idle <= 7*24*time.Hour, label+".lifecycle.idle_shutdown must be greater than zero and no more than 168h")
-		}
-		if _, err := backuppolicy.Resolve(server.Lifecycle.Backups); err != nil {
-			problems = append(problems, label+".lifecycle.backups: "+err.Error())
-		}
-		if _, err := scalingpolicy.Resolve(server.Lifecycle.Scaling); err != nil {
-			problems = append(problems, label+".lifecycle.scaling: "+err.Error())
-		}
-		add(server.Lifecycle.RequireVerifiedBackupBeforeDestroy, label+".lifecycle.require_verified_backup_before_destroy must be true")
-		add(server.Lifecycle.RequireApprovalForDestroy, label+".lifecycle.require_approval_for_destroy must be true")
+		validateServerLifecycleRules(&problems, add, label, server.Lifecycle)
 	}
 	validateStorageSecretIsolation(&problems, value.Servers, environmentByID, adapterByID)
 	validateUniqueBackendHostnames(&problems, value.Servers)
@@ -265,6 +253,21 @@ func Validate(value Config) error {
 		return fmt.Errorf("configuration is invalid:\n - %s", strings.Join(problems, "\n - "))
 	}
 	return nil
+}
+
+func validateServerLifecycleRules(problems *[]string, add func(bool, string), label string, lifecycle ServerLifecycle) {
+	if lifecycle.IdleShutdown != "" {
+		idle, err := time.ParseDuration(lifecycle.IdleShutdown)
+		add(err == nil && idle > 0 && idle <= 7*24*time.Hour, label+".lifecycle.idle_shutdown must be greater than zero and no more than 168h")
+	}
+	if _, err := backuppolicy.Resolve(lifecycle.Backups); err != nil {
+		*problems = append(*problems, label+".lifecycle.backups: "+err.Error())
+	}
+	if _, err := scalingpolicy.Resolve(lifecycle.Scaling); err != nil {
+		*problems = append(*problems, label+".lifecycle.scaling: "+err.Error())
+	}
+	add(lifecycle.RequireVerifiedBackupBeforeDestroy, label+".lifecycle.require_verified_backup_before_destroy must be true")
+	add(lifecycle.RequireApprovalForDestroy, label+".lifecycle.require_approval_for_destroy must be true")
 }
 
 func validateSecretReference(problems *[]string, label, name string, reference SecretReference) {
