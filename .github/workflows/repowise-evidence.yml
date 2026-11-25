@@ -1,0 +1,67 @@
+name: Repowise runtime evidence
+
+# Profiles the core workflow package and sends the CPU profile to Repowise,
+# which maps the samples onto its index of this repository.
+# Repowise accepts only push, schedule and workflow_dispatch runs from the
+# default branch, so this workflow does not run on pull requests.
+# See https://docs.repowise.dev/hosted/runtime-evidence.md
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repowise-evidence
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    name: Profile and upload runtime evidence
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Signs the upload with a GitHub OIDC token; no secret is needed.
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Profile workflow package tests
+        run: go test -count=1 -cpuprofile cpu.pprof ./internal/workflow
+      - name: Upload runtime evidence to Repowise
+        if: always()
+        continue-on-error: true
+        env:
+          EVIDENCE: "cpu.pprof"
+          WORKLOAD: "go test ./internal/workflow"
+          CLASS: "unit_test"
+        run: |
+          shopt -s globstar nullglob
+          files=()
+          for pattern in $EVIDENCE; do for f in $pattern; do [ -f "$f" ] && files+=(-F "evidence=@$f"); done; done
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::warning::Repowise: no evidence file matched '$EVIDENCE'; nothing uploaded."
+            exit 0
+          fi
+          token=$(curl -sS --fail --max-time 30 \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=repowise" | jq -r '.value')
+          if [ -z "$token" ] || [ "$token" = "null" ]; then
+            echo "::warning::Repowise: could not get a GitHub OIDC token; nothing uploaded."
+            exit 0
+          fi
+          curl -sS --fail-with-body --max-time 120 -H "Authorization: Bearer $token" "${files[@]}" \
+            -F "repository=$GITHUB_REPOSITORY" -F "commit=$GITHUB_SHA" \
+            -F "workload=$WORKLOAD" -F "class=$CLASS" -F "environment=linux-ci" \
+            -F "checkout_root=$GITHUB_WORKSPACE" \
+            https://api.repowise.dev/ci/evidence \
+            || echo "::warning::Repowise: evidence upload failed; see the message above."
