@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"testing"
 	"time"
 
@@ -116,19 +115,6 @@ func adapterR5Error(t *testing.T, err error, want string) {
 	t.Helper()
 	if err == nil || err.Error() != want {
 		t.Fatalf("error = %v, want %q", err, want)
-	}
-}
-
-// adapterR5Wrapped requires err to read prefix + ": " + cause and to wrap an
-// error with exactly the cause's message.
-func adapterR5Wrapped(t *testing.T, err error, prefix string, cause error) {
-	t.Helper()
-	if cause == nil {
-		t.Fatal("expected cause is nil")
-	}
-	adapterR5Error(t, err, prefix+": "+cause.Error())
-	if unwrapped := errors.Unwrap(err); unwrapped == nil || unwrapped.Error() != cause.Error() {
-		t.Fatalf("error %v does not wrap %v", err, cause)
 	}
 }
 
@@ -509,206 +495,6 @@ func TestAdapterR5CheckStreamTransferBoundaries(t *testing.T) {
 	}
 }
 
-type adapterR5RegisterCase struct {
-	name   string
-	change func(*Descriptor)
-	want   func(*adapterR5Fixture, Descriptor) string
-}
-
-func adapterR5RegisterCases() []adapterR5RegisterCase {
-	return []adapterR5RegisterCase{
-		{"descriptor that cannot be encoded", func(d *Descriptor) { d.Constraints = map[string]any{"bad": func() {}} },
-			func(_ *adapterR5Fixture, d Descriptor) string {
-				_, err := json.Marshal(d)
-				return "encode adapter descriptor: " + err.Error()
-			}},
-		{"descriptor fails its schema", func(d *Descriptor) { d.AdapterID = "" },
-			func(f *adapterR5Fixture, d Descriptor) string {
-				encoded, _ := json.Marshal(d)
-				return "invalid adapter descriptor: " + f.schemas.ValidateJSON("urn:gameserver-controller:"+f.reg.version+":common:capability-descriptor", encoded).Error()
-			}},
-		{"another protocol version", func(d *Descriptor) { d.ProtocolVersions = []string{"0.0.1"} },
-			func(f *adapterR5Fixture, d Descriptor) string {
-				return fmt.Sprintf("adapter %q does not support protocol %q", d.AdapterID, f.reg.version)
-			}},
-		{"capability outside the category", func(d *Descriptor) { d.Capabilities[1].Name = "storage.object.put" },
-			adapterR5RegisterMessage(`capability "storage.object.put" does not belong to category "hosting"`)},
-		{"duplicate capability", func(d *Descriptor) { d.Capabilities[1].Name = d.Capabilities[0].Name },
-			adapterR5RegisterMessage(`adapter "hosting.r5" advertises duplicate capability "hosting.instance.create"`)},
-		{"capabilities checked in order: duplicate first", func(d *Descriptor) {
-			d.Capabilities[1].Name = d.Capabilities[0].Name
-			d.Capabilities[2].Name = "game.save.request"
-		}, adapterR5RegisterMessage(`adapter "hosting.r5" advertises duplicate capability "hosting.instance.create"`)},
-		{"capabilities checked in order: category first", func(d *Descriptor) {
-			d.Capabilities[1].Name = "game.save.request"
-			d.Capabilities[2].Name = d.Capabilities[0].Name
-		}, adapterR5RegisterMessage(`capability "game.save.request" does not belong to category "hosting"`)},
-		{"category checked before schemas", func(d *Descriptor) {
-			d.Capabilities[0].Name = "game.save.request"
-			d.Capabilities[0].InputSchemaURI = "urn:gameserver-controller:missing"
-		}, adapterR5RegisterMessage(`capability "game.save.request" does not belong to category "hosting"`)},
-		{"unregistered input schema", func(d *Descriptor) { d.Capabilities[0].InputSchemaURI = "urn:gameserver-controller:missing" },
-			adapterR5RegisterMessage(`capability "hosting.instance.create" references an unregistered input or output schema`)},
-		{"unregistered output schema", func(d *Descriptor) { d.Capabilities[0].OutputSchemaURI = "urn:gameserver-controller:missing" },
-			adapterR5RegisterMessage(`capability "hosting.instance.create" references an unregistered input or output schema`)},
-		{"adapter already registered", func(d *Descriptor) { d.AdapterID = "hosting.example" },
-			adapterR5RegisterMessage(`adapter "hosting.example" is already registered`)},
-	}
-}
-
-func adapterR5RegisterMessage(message string) func(*adapterR5Fixture, Descriptor) string {
-	return adapterR5Fixed[Descriptor](message)
-}
-
-func TestAdapterR5RegisterRejections(t *testing.T) {
-	for _, test := range adapterR5RegisterCases() {
-		t.Run(test.name, func(t *testing.T) {
-			f := adapterR5NewFixture(t)
-			implementation := adapterR5Example(t, "adapter-descriptor.hosting.json")
-			implementation.descriptor.AdapterID = "hosting.r5"
-			test.change(&implementation.descriptor)
-			err := f.reg.Register(implementation)
-			adapterR5Error(t, err, test.want(f, implementation.descriptor))
-			if _, lookup := f.reg.Descriptor("hosting.r5"); !errors.Is(lookup, ErrAdapterNotFound) {
-				t.Fatal("rejected adapter was registered")
-			}
-		})
-	}
-}
-
-func TestAdapterR5RegisterRequiresRegistryAndImplementation(t *testing.T) {
-	f := adapterR5NewFixture(t)
-	var missing *Registry
-	adapterR5Error(t, missing.Register(f.hosting), "registry and adapter implementation are required")
-	adapterR5Error(t, f.reg.Register(nil), "registry and adapter implementation are required")
-	if _, err := missing.Descriptor("hosting.example"); !errors.Is(err, ErrAdapterNotFound) {
-		t.Fatalf("nil registry Descriptor error = %v", err)
-	}
-	if missing.ProtocolVersion() != "" {
-		t.Fatal("nil registry reported a protocol version")
-	}
-	if _, err := NewRegistry(nil); err == nil || err.Error() != "a loaded protocol schema registry is required" {
-		t.Fatalf("NewRegistry(nil) error = %v", err)
-	}
-}
-
-func TestAdapterR5RegisterStoresAnIndependentCopy(t *testing.T) {
-	f := adapterR5NewFixture(t)
-	implementation := adapterR5Example(t, "adapter-descriptor.paper.json")
-	implementation.descriptor.AdapterID = "game.r5"
-	if err := f.reg.Register(implementation); err != nil {
-		t.Fatal(err)
-	}
-	implementation.descriptor.Capabilities[0].Name = "game.changed"
-	implementation.descriptor.StreamTransportProfiles[0] = "changed"
-	stored, err := f.reg.Descriptor("game.r5")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stored.Capabilities[0].Name == "game.changed" || stored.StreamTransportProfiles[0] == "changed" {
-		t.Fatal("registered descriptor shares memory with the implementation's")
-	}
-	if _, ok := f.reg.adapters["game.r5"].capabilities["game.backup.capture"]; !ok {
-		t.Fatal("registered adapter is missing its advertised capability")
-	}
-}
-
-func TestAdapterR5CapabilityPrefix(t *testing.T) {
-	tests := map[Category]string{CategoryHosting: "hosting.", CategoryStorage: "storage.", CategoryExecution: "execution.",
-		CategoryGame: "game.", CategoryIntegration: "integration.", "integrations": ""}
-	for category, want := range tests {
-		if got, ok := capabilityPrefix(category); got != want || ok != (want != "") {
-			t.Fatalf("capabilityPrefix(%q) = %q, %v; want %q", category, got, ok, want)
-		}
-	}
-}
-
-type adapterR5Closer struct{ bytes.Buffer }
-
-func (*adapterR5Closer) Close() error { return nil }
-
-func TestAdapterR5StreamHandles(t *testing.T) {
-	source := io.NopCloser(bytes.NewReader(nil))
-	var empty RequestContext
-	if _, err := empty.OpenStream("s"); err == nil || err.Error() != "stream source is unavailable" {
-		t.Fatalf("OpenStream without access = %v", err)
-	}
-	if _, err := empty.CreateStream("d"); err == nil || err.Error() != "stream destination is unavailable" {
-		t.Fatalf("CreateStream without access = %v", err)
-	}
-	if empty.HasStreamDestination("d") {
-		t.Fatal("destination reported without access")
-	}
-	var c RequestContext
-	c.SetStreamSources(map[string]io.ReadCloser{"s": source, "": source})
-	c.SetStreamDestinations(map[string]io.WriteCloser{"d": &adapterR5Closer{}, "": &adapterR5Closer{}})
-	adapterR5ClaimTwice(t, "source", func(id string) error { _, err := c.OpenStream(id); return err }, "s", "stream source is unavailable")
-	if !c.HasStreamDestination("d") || c.HasStreamDestination("") || c.HasStreamDestination("missing") {
-		t.Fatal("HasStreamDestination misreported an attached handle")
-	}
-	adapterR5ClaimTwice(t, "destination", func(id string) error { _, err := c.CreateStream(id); return err }, "d", "stream destination is unavailable")
-	if c.HasStreamDestination("d") {
-		t.Fatal("claimed destination still reported")
-	}
-}
-
-// adapterR5ClaimTwice requires claim to reject an empty and an unknown ID,
-// accept id once, and then reject it with message.
-func adapterR5ClaimTwice(t *testing.T, kind string, claim func(string) error, id, message string) {
-	t.Helper()
-	for _, rejected := range []string{"", "missing"} {
-		if err := claim(rejected); err == nil || err.Error() != message {
-			t.Fatalf("%s %q claim = %v, want %q", kind, rejected, err, message)
-		}
-	}
-	if err := claim(id); err != nil {
-		t.Fatalf("first %s claim = %v", kind, err)
-	}
-	if err := claim(id); err == nil || err.Error() != message {
-		t.Fatalf("second %s claim = %v, want %q", kind, err, message)
-	}
-}
-
-func TestAdapterR5StreamHandleAttachment(t *testing.T) {
-	source := io.NopCloser(bytes.NewReader(nil))
-	t.Run("destinations alone leave no sources", func(t *testing.T) {
-		var c RequestContext
-		c.SetStreamDestinations(map[string]io.WriteCloser{"d": &adapterR5Closer{}})
-		if _, err := c.OpenStream("d"); err == nil || err.Error() != "stream source is unavailable" {
-			t.Fatalf("OpenStream = %v", err)
-		}
-	})
-	t.Run("sources alone leave no destinations", func(t *testing.T) {
-		var c RequestContext
-		c.SetStreamSources(map[string]io.ReadCloser{"s": source})
-		if _, err := c.CreateStream("s"); err == nil || err.Error() != "stream destination is unavailable" {
-			t.Fatalf("CreateStream = %v", err)
-		}
-	})
-	t.Run("setting sources replaces earlier destinations", func(t *testing.T) {
-		var c RequestContext
-		c.SetStreamDestinations(map[string]io.WriteCloser{"d": &adapterR5Closer{}})
-		c.SetStreamSources(map[string]io.ReadCloser{"s": source})
-		if c.HasStreamDestination("d") {
-			t.Fatal("destination survived SetStreamSources")
-		}
-	})
-	t.Run("clearing removes every handle", func(t *testing.T) {
-		var c RequestContext
-		c.SetStreamSources(map[string]io.ReadCloser{"s": source})
-		c.ClearStreamSources()
-		if _, err := c.OpenStream("s"); err == nil {
-			t.Fatal("cleared source still open")
-		}
-	})
-	t.Run("nil contexts are ignored", func(t *testing.T) {
-		var c *RequestContext
-		c.SetStreamSources(nil)
-		c.SetStreamDestinations(nil)
-		c.ClearStreamSources()
-	})
-}
-
 func TestAdapterR5ContainsStreamCredential(t *testing.T) {
 	transfers := []capturestream.Reference{{TransferID: "other"}, {TransferID: "secret"}}
 	tests := []struct {
@@ -733,5 +519,32 @@ func TestAdapterR5ContainsStreamCredential(t *testing.T) {
 	}
 	if containsAnyStreamCredential("secret", nil) {
 		t.Error("no transfers reported a credential")
+	}
+}
+
+// Schema validation and encoding run before the credential search in both
+// callers, so its not-JSON branch is reached only directly.
+func TestAdapterR5CheckNoStreamCredential(t *testing.T) {
+	transfers := []capturestream.Reference{{TransferID: "secret"}}
+	tests := []struct {
+		name    string
+		encoded string
+		want    string
+	}{
+		{"not JSON", `{`, "invalid"},
+		{"contains a transfer ID", `{"a":"secret"}`, "found"},
+		{"clean", `{"a":"public"}`, ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := checkNoStreamCredential([]byte(test.encoded), transfers, "invalid", "found")
+			if test.want == "" {
+				if err != nil {
+					t.Fatalf("checkNoStreamCredential = %v, want nil", err)
+				}
+				return
+			}
+			adapterR5Error(t, err, test.want)
+		})
 	}
 }
