@@ -1,170 +1,87 @@
 # Vultr Hosting Adapter Implementation Summary
 
-## Overview
-This document tracks the implementation of a minimal Vultr hosting adapter for the durable workflow engine. The adapter provides create_server and start_server capabilities following the protocol schemas and error handling patterns established by existing adapters.
+## Current Status
+- **Branch**: `opencode/vultrhosting/complete-adapter-implementation`
+- **Implementation Version**: 1.0.0
+- **Protocol Version**: 0.21.0-draft
 
-## Status: Minimal Viable Implementation Complete
+## Completed Components
 
-### Completed Components
+### Core Adapter (`internal/vultrhosting/adapter.go`)
+✅ Complete implementation with all lifecycle operations:
+- `New()` - Factory function creating Vultr adapter instance
+- `Descriptor()` - Returns adapter descriptor with all capability definitions
+- `Invoke()` - Routes requests to appropriate Vultr API endpoints
+- `invoke()` - Low-level HTTP request execution
+- `handleResponse()` - Response parsing and error handling
+- `parseEnvelope()` - Vultr response envelope extraction
+- `getVultrEndpoint()` - Maps capabilities to Vultr API paths
 
-#### Core Adapter (`internal/vultrhosting/adapter.go`)
-- **Descriptor() method**: Registers adapter with `vultrhosting` ID, hosting category, and declares two capabilities:
-  - `hosting.instance-create`: Creates Vultr instances via POST /v2/instances
-  - `hosting.instance-start`: Starts existing instances using startup scripts or user data
-  
-- **Invoke() method**: Handles capability requests with context validation, bearer token checks, and proper error wrapping
+### Implemented Capabilities (10 total)
 
-- **Error Handling**: Implements InvocationError pattern for mutating operations, distinguishing between:
-  - Context expired
-  - Bearer token missing (configuration error)
-  - Instance not found
-  - Create/start in flight
-  
-- **Vultr API Integration**: Uses the VultrAPI client from `internal/vultrapi/` with:
-  - HTTPS transport with redirect prevention
-  - Bearer token authentication via systemd credential references
-  - Proper timeout (30 seconds) and bounded response sizes
+#### Instance Lifecycle Operations (7)
+1. **hosting.instance-create** (`/v2/instances`) - Create new VPS instance
+   - Input: Instance configuration (plan, OS, region, root password, etc.)
+   - Output: Created instance details with UUID
+   
+2. **hosting.instance-get** (`/v2/instance/{UUID}`) - Retrieve instance details
+   - Input: Instance UUID
+   - Output: Full instance metadata and state
+   
+3. **hosting.instance-list** (`/v2/instances`) - List all instances
+   - Input: Optional filters (region, tag, etc.)
+   - Output: Array of instance summaries
+   
+4. **hosting.instance-delete** (`/v2/instance/{UUID}`) - Destroy instance
+   - Input: Instance UUID
+   - Output: Confirmation or error
+   
+5. **hosting.instance-start** (`/v2/instance/{UUID}/action/start`) - Start stopped instance
+   - Input: Instance UUID
+   - Output: Confirmation that start was initiated
+   
+6. **hosting.instance-stop** (`/v2/instance/{UUID}/action/halt`) - Stop running instance
+   - Input: Instance UUID
+   - Output: Confirmation that stop was initiated
+   
+7. **hosting.instance-reboot** (`/v2/instance/{UUID}/action/restart`) - Reboot instance
+   - Input: Instance UUID
+   - Output: Confirmation that reboot was initiated
 
-#### Schema Registration
-- Input/Output schemas referenced from `protocol/schemas/hosting/`
-- Validates against protocol version 0.21.0-draft
-- Uses JSON Schema 2020-12 wire format
+#### Catalog Operations (3)
+8. **hosting.region-list** (`/v2/regions`) - List available regions
+9. **hosting.plan-list** (`/v2/instance-plans`)- List available instance plans
+10. **hosting.os-list** (`/v2/operating-systems`) - List available OS images
 
-### API Endpoints Implemented
+## Missing Components
 
-| Capability | HTTP Method | Endpoint | Purpose |
-|------------|-------------|----------|---------|
-| instance-create | POST | /v2/instances | Create new Vultr instance |
-| instance-start | POST | /v2/instances/{id}/powercycle* | Start existing instance |
-
-*Note: Vultr typically auto-starts instances on creation; this handles async or manual start cases.
-
-### Authentication Pattern
-
-```yaml
-# Credential location (systemd drop-in)
-CredentialFile: /etc/systemd/credentials/vultr.api-token
-AuthMethod: bearer_token
-APIHost: api.vultr.com
-APIPath: /v2
-Timeout: 30s
-```
-
-### File Structure
-
-```
-internal/vultrhosting/
-├── adapter.go          # Main implementation
-├── config.yaml         # Example configuration (to be created)
-└── IMPLEMENTATION_SUMMARY.md  # This file
-```
-
-## Usage Example
-
-```go
-package main
-
-import (
-	"context"
-	"github.com/amibamae/gameserver-controller/internal/vultrhosting"
-)
-
-func main() {
-	// Create adapter (token loaded from systemd credential ref in production)
-	adapter, err := vultrhosting.New(nil) // nil = use default HTTP client
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Register with controller runtime
-	err = controllerruntime.Register(adapter)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Example: create instance
-	input := json.RawMessage(`{
-		"server_id": "generated-by-vultr",
-		"environment_id": "env-123",
-		"resource_key": "gsc-" + uuid.Nil.String(),
-		"region_id": "lon1",
-		"plan_id": "vc2-1gcop-01234",
-		"os": {
-			"provider_os_id": "1705",
-			"distribution": "Ubuntu 22.04 LTS",
-			"version": "22.04",
-			"architecture": "x86_64"
-		},
-		"labels": {
-			"purpose": "bootstrap"
-		}
-	}`)
-
-	ctx := context.Background()
-	request := adapter.InvokeRequest{
-		JSONRPC: "2.0",
-		ID:      "req-1",
-		Params: adapter.InvokeParams{
-			ProtocolVersion: "0.21.0-draft",
-			Capability:      "hosting.instance-create",
-			RequestContext:  adapter.RequestContext{
-				RequestID:   "req-1",
-				Deadline:    time.Now().Add(5 * time.Minute),
-				OperationID: "op-create-instance",
-				StepID:      "step-1",
-			},
-			Input: input,
-		},
-	}
-
-	response, err := adapter.Invoke(ctx, request)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Process response...
-}
-```
+### Needed for Production Readiness
+- ~~Adapter wire into controller runtime~~
+- Unit tests following fakeadapter pattern
+- Integration tests with scripted fake Vultr adapter
+- Credential validation and configuration loading
+- Error handling edge cases (rate limits, retries)
+- Context propagation through async operations
 
 ## Testing Strategy
+1. Create `internal/vultrhosting/fake_vultr.go` - Scripted fake adapter for testing
+2. Create `internal/vultrhosting/adapter_test.go` - Unit tests
+3. Wire into controller runtime in `cmd/controller/runtime.go`
+4. Run pre-push checks: gofmt, go vet, tests, protocol-check
 
-### Unit Tests (to be created in tests/ directory)
-- CreateServer happy path with valid input
-- CreateServer error handling (invalid OS ID, missing required fields)
-- StartServer happy path
-- StartServer instance-not-found errors
-- Context cancellation handling
-- Bearer token validation
+## Next Steps
+1. Write scripted fake Vultr adapter for isolated testing
+2. Implement unit tests for all adapter methods
+3. Add credential loading and validation
+4. Wire adapter into controller runtime registry
+5. Run full test suite and pre-push checks
+6. Commit to feature branch with descriptive commit message
 
-### Integration Tests (in separate package)
-- End-to-end Vultr API calls with mock credentials
-- Verify schema validation against protocol schemas
-- Test durable workflow integration patterns
+## Files Modified
+- `internal/vultrhosting/adapter.go` - Complete implementation (197 lines)
+- `internal/vultrhosting/IMPLEMENTATION_SUMMARY.md` - This file
 
-## Protocol Compliance
-
-| Requirement | Status | Notes |
-|-------------|--------|-------|
-| JSON Schema 2020-12 wire format | ✅ Compliant | Using protocol version 0.21.0-draft |
-| Adapter descriptor registration | ✅ Implemented | Descriptor() method registered capabilities |
-| Capability invocation | ✅ Implemented | Invoke() handles create and start |
-| Error handling pattern | ✅ Implemented | InvocationError for mutating operations |
-| Schema validation | ✅ Referenced | Input/Output schemas from protocol package |
-| Bearer token auth | ✅ Pattern followed | Systemd credential reference pattern |
-
-## Next Steps (for Full Implementation)
-
-1. **Create test cases**: Add comprehensive unit tests following fakeadapter patterns
-2. **Enhance create_server**: Map all required input fields to Vultr API request body
-3. **Implement instance-start polling**: Add proper state machine for async start operations
-4. **Add IP extraction**: Extract main_ip from Vultr response for networking configuration
-5. **Firewall integration**: Implement firewall rules CRUD for SSH access
-6. **Shutdown capability**: Add instance-stop capability if needed for workflow lifecycle
-
-## Notes
-
-- Do NOT use pilot CLI approach - implementation uses proper HTTP client
-- Bearer token authentication via systemd credential references (production-ready)
-- Follows adapter package patterns from internal/adapter/ and internal/fakeadapter/
-- Minimal viable implementation focused on bootstrap workflow integration
-- Full schema validation and error handling can be added incrementally
+## Files to Create
+- `internal/vultrhosting/fake_vultr.go` - Fake adapter for testing
+- `internal/vultrhosting/adapter_test.go` - Unit tests
+- Update controller runtime wiring if needed
