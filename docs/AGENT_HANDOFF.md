@@ -78,9 +78,9 @@ Claude resumed on 2026-11-26 with the three Claude rows below. Codex is continui
 | Claude | `internal/adapter/adapter.go`, `internal/captureinvoke/runtime.go` | #454 merged | done (2026-11-27): no function over 9; was 3.90 and 3.93, re-index pending |
 | Claude | `internal/workflow/engine.go` | #453 merged | done (2026-11-27): split into 11 files, no function over 10; was 4.05, re-index pending |
 | Claude | `internal/wasabistorage/operations.go` | #451 merged | done (2026-11-27): split into 7 files, no function over 8; was 5.93, re-index pending |
-| Claude | `cmd/protocol-check/unit_restart_conformance.go`, `cmd/protocol-check/backup_capture_conformance.go` | `claude/health-protocol-check-r6` | in progress (2026-11-27); scores 5.47 and 6.08 |
-| Claude | `internal/velocityproxy/adapter.go` | `claude/health-velocityproxy` | in progress (2026-11-27); score 6.23 |
-| Claude | `internal/controllerruntime/runtime.go` | `claude/health-controllerruntime` | in progress (2026-11-27); score 6.78 |
+| Claude | `cmd/protocol-check/unit_restart_conformance.go`, `cmd/protocol-check/backup_capture_conformance.go` | #459 merged | done (2026-11-28): evaluator output byte-identical for all 185 fixtures; was 5.47 and 6.08, re-index pending |
+| Claude | `internal/velocityproxy/adapter.go` | #457 merged | done (2026-11-28): split by responsibility; was 6.23, re-index pending |
+| Claude | `internal/controllerruntime/runtime.go` | #458 merged | done (2026-11-28): `Build` and `registerAdapters` split; was 6.78, re-index pending |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
 
 **Next up (2026-11-15, design confirmed with the owner):** secure the bridge for a proxy on a separate machine from the controller. A follow-up branch, starting from the merged start-locks branch — do not start it while that branch is still open.
@@ -94,7 +94,7 @@ Claude resumed on 2026-11-26 with the three Claude rows below. Codex is continui
 
 **Old `claude/r3-*` branches:** all have been deleted from GitHub. Their useful work is on `main`, through Codex's recovery merges and Claude's #445–#447.
 
-**Claude round 6 (2026-11-27):** the three rows above are in progress, one PR each. Don't edit those files until the row says done.
+**Claude round 6 (2026-11-27 to 28):** done. #457–#459 merged after green CI. After this round, every production file still below 7 is Codex-owned.
 
 **Claude round 5 (2026-11-26 to 27):** done. #451–#454 merged with characterization tests first. Known leftovers: `NewEngine` and `protocolError` keep 7 parameters, because callers outside the scope use them (`protocolError` is called from Codex-owned workflows); `fail`, `invokeStep` and `completeReconciledStep` also still take more than 5.
 
