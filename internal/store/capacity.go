@@ -245,24 +245,53 @@ func (s *BoltStore) ObserveCapacity(operationID string, observation CapacityProv
 	})
 }
 
+// capacityObservationRules are the checks validateCapacityObservation applies,
+// in order, each with the problem it reports when the observation fails it.
+var capacityObservationRules = []struct {
+	valid   func(CapacityProviderObservation) bool
+	problem string
+}{
+	{capacityObservationIdentified, "invalid provider observation"},
+	{capacityObservationStateKnown, "unsupported provider observation state"},
+	{presentObservationNamesInstance, "present observation requires provider_instance_id"},
+	{capacityObservationProvisionOrdered, "invalid provider provisioning timestamp"},
+	{capacityObservationInstanceIDValid, "invalid provider_instance_id"},
+}
+
+// validateCapacityObservation reports, as ErrInvalidRecord, the problem of
+// the first rule in capacityObservationRules that observation breaks.
 func validateCapacityObservation(observation CapacityProviderObservation) error {
-	if !validCapacityIdentifier(observation.Provider, 100) || !validCapacityIdentifier(observation.ResourceKey, 240) ||
-		!plausibleObservationTime(observation.ObservedAt) {
-		return fmt.Errorf("%w: invalid provider observation", ErrInvalidRecord)
-	}
-	if !knownCapacityObservationState(observation.State) {
-		return fmt.Errorf("%w: unsupported provider observation state", ErrInvalidRecord)
-	}
-	if observation.State == "present" && !validCapacityIdentifier(observation.ProviderInstanceID, 240) {
-		return fmt.Errorf("%w: present observation requires provider_instance_id", ErrInvalidRecord)
-	}
-	if !capacityObservationProvisionOrdered(observation) {
-		return fmt.Errorf("%w: invalid provider provisioning timestamp", ErrInvalidRecord)
-	}
-	if observation.ProviderInstanceID != "" && !validCapacityIdentifier(observation.ProviderInstanceID, 240) {
-		return fmt.Errorf("%w: invalid provider_instance_id", ErrInvalidRecord)
+	for _, rule := range capacityObservationRules {
+		if !rule.valid(observation) {
+			return fmt.Errorf("%w: %s", ErrInvalidRecord, rule.problem)
+		}
 	}
 	return nil
+}
+
+// capacityObservationIdentified requires a bounded provider and resource key
+// and a plausible observation time.
+func capacityObservationIdentified(observation CapacityProviderObservation) bool {
+	return validCapacityIdentifier(observation.Provider, 100) && validCapacityIdentifier(observation.ResourceKey, 240) &&
+		plausibleObservationTime(observation.ObservedAt)
+}
+
+// capacityObservationStateKnown requires a provider state the store
+// understands.
+func capacityObservationStateKnown(observation CapacityProviderObservation) bool {
+	return knownCapacityObservationState(observation.State)
+}
+
+// presentObservationNamesInstance requires a present observation to carry a
+// valid provider instance ID.
+func presentObservationNamesInstance(observation CapacityProviderObservation) bool {
+	return observation.State != "present" || validCapacityIdentifier(observation.ProviderInstanceID, 240)
+}
+
+// capacityObservationInstanceIDValid requires the provider instance ID, when
+// set, to be valid.
+func capacityObservationInstanceIDValid(observation CapacityProviderObservation) bool {
+	return observation.ProviderInstanceID == "" || validCapacityIdentifier(observation.ProviderInstanceID, 240)
 }
 
 func applyCapacityObservation(current CapacityReservation, observation CapacityProviderObservation) (CapacityReservation, error) {
@@ -928,12 +957,23 @@ func capacityObservationConsistent(r CapacityReservation) bool {
 // the reservation's provider resource, no earlier than its creation, with a
 // valid instance ID when present and one that agrees with the reservation's.
 func capacityObservationMatchesReservation(r CapacityReservation, observation CapacityProviderObservation) bool {
-	if observation.Provider != r.Provider || observation.ResourceKey != r.ResourceKey || observation.ObservedAt.Before(r.CreatedAt) ||
-		(observation.State == "present" && !validCapacityIdentifier(observation.ProviderInstanceID, 240)) {
-		return false
+	return capacityObservationForResource(r, observation) && presentObservationNamesInstance(observation) &&
+		capacityObservationInstanceAgrees(r.ProviderInstanceID, observation)
+}
+
+// capacityObservationForResource requires the observation to be for the
+// reservation's provider and resource key, and no earlier than its creation.
+func capacityObservationForResource(r CapacityReservation, observation CapacityProviderObservation) bool {
+	return observation.Provider == r.Provider && observation.ResourceKey == r.ResourceKey && !observation.ObservedAt.Before(r.CreatedAt)
+}
+
+// capacityObservationInstanceAgrees requires the observed instance ID, when
+// set, to be valid and to equal the reserved one, when that is set.
+func capacityObservationInstanceAgrees(reserved string, observation CapacityProviderObservation) bool {
+	if observation.ProviderInstanceID == "" {
+		return true
 	}
-	return observation.ProviderInstanceID == "" || (validCapacityIdentifier(observation.ProviderInstanceID, 240) &&
-		(r.ProviderInstanceID == "" || r.ProviderInstanceID == observation.ProviderInstanceID))
+	return validCapacityIdentifier(observation.ProviderInstanceID, 240) && (reserved == "" || reserved == observation.ProviderInstanceID)
 }
 
 // capacityObservationProvisionOrdered allows a provisioning time only on a
@@ -977,10 +1017,17 @@ func capacityStateReleased(state CapacityState) bool {
 	return state == CapacityAbsent || state == CapacityDestroyed
 }
 
+// sameCapacityObservation reports whether two observations name the same
+// provider resource and instance in the same state at the same instants.
 func sameCapacityObservation(left, right CapacityProviderObservation) bool {
 	return left.Provider == right.Provider && left.ResourceKey == right.ResourceKey &&
-		left.ProviderInstanceID == right.ProviderInstanceID && left.State == right.State &&
-		left.ObservedAt.Equal(right.ObservedAt) && left.ProvisionedAt.Equal(right.ProvisionedAt)
+		left.ProviderInstanceID == right.ProviderInstanceID && sameCapacityObservationStateAndTimes(left, right)
+}
+
+// sameCapacityObservationStateAndTimes reports whether two observations have
+// the same state and the same observation and provisioning instants.
+func sameCapacityObservationStateAndTimes(left, right CapacityProviderObservation) bool {
+	return left.State == right.State && left.ObservedAt.Equal(right.ObservedAt) && left.ProvisionedAt.Equal(right.ProvisionedAt)
 }
 
 func validCapacityIdentifier(value string, max int) bool {
