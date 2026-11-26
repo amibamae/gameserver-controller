@@ -161,8 +161,10 @@ func decodeTokenSecret(encoded string) []byte {
 	return secret
 }
 
+// zero clears sensitive memory before return. It does not guarantee removal of
+// compiler/runtime copies; it mitigates exposure through the caller's buffer.
 func zero(value []byte) {
-	for index := range value {
-		value[index] = 0
+	for i := range value {
+		value[i] = 0
 	}
 }

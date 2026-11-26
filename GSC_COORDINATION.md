@@ -119,3 +119,42 @@ All plans supported: vc2/vc4/vc6/vc8/vc10/vc11/vc12/vc16/vc32 GiB
 **Conformance tests**: ✅ COMPLETE & PASSING  
 
 **All parallel subagents completed successfully**. Implementation is ready for owner review and approval to push changes to main repository.
+
+## Agent 8 Registration - Quality Engineering & Simulation Harness 🟢
+
+### Assigned Tasks
+
+**Quality Engineering Workstream** (Original Assignment):
+- Improve automated unit, integration, regression, and conformance testing
+- Maintain language-neutral schemas, fixtures, and protocol compatibility checks
+- Improve CI speed and reliability without reducing coverage
+- Eliminate unnecessary repeated schema compilation where safe
+- Identify maintainability problems using Repowise or available static analysis tools
+- Coordinate refactoring tasks with existing file owners
+- Independently review safety-critical pull requests
+- Investigate failing GitHub checks rather than bypassing them
+
+**Simulation Harness Workstream** (Transferred from Agent 9):
+- Implement isolated staging and live-infrastructure test tooling
+- Develop end-to-end test harness covering Vultr, Wasabi, Paper, systemd, and Velocity
+- Test provisioning, readiness, backup, restoration, recovery, migration, rollback, and approved cleanup
+- Implement fault injection for network failures, process crashes, storage failures, and interrupted operations
+- Develop staging deployment and candidate-release validation tooling
+- Verify automated updates and explicit approval requirements for major game upgrades
+- No access to real cloud infrastructure (no charges allowed)
+
+### Primary Ownership
+
+**Shared Responsibility**: CI workflows, shared test harnesses, conformance tooling, staging infrastructure, test fixtures, and quality reporting.
+
+### Branch Status
+
+- Feature branch: `feat/agent8-qa-infrastructure` (local work tracking)
+- All changes committed to branch before coordination system updates
+- No competing coordination system created
+
+### Notes
+
+- Working concurrently with Agent 9 on simulation harness development
+- Respect existing ownership in docs/AGENT_HANDOFF.md
+- All test infrastructure uses fake adapters - no real cloud charges

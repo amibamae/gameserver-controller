@@ -1,7 +1,7 @@
 # AI Use and Development Transparency
 
 **Status:** Public project disclosure  
-**Last reviewed:** 2026-11-12
+**Last reviewed:** 2026-11-25
 
 ## Why I disclose this
 
@@ -25,6 +25,8 @@ Measured from the git history and GitHub on 2026-11-12, from the first commit (2
 | Commits with a `Co-Authored-By: Claude …` trailer | 37 |
 
 Codex commits are recorded under my name without a trailer, so the commit authors alone understate AI use. Treat the branch prefix as the marker. Claude Code commits carry the `Co-Authored-By` trailer.
+
+In addition to cloud agents, qwen3.5:9b and qwen3.8 (local models) have written a significant portion of this project's database layer, schema migrations, protocol conformance vectors, and integration code. These local model sessions appear in the `qwen/…` branches and are not marked with special trailers—they're part of the "other branches" category above. All models work from my instructions, following the same [CLAUDE.md](../CLAUDE.md) rules.
 
 To refresh the counts:
 
