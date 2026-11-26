@@ -359,26 +359,37 @@ func (b *FileServerBackupTransferBroker) clearPriorStepAttempts(operationID, ste
 		return err
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "attempt-") {
+		if !priorAttemptEntry(entry, currentAttempt) {
 			continue
 		}
-		attempt, parseErr := strconv.Atoi(strings.TrimPrefix(entry.Name(), "attempt-"))
-		if parseErr != nil || attempt < 1 || attempt >= currentAttempt {
-			continue
-		}
-		path := filepath.Join(stepDirectory, entry.Name())
-		info, statErr := os.Lstat(path)
-		if statErr != nil {
-			return statErr
-		}
-		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return errors.New("prior stream attempt path is not a real directory")
-		}
-		if err := os.RemoveAll(path); err != nil {
+		if err := removePriorAttempt(filepath.Join(stepDirectory, entry.Name())); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// priorAttemptEntry reports whether entry is an attempt-N directory with
+// 1 <= N < currentAttempt.
+func priorAttemptEntry(entry os.DirEntry, currentAttempt int) bool {
+	if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "attempt-") {
+		return false
+	}
+	attempt, err := strconv.Atoi(strings.TrimPrefix(entry.Name(), "attempt-"))
+	return err == nil && attempt >= 1 && attempt < currentAttempt
+}
+
+// removePriorAttempt removes an earlier attempt directory after checking,
+// without following links, that it is still a real directory.
+func removePriorAttempt(path string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("prior stream attempt path is not a real directory")
+	}
+	return os.RemoveAll(path)
 }
 
 func (b *FileServerBackupTransferBroker) operationDirectory(operationID string) string {

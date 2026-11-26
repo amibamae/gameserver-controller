@@ -56,3 +56,30 @@ func TestBrokerR4ClearPriorStepAttempts(t *testing.T) {
 		brokerR3WantContent(t, filepath.Join(target, "keep"), "keep")
 	})
 }
+
+// TestBrokerR4RemovePriorAttemptGuards covers the checks that only a change
+// between listing and removal can reach through clearPriorStepAttempts.
+func TestBrokerR4RemovePriorAttemptGuards(t *testing.T) {
+	const notReal = "prior stream attempt path is not a real directory"
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing")
+	_, wantMissing := os.Lstat(missing)
+	brokerR3WantErr(t, removePriorAttempt(missing), wantMissing.Error())
+
+	file := filepath.Join(dir, "file")
+	brokerR3Write(t, file, []byte("file"))
+	brokerR3WantErr(t, removePriorAttempt(file), notReal)
+	brokerR3Exists(t, file, true)
+
+	target := filepath.Join(dir, "target")
+	brokerR3Write(t, filepath.Join(target, "keep"), []byte("keep"))
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	brokerR3WantErr(t, removePriorAttempt(link), notReal)
+	brokerR3WantContent(t, filepath.Join(target, "keep"), "keep")
+
+	brokerR3WantResult(t, removePriorAttempt(target), "")
+	brokerR3Exists(t, target, false)
+}
