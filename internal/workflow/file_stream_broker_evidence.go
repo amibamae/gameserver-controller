@@ -61,7 +61,7 @@ func (b *FileServerBackupTransferBroker) verifyCompletedStream(streams stepStrea
 	if err != nil {
 		return errors.New("stream completion evidence is missing")
 	}
-	if !stagedRecordMatches(record, operation, step, expectation, streams.direction, streams.storesBytes) ||
+	if !stagedRecordMatches(record, streams, expectation) ||
 		!recordMeasuresExpectation(record, expectation) {
 		return errors.New("stream completion evidence does not match the exact operation, step, data set, size, and checksum")
 	}

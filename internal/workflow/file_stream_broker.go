@@ -179,7 +179,8 @@ func (b *FileServerBackupTransferBroker) verifyInvocationStream(
 		return err
 	}
 	record, err := readStagedStreamRecord(metaPath)
-	if err != nil || !stagedRecordMatches(record, operation, step, expectation, direction, storesBytes) ||
+	streams := stepStreams{operation: operation, step: step, direction: direction, storesBytes: storesBytes}
+	if err != nil || !stagedRecordMatches(record, streams, expectation) ||
 		!invocationRecordComplete(record, expectation.MaximumBytes) {
 		return errors.New("backup stream was not fully consumed or did not match its exact integrity expectation")
 	}
@@ -259,7 +260,7 @@ func (b *FileServerBackupTransferBroker) verifySourceArtifact(
 		return errors.New("stream source step is not identified")
 	}
 	sourceStep := operationStep(operation, sourceStepID)
-	if sourceStep.StepID == "" || sourceStep.Status != protocolstate.StepSucceeded || sourceStep.Attempt < 1 {
+	if !completedSourceStep(sourceStep) {
 		return errors.New("stream source step has no completed attempt")
 	}
 	dataPath, metaPath, err := b.streamPaths(operation.OperationID, sourceStepID, sourceStep.Attempt, expectation.DataSetID)
@@ -267,33 +268,74 @@ func (b *FileServerBackupTransferBroker) verifySourceArtifact(
 		return err
 	}
 	record, err := readStagedStreamRecord(metaPath)
-	if err != nil || record.OperationID != operation.OperationID || record.StepID != sourceStepID ||
-		record.Attempt != sourceStep.Attempt || record.EnvironmentID != operation.Target.EnvironmentID ||
-		record.DataSetID != expectation.DataSetID || record.Direction != "adapter_to_controller" ||
-		!record.StoresBytes || !record.Complete || record.ActualSize != expectation.SizeBytes ||
-		record.ActualSHA256 != expectation.SHA256 || record.MaximumBytes < expectation.SizeBytes ||
-		record.ActualSize > expectation.MaximumBytes {
+	if err != nil || !sourceRecordMatches(record, operation, sourceStep, expectation) {
 		return errors.New("verified staged source bytes are unavailable or do not match the transfer expectation")
 	}
-	size, digest, err := hashFileBounded(dataPath, expectation.MaximumBytes)
-	if err != nil || size != expectation.SizeBytes || digest != expectation.SHA256 {
+	if !stagedBytesMatch(dataPath, expectation.MaximumBytes, expectation.SizeBytes, expectation.SHA256) {
 		return errors.New("staged source bytes failed independent size or checksum verification")
 	}
 	return nil
 }
 
-func stagedRecordMatches(
-	record stagedStreamRecord, operation store.OperationRecord, step store.OperationStep,
-	expectation ServerBackupStreamExpectation, direction string, storesBytes bool,
+func completedSourceStep(step store.OperationStep) bool {
+	return step.StepID != "" && step.Status == protocolstate.StepSucceeded && step.Attempt >= 1
+}
+
+// sourceRecordMatches reports whether a source step's record describes
+// completed staged bytes of exactly the expected data set, size and checksum.
+// sourceStep was looked up by its ID, so its StepID is the source step ID.
+func sourceRecordMatches(
+	record stagedStreamRecord, operation store.OperationRecord, sourceStep store.OperationStep,
+	expectation ServerBackupStreamExpectation,
 ) bool {
-	return record.OperationID == operation.OperationID && record.StepID == step.StepID &&
-		record.Attempt == step.Attempt && record.AdapterID == step.AdapterID &&
-		record.Capability == step.CapabilityName && record.EnvironmentID == operation.Target.EnvironmentID &&
-		record.DataSetID == expectation.DataSetID && record.Direction == direction &&
-		record.MaximumBytes == expectation.MaximumBytes && record.InputSHA256 == streamInputDigest(effectiveStepInput(step)) &&
-		record.StoresBytes == storesBytes && !record.ExpiresAt.IsZero() &&
-		(record.ExpectedSize < 0 || record.ExpectedSize == expectation.SizeBytes) &&
-		(record.ExpectedSHA256 == "" || record.ExpectedSHA256 == expectation.SHA256)
+	return recordOfStepAttempt(record, operation, sourceStep) &&
+		recordInScope(record, operation, expectation.DataSetID, "adapter_to_controller") &&
+		sourceRecordMeasured(record, expectation)
+}
+
+// sourceRecordMeasured reports whether a record stored complete bytes that
+// measured exactly the expectation and fit both its own and the expected
+// maximum.
+func sourceRecordMeasured(record stagedStreamRecord, expectation ServerBackupStreamExpectation) bool {
+	return record.StoresBytes && recordMeasuresExpectation(record, expectation) &&
+		record.MaximumBytes >= expectation.SizeBytes && record.ActualSize <= expectation.MaximumBytes
+}
+
+// stagedRecordMatches reports whether a record was issued for exactly this
+// step attempt, adapter, data set, direction, input and expectation.
+func stagedRecordMatches(record stagedStreamRecord, streams stepStreams, expectation ServerBackupStreamExpectation) bool {
+	return recordOfStepAttempt(record, streams.operation, streams.step) &&
+		recordOfAdapterCall(record, streams.step) &&
+		recordInScope(record, streams.operation, expectation.DataSetID, streams.direction) &&
+		recordIssuedFor(record, streams, expectation)
+}
+
+func recordOfStepAttempt(record stagedStreamRecord, operation store.OperationRecord, step store.OperationStep) bool {
+	return record.OperationID == operation.OperationID && record.StepID == step.StepID && record.Attempt == step.Attempt
+}
+
+func recordOfAdapterCall(record stagedStreamRecord, step store.OperationStep) bool {
+	return record.AdapterID == step.AdapterID && record.Capability == step.CapabilityName
+}
+
+func recordInScope(record stagedStreamRecord, operation store.OperationRecord, dataSetID, direction string) bool {
+	return record.EnvironmentID == operation.Target.EnvironmentID && record.DataSetID == dataSetID && record.Direction == direction
+}
+
+// recordIssuedFor reports whether a record carries the issue-time bounds,
+// input digest, storage mode, expiry and expectation of this stream.
+func recordIssuedFor(record stagedStreamRecord, streams stepStreams, expectation ServerBackupStreamExpectation) bool {
+	return record.MaximumBytes == expectation.MaximumBytes &&
+		record.InputSHA256 == streamInputDigest(effectiveStepInput(streams.step)) &&
+		record.StoresBytes == streams.storesBytes && recordExpectationCompatible(record, expectation)
+}
+
+// recordExpectationCompatible reports whether a record has an expiry and
+// expected size and checksum that are unknown or equal to the expectation's.
+func recordExpectationCompatible(record stagedStreamRecord, expectation ServerBackupStreamExpectation) bool {
+	sizeCompatible := record.ExpectedSize < 0 || record.ExpectedSize == expectation.SizeBytes
+	checksumCompatible := record.ExpectedSHA256 == "" || record.ExpectedSHA256 == expectation.SHA256
+	return !record.ExpiresAt.IsZero() && sizeCompatible && checksumCompatible
 }
 
 func (b *FileServerBackupTransferBroker) streamPaths(operationID, stepID string, attempt int, dataSetID string) (string, string, error) {
