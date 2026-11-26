@@ -54,7 +54,7 @@ The owner's goal is a repowise average health of **7–8**. The method:
 
 ### Who owns what (check this before you start anything)
 
-Claude is paused. Codex is continuing the code-health backlog. Keep unfinished Claude scopes on hold when their work is unavailable. Check the published branches and open PRs before resuming any scope.
+Claude resumed on 2026-11-26 with the three Claude rows below. Codex is continuing the rest of the code-health backlog. Check the published branches and open PRs before resuming any scope.
 
 | Owner | Files | Branch or PR | Status (2026-11-14) |
 |---|---|---|---|
@@ -67,10 +67,11 @@ Claude is paused. Codex is continuing the code-health backlog. Keep unfinished C
 | Codex | `internal/store/logical_servers.go` | #254 merged | done (8.47) |
 | Codex | `internal/workflow/server_provision*.go` | `codex/finish-provision-health` | Continuing the five published Claude commits from `3f68309`; local worktree `/private/tmp/gsc-finish-provision-health`; checker passed; local provision score 6.25 → 7.17 after extracting plan, preconditions, reconciliation, completion and results; extracted files score 8.58–10.00 |
 | Codex | `internal/workflow/server_restore*.go` | `codex/finish-restore-health` | Five published Claude commits rebased locally in `/private/tmp/gsc-finish-restore-health`; focused restore suite and checker passed after correcting schema-first test expectations; score and full validation pending |
-| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | `claude/r3-server-start-stop` | WIP pushed (1 commit, tests only), unfinished; no PR |
-| Claude | `internal/workflow/file_stream_broker*.go` | `claude/r3-file-stream-broker` | WIP pushed (4 commits), unfinished; no PR |
-| Claude | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | WIP pushed (12 commits), unfinished; no PR |
-| Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | WIP pushed (10 commits), unfinished; no PR |
+| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | `claude/health-start-stop` | in progress (2026-11-26); scores 5.61 and 4.84 |
+| Claude | `internal/workflow/file_stream_broker*.go` | `claude/health-file-stream-broker` | in progress (2026-11-26); score 4.72 |
+| Claude | `internal/store/record.go` | `claude/health-store-record` | in progress (2026-11-26); score 5.09, mostly churn |
+| Codex | `internal/store/bolt.go` | `codex/recover-claude-store` merged | done (9.0) |
+| Codex | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `codex/recover-claude-storage` merged | done (9.0 each) |
 | Codex | `cmd/complexity-check/*`, its CI step | #260 merged | checker runs on PRs |
 | OpenCode | `plugins/velocity/src/**` | `feat/velocity-bridge-disable-start-locks` | **done locally** (2026-11-15): the 3 hard start-up locks (token-file perms, loopback bind, fallback in `velocity.toml`) are now disableable via a `[security]` table — `enforce-token-permissions` (default on), `enforce-loopback-bind` (default on), `enforce-fallback` (default **off**, since the controller registers the fallback backend at runtime). 41 tests green. 5 commits: `4049b0b`→`2cb8b4a`→`29b836e`→`6643885`→`6e7d2a0`. Owner-authorized to review and merge once green; review in progress, not yet pushed. |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
@@ -84,14 +85,9 @@ Claude is paused. Codex is continuing the code-health backlog. Keep unfinished C
 - **Hot rotation (owner requirement, high availability):** the certificate, key, and CA are re-read from disk without a restart. A `TlsMaterialManager` watches the paths, validates a new set atomically (parse, key matches certificate, expiry, permissions), and swaps the `SSLContext`/`HttpsConfigurator` on the already-listening `HttpServer` with a single `setHttpsConfigurator` call; existing connections finish on the old material. A bad or world-readable new file is rejected and the last good material is kept. Rotation has a zero-downtime overlap window: during a swap the plugin accepts the union of old and new CA anchors (and the controller may present either old or new client certificate) until the operator removes the old material; a failed rotation is therefore always recoverable. The Go client rotates the same way: its transport's `GetClientCertificate` callback re-reads the keypair per handshake and the CA bundle is re-read alongside it. Let's Encrypt auto-renewal is just "certbot writes the files, the plugin notices".
 - **Scope:** plugin `[tls]` table + `TlsMaterialManager` with start-up and per-swap permission checks; Go client client-cert transport (cert/key from the credential accessor, CA file re-read); docs — `docs/PROXY_BRIDGE_API.md` (topologies A and B with the no-plain-inner-hop rule), `docs/CONFIGURATION.md` (TLS setup and rotation procedure). Tests: certificate/key permission checks, mTLS accept/reject, rotation keeps an existing connection working, a corrupted new file leaves the old material in place.
 
-**Dropped Claude WIP, kept for reference only:** `claude/r3-server-backup`, `claude/r3-server-destroy`, `claude/r3-supervised-pilot` and `claude/r3-controller-setup` hold unfinished work on Codex-owned files, based on an old `main`. Do not merge them. Codex may read them for ideas or delete them.
+**Old `claude/r3-*` branches:** all have been deleted from GitHub. Their useful work was recovered into `main` by Codex or is being continued on the `claude/health-*` branches above.
 
-**Claude session paused (2026-11-14):** its six round-3 agents stopped before finishing. Their unfinished work was committed as `wip:` and pushed to the `claude/r3-*` branches above. Those commits are unreviewed, and their tests may not pass. To continue a row:
-1. Check out its branch and rebase onto `main`.
-2. Run every check. Characterization tests must pass on the old code before any refactor commit; check the branch's commit order.
-3. Finish the work and open the PR.
-
-If a branch looks wrong, redo it from `main` instead. The owner decides whether Codex or the resumed Claude session takes these rows; update the table when that happens.
+**Claude round 4 (2026-11-26):** each `claude/health-*` row is one PR. It starts from `main`, puts characterization tests before the refactor, and must pass `complexity-check -base origin/main`. Don't edit those files until the PR merges and the row says done.
 
 Claude's earlier backup, destroy, supervised-pilot and controller-setup agents were stopped unpublished, so their local work is dropped and those files are Codex's.
 
