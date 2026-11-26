@@ -262,14 +262,10 @@ type capabilityHandler func(context.Context, json.RawMessage) (any, adapter.Outc
 
 func (a *Adapter) handlers() map[string]capabilityHandler {
 	return map[string]capabilityHandler{
-		"integration.proxy.backend.inspect":  a.inspectBackend,
-		"integration.proxy.backend.register": a.registerBackend,
-		"integration.proxy.backend.drain": func(ctx context.Context, raw json.RawMessage) (any, adapter.Outcome, error) {
-			return a.changeBackend(ctx, raw, a.bridge.DrainBackend, Draining)
-		},
-		"integration.proxy.backend.unregister": func(ctx context.Context, raw json.RawMessage) (any, adapter.Outcome, error) {
-			return a.changeBackend(ctx, raw, a.bridge.UnregisterBackend, Unregistered)
-		},
+		"integration.proxy.backend.inspect":         a.inspectBackend,
+		"integration.proxy.backend.register":        a.registerBackend,
+		"integration.proxy.backend.drain":           a.changeHandler(a.bridge.DrainBackend, Draining),
+		"integration.proxy.backend.unregister":      a.changeHandler(a.bridge.UnregisterBackend, Unregistered),
 		"integration.proxy.backend.players.inspect": a.inspectPlayers,
 		"integration.proxy.session.inspect":         a.inspectSession,
 		"integration.proxy.cohort.inspect":          a.inspectCohort,
@@ -391,6 +387,43 @@ func (a *Adapter) boundState(ctx context.Context, target BackendTarget, observed
 	}
 }
 
+// backendView is the protocol state of the exact requested instance, bound
+// from one proxy observation.
+type backendView struct {
+	State       RegistrationState
+	Routability string
+	ObservedAt  time.Time
+}
+
+// viewBackend binds an observation to the target with boundState and stamps
+// it with the observation time, or the adapter's clock when that is missing.
+func (a *Adapter) viewBackend(ctx context.Context, target BackendTarget, observed BackendObservation) backendView {
+	state, routability := a.boundState(ctx, target, observed)
+	return backendView{State: state, Routability: routability, ObservedAt: a.observedAt(observed.ObservedAt)}
+}
+
+// boundToInstance reports whether the backend is registered or draining for
+// the exact requested instance.
+func (view backendView) boundToInstance() bool {
+	return view.State == Registered || view.State == Draining
+}
+
+// confirms reports whether the view shows the wanted state; a registration
+// is confirmed only once it is also routable.
+func (view backendView) confirms(want RegistrationState) bool {
+	return view.State == want && (want != Registered || view.Routability == "routable")
+}
+
+// knownSessionCount copies the observed active session count, or returns nil
+// when the proxy reported none or a negative count.
+func knownSessionCount(observed BackendObservation) *int64 {
+	if observed.ActiveSessions == nil || *observed.ActiveSessions < 0 {
+		return nil
+	}
+	count := *observed.ActiveSessions
+	return &count
+}
+
 func (a *Adapter) observedAt(observed time.Time) time.Time {
 	if observed.IsZero() {
 		return a.now().UTC()
@@ -407,11 +440,10 @@ func (a *Adapter) inspectBackend(ctx context.Context, raw json.RawMessage) (any,
 	if err != nil {
 		return backendStateOutput{Target: input.Target, RegistrationState: string(Unknown), Routability: "unknown", ObservedAt: a.now().UTC()}, adapter.OutcomeCompleted, nil
 	}
-	state, routability := a.boundState(ctx, input.Target, observed)
-	output := backendStateOutput{Target: input.Target, RegistrationState: string(state), Routability: routability, ObservedAt: a.observedAt(observed.ObservedAt)}
-	if (state == Registered || state == Draining) && observed.ActiveSessions != nil && *observed.ActiveSessions >= 0 {
-		count := *observed.ActiveSessions
-		output.ActiveSessionCount = &count
+	view := a.viewBackend(ctx, input.Target, observed)
+	output := backendStateOutput{Target: input.Target, RegistrationState: string(view.State), Routability: view.Routability, ObservedAt: view.ObservedAt}
+	if view.boundToInstance() {
+		output.ActiveSessionCount = knownSessionCount(observed)
 	}
 	return output, adapter.OutcomeCompleted, nil
 }
@@ -465,6 +497,14 @@ func (a *Adapter) registerBackend(ctx context.Context, raw json.RawMessage) (any
 	return a.applyAndConfirm(ctx, input.Target, register, Registered)
 }
 
+// changeHandler returns the handler for a backend change that is confirmed
+// once the proxy reports the wanted state.
+func (a *Adapter) changeHandler(action func(context.Context, BackendTarget) error, want RegistrationState) capabilityHandler {
+	return func(ctx context.Context, raw json.RawMessage) (any, adapter.Outcome, error) {
+		return a.changeBackend(ctx, raw, action, want)
+	}
+}
+
 func (a *Adapter) changeBackend(ctx context.Context, raw json.RawMessage, action func(context.Context, BackendTarget) error, want RegistrationState) (any, adapter.Outcome, error) {
 	input, err := decodeTargeted[backendInput](a, raw)
 	if err != nil {
@@ -478,10 +518,14 @@ func (a *Adapter) changeBackend(ctx context.Context, raw json.RawMessage, action
 func (a *Adapter) rejected(ctx context.Context, target BackendTarget, reason string) backendActionOutput {
 	output := a.unobservedAction(target, "rejected", reason)
 	if observed, err := a.bridge.InspectBackend(ctx, target.BackendID); err == nil {
-		state, routability := a.boundState(ctx, target, observed)
-		output.RegistrationState, output.Routability, output.ObservedAt = string(state), routability, a.observedAt(observed.ObservedAt)
+		output.show(a.viewBackend(ctx, target, observed))
 	}
 	return output
+}
+
+// show copies a bound backend view into the action output.
+func (output *backendActionOutput) show(view backendView) {
+	output.RegistrationState, output.Routability, output.ObservedAt = string(view.State), view.Routability, view.ObservedAt
 }
 
 // unobservedAction reports a request outcome with unknown backend state,
@@ -503,10 +547,10 @@ func (a *Adapter) applyAndConfirm(ctx context.Context, target BackendTarget, act
 	if err != nil {
 		return a.unobservedAction(target, "accepted", "confirmation_unavailable"), adapter.OutcomeAccepted, nil
 	}
-	state, routability := a.boundState(ctx, target, observed)
-	output := backendActionOutput{Target: target, RegistrationState: string(state), Routability: routability, ObservedAt: a.observedAt(observed.ObservedAt)}
-	confirmed := state == want && (want != Registered || routability == "routable")
-	if confirmed {
+	view := a.viewBackend(ctx, target, observed)
+	output := backendActionOutput{Target: target}
+	output.show(view)
+	if view.confirms(want) {
 		output.RequestOutcome = "confirmed"
 		return output, adapter.OutcomeCompleted, nil
 	}
@@ -527,17 +571,18 @@ func (a *Adapter) inspectPlayers(ctx context.Context, raw json.RawMessage) (any,
 	}
 	unknown := playersOutput{Target: input.Target, ObservationState: "unknown"}
 	observed, err := a.bridge.InspectBackend(ctx, input.Target.BackendID)
-	if err != nil || observed.ActiveSessions == nil || *observed.ActiveSessions < 0 || observed.ObservedAt.IsZero() {
+	count := knownSessionCount(observed)
+	if err != nil || count == nil || observed.ObservedAt.IsZero() {
 		return unknown, adapter.OutcomeCompleted, nil
 	}
-	if state, _ := a.boundState(ctx, input.Target, observed); state != Registered && state != Draining {
+	if !a.viewBackend(ctx, input.Target, observed).boundToInstance() {
 		return unknown, adapter.OutcomeCompleted, nil
 	}
 	if !a.fresh(observed.ObservedAt, input.MaximumAgeSeconds) {
 		return unknown, adapter.OutcomeCompleted, nil
 	}
-	count, at := *observed.ActiveSessions, observed.ObservedAt.UTC()
-	return playersOutput{Target: input.Target, ObservationState: "observed", ActiveSessionCount: &count, ObservedAt: &at}, adapter.OutcomeCompleted, nil
+	at := observed.ObservedAt.UTC()
+	return playersOutput{Target: input.Target, ObservationState: "observed", ActiveSessionCount: count, ObservedAt: &at}, adapter.OutcomeCompleted, nil
 }
 
 // fresh reports whether an observation is not in the future and no older
