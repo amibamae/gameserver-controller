@@ -74,10 +74,10 @@ Claude resumed on 2026-11-26 with the three Claude rows below. Codex is continui
 | Codex | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `codex/recover-claude-storage` merged | done (9.0 each) |
 | Codex | `cmd/complexity-check/*`, its CI step | #260 merged | checker runs on PRs |
 | OpenCode | `plugins/velocity/src/**` | `feat/velocity-bridge-disable-start-locks` | **done locally** (2026-11-15): the 3 hard start-up locks (token-file perms, loopback bind, fallback in `velocity.toml`) are now disableable via a `[security]` table — `enforce-token-permissions` (default on), `enforce-loopback-bind` (default on), `enforce-fallback` (default **off**, since the controller registers the fallback backend at runtime). 41 tests green. 5 commits: `4049b0b`→`2cb8b4a`→`29b836e`→`6643885`→`6e7d2a0`. Owner-authorized to review and merge once green; review in progress, not yet pushed. |
-| Claude | `internal/store/capacity.go` | `claude/health-store-capacity` | in progress (2026-11-26); score 3.61 |
-| Claude | `internal/adapter/adapter.go`, `internal/captureinvoke/runtime.go` | `claude/health-adapter-invoke` | in progress (2026-11-26); scores 3.90 and 3.93 |
-| Claude | `internal/workflow/engine.go` | `claude/health-workflow-engine` | in progress (2026-11-26); score 4.05 |
-| Claude | `internal/wasabistorage/operations.go` | `claude/health-wasabi-operations` | in progress (2026-11-26); score 5.93 |
+| Claude | `internal/store/capacity.go` | #452 merged | done (2026-11-27): split into 9 files, no function over 7; was 3.61, re-index pending |
+| Claude | `internal/adapter/adapter.go`, `internal/captureinvoke/runtime.go` | #454 merged | done (2026-11-27): no function over 9; was 3.90 and 3.93, re-index pending |
+| Claude | `internal/workflow/engine.go` | #453 merged | done (2026-11-27): split into 11 files, no function over 10; was 4.05, re-index pending |
+| Claude | `internal/wasabistorage/operations.go` | #451 merged | done (2026-11-27): split into 7 files, no function over 8; was 5.93, re-index pending |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
 
 **Next up (2026-11-15, design confirmed with the owner):** secure the bridge for a proxy on a separate machine from the controller. A follow-up branch, starting from the merged start-locks branch — do not start it while that branch is still open.
@@ -91,7 +91,7 @@ Claude resumed on 2026-11-26 with the three Claude rows below. Codex is continui
 
 **Old `claude/r3-*` branches:** all have been deleted from GitHub. Their useful work is on `main`, through Codex's recovery merges and Claude's #445–#447.
 
-**Claude round 5 (2026-11-26):** the four rows above are in progress, one PR each. Don't edit those files until the row says done.
+**Claude round 5 (2026-11-26 to 27):** done. #451–#454 merged with characterization tests first. Known leftovers: `NewEngine` and `protocolError` keep 7 parameters, because callers outside the scope use them (`protocolError` is called from Codex-owned workflows); `fail`, `invokeStep` and `completeReconciledStep` also still take more than 5.
 
 **Claude round 4 (2026-11-26):** done. #445–#447 merged with tests written first, and `complexity-check -base origin/main` passed. Known leftovers: five 9–13 line clone findings between matching start and stop files (same shape, different messages and types), and `exactCapability` keeps 7 parameters because Codex-owned workflows call it.
 
