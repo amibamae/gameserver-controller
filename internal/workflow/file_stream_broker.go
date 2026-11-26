@@ -63,29 +63,55 @@ type stagedStreamRecord struct {
 // staged bytes across operations; individual transfer references remain limited
 // by their trusted profile.
 func NewFileServerBackupTransferBroker(root string, maxStagingBytes int64, transferLifetime, artifactLifetime time.Duration) (*FileServerBackupTransferBroker, error) {
-	if root == "" || maxStagingBytes < 1 || maxStagingBytes > 9007199254740991 ||
-		transferLifetime <= 0 || transferLifetime > 5*time.Minute ||
-		artifactLifetime < transferLifetime {
+	if !validBrokerConfig(root, maxStagingBytes, transferLifetime, artifactLifetime) {
 		return nil, errors.New("private staging path, bounded operation bytes, transfer lifetime (1ns..5m), and longer artifact lifetime are required")
 	}
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(abs, 0700); err != nil {
-		return nil, fmt.Errorf("create private stream staging path: %w", err)
-	}
-	info, err := os.Lstat(abs)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return nil, errors.New("stream staging path must be a real directory")
-	}
-	if info.Mode().Perm()&0077 != 0 {
-		return nil, errors.New("stream staging directory must not be accessible by group or other users")
+	if err := ensurePrivateStagingDirectory(abs); err != nil {
+		return nil, err
 	}
 	return &FileServerBackupTransferBroker{
 		root: abs, maxStagingBytes: maxStagingBytes,
 		transferLifetime: transferLifetime, artifactLifetime: artifactLifetime,
 	}, nil
+}
+
+// maxSafeStagingBytes is the largest integer a JSON number carries exactly.
+const maxSafeStagingBytes = 9007199254740991
+
+// maxTransferLifetime bounds how long one issued stream reference lives.
+const maxTransferLifetime = 5 * time.Minute
+
+// validBrokerConfig reports whether the staging path is named, the byte
+// budget is 1..maxSafeStagingBytes, and the lifetimes are valid.
+func validBrokerConfig(root string, maxStagingBytes int64, transferLifetime, artifactLifetime time.Duration) bool {
+	return root != "" && maxStagingBytes >= 1 && maxStagingBytes <= maxSafeStagingBytes &&
+		validStreamLifetimes(transferLifetime, artifactLifetime)
+}
+
+// validStreamLifetimes reports whether the transfer lifetime is
+// 1ns..maxTransferLifetime and staged artifacts live at least as long.
+func validStreamLifetimes(transferLifetime, artifactLifetime time.Duration) bool {
+	return transferLifetime > 0 && transferLifetime <= maxTransferLifetime && artifactLifetime >= transferLifetime
+}
+
+// ensurePrivateStagingDirectory creates path if needed and checks that it is
+// a real directory that only its owner can access.
+func ensurePrivateStagingDirectory(path string) error {
+	if err := os.MkdirAll(path, 0700); err != nil {
+		return fmt.Errorf("create private stream staging path: %w", err)
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("stream staging path must be a real directory")
+	}
+	if info.Mode().Perm()&0077 != 0 {
+		return errors.New("stream staging directory must not be accessible by group or other users")
+	}
+	return nil
 }
 
 // IssueStepStreamTransfers creates one-use references and direct in-process
