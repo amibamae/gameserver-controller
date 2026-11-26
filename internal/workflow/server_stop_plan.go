@@ -11,14 +11,7 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
-var stopPlanRule = runtimePlanRule{
-	operationType:  "server.stop",
-	initError:      "initialized stop workflow and context are required",
-	operationError: "server.stop operation and loaded protocol version are required",
-	label:          "stop plan",
-	state:          protocolstate.ServerReady,
-	stateError:     "server.stop requires a ready logical server with a managed instance",
-}
+var stopPlanRule = newRuntimePlanRule("stop", protocolstate.ServerReady)
 
 // BuildPlan pins the exact instance, runtime unit, release, and capabilities
 // before the first dispatch. The first implementation supports graceful stop;

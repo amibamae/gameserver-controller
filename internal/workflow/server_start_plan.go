@@ -11,14 +11,7 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
-var startPlanRule = runtimePlanRule{
-	operationType:  "server.start",
-	initError:      "initialized start workflow and context are required",
-	operationError: "server.start operation and loaded protocol version are required",
-	label:          "start plan",
-	state:          protocolstate.ServerStopped,
-	stateError:     "server.start requires a stopped logical server with a managed instance",
-}
+var startPlanRule = newRuntimePlanRule("start", protocolstate.ServerStopped)
 
 // BuildPlan resolves the server's current instance and trusted release profile
 // into a durable, schema-checked sequence. All resource references, check IDs,

@@ -39,19 +39,13 @@ func (w *ServerStopWorkflow) handleLifecycleReady(next store.LogicalServer, oper
 
 // handleLifecycleStopping handles the stopping state for server stop.
 func (w *ServerStopWorkflow) handleLifecycleStopping(next store.LogicalServer, operation store.OperationRecord, saveStep store.OperationStep) (store.LogicalServer, bool, error) {
-	if operation.Status == protocolstate.OperationSucceeded {
-		if !hasValidStopResult(operation.Result, operation.Target, next.InstanceRef, w.schemas) {
-			return store.LogicalServer{}, false, errors.New("terminal server.stop result lacks exact save and termination evidence")
-		}
-		next.LifecycleState = protocolstate.ServerStopped
-		next.DesiredState = "stopped"
-		return next, true, nil
-	}
-	if operation.Status == protocolstate.OperationFailed {
-		next.LifecycleState = protocolstate.ServerFailed
-		return next, true, nil
-	}
-	return next, false, nil
+	return projectTerminal(next, operation.Status, terminalProjection{
+		validResult: func() bool {
+			return hasValidStopResult(operation.Result, operation.Target, next.InstanceRef, w.schemas)
+		},
+		invalidResult: "terminal server.stop result lacks exact save and termination evidence",
+		succeeded:     protocolstate.ServerStopped, desired: "stopped", failed: protocolstate.ServerFailed,
+	})
 }
 
 func hasValidStopResult(raw json.RawMessage, target store.OperationTarget, instanceRef json.RawMessage, schemas schemaRuntime) bool {

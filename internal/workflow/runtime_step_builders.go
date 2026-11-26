@@ -100,6 +100,20 @@ type runtimePlanRule struct {
 	stateError     string
 }
 
+// newRuntimePlanRule derives a plan rule's wording from the workflow verb,
+// for example "start", and the lifecycle state the plan starts from.
+func newRuntimePlanRule(verb string, state protocolstate.ServerState) runtimePlanRule {
+	operationType := "server." + verb
+	return runtimePlanRule{
+		operationType:  operationType,
+		initError:      "initialized " + verb + " workflow and context are required",
+		operationError: operationType + " operation and loaded protocol version are required",
+		label:          verb + " plan",
+		state:          state,
+		stateError:     operationType + " requires a " + string(state) + " logical server with a managed instance",
+	}
+}
+
 // checkPlanRequest refuses a plan request, in order, for a missing context
 // or dependencies (schemas is nil then), a cancelled context, or an operation
 // that is not a well-formed request of the rule's type.

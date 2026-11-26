@@ -37,10 +37,7 @@ func unitStopConfirmed(stopped executionUnitStopResult, unitRef json.RawMessage)
 }
 
 func (w *ServerStopWorkflow) BuildSuccessResult(ctx context.Context, operation store.OperationRecord) (json.RawMessage, error) {
-	if err := w.ValidateCompletion(ctx, operation); err != nil {
-		return nil, err
-	}
-	server, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
+	server, err := loadCompletedServer(ctx, operation, w.ValidateCompletion, w.servers)
 	if err != nil {
 		return nil, err
 	}
@@ -51,18 +48,14 @@ func (w *ServerStopWorkflow) BuildSuccessResult(ctx context.Context, operation s
 	// Planning refused undecodable parameters; the fields that decode here
 	// only select the reported proxy-drain outcome.
 	_ = json.Unmarshal(operation.RequestSnapshot.Parameters, &parameters)
-	result := lifecycleResult{
+	return json.Marshal(lifecycleSuccess{
 		operationType: "server.stop", summary: "Game data was saved and the exact runtime unit was confirmed stopped.",
-		affected: []any{server.Record.InstanceRef},
-	}.document(operation)
-	result["operation_data"] = map[string]any{
-		"server_id": server.Record.ServerID, "environment_id": server.Record.EnvironmentID,
-		"instance_ref": server.Record.InstanceRef, "lifecycle_state": string(protocolstate.ServerStopped),
-		"game_save":   map[string]any{"outcome": "confirmed", "observed_at": save.ObservedAt},
-		"execution":   map[string]any{"unit_ref": stop.UnitRef, "outcome": "stopped", "observed_at": stop.ObservedAt},
-		"proxy_drain": map[string]any{"outcome": stopProxyDrainOutcome(server.Record.NetworkProfile, parameters.drainRequested())},
-	}
-	return json.Marshal(result)
+		state: protocolstate.ServerStopped, data: map[string]any{
+			"game_save":   map[string]any{"outcome": "confirmed", "observed_at": save.ObservedAt},
+			"execution":   map[string]any{"unit_ref": stop.UnitRef, "outcome": "stopped", "observed_at": stop.ObservedAt},
+			"proxy_drain": map[string]any{"outcome": stopProxyDrainOutcome(server.Record.NetworkProfile, parameters.drainRequested())},
+		},
+	}.document(operation, server.Record))
 }
 
 func (w *ServerStopWorkflow) BuildFailureResult(_ context.Context, operation store.OperationRecord, step store.OperationStep, failure json.RawMessage) (json.RawMessage, error) {

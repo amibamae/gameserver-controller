@@ -54,10 +54,7 @@ func startUnitConfirmedRunning(operation store.OperationRecord) bool {
 }
 
 func (w *ServerStartWorkflow) BuildSuccessResult(ctx context.Context, operation store.OperationRecord) (json.RawMessage, error) {
-	if err := w.ValidateCompletion(ctx, operation); err != nil {
-		return nil, err
-	}
-	stored, err := w.servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
+	stored, err := loadCompletedServer(ctx, operation, w.ValidateCompletion, w.servers)
 	if err != nil {
 		return nil, err
 	}
@@ -65,16 +62,10 @@ func (w *ServerStartWorkflow) BuildSuccessResult(ctx context.Context, operation 
 	if err != nil {
 		return nil, err
 	}
-	result := lifecycleResult{
+	return json.Marshal(lifecycleSuccess{
 		operationType: "server.start", summary: "Server runtime started and all required game readiness checks passed.",
-		affected: []any{stored.Record.InstanceRef},
-	}.document(operation)
-	result["operation_data"] = map[string]any{
-		"server_id": stored.Record.ServerID, "environment_id": stored.Record.EnvironmentID,
-		"instance_ref": stored.Record.InstanceRef, "lifecycle_state": string(protocolstate.ServerReady),
-		"readiness_assertion": assertion,
-	}
-	return json.Marshal(result)
+		state: protocolstate.ServerReady, data: map[string]any{"readiness_assertion": assertion},
+	}.document(operation, stored.Record))
 }
 
 func (w *ServerStartWorkflow) BuildFailureResult(_ context.Context, operation store.OperationRecord, step store.OperationStep, failure json.RawMessage) (json.RawMessage, error) {

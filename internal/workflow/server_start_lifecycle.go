@@ -78,19 +78,13 @@ func startVerificationObservedFailure(operation store.OperationRecord) (bool, er
 // projectStartFromValidating makes a validating server ready only with an
 // exact terminal success result, and degrades it when the operation failed.
 func (w *ServerStartWorkflow) projectStartFromValidating(next store.LogicalServer, operation store.OperationRecord) (store.LogicalServer, bool, error) {
-	switch operation.Status {
-	case protocolstate.OperationSucceeded:
-		if !hasValidStartResult(operation.Result, operation.Target, next.InstanceRef, w.schemas) {
-			return store.LogicalServer{}, false, errors.New("terminal server.start result lacks its exact readiness assertion")
-		}
-		next.LifecycleState = protocolstate.ServerReady
-		next.DesiredState = "running"
-		return next, true, nil
-	case protocolstate.OperationFailed:
-		next.LifecycleState = protocolstate.ServerDegraded
-		return next, true, nil
-	}
-	return next, false, nil
+	return projectTerminal(next, operation.Status, terminalProjection{
+		validResult: func() bool {
+			return hasValidStartResult(operation.Result, operation.Target, next.InstanceRef, w.schemas)
+		},
+		invalidResult: "terminal server.start result lacks its exact readiness assertion",
+		succeeded:     protocolstate.ServerReady, desired: "running", failed: protocolstate.ServerDegraded,
+	})
 }
 
 func hasValidStartResult(raw json.RawMessage, target store.OperationTarget, instanceRef json.RawMessage, schemas schemaRuntime) bool {

@@ -197,6 +197,69 @@ func (r lifecycleResult) document(operation store.OperationRecord) map[string]an
 	}
 }
 
+// loadCompletedServer validates completion, then loads the target server the
+// success result reports.
+func loadCompletedServer(ctx context.Context, operation store.OperationRecord, validate func(context.Context, store.OperationRecord) error,
+	servers store.LifecycleOperationStore) (store.StoredLogicalServer, error) {
+	if err := validate(ctx, operation); err != nil {
+		return store.StoredLogicalServer{}, err
+	}
+	return servers.GetLogicalServer(operation.Target.EnvironmentID, operation.Target.ServerID)
+}
+
+// lifecycleSuccess describes a runtime lifecycle success result: the server
+// reaches state, and data adds workflow-specific operation data.
+type lifecycleSuccess struct {
+	operationType string
+	summary       string
+	state         protocolstate.ServerState
+	data          map[string]any
+}
+
+// document returns the success result for server, whose operation data
+// names the server, its instance and its new lifecycle state.
+func (s lifecycleSuccess) document(operation store.OperationRecord, server store.LogicalServer) map[string]any {
+	result := lifecycleResult{operationType: s.operationType, summary: s.summary, affected: []any{server.InstanceRef}}.document(operation)
+	data := map[string]any{
+		"server_id": server.ServerID, "environment_id": server.EnvironmentID,
+		"instance_ref": server.InstanceRef, "lifecycle_state": string(s.state),
+	}
+	for key, value := range s.data {
+		data[key] = value
+	}
+	result["operation_data"] = data
+	return result
+}
+
+// terminalProjection says how a lifecycle projection settles a terminal
+// operation: success needs a valid result and reaches succeeded with desired
+// state desired; failure reaches failed.
+type terminalProjection struct {
+	validResult   func() bool
+	invalidResult string
+	succeeded     protocolstate.ServerState
+	desired       string
+	failed        protocolstate.ServerState
+}
+
+// projectTerminal applies rule to next for a terminal operation status and
+// leaves next unchanged for any other status.
+func projectTerminal(next store.LogicalServer, status protocolstate.OperationStatus, rule terminalProjection) (store.LogicalServer, bool, error) {
+	switch status {
+	case protocolstate.OperationSucceeded:
+		if !rule.validResult() {
+			return store.LogicalServer{}, false, errors.New(rule.invalidResult)
+		}
+		next.LifecycleState = rule.succeeded
+		next.DesiredState = rule.desired
+		return next, true, nil
+	case protocolstate.OperationFailed:
+		next.LifecycleState = rule.failed
+		return next, true, nil
+	}
+	return next, false, nil
+}
+
 func nonNilList(values []any) []any {
 	if values == nil {
 		return []any{}
