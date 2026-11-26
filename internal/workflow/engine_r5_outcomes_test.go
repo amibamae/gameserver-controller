@@ -264,3 +264,42 @@ func TestEngineR5RecoverOnlyMarksARunningCurrentStep(t *testing.T) {
 		})
 	}
 }
+
+// engineR5CountingHandler counts precondition-failure decisions.
+type engineR5CountingHandler struct {
+	*testDefinition
+	calls *int
+}
+
+func (d engineR5CountingHandler) HandlePreconditionFailure(context.Context, store.OperationRecord, store.OperationStep, error) (Resolution, error) {
+	*d.calls++
+	return Resolution{State: ResolutionDefinitiveError, Error: advanceRefactorDefinitiveError("engine-r5")}, nil
+}
+
+func TestEngineR5PreconditionHandlerIsNotAskedAboutAnUnresolvedAttempt(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		failure   preconditionFailure
+		wantCalls int
+		want      protocolstate.OperationStatus
+	}{
+		{name: "pending step", failure: preconditionFailure{step: store.OperationStep{Status: protocolstate.StepPending}}, wantCalls: 1, want: protocolstate.OperationFailed},
+		{name: "resolved earlier attempt", failure: preconditionFailure{step: store.OperationStep{Status: protocolstate.StepOutcomeUnknown}, priorEffectResolved: true}, wantCalls: 1, want: protocolstate.OperationFailed},
+		{name: "unresolved earlier attempt", failure: preconditionFailure{step: store.OperationStep{Status: protocolstate.StepOutcomeUnknown}}, want: protocolstate.OperationNeedsOperator},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := engineR5NewEnv(t, engineR5Options{seed: engineR5Seed(protocolstate.OperationRunning, "")})
+			calls := 0
+			definition := engineR5CountingHandler{env.fixture.definition, &calls}
+			current, err := env.store.GetOperation(env.id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tc.failure.cause = errors.New("no")
+			stored, err := env.engine.handlePreconditionFailure(env.ctx, current, definition, tc.failure)
+			if err != nil || stored.Record.Status != tc.want || calls != tc.wantCalls {
+				t.Fatalf("status = %q, err = %v, calls = %d; want %q and %d calls", stored.Record.Status, err, calls, tc.want, tc.wantCalls)
+			}
+		})
+	}
+}

@@ -496,38 +496,72 @@ func (e *Engine) claimAndDispatch(ctx context.Context, current store.StoredOpera
 		return e.suspend(current, "core.compatibility.capability_unavailable", "The exact adapter capability recorded for this step is unavailable or incompatible.")
 	}
 	if err := definition.CheckPreconditions(ctx, current.Record, step); err != nil {
-		return e.handlePreconditionFailure(ctx, current, step, definition, err, false)
+		return e.handlePreconditionFailure(ctx, current, definition, preconditionFailure{step: step, cause: err})
 	}
 	if ctx.Err() != nil {
 		return current, ctx.Err()
 	}
 	deadline := e.stepDeadline(ctx, current.Record)
 	if !deadline.After(time.Now()) {
-		return e.failBeforeDispatch(ctx, current, stepIndex, definition, "core.operation.deadline_exceeded", "The operation deadline expired before adapter dispatch.", "timeout")
+		return e.failBeforeDispatch(ctx, current, stepIndex, definition, refusedByDeadline)
 	}
-	claimed := current.Record
-	claimed.Steps[stepIndex].Status = protocolstate.StepRunning
-	claimed.Steps[stepIndex].Attempt++
-	currentStepID := claimed.Steps[stepIndex].StepID
-	claimed.CurrentStepID = &currentStepID
-	current, err = e.updateOperation(current.Revision, claimed)
+	return e.claimStep(ctx, current, current.Record, stepCall{index: stepIndex, step: step, definition: definition, capability: capability})
+}
+
+// stepCall is one step about to be dispatched or reconciled: its index, the
+// step as last persisted, its definition and its preflighted capability.
+type stepCall struct {
+	index      int
+	step       store.OperationStep
+	definition Definition
+	capability adapter.Capability
+}
+
+// claimStep durably marks the step running for its next attempt in claimed,
+// which the caller derived from current, and only then dispatches it.
+func (e *Engine) claimStep(ctx context.Context, current store.StoredOperation, claimed store.OperationRecord, call stepCall) (store.StoredOperation, error) {
+	claimed.Steps[call.index].Status = protocolstate.StepRunning
+	claimed.Steps[call.index].Attempt++
+	claimed.CurrentStepID = stringPointer(claimed.Steps[call.index].StepID)
+	running, err := e.updateOperation(current.Revision, claimed)
 	if err != nil {
 		return store.StoredOperation{}, err
 	}
-	return e.dispatch(ctx, current, stepIndex, definition, capability)
+	return e.dispatch(ctx, running, call.index, call.definition, call.capability)
 }
 
-func (e *Engine) handlePreconditionFailure(ctx context.Context, current store.StoredOperation, step store.OperationStep, definition Definition, cause error, priorEffectResolved bool) (store.StoredOperation, error) {
-	if handler, ok := definition.(PreconditionFailureHandler); ok && (step.Status == protocolstate.StepPending || priorEffectResolved) {
-		resolution, err := handler.HandlePreconditionFailure(ctx, current.Record, step, cause)
-		if err == nil && resolution.State == ResolutionDefinitiveError && validProtocolError(e.schemas, resolution.Error) {
-			failed := current.Record
-			failed.Status = protocolstate.OperationFailed
-			failed.Error = append(json.RawMessage(nil), resolution.Error...)
-			failed.CurrentStepID = nil
-			return e.fail(ctx, current, failed, -1, definition, resolution.Error)
-		}
+// preconditionFailure is a step whose precondition check failed with cause.
+// priorEffectResolved is true when reconciliation has already settled the
+// step's earlier attempt.
+type preconditionFailure struct {
+	step                store.OperationStep
+	cause               error
+	priorEffectResolved bool
+}
+
+// mayFailDefinitively reports whether a definition may turn the failure
+// into a definitive error: the step never ran, or its earlier effect is
+// already resolved.
+func (f preconditionFailure) mayFailDefinitively() bool {
+	return f.step.Status == protocolstate.StepPending || f.priorEffectResolved
+}
+
+// handlePreconditionFailure fails the operation when the definition reports
+// a definitive, schema-valid error for the failure, and otherwise suspends
+// it for an operator.
+func (e *Engine) handlePreconditionFailure(ctx context.Context, current store.StoredOperation, definition Definition, failure preconditionFailure) (store.StoredOperation, error) {
+	handler, ok := definition.(PreconditionFailureHandler)
+	if !ok || !failure.mayFailDefinitively() {
+		return e.suspendPreconditionUnmet(current)
 	}
+	resolution, err := handler.HandlePreconditionFailure(ctx, current.Record, failure.step, failure.cause)
+	if err != nil || resolution.State != ResolutionDefinitiveError || !validProtocolError(e.schemas, resolution.Error) {
+		return e.suspendPreconditionUnmet(current)
+	}
+	return e.fail(ctx, current, current.Record, -1, definition, resolution.Error)
+}
+
+func (e *Engine) suspendPreconditionUnmet(current store.StoredOperation) (store.StoredOperation, error) {
 	return e.suspend(current, "core.safety.precondition_unmet", "Workflow preconditions or authorization are not currently satisfied.")
 }
 
@@ -540,9 +574,12 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 	}
 	secretRefs, streams, refusal := prepareDispatch(ctx, running.Record, step, definition, deadline)
 	if refusal != nil {
-		return e.failBeforeDispatch(ctx, running, stepIndex, definition, refusal.code, refusal.message, "safety_blocked")
+		return e.failBeforeDispatch(ctx, running, stepIndex, definition, refusal)
 	}
 	defer func() {
+		// invokeStep closes the streams and turns a close failure into an
+		// uncertain outcome. This deferred close only releases them if
+		// invokeStep is never reached, when no outcome is left to report.
 		_ = streams.close()
 	}()
 
@@ -558,12 +595,13 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 }
 
 // dispatchRefusal names why a step was stopped before its adapter call.
-type dispatchRefusal struct{ code, message string }
+type dispatchRefusal struct{ code, message, category string }
 
 var (
-	refusedByDispatchGuard = &dispatchRefusal{"core.workflow.dispatch_guard_failed", "A controller safety check failed immediately before adapter dispatch."}
-	refusedSecretRefs      = &dispatchRefusal{"core.workflow.secret_reference_failed", "The controller could not authorize the secret references required by this adapter step."}
-	refusedStreams         = &dispatchRefusal{"core.workflow.stream_transfer_failed", "The controller could not prepare the bounded stream inputs required by this adapter step."}
+	refusedByDeadline      = &dispatchRefusal{"core.operation.deadline_exceeded", "The operation deadline expired before adapter dispatch.", "timeout"}
+	refusedByDispatchGuard = &dispatchRefusal{"core.workflow.dispatch_guard_failed", "A controller safety check failed immediately before adapter dispatch.", "safety_blocked"}
+	refusedSecretRefs      = &dispatchRefusal{"core.workflow.secret_reference_failed", "The controller could not authorize the secret references required by this adapter step.", "safety_blocked"}
+	refusedStreams         = &dispatchRefusal{"core.workflow.stream_transfer_failed", "The controller could not prepare the bounded stream inputs required by this adapter step.", "safety_blocked"}
 )
 
 // prepareDispatch runs the definition's last safety check and collects the
@@ -650,6 +688,8 @@ func wellFormedTransfer(transfer adapter.StreamTransfer) bool {
 	return validBinding && transfer.Verify != nil && transfer.Reference.TransferID != "" && transfer.Reference.MaximumBytes >= 1
 }
 
+// closeAllStreamEnds releases every end of rejected transfers. The step is
+// refused before any adapter call, so a close error has nothing to change.
 func closeAllStreamEnds(transfers []adapter.StreamTransfer) {
 	for _, prepared := range transfers {
 		if prepared.Source != nil {
@@ -880,33 +920,28 @@ func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, s
 		}
 		step = current.Record.Steps[stepIndex]
 	}
-	return e.applyResolution(ctx, current, stepIndex, step, definition, capability, resolution)
+	return e.applyResolution(ctx, current, stepCall{index: stepIndex, step: step, definition: definition, capability: capability}, resolution)
 }
 
 // applyResolution records what reconciliation determined about the step.
-func (e *Engine) applyResolution(ctx context.Context, current store.StoredOperation, stepIndex int, step store.OperationStep, definition Definition, capability adapter.Capability, resolution Resolution) (store.StoredOperation, error) {
+func (e *Engine) applyResolution(ctx context.Context, current store.StoredOperation, call stepCall, resolution Resolution) (store.StoredOperation, error) {
 	next := current.Record
 	next.Error = nil
 	switch resolution.State {
 	case ResolutionCompleted:
-		return e.completeReconciledStep(current, next, stepIndex, capability, resolution)
+		return e.completeReconciledStep(current, next, call.index, call.capability, resolution)
 	case ResolutionPending:
 		next.Status = protocolstate.OperationWaiting
-		next.Steps[stepIndex].Status = protocolstate.StepWaiting
-		next.Steps[stepIndex].Error = nil
+		next.Steps[call.index].Status = protocolstate.StepWaiting
+		next.Steps[call.index].Error = nil
 		return e.updateOperation(current.Revision, next)
 	case ResolutionSafeToRetry:
-		return e.retryReconciledStep(ctx, current, next, stepIndex, step, definition, capability)
+		return e.retryReconciledStep(ctx, current, next, call)
 	case ResolutionDefinitiveError:
 		if !validProtocolError(e.schemas, resolution.Error) {
 			return e.suspend(current, "core.reconciliation.invalid_result", "Reconciliation returned an invalid error record.")
 		}
-		failed := current.Record
-		failed.Status = protocolstate.OperationFailed
-		failed.Steps[stepIndex].Status = protocolstate.StepFailed
-		failed.Steps[stepIndex].Error = append(json.RawMessage(nil), resolution.Error...)
-		failed.Error = append(json.RawMessage(nil), resolution.Error...)
-		return e.fail(ctx, current, failed, stepIndex, definition, resolution.Error)
+		return e.failStep(ctx, current, call.index, call.definition, resolution.Error)
 	case ResolutionNeedsOperator:
 		return e.suspend(current, "core.reconciliation.operator_required", "Automatic reconciliation cannot safely determine the external outcome.")
 	default:
@@ -935,23 +970,16 @@ func (e *Engine) completeReconciledStep(current store.StoredOperation, next stor
 
 // retryReconciledStep durably claims a step that reconciliation reported
 // safe to retry, within the attempt limit, and dispatches it again.
-func (e *Engine) retryReconciledStep(ctx context.Context, current store.StoredOperation, next store.OperationRecord, stepIndex int, step store.OperationStep, definition Definition, capability adapter.Capability) (store.StoredOperation, error) {
-	if step.Attempt >= e.maxStepAttempts {
+func (e *Engine) retryReconciledStep(ctx context.Context, current store.StoredOperation, next store.OperationRecord, call stepCall) (store.StoredOperation, error) {
+	if call.step.Attempt >= e.maxStepAttempts {
 		return e.suspend(current, "core.operation.retry_limit", "The safe retry limit for this step has been reached.")
 	}
-	if err := definition.CheckPreconditions(ctx, current.Record, step); err != nil {
-		return e.handlePreconditionFailure(ctx, current, step, definition, err, true)
+	if err := call.definition.CheckPreconditions(ctx, current.Record, call.step); err != nil {
+		return e.handlePreconditionFailure(ctx, current, call.definition, preconditionFailure{step: call.step, cause: err, priorEffectResolved: true})
 	}
 	next.Status = protocolstate.OperationRunning
-	next.Steps[stepIndex].Status = protocolstate.StepRunning
-	next.Steps[stepIndex].Attempt++
-	next.Steps[stepIndex].Error = nil
-	next.CurrentStepID = stringPointer(step.StepID)
-	running, err := e.updateOperation(current.Revision, next)
-	if err != nil {
-		return store.StoredOperation{}, err
-	}
-	return e.dispatch(ctx, running, stepIndex, definition, capability)
+	next.Steps[call.index].Error = nil
+	return e.claimStep(ctx, current, next, call)
 }
 
 func (e *Engine) finishSuccess(ctx context.Context, current store.StoredOperation, definition Definition) (store.StoredOperation, error) {
@@ -961,11 +989,7 @@ func (e *Engine) finishSuccess(ctx context.Context, current store.StoredOperatio
 	if validator, ok := definition.(CompletionValidator); ok {
 		if err := validator.ValidateCompletion(ctx, current.Record); err != nil {
 			failure := protocolError("core.workflow.postcondition_unmet", "safety_blocked", "Completed adapter steps did not satisfy the operation's required postconditions.", current.Record.OperationID, false, "inspect_operation", false)
-			failed := current.Record
-			failed.Status = protocolstate.OperationFailed
-			failed.Error = failure
-			failed.CurrentStepID = nil
-			return e.fail(ctx, current, failed, -1, definition, failure)
+			return e.fail(ctx, current, current.Record, -1, definition, failure)
 		}
 	}
 	result, err := definition.BuildSuccessResult(ctx, current.Record)
@@ -980,13 +1004,12 @@ func (e *Engine) finishSuccess(ctx context.Context, current store.StoredOperatio
 	return e.updateOperation(current.Revision, next)
 }
 
-func (e *Engine) failBeforeDispatch(ctx context.Context, current store.StoredOperation, stepIndex int, definition Definition, code, message, category string) (store.StoredOperation, error) {
-	errValue := protocolError(code, category, message, current.Record.OperationID, false, "inspect_operation", false)
-	failed := current.Record
-	failed.Status = protocolstate.OperationFailed
-	failed.Error = errValue
-	failed.CurrentStepID = nil
-	return e.fail(ctx, current, failed, stepIndex, definition, errValue)
+// failBeforeDispatch fails the operation for a step the controller refused
+// to send to its adapter. fail itself sets the failed status, the error and
+// the cleared current step, so the record is passed unchanged.
+func (e *Engine) failBeforeDispatch(ctx context.Context, current store.StoredOperation, stepIndex int, definition Definition, refusal *dispatchRefusal) (store.StoredOperation, error) {
+	errValue := protocolError(refusal.code, refusal.category, refusal.message, current.Record.OperationID, false, "inspect_operation", false)
+	return e.fail(ctx, current, current.Record, stepIndex, definition, errValue)
 }
 
 func (e *Engine) fail(ctx context.Context, current store.StoredOperation, failed store.OperationRecord, stepIndex int, definition Definition, failure json.RawMessage) (store.StoredOperation, error) {
@@ -1262,6 +1285,7 @@ func protocolError(code, category, message, operationID string, retryable bool, 
 		"operation_id": operationID,
 		"recovery":     map[string]any{"action": recoveryAction, "operator_required": operatorRequired},
 	}
+	// A map of strings and booleans always encodes, so Marshal cannot fail.
 	encoded, _ := json.Marshal(value)
 	return encoded
 }
