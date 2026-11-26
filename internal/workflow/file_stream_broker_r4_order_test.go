@@ -202,3 +202,22 @@ func TestBrokerR4StagedRecordMatchesExpectationBounds(t *testing.T) {
 		t.Error("stagedRecordMatches accepted a different direction")
 	}
 }
+
+// TestBrokerR4StagingTallyBranches covers tally branches the walk cannot
+// reach, because earlier checks reject the record or the total first.
+func TestBrokerR4StagingTallyBranches(t *testing.T) {
+	record := brokerR3UsageRecord(2, 8, false)
+	record.StoresBytes = false
+	tally := &stagingTally{budget: 16, used: 4}
+	brokerR3WantResult(t, tally.reserve(record, 2), "")
+	record.StoresBytes, record.Complete = true, true
+	brokerR3WantResult(t, tally.reserve(record, 2), "")
+	if tally.used != 4 {
+		t.Fatalf("used = %d after reserving for a source and a complete sink, want 4", tally.used)
+	}
+	over := &stagingTally{budget: 16, used: 17}
+	brokerR3WantErr(t, over.add(0, "over"), "over")
+	if over.used != 17 {
+		t.Fatalf("used = %d after a rejected add, want 17", over.used)
+	}
+}
