@@ -651,12 +651,10 @@ func directoryLatestModTime(root string) (time.Time, error) {
 	return latest, err
 }
 
+// isSafeStreamKey reports whether value has the form safeStreamKey produces:
+// a hex SHA-256 digest (sha256.Size*2 = 64 hex characters).
 func isSafeStreamKey(value string) bool {
-	if len(value) != 64 {
-		return false
-	}
-	_, err := hex.DecodeString(value)
-	return err == nil
+	return isSHA256(value)
 }
 
 // stagedStream is the state a bounded sink and a bounded source share: the
