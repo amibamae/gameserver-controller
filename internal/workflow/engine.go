@@ -47,33 +47,84 @@ type Engine struct {
 	activeOperations map[string]bool
 }
 
+// NewEngine checks that every dependency is present before it checks the
+// protocol version and limits, so a missing dependency is reported first.
+// Its seven positional parameters are kept because callers outside this
+// package depend on the exported signature.
 func NewEngine(operationStore store.OperationStore, adapters adapterRuntime, schemas schemaRuntime, definitions *Definitions, resumeAuthorizer ResumeAuthorizer, stepTimeout time.Duration, maxStepAttempts int) (*Engine, error) {
-	if operationStore == nil || adapters == nil || schemas == nil || definitions == nil || resumeAuthorizer == nil {
-		return nil, errors.New("operation store, adapter registry, schemas, workflow definitions, and resume authorizer are required")
-	}
-	if schemas.ProtocolVersion() == "" || stepTimeout <= 0 || stepTimeout > 24*time.Hour || maxStepAttempts < 1 || maxStepAttempts > 10 {
-		return nil, errors.New("protocol version, step timeout (1ns..24h), and maximum step attempts (1..10) are required")
-	}
-	return &Engine{
+	engine := &Engine{
 		store: operationStore, adapters: adapters, schemas: schemas, definitions: definitions,
 		resumeAuthorizer: resumeAuthorizer, stepTimeout: stepTimeout, maxStepAttempts: maxStepAttempts,
 		activeOperations: make(map[string]bool),
-	}, nil
+	}
+	if engine.missingDependency() {
+		return nil, errors.New("operation store, adapter registry, schemas, workflow definitions, and resume authorizer are required")
+	}
+	if !engine.limitsValid() {
+		return nil, errors.New("protocol version, step timeout (1ns..24h), and maximum step attempts (1..10) are required")
+	}
+	return engine, nil
 }
 
+// missingDependency reports whether any injected dependency is nil.
+func (e *Engine) missingDependency() bool {
+	if e.store == nil || e.adapters == nil || e.schemas == nil {
+		return true
+	}
+	return e.definitions == nil || e.resumeAuthorizer == nil
+}
+
+// limitsValid reports whether a protocol version is loaded, the step timeout
+// is within 1ns..24h and the attempt limit within 1..10.
+func (e *Engine) limitsValid() bool {
+	if e.schemas.ProtocolVersion() == "" {
+		return false
+	}
+	return stepTimeoutInRange(e.stepTimeout) && stepAttemptsInRange(e.maxStepAttempts)
+}
+
+func stepTimeoutInRange(timeout time.Duration) bool {
+	return timeout > 0 && timeout <= 24*time.Hour
+}
+
+func stepAttemptsInRange(attempts int) bool {
+	return attempts >= 1 && attempts <= 10
+}
+
+// updateOperation writes next, committing the logical-server record in the
+// same write when the operation's definition projects lifecycle state.
 func (e *Engine) updateOperation(expectedRevision uint64, next store.OperationRecord) (store.StoredOperation, error) {
-	definition, registered := e.definitions.get(next.OperationType)
-	projector, projectsLifecycle := definition.(LifecycleProjector)
-	if next.OperationType == "server.define" {
+	projector, projects, err := e.lifecycleProjectorFor(next.OperationType)
+	if err != nil {
+		return store.StoredOperation{}, err
+	}
+	if !projects {
 		return e.store.UpdateOperation(expectedRevision, next)
 	}
-	if strings.HasPrefix(next.OperationType, "server.") {
-		if !registered || !projectsLifecycle {
-			return store.StoredOperation{}, fmt.Errorf("operation %q has no registered lifecycle projector", next.OperationType)
-		}
-	} else if !registered || !projectsLifecycle {
-		return e.store.UpdateOperation(expectedRevision, next)
+	return e.updateWithLifecycleProjection(expectedRevision, next, projector)
+}
+
+// lifecycleProjectorFor returns the registered lifecycle projector for an
+// operation type. server.define never projects; any other server.* type must
+// have a projector, and other types project only when theirs is one.
+func (e *Engine) lifecycleProjectorFor(operationType string) (LifecycleProjector, bool, error) {
+	if operationType == "server.define" {
+		return nil, false, nil
 	}
+	definition, _ := e.definitions.get(operationType)
+	projector, projects := definition.(LifecycleProjector)
+	if projects {
+		return projector, true, nil
+	}
+	if strings.HasPrefix(operationType, "server.") {
+		return nil, false, fmt.Errorf("operation %q has no registered lifecycle projector", operationType)
+	}
+	return nil, false, nil
+}
+
+// updateWithLifecycleProjection projects the logical server from next and
+// commits both records atomically when the projection is a transition.
+func (e *Engine) updateWithLifecycleProjection(expectedRevision uint64, next store.OperationRecord, projector LifecycleProjector) (store.StoredOperation, error) {
 	lifecycleStore, ok := e.store.(store.LifecycleOperationStore)
 	if !ok {
 		return store.StoredOperation{}, errors.New("lifecycle workflow requires an atomic logical-server operation store")
@@ -123,18 +174,13 @@ func (e *Engine) Run(ctx context.Context, operationID string) (store.StoredOpera
 	if err != nil {
 		return store.StoredOperation{}, err
 	}
-	limit := e.maxStepAttempts*len(stored.Record.Steps) + len(stored.Record.Steps) + 4
-	if limit < 8 {
-		limit = 8
-	}
+	limit := e.transitionLimit(len(stored.Record.Steps))
 	for i := 0; i < limit; i++ {
 		stored, err = e.Advance(ctx, operationID)
 		if err != nil {
 			return stored, err
 		}
-		if protocolstate.IsTerminalOperation(stored.Record.Status) ||
-			stored.Record.Status == protocolstate.OperationWaiting ||
-			stored.Record.Status == protocolstate.OperationNeedsOperator {
+		if runSettled(stored.Record.Status) {
 			return stored, nil
 		}
 		if err := ctx.Err(); err != nil {
@@ -142,6 +188,25 @@ func (e *Engine) Run(ctx context.Context, operationID string) (store.StoredOpera
 		}
 	}
 	return e.suspend(stored, "core.workflow.transition_limit", "Workflow advancement exceeded its bounded transition count.")
+}
+
+// transitionLimit bounds Run: every attempt of every step, one more
+// advancement per step, four for start and completion, and never below 8.
+func (e *Engine) transitionLimit(stepCount int) int {
+	limit := e.maxStepAttempts*stepCount + stepCount + 4
+	if limit < 8 {
+		return 8
+	}
+	return limit
+}
+
+// runSettled reports whether Run stops at status: the operation is
+// terminal, waits for an external effect, or needs an operator.
+func runSettled(status protocolstate.OperationStatus) bool {
+	if protocolstate.IsTerminalOperation(status) {
+		return true
+	}
+	return status == protocolstate.OperationWaiting || status == protocolstate.OperationNeedsOperator
 }
 
 // Recover marks a step that was still running at process shutdown as
@@ -696,11 +761,7 @@ func (e *Engine) recordInvokeFailure(ctx context.Context, running store.StoredOp
 // malformed, mismatched or carries an unsupported outcome, or "" when the
 // response can be applied.
 func (e *Engine) responseProblem(response adapter.InvokeResponse, requestID string, capability adapter.Capability) (string, string) {
-	encodedResponse, encodeErr := json.Marshal(response)
-	responseSchemaID := "urn:gameserver-controller:" + e.schemas.ProtocolVersion() + ":rpc:adapter-invoke-result"
-	if encodeErr != nil || response.JSONRPC != "2.0" || response.ID != requestID || response.Result.ObservedAt.IsZero() ||
-		e.schemas.ValidateJSON(responseSchemaID, encodedResponse) != nil ||
-		e.schemas.ValidateJSON(capability.OutputSchemaURI, response.Result.Output) != nil {
+	if e.responseMalformed(response, requestID, capability) {
 		return "core.adapter.invalid_response", "The adapter returned a malformed response after dispatch."
 	}
 	switch response.Result.Outcome {
@@ -708,6 +769,27 @@ func (e *Engine) responseProblem(response adapter.InvokeResponse, requestID stri
 		return "", ""
 	}
 	return "core.adapter.invalid_outcome", "The adapter returned an unsupported outcome after dispatch."
+}
+
+// responseMalformed reports whether a response cannot be encoded, does not
+// answer requestID as JSON-RPC 2.0 with an observation time, or fails the
+// response schema or the capability's output schema, checked in that order.
+func (e *Engine) responseMalformed(response adapter.InvokeResponse, requestID string, capability adapter.Capability) bool {
+	encodedResponse, encodeErr := json.Marshal(response)
+	responseSchemaID := "urn:gameserver-controller:" + e.schemas.ProtocolVersion() + ":rpc:adapter-invoke-result"
+	if encodeErr != nil || !responseAnswers(response, requestID) {
+		return true
+	}
+	if e.schemas.ValidateJSON(responseSchemaID, encodedResponse) != nil {
+		return true
+	}
+	return e.schemas.ValidateJSON(capability.OutputSchemaURI, response.Result.Output) != nil
+}
+
+// responseAnswers reports whether a response is JSON-RPC 2.0, answers
+// requestID and records when the outcome was observed.
+func responseAnswers(response adapter.InvokeResponse, requestID string) bool {
+	return response.JSONRPC == "2.0" && response.ID == requestID && !response.Result.ObservedAt.IsZero()
 }
 
 // applyAdapterResult records a valid response: the step's external
@@ -960,7 +1042,7 @@ func (e *Engine) preflight(record store.OperationRecord, step store.OperationSte
 		return adapter.Capability{}, errors.New("operation protocol version differs from adapter registry")
 	}
 	input := effectiveStepInput(step)
-	if step.AdapterID == "" || step.CapabilityName == "" || step.CapabilityVersion == "" || !isObject(input) {
+	if !invocationPlanComplete(step, input) {
 		return adapter.Capability{}, errors.New("step does not contain a complete adapter invocation plan")
 	}
 	descriptor, err := e.adapters.Descriptor(step.AdapterID)
@@ -971,6 +1053,15 @@ func (e *Engine) preflight(record store.OperationRecord, step store.OperationSte
 		return adapter.Capability{}, errors.New("recorded adapter does not support operation protocol version")
 	}
 	return e.recordedCapability(descriptor, step, input)
+}
+
+// invocationPlanComplete reports whether a step names its adapter and exact
+// capability and has an object input.
+func invocationPlanComplete(step store.OperationStep, input json.RawMessage) bool {
+	if step.AdapterID == "" || step.CapabilityName == "" || step.CapabilityVersion == "" {
+		return false
+	}
+	return isObject(input)
 }
 
 // recordedCapability finds the step's exact capability in the adapter
