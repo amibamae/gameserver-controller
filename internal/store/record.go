@@ -93,41 +93,6 @@ type StoredOperation struct {
 	Revision uint64
 }
 
-func prepareNewRecord(record OperationRecord, now time.Time) (OperationRecord, error) {
-	if record.BackupInitialLifecycleState != "" {
-		return OperationRecord{}, fmt.Errorf("%w: backup initial state is core-owned", ErrInvalidRecord)
-	}
-	if record.Status == "" {
-		record.Status = protocolstate.OperationPending
-	}
-	if record.Status != protocolstate.OperationPending {
-		return OperationRecord{}, fmt.Errorf("%w: new operations must start pending", ErrInvalidRecord)
-	}
-	if record.Steps == nil {
-		record.Steps = []OperationStep{}
-	}
-	for i := range record.Steps {
-		if record.Steps[i].Status == "" {
-			record.Steps[i].Status = protocolstate.StepPending
-		}
-		if record.Steps[i].Status != protocolstate.StepPending {
-			return OperationRecord{}, fmt.Errorf("%w: new operation steps must start pending", ErrInvalidRecord)
-		}
-		if len(record.Steps[i].ResolvedInput) > 0 {
-			return OperationRecord{}, fmt.Errorf("%w: resolved step inputs are written by the engine before dispatch", ErrInvalidRecord)
-		}
-	}
-	if record.StartedAt != nil || record.CompletedAt != nil || len(record.Result) != 0 || len(record.Error) != 0 {
-		return OperationRecord{}, fmt.Errorf("%w: new operation cannot contain an execution outcome", ErrInvalidRecord)
-	}
-	record.CreatedAt = now.UTC()
-	record.UpdatedAt = record.CreatedAt
-	if err := validateRecord(record); err != nil {
-		return OperationRecord{}, err
-	}
-	return record, nil
-}
-
 // validateRecord checks an operation record before it is stored or after it
 // is loaded. The checks run in a fixed order and the first failure is
 // returned, so callers and tests see the same field name for the same record.
