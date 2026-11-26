@@ -117,15 +117,31 @@ func validateRecord(record OperationRecord) error {
 // lifecycle state it started from, and allows that field only on server.backup
 // with a ready, degraded, or stopped state.
 func validateBackupInitialState(record OperationRecord) error {
-	if record.OperationType == "server.backup" && record.Status == protocolstate.OperationSucceeded && record.BackupInitialLifecycleState == "" {
+	if !backupInitialStateValid(record) {
 		return invalidField("backup_initial_lifecycle_state")
 	}
-	if state := record.BackupInitialLifecycleState; state != "" {
-		if record.OperationType != "server.backup" || (state != protocolstate.ServerReady && state != protocolstate.ServerDegraded && state != protocolstate.ServerStopped) {
-			return invalidField("backup_initial_lifecycle_state")
-		}
-	}
 	return nil
+}
+
+// backupInitialStateValid requires the state on a succeeded server.backup,
+// and limits a recorded state to server.backup with a backup start state.
+func backupInitialStateValid(record OperationRecord) bool {
+	isBackup := record.OperationType == "server.backup"
+	if record.BackupInitialLifecycleState == "" {
+		return !isBackup || record.Status != protocolstate.OperationSucceeded
+	}
+	return isBackup && backupStartState(record.BackupInitialLifecycleState)
+}
+
+// backupStartState reports the lifecycle states a server.backup may start
+// from.
+func backupStartState(state protocolstate.ServerState) bool {
+	switch state {
+	case protocolstate.ServerReady, protocolstate.ServerDegraded, protocolstate.ServerStopped:
+		return true
+	default:
+		return false
+	}
 }
 
 // validateRecordIdentity checks the record's identity fields in a fixed
