@@ -67,9 +67,9 @@ Claude resumed on 2026-11-26 with the three Claude rows below. Codex is continui
 | Codex | `internal/store/logical_servers.go` | #254 merged | done (8.47) |
 | Codex | `internal/workflow/server_provision*.go` | `codex/finish-provision-health` | Continuing the five published Claude commits from `3f68309`; local worktree `/private/tmp/gsc-finish-provision-health`; checker passed; local provision score 6.25 → 7.17 after extracting plan, preconditions, reconciliation, completion and results; extracted files score 8.58–10.00 |
 | Codex | `internal/workflow/server_restore*.go` | `codex/finish-restore-health` | Five published Claude commits rebased locally in `/private/tmp/gsc-finish-restore-health`; focused restore suite and checker passed after correcting schema-first test expectations; score and full validation pending |
-| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | `claude/health-start-stop` | in progress (2026-11-26); scores 5.61 and 4.84 |
-| Claude | `internal/workflow/file_stream_broker*.go` | `claude/health-file-stream-broker` | in progress (2026-11-26); score 4.72 |
-| Claude | `internal/store/record.go` | `claude/health-store-record` | in progress (2026-11-26); score 5.09, mostly churn |
+| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | #446 merged | done (2026-11-26): split into plan, preconditions, reconcile, completion and lifecycle files plus shared `runtime_step_*` helpers; no function over 10; was 5.61 and 4.84, re-index pending |
+| Claude | `internal/workflow/file_stream_broker*.go` | #447 merged | done (2026-11-26): split into record, staging and stream files; no function over 10; was 4.72, re-index pending |
+| Claude | `internal/store/record.go` | #445 merged | done (2026-11-26): no function over 8; was 5.09, mostly churn, re-index pending |
 | Codex | `internal/store/bolt.go` | `codex/recover-claude-store` merged | done (9.0) |
 | Codex | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `codex/recover-claude-storage` merged | done (9.0 each) |
 | Codex | `cmd/complexity-check/*`, its CI step | #260 merged | checker runs on PRs |
@@ -85,9 +85,9 @@ Claude resumed on 2026-11-26 with the three Claude rows below. Codex is continui
 - **Hot rotation (owner requirement, high availability):** the certificate, key, and CA are re-read from disk without a restart. A `TlsMaterialManager` watches the paths, validates a new set atomically (parse, key matches certificate, expiry, permissions), and swaps the `SSLContext`/`HttpsConfigurator` on the already-listening `HttpServer` with a single `setHttpsConfigurator` call; existing connections finish on the old material. A bad or world-readable new file is rejected and the last good material is kept. Rotation has a zero-downtime overlap window: during a swap the plugin accepts the union of old and new CA anchors (and the controller may present either old or new client certificate) until the operator removes the old material; a failed rotation is therefore always recoverable. The Go client rotates the same way: its transport's `GetClientCertificate` callback re-reads the keypair per handshake and the CA bundle is re-read alongside it. Let's Encrypt auto-renewal is just "certbot writes the files, the plugin notices".
 - **Scope:** plugin `[tls]` table + `TlsMaterialManager` with start-up and per-swap permission checks; Go client client-cert transport (cert/key from the credential accessor, CA file re-read); docs — `docs/PROXY_BRIDGE_API.md` (topologies A and B with the no-plain-inner-hop rule), `docs/CONFIGURATION.md` (TLS setup and rotation procedure). Tests: certificate/key permission checks, mTLS accept/reject, rotation keeps an existing connection working, a corrupted new file leaves the old material in place.
 
-**Old `claude/r3-*` branches:** all have been deleted from GitHub. Their useful work was recovered into `main` by Codex or is being continued on the `claude/health-*` branches above.
+**Old `claude/r3-*` branches:** all have been deleted from GitHub. Their useful work is on `main`, through Codex's recovery merges and Claude's #445–#447.
 
-**Claude round 4 (2026-11-26):** each `claude/health-*` row is one PR. It starts from `main`, puts characterization tests before the refactor, and must pass `complexity-check -base origin/main`. Don't edit those files until the PR merges and the row says done.
+**Claude round 4 (2026-11-26):** done. #445–#447 merged with tests written first, and `complexity-check -base origin/main` passed. Known leftovers: five 9–13 line clone findings between matching start and stop files (same shape, different messages and types), and `exactCapability` keeps 7 parameters because Codex-owned workflows call it.
 
 Claude's earlier backup, destroy, supervised-pilot and controller-setup agents were stopped unpublished, so their local work is dropped and those files are Codex's.
 
