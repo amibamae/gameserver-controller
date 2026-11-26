@@ -423,19 +423,8 @@ func (e *Engine) settleActiveStep(ctx context.Context, current store.StoredOpera
 	var err error
 	step := current.Record.Steps[stepIndex]
 	switch step.Status {
-	case protocolstate.StepRunning:
-		unknown := current.Record
-		unknown.Status = protocolstate.OperationReconciling
-		unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
-		unknown.Steps[stepIndex].Error = protocolError("core.adapter.outcome_unknown", "internal", "The previous adapter invocation has no recorded response.", current.Record.OperationID, false, "reconcile", false)
-		unknown.Error = json.RawMessage(unknown.Steps[stepIndex].Error)
-		current, err = e.updateOperation(current.Revision, unknown)
-		if err != nil {
-			return store.StoredOperation{}, true, err
-		}
-		current, err = e.reconcile(ctx, current, stepIndex, definition)
-		return current, true, err
-	case protocolstate.StepOutcomeUnknown, protocolstate.StepWaiting:
+	case protocolstate.StepRunning, protocolstate.StepOutcomeUnknown, protocolstate.StepWaiting:
+		// reconcile first records a running step's outcome as unknown.
 		current, err = e.reconcile(ctx, current, stepIndex, definition)
 		return current, true, err
 	case protocolstate.StepSucceeded:
@@ -563,7 +552,7 @@ func (e *Engine) dispatch(ctx context.Context, running store.StoredOperation, st
 		return e.recordInvokeFailure(ctx, running, stepIndex, definition, invokeErr)
 	}
 	if code, message := e.responseProblem(response, request.ID, capability); code != "" {
-		return e.markOutcomeUnknown(running, stepIndex, protocolError(code, "internal", message, running.Record.OperationID, false, "reconcile", false))
+		return e.markOutcomeUnknown(running, stepIndex, reconcileRequired(code, message, running.Record.OperationID))
 	}
 	return e.applyAdapterResult(ctx, running, stepIndex, definition, response)
 }
@@ -751,7 +740,7 @@ func (e *Engine) invokeStep(ctx context.Context, adapterID string, request adapt
 func (e *Engine) recordInvokeFailure(ctx context.Context, running store.StoredOperation, stepIndex int, definition Definition, invokeErr error) (store.StoredOperation, error) {
 	var ambiguous *adapter.InvocationError
 	if errors.As(invokeErr, &ambiguous) && ambiguous.MayHaveSideEffects {
-		return e.markOutcomeUnknown(running, stepIndex, protocolError("core.adapter.outcome_unknown", "internal", "The adapter call may have taken effect but returned no definitive result.", running.Record.OperationID, false, "reconcile", false))
+		return e.markOutcomeUnknown(running, stepIndex, reconcileRequired("core.adapter.outcome_unknown", "The adapter call may have taken effect but returned no definitive result.", running.Record.OperationID))
 	}
 	failure := protocolError("core.adapter.invocation_failed", "provider_failure", "The adapter call failed before a side effect was confirmed.", running.Record.OperationID, false, "inspect_operation", true)
 	return e.failStep(ctx, running, stepIndex, definition, failure)
@@ -802,7 +791,7 @@ func (e *Engine) applyAdapterResult(ctx context.Context, running store.StoredOpe
 	if len(response.Result.ExternalOperationRef) > 0 {
 		recorded := updated.Steps[stepIndex].ExternalOperationRef
 		if len(recorded) > 0 && !equalJSON(recorded, response.Result.ExternalOperationRef) {
-			return e.markOutcomeUnknown(running, stepIndex, protocolError("core.adapter.external_reference_changed", "internal", "The adapter returned a different external operation reference for a recorded step.", running.Record.OperationID, false, "reconcile", false))
+			return e.markOutcomeUnknown(running, stepIndex, reconcileRequired("core.adapter.external_reference_changed", "The adapter returned a different external operation reference for a recorded step.", running.Record.OperationID))
 		}
 		updated.Steps[stepIndex].ExternalOperationRef = append(json.RawMessage(nil), response.Result.ExternalOperationRef...)
 	}
@@ -816,12 +805,8 @@ func (e *Engine) applyAdapterResult(ctx context.Context, running store.StoredOpe
 		updated.Steps[stepIndex].Status = protocolstate.StepWaiting
 		return e.updateOperation(running.Revision, updated)
 	case adapter.OutcomeUnknown:
-		updated.Status = protocolstate.OperationReconciling
 		updated.CurrentStepID = stringPointer(updated.Steps[stepIndex].StepID)
-		updated.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
-		unknownError := protocolError("core.adapter.outcome_unknown", "internal", "The adapter reported that the external outcome is unknown.", running.Record.OperationID, false, "reconcile", false)
-		updated.Steps[stepIndex].Error = unknownError
-		updated.Error = json.RawMessage(unknownError)
+		markStepOutcomeUnknown(&updated, stepIndex, reconcileRequired("core.adapter.outcome_unknown", "The adapter reported that the external outcome is unknown.", running.Record.OperationID))
 		return e.updateOperation(running.Revision, updated)
 	default:
 		failure := protocolError("core.adapter.invalid_outcome", "internal", "The adapter returned an unsupported outcome value.", running.Record.OperationID, false, "inspect_operation", true)
@@ -833,11 +818,23 @@ func (e *Engine) applyAdapterResult(ctx context.Context, running store.StoredOpe
 // outcome unknown, recording errValue on both.
 func (e *Engine) markOutcomeUnknown(running store.StoredOperation, stepIndex int, errValue json.RawMessage) (store.StoredOperation, error) {
 	unknown := running.Record
-	unknown.Status = protocolstate.OperationReconciling
-	unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
-	unknown.Steps[stepIndex].Error = errValue
-	unknown.Error = json.RawMessage(errValue)
+	markStepOutcomeUnknown(&unknown, stepIndex, errValue)
 	return e.updateOperation(running.Revision, unknown)
+}
+
+// markStepOutcomeUnknown moves record to reconciliation with the step's
+// outcome unknown, recording errValue on both.
+func markStepOutcomeUnknown(record *store.OperationRecord, stepIndex int, errValue json.RawMessage) {
+	record.Status = protocolstate.OperationReconciling
+	record.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
+	record.Steps[stepIndex].Error = errValue
+	record.Error = json.RawMessage(errValue)
+}
+
+// reconcileRequired is the internal error recorded on a step whose external
+// outcome must be reconciled before anything else happens to it.
+func reconcileRequired(code, message, operationID string) json.RawMessage {
+	return protocolError(code, "internal", message, operationID, false, "reconcile", false)
 }
 
 // failStep fails the step with errValue and finishes the operation.
@@ -851,14 +848,8 @@ func (e *Engine) failStep(ctx context.Context, running store.StoredOperation, st
 func (e *Engine) reconcile(ctx context.Context, current store.StoredOperation, stepIndex int, definition Definition) (store.StoredOperation, error) {
 	step := current.Record.Steps[stepIndex]
 	if step.Status == protocolstate.StepRunning {
-		unknown := current.Record
-		unknown.Status = protocolstate.OperationReconciling
-		unknown.Steps[stepIndex].Status = protocolstate.StepOutcomeUnknown
-		unknownError := protocolError("core.adapter.outcome_unknown", "internal", "The previous adapter invocation has no recorded response.", current.Record.OperationID, false, "reconcile", false)
-		unknown.Steps[stepIndex].Error = unknownError
-		unknown.Error = json.RawMessage(unknownError)
 		var err error
-		current, err = e.updateOperation(current.Revision, unknown)
+		current, err = e.markOutcomeUnknown(current, stepIndex, reconcileRequired("core.adapter.outcome_unknown", "The previous adapter invocation has no recorded response.", current.Record.OperationID))
 		if err != nil {
 			return store.StoredOperation{}, err
 		}
@@ -1142,13 +1133,7 @@ func (e *Engine) recoverOne(current store.StoredOperation) (store.StoredOperatio
 	if index < 0 || current.Record.Steps[index].Status != protocolstate.StepRunning {
 		return current, nil
 	}
-	next := current.Record
-	next.Status = protocolstate.OperationReconciling
-	next.Steps[index].Status = protocolstate.StepOutcomeUnknown
-	unknownError := protocolError("core.adapter.outcome_unknown", "internal", "The controller restarted while this adapter step was running.", current.Record.OperationID, false, "reconcile", false)
-	next.Steps[index].Error = unknownError
-	next.Error = json.RawMessage(unknownError)
-	return e.updateOperation(current.Revision, next)
+	return e.markOutcomeUnknown(current, index, reconcileRequired("core.adapter.outcome_unknown", "The controller restarted while this adapter step was running.", current.Record.OperationID))
 }
 
 func (e *Engine) begin(operationID string) bool {
