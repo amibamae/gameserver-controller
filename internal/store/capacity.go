@@ -406,19 +406,43 @@ func observeCapacityTx(tx *bolt.Tx, operationID string, observation CapacityProv
 // controller-owned provider instance. Adopted or unmanaged instances have no
 // capacity reservation and therefore do not create local boot samples.
 func (s *BoltStore) RecordCapacityReady(serverID, environmentID, providerInstanceID string, readyAt time.Time) (CapacityReservation, error) {
-	if !validCapacityIdentifier(serverID, 200) || !validCapacityIdentifier(environmentID, 200) ||
-		!validCapacityIdentifier(providerInstanceID, 240) || !plausibleObservationTime(readyAt) {
+	instance := capacityInstanceQuery{ServerID: serverID, EnvironmentID: environmentID, ProviderInstanceID: providerInstanceID}
+	if !instance.valid() || !plausibleObservationTime(readyAt) {
 		return CapacityReservation{}, fmt.Errorf("%w: invalid readiness measurement", ErrInvalidRecord)
 	}
 	return capacityTxValue(s.db.Update, func(tx *bolt.Tx) (CapacityReservation, error) {
-		return recordCapacityReadyTx(tx, serverID, environmentID, providerInstanceID, "", readyAt)
+		return recordCapacityReadyTx(tx, instance, readyAt)
 	})
 }
 
-func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanceID, adapterID string, readyAt time.Time) (CapacityReservation, error) {
+// capacityInstanceQuery names the provider instance a readiness measurement
+// is for: the instance on ServerID in EnvironmentID and, when AdapterID is
+// set, only one reserved through that hosting adapter.
+type capacityInstanceQuery struct {
+	ServerID           string
+	EnvironmentID      string
+	ProviderInstanceID string
+	AdapterID          string
+}
+
+// valid requires the server, environment and instance identifiers to be
+// present and within their bounds.
+func (q capacityInstanceQuery) valid() bool {
+	return validCapacityIdentifier(q.ServerID, 200) && validCapacityIdentifier(q.EnvironmentID, 200) &&
+		validCapacityIdentifier(q.ProviderInstanceID, 240)
+}
+
+// matches reports whether reservation is for the queried instance and, when
+// the query names an adapter, was reserved through it.
+func (q capacityInstanceQuery) matches(reservation CapacityReservation) bool {
+	return capacityReservationMatchesInstance(reservation, q.ServerID, q.EnvironmentID, q.ProviderInstanceID) &&
+		(q.AdapterID == "" || reservation.ProviderAdapterID == q.AdapterID)
+}
+
+func recordCapacityReadyTx(tx *bolt.Tx, instance capacityInstanceQuery, readyAt time.Time) (CapacityReservation, error) {
 	// Once a reservation matches, it is returned alongside any later error.
 	bucket := tx.Bucket(capacityReservationsBucket)
-	key, result, err := findCapacityReservationForInstance(bucket, serverID, environmentID, providerInstanceID, adapterID)
+	key, result, err := findCapacityReservationForInstance(bucket, instance)
 	if err != nil {
 		return result, err
 	}
@@ -440,16 +464,15 @@ func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanc
 }
 
 // findCapacityReservationForInstance returns the key and value of the single
-// reservation for the provider instance on serverID in environmentID (and
-// adapterID, when given). A second match is ErrCapacityConflict and no match
-// is ErrCapacityNotFound. The first match is returned even with an error.
-func findCapacityReservationForInstance(bucket *bolt.Bucket, serverID, environmentID, providerInstanceID, adapterID string) ([]byte, CapacityReservation, error) {
+// reservation that instance matches. A second match is ErrCapacityConflict
+// and no match is ErrCapacityNotFound. The first match is returned even with
+// an error.
+func findCapacityReservationForInstance(bucket *bolt.Bucket, instance capacityInstanceQuery) ([]byte, CapacityReservation, error) {
 	found := false
 	var matchedKey []byte
 	var match CapacityReservation
 	err := forEachCapacityReservation(bucket, func(key []byte, current CapacityReservation) error {
-		if !capacityReservationMatchesInstance(current, serverID, environmentID, providerInstanceID) ||
-			(adapterID != "" && current.ProviderAdapterID != adapterID) {
+		if !instance.matches(current) {
 			return nil
 		}
 		if found {
@@ -478,7 +501,13 @@ func capacityReadyAllowed(r CapacityReservation, readyAt time.Time) bool {
 	if r.Adoption != nil || r.State != CapacityActive || r.LastObservation == nil || r.LastObservation.State != "present" {
 		return false
 	}
-	return !readyAt.Before(r.CreatedAt) && (r.ProvisionedAt.IsZero() || !readyAt.Before(r.ProvisionedAt))
+	return !readyAt.Before(r.CreatedAt) && notBeforeKnownTime(readyAt, r.ProvisionedAt)
+}
+
+// notBeforeKnownTime reports whether at is no earlier than floor, or floor
+// is unknown (zero).
+func notBeforeKnownTime(at, floor time.Time) bool {
+	return floor.IsZero() || !at.Before(floor)
 }
 
 // recordCapacityLifecycleOutcomeTx ties boot samples and confirmed destruction
@@ -503,7 +532,9 @@ func recordStartedCapacityTx(tx *bolt.Tx, operation OperationRecord, server Logi
 	if !ok {
 		return nil
 	}
-	_, err := recordCapacityReadyTx(tx, server.ServerID, server.EnvironmentID, instance.ExternalID, instance.AdapterID, observedAt)
+	_, err := recordCapacityReadyTx(tx, capacityInstanceQuery{
+		ServerID: server.ServerID, EnvironmentID: server.EnvironmentID, ProviderInstanceID: instance.ExternalID, AdapterID: instance.AdapterID,
+	}, observedAt)
 	if errors.Is(err, ErrCapacityNotFound) || errors.Is(err, ErrCapacityConflict) || errors.Is(err, ErrCapacityTransition) {
 		return nil
 	}
@@ -520,29 +551,56 @@ type startedCapacityInstance struct {
 // readiness time asserted by the server.start result, and false unless the
 // assertion is for exactly this server, environment and instance.
 func startedCapacityReadiness(operation OperationRecord, server LogicalServer) (startedCapacityInstance, time.Time, bool) {
-	var result struct {
-		Data struct {
-			Assertion struct {
-				ServerID      string          `json:"server_id"`
-				EnvironmentID string          `json:"environment_id"`
-				InstanceRef   json.RawMessage `json:"instance_ref"`
-				ObservedAt    time.Time       `json:"observed_at"`
-			} `json:"readiness_assertion"`
-		} `json:"operation_data"`
-	}
-	if json.Unmarshal(operation.Result, &result) != nil {
+	assertion, ok := decodeStartedReadinessAssertion(operation.Result)
+	if !ok || !assertion.isFor(server) {
 		return startedCapacityInstance{}, time.Time{}, false
 	}
-	assertion := result.Data.Assertion
-	if assertion.ServerID != server.ServerID || assertion.EnvironmentID != server.EnvironmentID ||
-		!equalCanonicalJSON(assertion.InstanceRef, server.InstanceRef) || assertion.ObservedAt.IsZero() {
-		return startedCapacityInstance{}, time.Time{}, false
-	}
-	var instance startedCapacityInstance
-	if json.Unmarshal(server.InstanceRef, &instance) != nil || instance.ExternalID == "" || instance.AdapterID == "" {
+	instance, ok := decodeStartedCapacityInstance(server.InstanceRef)
+	if !ok {
 		return startedCapacityInstance{}, time.Time{}, false
 	}
 	return instance, assertion.ObservedAt, true
+}
+
+// startedReadinessAssertion is the readiness assertion in a server.start
+// result.
+type startedReadinessAssertion struct {
+	ServerID      string          `json:"server_id"`
+	EnvironmentID string          `json:"environment_id"`
+	InstanceRef   json.RawMessage `json:"instance_ref"`
+	ObservedAt    time.Time       `json:"observed_at"`
+}
+
+// decodeStartedReadinessAssertion returns the readiness assertion in a
+// server.start result, and false when the result does not decode.
+func decodeStartedReadinessAssertion(result json.RawMessage) (startedReadinessAssertion, bool) {
+	var decoded struct {
+		Data struct {
+			Assertion startedReadinessAssertion `json:"readiness_assertion"`
+		} `json:"operation_data"`
+	}
+	if json.Unmarshal(result, &decoded) != nil {
+		return startedReadinessAssertion{}, false
+	}
+	return decoded.Data.Assertion, true
+}
+
+// isFor reports whether the assertion is timestamped and for exactly the
+// server's identity and provider instance.
+func (a startedReadinessAssertion) isFor(server LogicalServer) bool {
+	return a.ServerID == server.ServerID && a.EnvironmentID == server.EnvironmentID &&
+		equalCanonicalJSON(a.InstanceRef, server.InstanceRef) && !a.ObservedAt.IsZero()
+}
+
+// decodeStartedCapacityInstance returns the provider instance a server's
+// instance reference names, and false unless it names both the instance
+// and its adapter.
+func decodeStartedCapacityInstance(ref json.RawMessage) (startedCapacityInstance, bool) {
+	var instance startedCapacityInstance
+	if json.Unmarshal(ref, &instance) != nil || instance.ExternalID == "" || instance.AdapterID == "" {
+		return startedCapacityInstance{}, false
+	}
+	return instance, true
 }
 
 // recordDestroyedCapacityTx releases a managed VM slot in the same Bolt
