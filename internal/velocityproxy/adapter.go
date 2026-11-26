@@ -170,15 +170,27 @@ func newAdapter(config Config, protocolVersion string, bridge Bridge, addresses 
 }
 
 func validateConfig(config Config) error {
-	if !adapterIDPattern.MatchString(config.AdapterID) || config.EnvironmentID == "" || len(config.EnvironmentID) > 200 {
+	if !validAdapterIdentity(config) {
 		return errors.New("an integration adapter ID and environment are required")
 	}
-	ref := config.ProxyInstanceRef
-	ownsRef := ref.AdapterID == config.AdapterID && ref.EnvironmentID == config.EnvironmentID && ref.ResourceKind == proxyInstanceKind
-	if !ownsRef || ref.ExternalID == "" || len(ref.ExternalID) > 1024 {
+	if !ownsProxyInstanceRef(config) {
 		return errors.New("proxy instance reference must name this adapter, its environment, and a proxy-instance ID")
 	}
 	return nil
+}
+
+// validAdapterIdentity reports whether the adapter ID is an integration ID
+// and the environment ID is non-empty and at most 200 bytes.
+func validAdapterIdentity(config Config) bool {
+	return adapterIDPattern.MatchString(config.AdapterID) && config.EnvironmentID != "" && len(config.EnvironmentID) <= 200
+}
+
+// ownsProxyInstanceRef reports whether the proxy instance reference names this
+// adapter, its environment, and a proxy-instance ID of at most 1024 bytes.
+func ownsProxyInstanceRef(config Config) bool {
+	ref := config.ProxyInstanceRef
+	ownsRef := ref.AdapterID == config.AdapterID && ref.EnvironmentID == config.EnvironmentID && ref.ResourceKind == proxyInstanceKind
+	return ownsRef && ref.ExternalID != "" && len(ref.ExternalID) <= 1024
 }
 
 // Descriptor advertises the proxy backend lifecycle, session inspection, and
