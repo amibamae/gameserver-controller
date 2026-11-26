@@ -85,8 +85,13 @@ func invocationRecordComplete(record stagedStreamRecord, maximumBytes int64) boo
 
 func recordMeetsOwnExpectation(record stagedStreamRecord) bool {
 	sizeMet := record.ExpectedSize < 0 || record.ActualSize == record.ExpectedSize
-	checksumMet := record.ExpectedSHA256 == "" || record.ActualSHA256 == record.ExpectedSHA256
-	return sizeMet && checksumMet
+	return sizeMet && recordChecksumMet(record)
+}
+
+// recordChecksumMet reports whether a record has no expected checksum or
+// measured exactly that checksum.
+func recordChecksumMet(record stagedStreamRecord) bool {
+	return record.ExpectedSHA256 == "" || record.ActualSHA256 == record.ExpectedSHA256
 }
 
 // stagedBytesMatch re-reads a staged file within maximumBytes and reports
