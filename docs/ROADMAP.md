@@ -4,7 +4,7 @@
 
 ## Estimated timeline
 
-These ranges are elapsed calendar time from November 2026. Plan for **12–18 months for the full roadmap through Phase 7**, with room to extend the schedule if usage limits or live testing cause longer pauses. The milestones overlap, so the ranges are measured from the same starting point.
+These ranges are elapsed calendar time from November 2026. Plan for **12–18 months for the full roadmap through Phase 7**, with room to extend the schedule if agent availability or live testing cause longer pauses. The milestones overlap, so the ranges are measured from the same starting point.
 
 | Milestone | Estimated calendar time | What needs to be proven |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ These ranges are elapsed calendar time from November 2026. Plan for **12–18 mo
 | First production deployment | 4–8 months | Wire the required lifecycle workflows to real adapters, verify recovery and cleanup on staging, then restore a fresh backup of the live world onto the larger production VM and verify it before an approved cutover. |
 | Full roadmap through Phase 7 | 12–18 months | Complete production orchestration and scaling, release rollback, automated staging updates, and validation with another hosting provider and game. |
 
-Agents work in sessions when usage is available. Several agents can make progress in parallel, but usage limits can pause them for days or weeks, and some work has to wait for another change, review, or CI run. The ranges include time for those gaps, fixes after staging tests, and operator availability for live checks. Revisit the estimates after the first successful staging restore and whenever the pace of work changes materially.
+Agents work in sessions when they are available. Several agents can make progress in parallel, but they can pause for days or weeks, and some work has to wait for another change, review, or CI run. The ranges include time for those gaps, fixes after staging tests, and operator availability for live checks. Revisit the estimates after the first successful staging restore and whenever the pace of work changes materially.
 
 The optional hosted subdomain service and other-language contributions are outside this schedule. Stable protocol 1.0 follows the implementation evidence gate below.
 
