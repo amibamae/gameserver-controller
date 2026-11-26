@@ -318,19 +318,31 @@ func validateStepResolvedInput(i int, step OperationStep) error {
 // and error documents. Only a succeeded step has output, and a succeeded
 // adapter step must have it.
 func validateStepOutcome(_ OperationRecord, i int, step OperationStep) error {
-	if len(step.Output) > 0 && (!isJSONObject(step.Output) || step.Status != protocolstate.StepSucceeded) {
+	if !stepOutputValid(step) {
 		return invalidField(fmt.Sprintf("steps[%d].output", i))
 	}
-	if step.Status == protocolstate.StepSucceeded && step.CapabilityName != "" && len(step.Output) == 0 {
-		return invalidField(fmt.Sprintf("steps[%d].output", i))
-	}
-	if len(step.ExternalOperationRef) > 0 && !isJSONObject(step.ExternalOperationRef) {
+	if !optionalJSONObject(step.ExternalOperationRef) {
 		return invalidField(fmt.Sprintf("steps[%d].external_operation_ref", i))
 	}
-	if len(step.Error) > 0 && !isJSONObject(step.Error) {
+	if !optionalJSONObject(step.Error) {
 		return invalidField(fmt.Sprintf("steps[%d].error", i))
 	}
 	return nil
+}
+
+// stepOutputValid allows output only on a succeeded step and only as an
+// object, and requires it on a succeeded adapter step.
+func stepOutputValid(step OperationStep) bool {
+	succeeded := step.Status == protocolstate.StepSucceeded
+	if len(step.Output) > 0 {
+		return succeeded && isJSONObject(step.Output)
+	}
+	return !succeeded || step.CapabilityName == ""
+}
+
+// optionalJSONObject accepts an absent document or a JSON object.
+func optionalJSONObject(value json.RawMessage) bool {
+	return len(value) == 0 || isJSONObject(value)
 }
 
 // validateStepTimes requires step timestamps to fall within the record's
