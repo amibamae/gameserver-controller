@@ -867,8 +867,19 @@ func updateCapacityTx(bucket *bolt.Bucket, key []byte, transition func(CapacityR
 // was already recorded. CreatedAt is compared with == on purpose.
 func capacityImmutableFieldsChanged(current, next CapacityReservation) bool {
 	return next.OperationID != current.OperationID || next.CreatedAt != current.CreatedAt || next.ProviderAdapterID != current.ProviderAdapterID ||
-		(!current.ProvisionedAt.IsZero() && !next.ProvisionedAt.Equal(current.ProvisionedAt)) ||
-		(!current.ReadyAt.IsZero() && !next.ReadyAt.Equal(current.ReadyAt))
+		capacityRecordedTimesChanged(current, next)
+}
+
+// capacityRecordedTimesChanged reports whether a transition changed a
+// provision or ready time that was already recorded.
+func capacityRecordedTimesChanged(current, next CapacityReservation) bool {
+	return recordedTimeChanged(current.ProvisionedAt, next.ProvisionedAt) || recordedTimeChanged(current.ReadyAt, next.ReadyAt)
+}
+
+// recordedTimeChanged reports whether next differs from a recorded (non-zero)
+// time.
+func recordedTimeChanged(recorded, next time.Time) bool {
+	return !recorded.IsZero() && !next.Equal(recorded)
 }
 
 func decodeCapacityReservation(value []byte) (CapacityReservation, error) {
@@ -935,7 +946,13 @@ func putUpdatedCapacityReservation(bucket *bolt.Bucket, key []byte, reservation 
 // whose change must be persisted with a new UpdatedAt.
 func capacityTrackedFieldsChanged(current, next CapacityReservation) bool {
 	return next.State != current.State || next.ProviderInstanceID != current.ProviderInstanceID || next.LastObservation != current.LastObservation ||
-		!next.ProvisionedAt.Equal(current.ProvisionedAt) || !next.ReadyAt.Equal(current.ReadyAt)
+		capacityEvidenceTimesChanged(current, next)
+}
+
+// capacityEvidenceTimesChanged reports whether a transition changed the
+// provision or ready time.
+func capacityEvidenceTimesChanged(current, next CapacityReservation) bool {
+	return !next.ProvisionedAt.Equal(current.ProvisionedAt) || !next.ReadyAt.Equal(current.ReadyAt)
 }
 
 // capacityUpdateTime returns the current UTC time, raised to the latest of
@@ -972,16 +989,50 @@ func validateCapacityReservationRequest(reservation CapacityReservation) error {
 // capacityIdentifiersValid requires every required reservation identifier to
 // be present and within its length bound.
 func capacityIdentifiersValid(r CapacityReservation) bool {
-	return validCapacityIdentifier(r.OperationID, 200) && validCapacityIdentifier(r.ServerID, 200) &&
-		validCapacityIdentifier(r.EnvironmentID, 200) && validCapacityIdentifier(r.CapacityGroup, 100) &&
-		validCapacityIdentifier(r.Provider, 100) && validCapacityIdentifier(r.ResourceKey, 240)
+	return capacityIdentifiersWithin([]capacityIdentifierBound{
+		{r.OperationID, 200}, {r.ServerID, 200}, {r.EnvironmentID, 200},
+		{r.CapacityGroup, 100}, {r.Provider, 100}, {r.ResourceKey, 240},
+	})
+}
+
+// capacityIdentifierBound is an identifier and the most bytes it may hold.
+type capacityIdentifierBound struct {
+	value string
+	max   int
+}
+
+// capacityIdentifiersWithin reports whether every identifier is valid
+// within its bound.
+func capacityIdentifiersWithin(bounds []capacityIdentifierBound) bool {
+	for _, bound := range bounds {
+		if !validCapacityIdentifier(bound.value, bound.max) {
+			return false
+		}
+	}
+	return true
 }
 
 // capacityControllerFieldsUnset requires a reservation request to leave every
 // field the store assigns (instance, state, times, evidence) empty.
 func capacityControllerFieldsUnset(r CapacityReservation) bool {
-	return r.ProviderInstanceID == "" && r.State == "" && r.CreatedAt.IsZero() && r.UpdatedAt.IsZero() &&
-		r.ProvisionedAt.IsZero() && r.ReadyAt.IsZero() && r.LastObservation == nil && r.Adoption == nil
+	return r.ProviderInstanceID == "" && r.State == "" && capacityEvidenceUnset(r) &&
+		allTimesZero(r.CreatedAt, r.UpdatedAt, r.ProvisionedAt, r.ReadyAt)
+}
+
+// capacityEvidenceUnset reports whether the reservation carries neither a
+// provider observation nor adoption evidence.
+func capacityEvidenceUnset(r CapacityReservation) bool {
+	return r.LastObservation == nil && r.Adoption == nil
+}
+
+// allTimesZero reports whether every time is the zero time.
+func allTimesZero(times ...time.Time) bool {
+	for _, at := range times {
+		if !at.IsZero() {
+			return false
+		}
+	}
+	return true
 }
 
 // validatePersistedCapacityReservation rejects a stored reservation that breaks
@@ -1009,9 +1060,15 @@ func capacityAdoptionConsistent(r CapacityReservation) bool {
 	if r.Adoption == nil {
 		return true
 	}
+	return capacityAdoptionMatchesReservation(r) && r.LastObservation != nil && allTimesZero(r.ProvisionedAt, r.ReadyAt)
+}
+
+// capacityAdoptionMatchesReservation requires the adoption record to be
+// valid, for the reservation's provider instance, and observed when the
+// reservation was created. r.Adoption must not be nil.
+func capacityAdoptionMatchesReservation(r CapacityReservation) bool {
 	return validateCapacityAdoption(*r.Adoption) == nil && r.ProviderInstanceID == r.Adoption.InstanceID &&
-		r.CreatedAt.Equal(r.Adoption.ObservedAt) && r.LastObservation != nil &&
-		r.ProvisionedAt.IsZero() && r.ReadyAt.IsZero()
+		r.CreatedAt.Equal(r.Adoption.ObservedAt)
 }
 
 // capacityIdentityValid requires every identifier to be present and bounded
@@ -1038,11 +1095,15 @@ func capacityStateValid(r CapacityReservation) bool {
 // capacityTimesOrdered requires provision and ready times, when set, to fall
 // within the record's lifetime, with ready no earlier than provisioned.
 func capacityTimesOrdered(r CapacityReservation) bool {
-	if !r.ProvisionedAt.IsZero() && (r.ProvisionedAt.Before(r.CreatedAt) || r.ProvisionedAt.After(r.UpdatedAt)) {
+	if !r.ProvisionedAt.IsZero() && !capacityTimeWithin(r.ProvisionedAt, r.CreatedAt, r.UpdatedAt) {
 		return false
 	}
-	return r.ReadyAt.IsZero() || !(r.ReadyAt.Before(r.CreatedAt) ||
-		(!r.ProvisionedAt.IsZero() && r.ReadyAt.Before(r.ProvisionedAt)) || r.ReadyAt.After(r.UpdatedAt))
+	return r.ReadyAt.IsZero() || (capacityTimeWithin(r.ReadyAt, r.CreatedAt, r.UpdatedAt) && notBeforeKnownTime(r.ReadyAt, r.ProvisionedAt))
+}
+
+// capacityTimeWithin reports whether at falls in [from, to].
+func capacityTimeWithin(at, from, to time.Time) bool {
+	return !at.Before(from) && !at.After(to)
 }
 
 // capacityObservationConsistent requires the last provider observation, if
@@ -1112,10 +1173,29 @@ func capacityStateAgreesWithObservation(state CapacityState, observed string) bo
 	return true
 }
 
+// sameCapacityRequest reports whether two reservations carry the same
+// request identity.
 func sameCapacityRequest(existing, requested CapacityReservation) bool {
-	return existing.OperationID == requested.OperationID && existing.ServerID == requested.ServerID &&
-		existing.EnvironmentID == requested.EnvironmentID && existing.CapacityGroup == requested.CapacityGroup &&
-		existing.Provider == requested.Provider && existing.ProviderAdapterID == requested.ProviderAdapterID && existing.ResourceKey == requested.ResourceKey
+	return capacityRequestIdentityOf(existing) == capacityRequestIdentityOf(requested)
+}
+
+// capacityRequestIdentity is the part of a reservation a repeated
+// ReserveCapacity request must match.
+type capacityRequestIdentity struct {
+	OperationID       string
+	ServerID          string
+	EnvironmentID     string
+	CapacityGroup     string
+	Provider          string
+	ProviderAdapterID string
+	ResourceKey       string
+}
+
+func capacityRequestIdentityOf(r CapacityReservation) capacityRequestIdentity {
+	return capacityRequestIdentity{
+		OperationID: r.OperationID, ServerID: r.ServerID, EnvironmentID: r.EnvironmentID, CapacityGroup: r.CapacityGroup,
+		Provider: r.Provider, ProviderAdapterID: r.ProviderAdapterID, ResourceKey: r.ResourceKey,
+	}
 }
 
 func capacityStateReleased(state CapacityState) bool {
