@@ -74,56 +74,36 @@ func (s *BoltStore) ReserveCapacity(reservation CapacityReservation, totalLimit,
 	if totalLimit < 1 || groupLimit < 1 {
 		return CapacityReservation{}, false, fmt.Errorf("%w: invalid capacity limits", ErrInvalidRecord)
 	}
-	var result CapacityReservation
-	created := false
-	err := s.db.Update(func(tx *bolt.Tx) error {
-		var err error
-		result, created, err = reserveCapacityTx(tx, reservation, totalLimit, groupLimit)
-		return err
+	result, err := capacityTxValue(s.db.Update, func(tx *bolt.Tx) (reservedCapacity, error) {
+		reserved, created, err := reserveCapacityTx(tx, reservation, totalLimit, groupLimit)
+		return reservedCapacity{reservation: reserved, created: created}, err
 	})
 	if err != nil {
 		return CapacityReservation{}, false, err
 	}
-	return result, created, nil
+	return result.reservation, result.created, nil
 }
 
+// reservedCapacity is what reserveCapacityTx returns, carried out of the
+// ReserveCapacity transaction as one value.
+type reservedCapacity struct {
+	reservation CapacityReservation
+	created     bool
+}
+
+// reserveCapacityTx returns the stored reservation for a repeated request,
+// or stores a new one when the slot, the provider resource key, and the
+// total and group limits allow it. created reports a new reservation.
 func reserveCapacityTx(tx *bolt.Tx, reservation CapacityReservation, totalLimit, groupLimit int) (CapacityReservation, bool, error) {
 	bucket := tx.Bucket(capacityReservationsBucket)
-	if existingValue := bucket.Get([]byte(reservation.OperationID)); existingValue != nil {
-		existing, err := decodeCapacityReservation(existingValue)
-		if err != nil {
-			return CapacityReservation{}, false, err
-		}
-		if !sameCapacityRequest(existing, reservation) {
-			return CapacityReservation{}, false, ErrCapacityConflict
-		}
-		return existing, false, nil
+	if existing, found, err := replayCapacityReservation(bucket, reservation); found {
+		return existing, false, err
 	}
-
-	total, groupCount := 0, 0
-	err := forEachCapacityReservation(bucket, func(_ []byte, existing CapacityReservation) error {
-		if capacityStateReleased(existing.State) {
-			return nil
-		}
-		if existing.ServerID == reservation.ServerID && existing.EnvironmentID == reservation.EnvironmentID {
-			return fmt.Errorf("%w: server %q in environment %q", ErrCapacityOccupied, reservation.ServerID, reservation.EnvironmentID)
-		}
-		if existing.Provider == reservation.Provider && existing.ResourceKey == reservation.ResourceKey {
-			return fmt.Errorf("%w: provider resource key %q is already reserved", ErrCapacityConflict, reservation.ResourceKey)
-		}
-		total++
-		if existing.CapacityGroup == reservation.CapacityGroup {
-			groupCount++
-		}
-		return nil
-	})
+	usage, err := countCapacityUsage(bucket, reservation)
 	if err != nil {
 		return CapacityReservation{}, false, err
 	}
-	if total >= totalLimit {
-		return CapacityReservation{}, false, ErrCapacityReached
-	}
-	if groupCount >= groupLimit {
+	if usage.reaches(totalLimit, groupLimit) {
 		return CapacityReservation{}, false, ErrCapacityReached
 	}
 	now := time.Now().UTC()
@@ -136,18 +116,76 @@ func reserveCapacityTx(tx *bolt.Tx, reservation CapacityReservation, totalLimit,
 	return reservation, true, nil
 }
 
+// replayCapacityReservation reports whether a reservation is already stored
+// for request's operation. When one is, it returns that reservation if
+// request repeats its identity, and otherwise the zero value with
+// ErrCapacityConflict or the decode error.
+func replayCapacityReservation(bucket *bolt.Bucket, request CapacityReservation) (CapacityReservation, bool, error) {
+	value := bucket.Get([]byte(request.OperationID))
+	if value == nil {
+		return CapacityReservation{}, false, nil
+	}
+	existing, err := decodeCapacityReservation(value)
+	if err != nil {
+		return CapacityReservation{}, true, err
+	}
+	if !sameCapacityRequest(existing, request) {
+		return CapacityReservation{}, true, ErrCapacityConflict
+	}
+	return existing, true, nil
+}
+
+// capacityUsage counts the unreleased reservations in total and in the
+// request's capacity group.
+type capacityUsage struct {
+	total int
+	group int
+}
+
+// reaches reports whether one more reservation would exceed either limit.
+func (u capacityUsage) reaches(totalLimit, groupLimit int) bool {
+	return u.total >= totalLimit || u.group >= groupLimit
+}
+
+// countCapacityUsage counts the unreleased reservations, in key order, and
+// stops at the first one that already holds request's slot or provider
+// resource key.
+func countCapacityUsage(bucket *bolt.Bucket, request CapacityReservation) (capacityUsage, error) {
+	var usage capacityUsage
+	err := forEachCapacityReservation(bucket, func(_ []byte, existing CapacityReservation) error {
+		if capacityStateReleased(existing.State) {
+			return nil
+		}
+		if err := capacitySlotConflict(existing, request); err != nil {
+			return err
+		}
+		usage.total++
+		if existing.CapacityGroup == request.CapacityGroup {
+			usage.group++
+		}
+		return nil
+	})
+	return usage, err
+}
+
+// capacitySlotConflict rejects request when the unreleased existing
+// reservation already holds its server slot or its provider resource key.
+func capacitySlotConflict(existing, request CapacityReservation) error {
+	if existing.ServerID == request.ServerID && existing.EnvironmentID == request.EnvironmentID {
+		return fmt.Errorf("%w: server %q in environment %q", ErrCapacityOccupied, request.ServerID, request.EnvironmentID)
+	}
+	if existing.Provider == request.Provider && existing.ResourceKey == request.ResourceKey {
+		return fmt.Errorf("%w: provider resource key %q is already reserved", ErrCapacityConflict, request.ResourceKey)
+	}
+	return nil
+}
+
 // MarkCapacityCreateSent is a one-time dispatch claim. Callers must claim it
 // immediately before sending the provider create request; a repeated claim
 // fails so a retry cannot accidentally dispatch the same create again. The
 // outcome remains counted until reconciled.
 func (s *BoltStore) MarkCapacityCreateSent(operationID string) (CapacityReservation, error) {
-	return s.updateCapacity(operationID, func(current CapacityReservation) (CapacityReservation, error) {
-		if current.State != CapacityReserved {
-			return CapacityReservation{}, ErrCapacityTransition
-		}
-		current.State = CapacityCreateOutcomeUnknown
-		return current, nil
-	})
+	return s.claimCapacityDispatch(operationID, CapacityReserved, CapacityCreateOutcomeUnknown)
 }
 
 // ReleaseUnsentCapacityReservation removes a reservation only while it is
@@ -180,11 +218,17 @@ func (s *BoltStore) ReleaseUnsentCapacityReservation(operationID, resourceKey st
 // Capacity remains occupied until provider reconciliation confirms absence or
 // destruction.
 func (s *BoltStore) MarkCapacityDestroySent(operationID string) (CapacityReservation, error) {
+	return s.claimCapacityDispatch(operationID, CapacityActive, CapacityDestroyOutcomeUnknown)
+}
+
+// claimCapacityDispatch moves the reservation from the from state to the to
+// state, and fails with ErrCapacityTransition unless it is in from.
+func (s *BoltStore) claimCapacityDispatch(operationID string, from, to CapacityState) (CapacityReservation, error) {
 	return s.updateCapacity(operationID, func(current CapacityReservation) (CapacityReservation, error) {
-		if current.State != CapacityActive {
+		if current.State != from {
 			return CapacityReservation{}, ErrCapacityTransition
 		}
-		current.State = CapacityDestroyOutcomeUnknown
+		current.State = to
 		return current, nil
 	})
 }
@@ -337,13 +381,9 @@ func (s *BoltStore) RecordCapacityReady(serverID, environmentID, providerInstanc
 		!validCapacityIdentifier(providerInstanceID, 240) || !plausibleObservationTime(readyAt) {
 		return CapacityReservation{}, fmt.Errorf("%w: invalid readiness measurement", ErrInvalidRecord)
 	}
-	var result CapacityReservation
-	err := s.db.Update(func(tx *bolt.Tx) error {
-		var err error
-		result, err = recordCapacityReadyTx(tx, serverID, environmentID, providerInstanceID, "", readyAt)
-		return err
+	return capacityTxValue(s.db.Update, func(tx *bolt.Tx) (CapacityReservation, error) {
+		return recordCapacityReadyTx(tx, serverID, environmentID, providerInstanceID, "", readyAt)
 	})
-	return result, err
 }
 
 func recordCapacityReadyTx(tx *bolt.Tx, serverID, environmentID, providerInstanceID, adapterID string, readyAt time.Time) (CapacityReservation, error) {
@@ -601,19 +641,7 @@ func findDestroyedCapacityReservation(bucket *bolt.Bucket, server LogicalServer,
 }
 
 func (s *BoltStore) GetCapacityReservation(operationID string) (CapacityReservation, error) {
-	if !validCapacityIdentifier(operationID, 200) {
-		return CapacityReservation{}, ErrCapacityNotFound
-	}
-	var result CapacityReservation
-	err := s.db.View(func(tx *bolt.Tx) error {
-		var err error
-		result, err = loadCapacityReservation(tx.Bucket(capacityReservationsBucket), []byte(operationID))
-		return err
-	})
-	if err != nil {
-		return CapacityReservation{}, err
-	}
-	return result, nil
+	return capacityReservationTx(s.db.View, operationID, loadCapacityReservation)
 }
 
 func (s *BoltStore) ListCapacityReservations() ([]CapacityReservation, error) {
@@ -637,14 +665,37 @@ func (s *BoltStore) ListCapacityReservations() ([]CapacityReservation, error) {
 }
 
 func (s *BoltStore) updateCapacity(operationID string, transition func(CapacityReservation) (CapacityReservation, error)) (CapacityReservation, error) {
+	return capacityReservationTx(s.db.Update, operationID, func(bucket *bolt.Bucket, key []byte) (CapacityReservation, error) {
+		return updateCapacityTx(bucket, key, transition)
+	})
+}
+
+// capacityTxRunner opens a Bolt transaction and runs fn in it, as
+// (*bolt.DB).Update and (*bolt.DB).View do.
+type capacityTxRunner func(fn func(*bolt.Tx) error) error
+
+// capacityTxValue runs fn in one transaction opened by run and returns the
+// value fn produced with the transaction's error. The value is returned even
+// when there is an error, as fn left it.
+func capacityTxValue[T any](run capacityTxRunner, fn func(*bolt.Tx) (T, error)) (T, error) {
+	var result T
+	err := run(func(tx *bolt.Tx) error {
+		var err error
+		result, err = fn(tx)
+		return err
+	})
+	return result, err
+}
+
+// capacityReservationTx runs fn on the reservation key for operationID in
+// one transaction opened by run. An invalid operationID is
+// ErrCapacityNotFound, and any error returns the zero reservation.
+func capacityReservationTx(run capacityTxRunner, operationID string, fn func(bucket *bolt.Bucket, key []byte) (CapacityReservation, error)) (CapacityReservation, error) {
 	if !validCapacityIdentifier(operationID, 200) {
 		return CapacityReservation{}, ErrCapacityNotFound
 	}
-	var result CapacityReservation
-	err := s.db.Update(func(tx *bolt.Tx) error {
-		var err error
-		result, err = updateCapacityTx(tx.Bucket(capacityReservationsBucket), []byte(operationID), transition)
-		return err
+	result, err := capacityTxValue(run, func(tx *bolt.Tx) (CapacityReservation, error) {
+		return fn(tx.Bucket(capacityReservationsBucket), []byte(operationID))
 	})
 	if err != nil {
 		return CapacityReservation{}, err
