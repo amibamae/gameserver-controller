@@ -1,6 +1,6 @@
 # Agent handoff
 
-Written 2026-11-11, last updated 2026-11-15. It is for another AI agent (Claude, ChatGPT Codex or another) or a human taking over when the previous session can't continue, for example after a usage limit. It reflects the state at the time of writing, so check `git log`, open PRs and remote branches before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`).
+Written 2026-11-11, last updated 2026-11-15. It is for another AI agent (Claude, ChatGPT Codex or another) or a human taking over when the previous session can't continue. It reflects the state at the time of writing, so check `git log`, open PRs and remote branches before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`).
 
 Read [CLAUDE.md](../CLAUDE.md) first. Its rules are standing requirements from the project owner and apply to every agent, whatever tool runs it. [AGENTS.md](../AGENTS.md) points here for tools that read that file instead.
 
@@ -54,7 +54,7 @@ The owner's goal is a repowise average health of **7–8**. The method:
 
 ### Who owns what (check this before you start anything)
 
-Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is continuing the code-health backlog. Keep unfinished Claude scopes on hold when their work is unavailable. Check the published branches and open PRs before resuming any scope.
+Claude is paused. Codex is continuing the code-health backlog. Keep unfinished Claude scopes on hold when their work is unavailable. Check the published branches and open PRs before resuming any scope.
 
 | Owner | Files | Branch or PR | Status (2026-11-14) |
 |---|---|---|---|
@@ -86,7 +86,7 @@ Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is cont
 
 **Dropped Claude WIP, kept for reference only:** `claude/r3-server-backup`, `claude/r3-server-destroy`, `claude/r3-supervised-pilot` and `claude/r3-controller-setup` hold unfinished work on Codex-owned files, based on an old `main`. Do not merge them. Codex may read them for ideas or delete them.
 
-**Claude session paused (2026-11-14):** its six round-3 agents stopped on the account's weekly usage limit, which resets 2026-11-19 at 11:00 UTC. Their unfinished work was committed as `wip:` and pushed to the `claude/r3-*` branches above. Those commits are unreviewed, and their tests may not pass. To continue a row:
+**Claude session paused (2026-11-14):** its six round-3 agents stopped before finishing. Their unfinished work was committed as `wip:` and pushed to the `claude/r3-*` branches above. Those commits are unreviewed, and their tests may not pass. To continue a row:
 1. Check out its branch and rebase onto `main`.
 2. Run every check. Characterization tests must pass on the old code before any refactor commit; check the branch's commit order.
 3. Finish the work and open the PR.
