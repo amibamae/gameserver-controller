@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"path/filepath"
 	"reflect"
 	"time"
 )
@@ -26,6 +24,22 @@ func instantOf(object map[string]any, key string) instant {
 	at, err := parseTime(stringValue(object, key))
 	return instant{at: at, ok: err == nil}
 }
+
+// notBefore: i is present and not earlier than lower. Whether lower is
+// present is the caller's check.
+func (i instant) notBefore(lower instant) bool {
+	return i.ok && !i.at.Before(lower.at)
+}
+
+// between: i is present and lies in [lower, upper]. Whether the bounds are
+// present is the caller's check.
+func (i instant) between(lower, upper instant) bool {
+	return i.notBefore(lower) && !upper.at.Before(i.at)
+}
+
+// restartInspectOutputSchema is the systemd unit inspection both the pre- and
+// post-dispatch inspections must match.
+const restartInspectOutputSchema = "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-inspect-output"
 
 // restartCase is one evaluation of the systemd unit restart vector with its
 // timestamps parsed once.
@@ -58,73 +72,50 @@ func newRestartCase(c map[string]any) restartCase {
 
 // timesValid: acceptance, dispatch, and evaluation are present and ordered.
 func (r restartCase) timesValid() bool {
-	return r.accepted.ok && r.dispatched.ok && r.evaluated.ok && !r.dispatched.at.Before(r.accepted.at) && !r.evaluated.at.Before(r.dispatched.at)
+	return r.accepted.ok && r.dispatched.notBefore(r.accepted) && r.evaluated.notBefore(r.dispatched)
 }
 
-// saveStepBound: the completed save step is the selected, advertised
-// game.save.request capability bound to this operation, target, and release.
-func restartSaveStepBound(pkg *protocolPackage, fixture, c map[string]any, r restartCase) bool {
-	selectedAdapterID := stringValue(r.core, "selected_game_adapter_id")
-	selectedCapability := asObject(c["selected_game_capability"])
-	if selectedCapability == nil {
-		selectedCapability = asObject(fixture["selected_game_capability"])
-	}
-	return selectedSaveCapabilityBound(pkg, selectedAdapterID, selectedCapability) &&
-		r.saveStepPayloadBound(pkg, selectedCapability) &&
-		r.saveStepRecordBound(selectedAdapterID, selectedCapability)
+// namesUnit: object names this unit and target, and the request's release
+// under releaseKey.
+func (r restartCase) namesUnit(object map[string]any, releaseKey string) bool {
+	return reflect.DeepEqual(r.unit, object["unit_ref"]) && reflect.DeepEqual(r.target, object["target"]) &&
+		r.request["release_id"] == object[releaseKey]
 }
 
-// selectedSaveCapabilityBound: the selected capability is game.save.request
-// on the selected adapter, exactly as that adapter's descriptor advertises
-// it (name, version and both schemas).
-func selectedSaveCapabilityBound(pkg *protocolPackage, adapterID string, selected map[string]any) bool {
-	advertised, err := findAdapterCapability(pkg, adapterID, "game.save.request")
-	return err == nil &&
-		selected["adapter_id"] == adapterID &&
-		selected["name"] == "game.save.request" &&
-		selected["name"] == advertised["name"] &&
-		selected["version"] == advertised["version"] &&
-		selected["input_schema_uri"] == advertised["input_schema_uri"] &&
-		selected["output_schema_uri"] == advertised["output_schema_uri"]
-}
-
-// saveStepPayloadBound: the save step's input and output match the selected
-// capability's schemas, and the input asks to save this target and release
-// at the operator's request.
-func (r restartCase) saveStepPayloadBound(pkg *protocolPackage, selected map[string]any) bool {
-	stepInput := asObject(r.saveStep["input"])
-	return pkg.validateSchema(stringValue(selected, "input_schema_uri"), stepInput) == nil &&
-		reflect.DeepEqual(r.target, stepInput["target"]) &&
-		r.request["release_id"] == stepInput["release_id"] && stringValue(stepInput, "reason") == "operator_request" &&
-		pkg.validateSchema(stringValue(selected, "output_schema_uri"), r.saveStep["output"]) == nil
-}
-
-// saveStepRecordBound: the save step is the request's succeeded step of
-// this operation, ran the selected adapter's game.save.request at the
-// selected version, and its output is the save confirmation.
-func (r restartCase) saveStepRecordBound(adapterID string, selected map[string]any) bool {
-	return stringValue(r.core, "operation_id") != "" && r.saveStep["operation_id"] == r.core["operation_id"] &&
-		r.saveStep["step_id"] == r.request["save_step_id"] && stringValue(r.saveStep, "status") == "succeeded" &&
-		r.saveStep["adapter_id"] == adapterID && r.saveStep["capability_name"] == "game.save.request" &&
-		r.saveStep["capability_version"] == selected["version"] && reflect.DeepEqual(r.save, r.saveStep["output"])
+// namesRestart: object names this unit, target and release, and the
+// request's expected runtime as its previous runtime.
+func (r restartCase) namesRestart(object map[string]any) bool {
+	return r.namesUnit(object, "release_id") && r.request["expected_runtime_id"] == object["previous_runtime_id"]
 }
 
 // unitCurrent: the pre-dispatch inspection shows this unit running the
 // expected runtime, observed after acceptance and before dispatch.
 func (r restartCase) unitCurrent(pkg *protocolPackage) bool {
-	inspected := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-inspect-output", r.before) == nil &&
-		reflect.DeepEqual(r.unit, r.before["unit_ref"]) && reflect.DeepEqual(r.target, r.before["target"]) && r.before["release_ref"] == r.request["release_id"] &&
+	inspected := pkg.validateSchema(restartInspectOutputSchema, r.before) == nil && r.namesUnit(r.before, "release_ref") &&
 		r.before["runtime_id"] == r.request["expected_runtime_id"] && stringValue(r.before, "state") == "running"
-	return inspected && r.timesValid() && r.unitObserved.ok && !r.unitObserved.at.Before(r.accepted.at) && !r.dispatched.at.Before(r.unitObserved.at)
+	return inspected && r.timesValid() && r.unitObserved.between(r.accepted, r.dispatched)
 }
 
 // saveConfirmationBound: the save confirmation is the save step's output,
 // confirmed, for this target and release, and ordered between the unit
 // inspection and dispatch.
 func (r restartCase) saveConfirmationBound(saveStepBound, unitInspectionPrecedesSave bool) bool {
-	return saveStepBound && r.timesValid() && r.saved.ok && r.saveObserved.ok && !r.saved.at.Before(r.accepted.at) && !r.saveObserved.at.Before(r.saved.at) &&
-		!r.dispatched.at.Before(r.saveObserved.at) && unitInspectionPrecedesSave && r.stepCompleted.ok && !r.stepCompleted.at.Before(r.saveObserved.at) &&
-		!r.dispatched.at.Before(r.stepCompleted.at) && stringValue(r.save, "outcome") == "confirmed" && reflect.DeepEqual(r.target, r.save["target"]) &&
+	return saveStepBound && unitInspectionPrecedesSave && r.saveEvidenceOrdered() && r.saveConfirmed()
+}
+
+// saveEvidenceOrdered: the operation times are valid, the save happened
+// after acceptance, the save observation falls between the save and
+// dispatch, and the save step completed between that observation and
+// dispatch.
+func (r restartCase) saveEvidenceOrdered() bool {
+	return r.timesValid() && r.saved.notBefore(r.accepted) && r.saveObserved.between(r.saved, r.dispatched) &&
+		r.stepCompleted.between(r.saveObserved, r.dispatched)
+}
+
+// saveConfirmed: the save confirmation is confirmed for this target and
+// release.
+func (r restartCase) saveConfirmed() bool {
+	return stringValue(r.save, "outcome") == "confirmed" && reflect.DeepEqual(r.target, r.save["target"]) &&
 		r.request["release_id"] == r.save["release_id"]
 }
 
@@ -132,35 +123,51 @@ func (r restartCase) saveConfirmationBound(saveStepBound, unitInspectionPrecedes
 // adapter's unit operation and matches the resolved operation.
 func (r restartCase) operationBound() bool {
 	operationRef, hasOperationRef := r.output["external_operation_ref"]
-	return !hasOperationRef || (asObject(operationRef)["adapter_id"] == r.unit["adapter_id"] &&
-		asObject(operationRef)["environment_id"] == r.unit["environment_id"] && stringValue(asObject(operationRef), "resource_kind") == "unit-operation" &&
-		reflect.DeepEqual(operationRef, r.resolved["external_operation_ref"]) && reflect.DeepEqual(r.unit, r.resolved["unit_ref"]) &&
-		reflect.DeepEqual(r.target, r.resolved["target"]) && r.request["release_id"] == r.resolved["release_id"] && r.request["expected_runtime_id"] == r.resolved["previous_runtime_id"])
+	if !hasOperationRef {
+		return true
+	}
+	return r.unitOperationRef(asObject(operationRef)) &&
+		reflect.DeepEqual(operationRef, r.resolved["external_operation_ref"]) && r.namesRestart(r.resolved)
+}
+
+// unitOperationRef: ref is a unit operation of this unit's adapter and
+// environment.
+func (r restartCase) unitOperationRef(ref map[string]any) bool {
+	return ref["adapter_id"] == r.unit["adapter_id"] && ref["environment_id"] == r.unit["environment_id"] &&
+		stringValue(ref, "resource_kind") == "unit-operation"
 }
 
 // resultBound: the restart result names this unit, target, release, and
 // previous runtime, and was observed between dispatch and evaluation.
 func (r restartCase) resultBound(operationBound bool) bool {
-	return reflect.DeepEqual(r.unit, r.output["unit_ref"]) && reflect.DeepEqual(r.target, r.output["target"]) && r.request["release_id"] == r.output["release_id"] &&
-		r.request["expected_runtime_id"] == r.output["previous_runtime_id"] && operationBound && r.timesValid() && r.observed.ok &&
-		!r.observed.at.Before(r.dispatched.at) && !r.evaluated.at.Before(r.observed.at)
+	return r.namesRestart(r.output) && operationBound && r.timesValid() && r.observed.between(r.dispatched, r.evaluated)
 }
 
 // afterBound: the post-dispatch inspection is valid, names this unit, and was
 // observed between dispatch and evaluation.
 func (r restartCase) afterBound(pkg *protocolPackage) bool {
-	afterValid := pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-inspect-output", r.after) == nil
-	return afterValid && reflect.DeepEqual(r.unit, r.after["unit_ref"]) && reflect.DeepEqual(r.target, r.after["target"]) && r.after["release_ref"] == r.request["release_id"] &&
-		r.afterObserved.ok && !r.afterObserved.at.Before(r.dispatched.at) && !r.evaluated.at.Before(r.afterObserved.at)
+	afterValid := pkg.validateSchema(restartInspectOutputSchema, r.after) == nil
+	return afterValid && r.namesUnit(r.after, "release_ref") && r.afterObserved.between(r.dispatched, r.evaluated)
 }
 
 // reconciled: an uncertain restart is proven complete by the resolved
 // operation and a running inspection with a new runtime.
 func (r restartCase) reconciled(afterBound bool) bool {
-	return stringValue(r.resolved, "state") == "completed" &&
-		r.completed.ok && !r.completed.at.Before(r.dispatched.at) && !r.afterObserved.at.Before(r.completed.at) &&
-		boolValue(r.resolved, "clean_stop_confirmed") && afterBound && stringValue(r.after, "state") == "running" &&
-		stringValue(r.after, "runtime_id") != "" && r.after["runtime_id"] != r.request["expected_runtime_id"] && r.after["runtime_id"] == r.resolved["runtime_id"]
+	return r.resolvedCleanly() && afterBound && r.afterRunsResolvedRuntime()
+}
+
+// resolvedCleanly: the resolved operation completed after dispatch, no
+// later than the follow-up inspection, with a confirmed clean stop.
+func (r restartCase) resolvedCleanly() bool {
+	return stringValue(r.resolved, "state") == "completed" && r.completed.notBefore(r.dispatched) &&
+		!r.afterObserved.at.Before(r.completed.at) && boolValue(r.resolved, "clean_stop_confirmed")
+}
+
+// afterRunsResolvedRuntime: the follow-up inspection shows the unit running
+// the resolved operation's runtime, which is new.
+func (r restartCase) afterRunsResolvedRuntime() bool {
+	return stringValue(r.after, "state") == "running" && stringValue(r.after, "runtime_id") != "" &&
+		r.after["runtime_id"] != r.request["expected_runtime_id"] && r.after["runtime_id"] == r.resolved["runtime_id"]
 }
 
 func evaluateUnitRestartCase(pkg *protocolPackage, fixture, c map[string]any) map[string]any {
@@ -173,8 +180,8 @@ func evaluateUnitRestartCase(pkg *protocolPackage, fixture, c map[string]any) ma
 		"adapter_bound": d.adapterBound, "target_consistent": d.targetConsistent, "unit_bound": d.unitBound, "unit_current": d.unitCurrent,
 		"save_step_bound": d.saveStepBound, "unit_inspection_precedes_save": d.inspectionPrecedesSave, "save_confirmation_bound": d.saveBound,
 		"dispatch_allowed": dispatchAllowed, "result_bound": o.bound,
-		"restart_confirmed": o.confirmed || o.reconciled, "reconciliation_confirmed": o.reconciled,
-		"must_inspect_before_retry": dispatchAllowed && (!o.resultValid || (o.uncertain && !o.reconciled)),
+		"restart_confirmed": o.restartConfirmed(), "reconciliation_confirmed": o.reconciled,
+		"must_inspect_before_retry": o.mustInspectBeforeRetry(dispatchAllowed),
 		"retry_permitted":           false, "operator_required": o.operatorRequired, "readiness_established": false,
 	}
 }
@@ -187,22 +194,43 @@ type restartDispatch struct {
 
 func (r restartCase) dispatchChecks(pkg *protocolPackage, fixture, c map[string]any) restartDispatch {
 	d := restartDispatch{
-		requestValid:  pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-input", r.request) == nil,
-		saveStepBound: restartSaveStepBound(pkg, fixture, c, r),
-		adapterBound:  stringValue(r.core, "execution_adapter_id") != "" && r.unit["adapter_id"] == r.core["execution_adapter_id"],
-		targetConsistent: r.unit["environment_id"] == r.target["environment_id"] && r.target["environment_id"] == r.instance["environment_id"] &&
-			stringValue(r.unit, "resource_kind") == "systemd-unit",
-		unitBound: reflect.DeepEqual(r.unit, r.binding["unit_ref"]) && reflect.DeepEqual(r.target, r.binding["target"]) &&
-			r.request["release_id"] == r.binding["release_id"],
-		unitCurrent: r.unitCurrent(pkg),
+		requestValid:     pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-input", r.request) == nil,
+		saveStepBound:    restartSaveStepBound(pkg, fixture, c, r),
+		adapterBound:     r.adapterBound(),
+		targetConsistent: r.targetConsistent(),
+		unitBound:        r.namesUnit(r.binding, "release_id"),
+		unitCurrent:      r.unitCurrent(pkg),
 	}
 	d.inspectionPrecedesSave = d.unitCurrent && r.saved.ok && !r.saved.at.Before(r.unitObserved.at)
 	d.saveBound = r.saveConfirmationBound(d.saveStepBound, d.inspectionPrecedesSave)
 	return d
 }
 
+// adapterBound: the unit belongs to the operation's execution adapter.
+func (r restartCase) adapterBound() bool {
+	return stringValue(r.core, "execution_adapter_id") != "" && r.unit["adapter_id"] == r.core["execution_adapter_id"]
+}
+
+// targetConsistent: the unit, target and instance share one environment,
+// and the unit is a systemd unit.
+func (r restartCase) targetConsistent() bool {
+	return r.unit["environment_id"] == r.target["environment_id"] && r.target["environment_id"] == r.instance["environment_id"] &&
+		stringValue(r.unit, "resource_kind") == "systemd-unit"
+}
+
 func (d restartDispatch) allowed() bool {
-	return d.requestValid && d.adapterBound && d.targetConsistent && d.unitBound && d.unitCurrent && d.saveBound
+	return d.requestBound() && d.unitReady()
+}
+
+// requestBound: the request is valid and names a consistent unit of the
+// execution adapter.
+func (d restartDispatch) requestBound() bool {
+	return d.requestValid && d.adapterBound && d.targetConsistent
+}
+
+// unitReady: the unit is bound, current, and saved before dispatch.
+func (d restartDispatch) unitReady() bool {
+	return d.unitBound && d.unitCurrent && d.saveBound
 }
 
 // restartOutcome is what the restart result, and any follow-up
@@ -217,19 +245,42 @@ type restartOutcome struct {
 // reconciled only by a bound inspection showing a new running runtime;
 // anything else that cannot be resolved needs an operator.
 func (r restartCase) outcomeChecks(pkg *protocolPackage, dispatchAllowed bool) restartOutcome {
+	o := r.resultChecks(pkg)
+	o.confirmed = dispatchAllowed && o.resultValid && stringValue(r.output, "outcome") == "completed"
+	afterBound := r.afterBound(pkg)
+	o.reconciled = dispatchAllowed && o.resultValid && o.uncertain && r.reconciled(afterBound)
+	o.operatorRequired = dispatchAllowed && o.uncertain && (!o.operationBound || r.unresolved(afterBound, o.reconciled))
+	return o
+}
+
+// resultChecks: what the restart result alone shows, before dispatch
+// permission and any follow-up inspection are considered.
+func (r restartCase) resultChecks(pkg *protocolPackage) restartOutcome {
 	o := restartOutcome{
 		outputValid:    pkg.validateSchema("urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-restart-output", r.output) == nil,
 		operationBound: r.operationBound(),
 	}
 	o.bound = r.resultBound(o.operationBound)
-	outcome := stringValue(r.output, "outcome")
 	o.resultValid = o.outputValid && o.bound && r.cycleConsistent()
-	o.confirmed = dispatchAllowed && o.resultValid && outcome == "completed"
-	o.uncertain = outcome == "accepted" || outcome == "outcome_unknown"
-	afterBound := r.afterBound(pkg)
-	o.reconciled = dispatchAllowed && o.resultValid && o.uncertain && r.reconciled(afterBound)
-	o.operatorRequired = dispatchAllowed && o.uncertain && (!o.operationBound || r.unresolved(afterBound, o.reconciled))
+	o.uncertain = restartOutcomeUncertain(stringValue(r.output, "outcome"))
 	return o
+}
+
+// restartOutcomeUncertain: the adapter only accepted the restart, or does
+// not know how it ended.
+func restartOutcomeUncertain(outcome string) bool {
+	return outcome == "accepted" || outcome == "outcome_unknown"
+}
+
+// restartConfirmed: the result confirmed the restart, or reconciliation did.
+func (o restartOutcome) restartConfirmed() bool {
+	return o.confirmed || o.reconciled
+}
+
+// mustInspectBeforeRetry: a dispatched restart whose result is invalid, or
+// uncertain and not reconciled, must be inspected before any retry.
+func (o restartOutcome) mustInspectBeforeRetry(dispatchAllowed bool) bool {
+	return dispatchAllowed && (!o.resultValid || (o.uncertain && !o.reconciled))
 }
 
 // cycleConsistent: a new runtime is reported only with a confirmed clean
@@ -242,36 +293,13 @@ func (r restartCase) cycleConsistent() bool {
 // unresolved: a follow-up inspection exists but is unbound, reports an
 // unknown state, or shows a completed operation that did not reconcile.
 func (r restartCase) unresolved(afterBound, reconciled bool) bool {
-	return len(r.after) > 0 &&
-		(!afterBound || stringValue(r.after, "state") == "unknown" || (stringValue(r.resolved, "state") == "completed" && !reconciled))
+	return len(r.after) > 0 && (!afterBound || r.inspectionInconclusive(reconciled))
 }
 
-func findAdapterCapability(pkg *protocolPackage, adapterID, capabilityName string) (map[string]any, error) {
-	paths, err := filepath.Glob(filepath.Join(pkg.root, "protocol", "examples", "adapter-descriptor.*.json"))
-	if err != nil {
-		return nil, err
-	}
-	for _, path := range paths {
-		value, err := parseJSONFile(path)
-		if err != nil {
-			return nil, err
-		}
-		descriptor := asObject(value)
-		if stringValue(descriptor, "adapter_id") != adapterID {
-			continue
-		}
-		if stringValue(descriptor, "category") != "game" {
-			return nil, fmt.Errorf("selected adapter %q is not a game adapter", adapterID)
-		}
-		for _, rawCapability := range arrayValue(descriptor, "capabilities") {
-			capability := asObject(rawCapability)
-			if stringValue(capability, "name") == capabilityName {
-				return capability, nil
-			}
-		}
-		return nil, fmt.Errorf("adapter %q does not advertise %q", adapterID, capabilityName)
-	}
-	return nil, fmt.Errorf("selected adapter descriptor %q is missing", adapterID)
+// inspectionInconclusive: the follow-up inspection reports an unknown state,
+// or the operation completed without reconciling.
+func (r restartCase) inspectionInconclusive(reconciled bool) bool {
+	return stringValue(r.after, "state") == "unknown" || (stringValue(r.resolved, "state") == "completed" && !reconciled)
 }
 
 func init() {
