@@ -7,15 +7,11 @@ import (
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
-	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
 func TestBuildReadinessAssertionBindsPassingEvidence(t *testing.T) {
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	operation, server, step := readinessFixture(schemas.ProtocolVersion())
 	encoded, err := buildReadinessAssertionAt(schemas, operation, server, step.StepID, time.Minute, readinessFixtureNow())
 	if err != nil {
@@ -61,10 +57,7 @@ func TestBuildReadinessAssertionBindsPassingEvidence(t *testing.T) {
 }
 
 func TestBuildReadinessAssertionRejectsUnsafeEvidence(t *testing.T) {
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	tests := []struct {
 		name   string
 		mutate func(*store.OperationRecord, *store.LogicalServer, *store.OperationStep)
@@ -150,10 +143,7 @@ func TestBuildReadinessAssertionRejectsUnsafeEvidence(t *testing.T) {
 }
 
 func TestBuildReadinessAssertionRequiresBoundedTTL(t *testing.T) {
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	operation, server, step := readinessFixture(schemas.ProtocolVersion())
 	for _, ttl := range []time.Duration{0, -time.Second, maxReadinessAssertionTTL + time.Nanosecond} {
 		if _, err := buildReadinessAssertionAt(schemas, operation, server, step.StepID, ttl, readinessFixtureNow()); err == nil {
