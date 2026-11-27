@@ -28,9 +28,14 @@ type ProcessSettings struct {
 
 var envNamePattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,127}$`)
 
+// isAbsolute accepts both Unix-style paths (starting with /) and Windows-style absolute paths.
+func isAbsolute(path string) bool {
+	return filepath.IsAbs(path) || strings.HasPrefix(path, "/")
+}
+
 func (p *ProcessSettings) Validate(check config.SettingsCheck) {
-	check.Require(filepath.IsAbs(p.Path) && !strings.ContainsRune(p.Path, '\x00'), "path must be an absolute executable path")
-	check.Require(p.WorkingDirectory == "" || filepath.IsAbs(p.WorkingDirectory), "working_directory must be absolute when set")
+	check.Require(isAbsolute(p.Path) && !strings.ContainsRune(p.Path, '\x00'), "path must be an absolute executable path")
+	check.Require(p.WorkingDirectory == "" || isAbsolute(p.WorkingDirectory), "working_directory must be absolute when set")
 	for _, arg := range p.Args {
 		check.Require(!strings.ContainsRune(arg, '\x00'), "args must not contain NUL")
 	}

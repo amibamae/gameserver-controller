@@ -1,7 +1,6 @@
 package config
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"regexp"
@@ -159,7 +158,7 @@ func buildInlineYAML(content []*yaml.Node, builder *strings.Builder) error {
 			continue
 		}
 
-		builder.WriteString(keyNode.Value + ":")
+		builder.WriteString(keyNode.Value + ": ")
 
 		switch valueNode.Kind {
 		case yaml.ScalarNode:
@@ -226,12 +225,16 @@ func resolveSettings(profile *AdapterProfile) error {
 		return err
 	}
 
-	decoder := yaml.NewDecoder(bytes.NewReader([]byte(builder.String())))
-	decoder.KnownFields(true)
-	if err := decoder.Decode(settings); err != nil {
-		// Decoder errors can quote values; keep them out of messages.
+	yamlContent := builder.String()
+	fmt.Printf("resolveSettings %q: YAML built:\n%s\n", profile.Implementation, yamlContent)
+
+	// Use unmarshal directly on the YAML content.
+	if err := yaml.Unmarshal([]byte(yamlContent), settings); err != nil {
+		fmt.Printf("resolveSettings %q decode error: %v\n", profile.Implementation, err)
 		return errInvalidBlock
 	}
+
+	fmt.Printf("resolveSettings %q decoded into type %T: %+v\n", profile.Implementation, settings, settings)
 	profile.Settings = settings
 	return nil
 }
