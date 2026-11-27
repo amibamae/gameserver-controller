@@ -3,6 +3,7 @@ package controllerruntime
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func TestRunnerScanRediscoversDroppedHint(t *testing.T) {
 			target <- struct{}{}
 			return
 		}
-		if id == "worker" || id[:min(len(id), 7)] == "worker-" {
+		if strings.HasPrefix(id, "worker-") {
 			started <- struct{}{}
 			select {
 			case <-gate:
