@@ -4,6 +4,19 @@ Game Server Controller (GSC) is an open-source, self-hosted orchestration projec
 
 The first priority is safe, routine operation of the owner's production Minecraft network. The initial reference stack is Debian, Vultr, Paper, Velocity and Wasabi, with a lightweight Go controller and embedded bbolt state store.
 
+## Design philosophy
+
+**Simple by default, sophisticated when necessary.**
+
+GSC should solve real user problems without making ordinary deployments unnecessarily complicated. A small server community should benefit from robust world protection and recovery without needing a distributed database, orchestration cluster or external monitoring stack.
+
+- Prefer the simplest maintainable implementation that meets demonstrated user needs and safety requirements. Reuse mature components where appropriate; avoid speculative abstractions and features built solely for competitive parity.
+- Keep advanced capabilities for power users opt-in, independently configurable and isolated behind clear interfaces. High availability, external databases, multi-region orchestration, Kubernetes, advanced scaling and external observability must not become prerequisites for a standalone deployment.
+- Use safe, understandable defaults and keep the normal installation, configuration and upgrade path small. Optional features must justify their ongoing maintenance, security and operational costs.
+- Never simplify away essential authorization, world-data integrity, recovery or destructive-action safeguards. These protections apply regardless of deployment size or enabled features.
+
+See the [roadmap's scope discipline](docs/ROADMAP.md#competitive-review-and-scope-discipline) for feature acceptance and verification criteria.
+
 ## Intended deployment options
 
 | Deployment | Goal |
