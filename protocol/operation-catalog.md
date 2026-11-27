@@ -29,6 +29,7 @@ A request's `parameters` object MUST validate against the schema named in the ta
 | `server.backup` | `backup-parameters.schema.json` | Capture, upload, and verify a consistent backup. |
 | `server.restore` | `restore-parameters.schema.json` | Restore one explicit verified backup to a prepared target. |
 | `server.destroy` | `destroy-parameters.schema.json` | Ensure a verified backup, then destroy the exact recorded instance. |
+| `server.recover` | `server-recover.schema.json` | Recover a failed or degraded server back to healthy state without destroying data. |
 
 `server.replace` is intentionally not a standard 0.21.0-draft operation. Safe replacement may require simultaneous old/new instance references and cutover semantics beyond the single-current-instance model. It will be specified only after a multi-instance transition model is reviewed.
 
@@ -70,6 +71,25 @@ Destroys only the exact `expected_instance_ref` attached to the logical server. 
 
 Production policy SHOULD require a separate approval bound to the exact destroy plan. The controller rechecks target identity, backup verification, environment, locks, and approval immediately before provider dispatch. Success means provider absence is confirmed; the logical server remains in `destroyed` state and retains backup references.
 
+### 3.8 `server.recover`
+
+Recovers a failed or degraded server by attempting to bring it back to healthy state without destroying data or instance. The operation supports four recovery intents:
+
+- **revalidate**: Attempt health check and readiness validation without changing runtime state. Transition from `degraded` to `ready` if checks pass; otherwise remain in current state (or transition to `failed`).
+- **restart**: Gracefully stop, optionally save, restart the execution unit, then revalidate readiness. If recovery fails after retry budget expires, leave server in `failed`.
+- **restore**: Restore from a specifically identified backup (by manifest reference or generation ID), validate compatibility and integrity, then transition to `starting` -> `validating` -> `ready` on success. Requires explicit `target_generation_id` and `backup_ref` parameters.
+- **replace**: Create a new instance with existing data restoration (from a selected production backup), cutover players to the replacement after readiness validation, and destroy the old instance only after final backup is verified.
+
+The operation requires a lock scoped to `server_only`, `server_instance`, or `server_data` (default). The request budget includes maximum duration before timeout and retry count for failed attempts. Force recovery with explicit authorization may bypass some safety checks but retains audit requirements. Recovery failures result in server state transitioning to `failed`, requiring manual intervention or a new authorized recovery operation.
+
+Recovery semantics follow the lifecycle transitions:
+- `degraded` -> `validating` (revalidate intent)
+- `starting` -> `stopping` -> `starting` -> `validating` (restart intent, if already running)
+- `stopped` -> `restoring` (restore intent)
+- `destroying` -> `provisioning` (replace intent with recreation)
+
+The operation persists before any provider call and reconciles ambiguous outcomes. An unknown result requires manual review.
+
 ## 4. Required postconditions
 
 An operation MUST NOT become `succeeded` until its listed postconditions are confirmed.
@@ -97,6 +117,7 @@ Successful operation results use the canonical envelope from [operation-result.s
 | `server.backup` | [server-backup-result.schema.json](schemas/operations/server-backup-result.schema.json) |
 | `server.restore` | [server-restore-result.schema.json](schemas/operations/server-restore-result.schema.json) |
 | `server.destroy` | [server-destroy-result.schema.json](schemas/operations/server-destroy-result.schema.json) |
+| `server.recover` | [server-recover-result.schema.json](schemas/lifecycle/server-recover-result.schema.json) |
 
 Every standard operation now has a registered typed result schema; the conformance suite checks the operation type and exact target binding.
 

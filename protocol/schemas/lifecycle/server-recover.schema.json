@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gameserver-controller:0.21.0-draft:lifecycle:server-recover",
+  "title": "Server recovery operation parameters",
+  "type": "object",
+  "additionalProperties": true,
+  "description": "Parameters for a durable server recovery operation. This operation attempts to bring a failed/degraded server back to healthy state without destroying data or instance.",
+  "required": [
+    "server_id",
+    "environment_id"
+  ],
+  "properties": {
+    "server_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "environment_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "recovery_intent": {
+      "description": "The recovery action to perform. One of: revalidate, restart, restore, replace.",
+      "enum": [
+        "revalidate",
+        "restart",
+        "restore",
+        "replace"
+      ]
+    },
+    "target_instance_ref": {
+      "description": "Optional specific instance reference to target. If omitted, use existing or select from hosting adapter.",
+      "type": ["string", "null"],
+      "$ref": "urn:gameserver-controller:0.21.0-draft:common:external-resource-ref"
+    },
+    "target_generation_id": {
+      "description": "Target data generation ID for restore operations. If omitted, use current generation.",
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "backup_ref": {
+      "description": "Reference to a specific backup for restore operations. Required when target_generation_id is provided.",
+      "type": ["string", "null"],
+      "maxLength": 500
+    },
+    "recovery_budget": {
+      "description": "Time budget for recovery operation before it times out or transitions to failed.",
+      "type": "object",
+      "required": [
+        "max_duration"
+      ],
+      "properties": {
+        "max_duration": {
+          "description": "Maximum duration in seconds. Zero means no timeout.",
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 86400
+        },
+        "retry_count": {
+          "description": "Number of retry attempts before giving up on automatic recovery.",
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "default": 3
+        }
+      }
+    },
+    "lock_scope": {
+      "description": "Lock scope for this operation. Prevents concurrent conflicting operations.",
+      "enum": [
+        "server_only",
+        "server_instance",
+        "server_data"
+      ],
+      "default": "server_data"
+    },
+    "force_recovery": {
+      "description": "When true, bypasses some safety checks. Requires explicit authorization.",
+      "type": "boolean",
+      "default": false
+    },
+    "authorization_ref": {
+      "description": "Reference to an authorization token or approval for force recovery operations.",
+      "type": ["string", "null"],
+      "maxLength": 500
+    }
+  },
+  "if": {
+    "properties": {
+      "recovery_intent": {
+        "const": "restore"
+      }
+    },
+    "required": [
+      "recovery_intent"
+    ]
+  },
+  "then": {
+    "required": [
+      "target_generation_id",
+      "backup_ref"
+    ]
+  },
+  "if": {
+    "properties": {
+      "force_recovery": {
+        "const": true
+      }
+    },
+    "required": [
+      "force_recovery"
+    ]
+  },
+  "then": {
+    "required": [
+      "authorization_ref"
+    ]
+  }
+}

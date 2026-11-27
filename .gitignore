@@ -1,7 +1,3 @@
-.opencode/
-__pycache__/
-*.pyc
-
-# Coordination CLI lock and temporary files
-COORDINATION/.lock
-COORDINATION/.*.tmp-*
+# Ignore Windows temp files and incomplete stubs for Issue #425
+*.impcache
+*.cache

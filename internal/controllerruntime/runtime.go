@@ -22,8 +22,9 @@ import (
 
 // RegisteredOperationTypes lists the workflows this runtime can execute.
 // Other lifecycle workflows need hosting, execution, and game adapters that
-// do not exist yet; their operations are not run.
-var RegisteredOperationTypes = []string{"server.define"}
+// do not exist yet; their operations are not run. The server.recover operation
+// is registered but requires game/execution adapters to be fully implemented.
+var RegisteredOperationTypes = []string{"server.define", "server.recover"}
 
 // Options carries process-level inputs that are not part of the config file.
 type Options struct {

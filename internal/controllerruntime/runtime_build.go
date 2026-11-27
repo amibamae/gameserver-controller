@@ -91,11 +91,24 @@ func (b *runtimeBuild) registerAdapters() error {
 // registerDefinitions registers the workflows in RegisteredOperationTypes.
 func (b *runtimeBuild) registerDefinitions() error {
 	b.definitions = workflow.NewDefinitions()
+
+	// Register server.define and server.recover
 	define, err := workflow.NewServerDefineDefinition(b.runtime.Store)
 	if err != nil {
 		return err
 	}
-	return b.definitions.Register("server.define", define)
+	if err := b.definitions.Register("server.define", define); err != nil {
+		return err
+	}
+
+	recoverDef, err := workflow.NewServerRecoverDefinition(
+		b.runtime.Store,
+		b.runtime.Engine,
+	)
+	if err != nil {
+		return err
+	}
+	return b.definitions.Register("server.recover", recoverDef)
 }
 
 func (b *runtimeBuild) newEngine() (err error) {
