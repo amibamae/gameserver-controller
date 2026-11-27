@@ -1,6 +1,6 @@
 # Protocol Specification
 
-**Status:** Reviewed Phase 1 draft, version `0.21.0-draft`. The repo includes normative draft text, JSON Schemas, RPC and management API bindings, examples, and conformance fixtures. Go CI checks schema structure and references, examples, OpenAPI, and fixtures. The Go operation store, acceptance service, local schema registry, and in-process adapter boundary exist. Durable workflow dispatch, the management runtime, and production adapters are still work to do.
+**Status:** Reviewed Phase 1 draft, version `0.21.0-draft`. The repo includes normative draft text, JSON Schemas, RPC and management API bindings, examples, and conformance fixtures. Go CI checks schema structure and references, examples, OpenAPI, and fixtures. The Go operation store, acceptance service, local schema registry, and in-process adapter boundary exist. Durable workflow dispatch primitives, fake-tested lifecycle definitions and an initial authenticated management runtime exist. The reviewed runtime registers `server.define`; complete controller behavioral conformance and real lifecycle integration remain to be demonstrated.
 
 ## Purpose
 
@@ -156,7 +156,7 @@ The tree describes the draft package. [schemas/index.json](schemas/index.json) l
 
 The current untagged branch carries version `0.21.0-draft` and has completed the Phase 1 package review. It is development source, not an immutable compatibility target. A published snapshot MUST be immutable and increment the pre-1.0 minor version.
 
-The protocol remains a draft. Phase 1 completion means the specification and Go validator/conformance suite are reviewed; it does not mean the full controller is ready. Stable protocol 1.0 remains gated on the Go controller and fake-adapter implementation passing the behavioral suite. Other-language implementations are welcome, but they are not required for release.
+The protocol remains a draft. Phase 1 completion means the specification and Go validator/conformance suite are reviewed; it does not mean the full controller is ready. Stable protocol 1.0 remains gated on the Go controller and fake-adapter implementation passing the behavioral suite. See the [stabilization evidence checklist](../docs/PROTOCOL_STABILIZATION.md) for the distinction between package validation, implementation behavior and production readiness. Other-language implementations are welcome, but they are not required for release.
 
 ## Related decisions
 
