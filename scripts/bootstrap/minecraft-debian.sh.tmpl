@@ -21,7 +21,24 @@ on_error() {
     echo "log       : $LOG"
     echo "============================================================"
     echo "$rc" > "$STATE_DIR/bootstrap-failed"
-    logger -t gsc-bootstrap "gsc bootstrap failed" 2>/dev/null || true
+    
+    # Preserve bootstrap logs for debugging before exit (on_error hook)
+    {
+        echo "--------------------------------------------------------------"
+        echo "PRESERVING BOOTSTRAP LOGS TO /var/log/minecraft-bootstrap.tar.gz"
+        echo "Timestamp: $(date --iso-8601=seconds)"
+        echo "Failed exit code: $rc"
+        echo "Command that failed: ${BASH_COMMAND:-unknown}"
+        echo "--------------------------------------------------------------"
+    } >> /var/log/minecraft-bootstrap-preserve.log
+    
+    tar -czf /var/log/minecraft-bootstrap.tar.gz \
+        -C / \
+        . \
+        /etc \
+        /opt \
+        2>&1 | tail -n 5 || true
+    
     exit "$rc"
 }
 
