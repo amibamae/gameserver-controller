@@ -29,7 +29,7 @@ func (w *ServerStartWorkflow) ValidateCompletion(ctx context.Context, operation 
 	if err != nil {
 		return err
 	}
-	_, err = BuildReadinessAssertion(w.schemas, operation, stored.Record, startReadinessStep, w.ttl)
+	_, err = w.startReadinessAssertion(operation, stored.Record)
 	return err
 }
 
@@ -58,7 +58,7 @@ func (w *ServerStartWorkflow) BuildSuccessResult(ctx context.Context, operation 
 	if err != nil {
 		return nil, err
 	}
-	assertion, err := BuildReadinessAssertion(w.schemas, operation, stored.Record, startReadinessStep, w.ttl)
+	assertion, err := w.startReadinessAssertion(operation, stored.Record)
 	if err != nil {
 		return nil, err
 	}

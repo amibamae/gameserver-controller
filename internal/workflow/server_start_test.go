@@ -227,7 +227,7 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 				OutputSchemaURI: "urn:gameserver-controller:" + version + ":game:save-request-output", RequiredPermissions: []string{}},
 		},
 	})
-	for _, fake := range []*fakeadapter.Scripted{hosting, execution, game} {
+	for _, fake := range []adapter.Implementation{hosting, execution, freshReadinessGame{game}} {
 		if err := registry.Register(fake); err != nil {
 			t.Fatal(err)
 		}

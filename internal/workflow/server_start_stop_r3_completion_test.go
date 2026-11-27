@@ -56,19 +56,43 @@ func TestStartStopR3Constructors(t *testing.T) {
 	}
 }
 
+// startStopR3Evidence is when a test start's unit start completed and when
+// its readiness observation and checks were made.
+type startStopR3Evidence struct {
+	startCompletedAt time.Time
+	observedAt       time.Time
+	checkObservedAt  time.Time
+}
+
+// startStopR3FreshEvidence is a unit start completed one second ago and
+// readiness observed now.
+func startStopR3FreshEvidence() startStopR3Evidence {
+	now := time.Now().UTC()
+	return startStopR3Evidence{startCompletedAt: now.Add(-time.Second), observedAt: now, checkObservedAt: now}
+}
+
 // startStopR3Ready completes a planned start with passing readiness evidence
-// observed now.
+// observed now, after the unit start completed.
 func startStopR3Ready(t *testing.T, f *startStopR3Fixture) store.OperationRecord {
 	t.Helper()
+	return startStopR3ReadyWith(t, f, startStopR3FreshEvidence())
+}
+
+// startStopR3ReadyWith completes a planned start with passing readiness
+// evidence at the given times.
+func startStopR3ReadyWith(t *testing.T, f *startStopR3Fixture, evidence startStopR3Evidence) store.OperationRecord {
+	t.Helper()
 	operation := startStopR3PlannedStart(t, f)
-	observed := time.Now().UTC().Format(time.RFC3339Nano)
+	completedAt := evidence.startCompletedAt
+	startStopR3SetStep(&operation, startRuntimeStep, func(step *store.OperationStep) { step.CompletedAt = &completedAt })
+	checkObserved := evidence.checkObservedAt.Format(time.RFC3339Nano)
 	results := []any{}
 	for _, check := range startStopR3Checks() {
-		results = append(results, map[string]any{"check_id": check.CheckID, "check_version": check.CheckVersion, "result": "pass", "observed_at": observed})
+		results = append(results, map[string]any{"check_id": check.CheckID, "check_version": check.CheckVersion, "result": "pass", "observed_at": checkObserved})
 	}
 	output := startStopR3MustJSON(t, map[string]any{
 		"server_id": startTestServerID, "environment_id": startTestEnvID, "instance_ref": json.RawMessage(startTestInstance),
-		"game_release_id": startTestRelease, "observed_at": observed, "check_results": results,
+		"game_release_id": startTestRelease, "observed_at": evidence.observedAt.Format(time.RFC3339Nano), "check_results": results,
 	})
 	startStopR3SetStep(&operation, startReadinessStep, startStopR3Succeed(string(output)))
 	f.server().LifecycleState = protocolstate.ServerValidating
