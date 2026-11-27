@@ -46,10 +46,7 @@ type restorePlanTestFixture struct {
 func newRestorePlanTestFixture(t *testing.T) *restorePlanTestFixture {
 	t.Helper()
 
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	registry, err := adapter.NewRegistry(schemas)
 	if err != nil {
 		t.Fatal(err)

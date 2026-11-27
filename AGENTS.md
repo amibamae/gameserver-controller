@@ -50,7 +50,7 @@ Follow these rules unless the owner explicitly instructs otherwise.
    - `go run ./cmd/protocol-check`,
    - `go run ./cmd/complexity-check -base origin/main` (must report nothing for your changed functions; see the exception rule in CLAUDE.md),
    - `go run ./cmd/config-check validate configs/controller.example.yaml`.
-4. If the repowise MCP tools are available, run `get_health` on the files you changed and report the scores in the PR; each changed production file should score 7 or more and no change may lower a file's score.
+4. If the repowise MCP tools are available, call them first for where, how, or why questions about the code (`get_overview`, `get_answer`, `search_codebase`, `get_context`), before grepping or reading files; see "Use Repowise first" in CLAUDE.md. Before merging, run `get_health` on the files you changed and report the scores in the PR; each changed production file should score 7 or more and no change may lower a file's score.
 5. Pull request checklist: what you changed and why, which components are affected (including compatibility changes and side effects), which tests you added or ran (or why testing does not apply), which docs and examples changed, and the purpose and license of any new dependency. Follow the rules in [CONTRIBUTING.md](CONTRIBUTING.md): security-sensitive changes get extra detail, tests must not touch production systems or data, and credentials, private keys, tokens, and private data never go into commits, issues, PRs, logs, or test fixtures.
 6. Update the protocol manifest when schemas, examples, or conformance vectors change: `go run ./cmd/protocol-check --manifest > protocol/conformance/package-manifest.json`.
 

@@ -12,7 +12,6 @@ import (
 
 	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
-	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
@@ -177,10 +176,7 @@ type restoreR3Fixture struct {
 // data is not known to be empty, with the given request parameters.
 func newRestoreR3Fixture(t *testing.T, parameters string) *restoreR3Fixture {
 	t.Helper()
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	version := schemas.ProtocolVersion()
 	fixture := &restoreR3Fixture{
 		servers:    &restoreR3Repository{record: store.StoredLogicalServer{Record: restoreR3Server()}},
@@ -189,10 +185,11 @@ func newRestoreR3Fixture(t *testing.T, parameters string) *restoreR3Fixture {
 		adapters:   &restoreR3Adapters{version: version, descriptors: restoreR3Descriptors(version)},
 		authorizer: &restoreR3Authorizer{},
 	}
-	fixture.workflow, err = NewServerRestoreWorkflow(fixture.servers, fixture.adapters, schemas, fixture.profiles, fixture.backups, fixture.authorizer, time.Minute)
+	workflow, err := NewServerRestoreWorkflow(fixture.servers, fixture.adapters, schemas, fixture.profiles, fixture.backups, fixture.authorizer, time.Minute)
 	if err != nil {
 		t.Fatal(err)
 	}
+	fixture.workflow = workflow
 	fixture.operation = store.OperationRecord{OperationID: "restore-op", OperationType: "server.restore", ProtocolVersion: version,
 		Status: protocolstate.OperationRunning, ActorID: "operator-1", CorrelationID: "correlation-1",
 		Target:          store.OperationTarget{ServerID: "server-1", EnvironmentID: "staging"},

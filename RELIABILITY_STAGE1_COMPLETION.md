@@ -79,8 +79,8 @@ gameserver_controller_adapter_response_seconds
 ### ✅ 3. Operational Runbooks (~570 lines)
 
 **Files Created:**
-- `.opencode/runbooks/01-crash-recovery-procedure.md` (238 lines)
-- `.opencode/runbooks/02-deployment-procedures.md` (255 lines)
+- `runbooks/01-crash-recovery-procedure.md` (238 lines)
+- `runbooks/02-deployment-procedures.md` (255 lines)
 
 **Crash Recovery Procedures Include:**
 - Normal restart recovery with step-by-step commands

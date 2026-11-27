@@ -246,6 +246,14 @@ The four JSON resources in `cmd/protocol-check/openapi-schema/` are byte-for-byt
 - Copyright: Tatu Ylonen, Markus Friedl, Theo de Raadt, Niels Provos, Dug Song, Damien Miller, and other contributors
 - Upstream: [openssh-portable LICENCE](https://github.com/openssh/openssh-portable/blob/master/LICENCE)
 
+## Git (developer host)
+
+The coordination CLI (`cmd/coordination`) runs the host's `git worktree list --porcelain` to find the main worktree's `COORDINATION/` directory when neither `--dir` nor `$GSC_COORDINATION_DIR` is given. Its tests also run `git init`, `git commit` and `git worktree add` in temporary directories. Git is provided by the operating system or the developer's Git installation and is not distributed, linked or vendored by this project.
+
+- License: GNU General Public License version 2 only, as stated in Git's COPYING file (checked at the upstream file in November 2026); some bundled parts carry their own compatible licenses
+- Copyright: Linus Torvalds, Junio C Hamano, and the Git contributors
+- Upstream: [git COPYING](https://github.com/git/git/blob/master/COPYING)
+
 ## Rust conformance consumer (`conformance-rs`)
 
 [`conformance-rs`](conformance-rs) is an optional, independent test tool that runs in CI. It is not shipped with the controller and no binary is distributed, so these crates are not redistributed by this project. Versions match [conformance-rs/Cargo.lock](conformance-rs/Cargo.lock). Licenses are as declared in each crate's published metadata and checked against the license files in the published crate. `cargo test` in `conformance-rs` fails if a crate in the lockfile is missing from this table. Where a crate offers a choice of licenses, the project may use any of them.

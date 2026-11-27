@@ -64,10 +64,7 @@ type provisionPlanFixture struct {
 
 func newProvisionPlanFixture(t *testing.T) provisionPlanFixture {
 	t.Helper()
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	registry, err := adapter.NewRegistry(schemas)
 	if err != nil {
 		t.Fatal(err)
