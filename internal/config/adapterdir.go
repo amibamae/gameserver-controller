@@ -49,35 +49,14 @@ func loadAdapterDirectory(dir string) ([]AdapterProfile, error) {
 		return nil, err
 	}
 
-	// Batch filesystem reads outside the decode loop to avoid I/O in loop
-	contentBuffers := make(map[string][]byte)
+	contentBuffers := make(map[string][]byte, len(names))
 	for _, name := range names {
-		path := filepath.Join(dir, name)
-		info, err := os.Lstat(path)
+		data, err := readAdapterFileBytes(filepath.Join(dir, name))
 		if err != nil {
 			return nil, fmt.Errorf("%s/%s: %w", AdapterDirectoryName, name, err)
-		}
-		if !info.Mode().IsRegular() {
-			return nil, fmt.Errorf("%s/%s: must be a regular file, not a symlink", AdapterDirectoryName, name)
-		}
-		if info.Mode().Perm()&0o022 != 0 {
-			return nil, fmt.Errorf("%s/%s: must not be writable by group or others", AdapterDirectoryName, name)
-		}
-		if info.Size() > maxAdapterFileBytes {
-			return nil, fmt.Errorf("%s/%s: is larger than 1 MiB", AdapterDirectoryName, name)
-		}
-		file, err := os.Open(path)
-		if err != nil {
-			return nil, fmt.Errorf("%s/%s: %w", AdapterDirectoryName, name, err)
-		}
-		defer file.Close()
-		data, err := io.ReadAll(io.LimitReader(file, maxAdapterFileBytes+1))
-		if err != nil || len(data) > maxAdapterFileBytes {
-			return nil, fmt.Errorf("%s/%s: cannot be read", AdapterDirectoryName, name)
 		}
 		contentBuffers[name] = data
 	}
-
 	profiles := make([]AdapterProfile, 0, len(names))
 	for _, name := range names {
 		profile, err := decodeAdapterProfile(contentBuffers[name])
@@ -106,30 +85,30 @@ func adapterProfileFileNames(entries []fs.DirEntry) ([]string, error) {
 	return names, nil
 }
 
-func readAdapterFile(path string) (AdapterProfile, error) {
+func readAdapterFileBytes(path string) ([]byte, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
-		return AdapterProfile{}, errors.New("cannot be read")
+		return nil, err
 	}
 	if !info.Mode().IsRegular() {
-		return AdapterProfile{}, errors.New("must be a regular file, not a symlink")
+		return nil, errors.New("must be a regular file, not a symlink")
 	}
 	if info.Mode().Perm()&0o022 != 0 {
-		return AdapterProfile{}, errors.New("must not be writable by group or others")
+		return nil, errors.New("must not be writable by group or others")
 	}
 	if info.Size() > maxAdapterFileBytes {
-		return AdapterProfile{}, errors.New("is larger than 1 MiB")
+		return nil, errors.New("is larger than 1 MiB")
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return AdapterProfile{}, errors.New("cannot be read")
+		return nil, err
 	}
 	defer file.Close()
 	data, err := io.ReadAll(io.LimitReader(file, maxAdapterFileBytes+1))
 	if err != nil || len(data) > maxAdapterFileBytes {
-		return AdapterProfile{}, errors.New("cannot be read")
+		return nil, errors.New("cannot be read")
 	}
-	return decodeAdapterProfile(data)
+	return data, nil
 }
 
 func decodeAdapterProfile(data []byte) (AdapterProfile, error) {

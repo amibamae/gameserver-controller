@@ -184,4 +184,14 @@ func TestLoadRejectsUnsafeAdapterFiles(t *testing.T) {
 			t.Fatalf("Load = %v", err)
 		}
 	})
+	t.Run("reads every file before decoding", func(t *testing.T) {
+		path := writeConfigDir(t, map[string]string{"a.yaml": "not: [valid\n", "b.yaml": paperFile})
+		if err := os.Chmod(filepath.Join(filepath.Dir(path), AdapterDirectoryName, "b.yaml"), 0o660); err != nil {
+			t.Fatal(err)
+		}
+		_, err := Load(path)
+		if err == nil || !strings.Contains(err.Error(), "b.yaml: must not be writable") {
+			t.Fatalf("Load = %v, want later file read error to precede earlier decode error", err)
+		}
+	})
 }
