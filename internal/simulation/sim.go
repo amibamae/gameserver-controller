@@ -2,6 +2,9 @@
 // a virtual clock, a fault-injection plan, a safety-invariant checker and
 // seeded randomness. Per-backend simulators build on it; it never touches the
 // network, the wall clock or the global random source.
+//
+// TEST HARNESS: for tests only. Production code must not import this package.
+// See docs/TEST_HARNESSES.md.
 package simulation
 
 import (
