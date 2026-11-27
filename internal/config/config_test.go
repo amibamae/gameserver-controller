@@ -77,6 +77,31 @@ servers:
       require_approval_for_destroy: true
 `
 
+func TestValidateCollectsSortedProfileProblems(t *testing.T) {
+	value, err := Parse(strings.NewReader(validConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The first production environment still governs storage isolation when
+	// a later (invalid) entry claims the same ID.
+	value.Environments = append(value.Environments, Environment{
+		ID: "production", Classification: "testing", ProductionBackupAccess: "none",
+	})
+	value.Servers[1].Adapters.Storage = value.Servers[0].Adapters.Storage
+	value.Servers[1].Network = &ServerNetwork{JoinMode: "invalid"}
+	value.Servers[1].Lifecycle.RequireApprovalForDestroy = false
+	want := strings.Join([]string{
+		"configuration is invalid:",
+		" - duplicate environment ID: production",
+		" - servers[1].lifecycle.require_approval_for_destroy must be true",
+		" - servers[1].network.join_mode must be proxy, direct_dns, or none",
+		" - storage secret references must not be shared between production and staging/testing servers",
+	}, "\n")
+	if err := Validate(value); err == nil || err.Error() != want {
+		t.Fatalf("Validate() = %v, want %s", err, want)
+	}
+}
+
 func TestParseValidConfig(t *testing.T) {
 	value, err := Parse(strings.NewReader(validConfig))
 	if err != nil {

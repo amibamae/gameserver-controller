@@ -96,7 +96,7 @@ Hosting providers such as Vultr bill each instance in whole increments (one hour
 - A server whose configured hourly cost is below the owner's threshold skips the window and scales as soon as it is idle.
 - The window only decides *when* the core may start a scaling action. Back up and destroy still runs every check above, and a failed check stops it.
 
-The policy lives in `internal/scalingpolicy` and is configured per server under `lifecycle.scaling` (see [configuration](CONFIGURATION.md#scaling-and-billing)). Hosting adapters may declare their billing increment with the `billing_increment_seconds` descriptor constraint. The runtime scheduler that applies it is future work.
+The policy lives in `internal/scalingpolicy` and is configured per server under `lifecycle.scaling` (see [configuration](CONFIGURATION.md#scaling-and-billing)). Hosting adapters may declare their billing increment with the `billing_increment_seconds` descriptor constraint. `internal/idlescheduler` applies it: on each tick it reads every managed server's creation time and idle evidence, calls `ScaleDown`, and when allowed requests the stop, verified backup and destroy sequence through an injected requester, never destroying directly. It fails closed on an unknown creation time, missing idle evidence, an invalid policy or a failed request, and keeps at most one shutdown request in flight per server. Wiring the scheduler into the controller runtime is future work.
 
 ### Vertical auto-scaling (planned)
 
