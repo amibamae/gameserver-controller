@@ -19,6 +19,7 @@ var pilotActions = []struct {
 	{"provision", "gsc-pilot provision --server-id <id> --environment staging --region <id> --plan <id> --os-id <id> --ssh-key-id <id> --startup-script-id <id> --startup-script-sha256 <digest> --firewall-group-id <id> --controller-ip <ip>"},
 	{"adopt", "gsc-pilot adopt --server-id <id> --environment <environment> --instance-id <id> --expected-ip <IPv4> --region <id> --plan <id> --os-id <id> --os-name <name>"},
 	{"handoff", "gsc-pilot handoff --operation-id <id> --wasabi-region <region> [--execute --confirm-handoff <server>@<environment>/<instance-id>]"},
+	{"observability", "gsc-pilot observability --operation-id <id> --logs-privacy lifecycle --logs-endpoint https://<host>/insert/jsonline [--execute --confirm-observability <server>@<environment>/<instance-id>]"},
 	{"register-ssh-key", "gsc-pilot register-ssh-key --public-key-file <path> --name <name> [--execute]"},
 	{"capacity", "gsc-pilot capacity"},
 }

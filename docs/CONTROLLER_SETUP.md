@@ -190,6 +190,20 @@ administration through a future management API. A future panel must use a
 separate authenticated application boundary and cannot assert a requester ID
 from browser input.
 
+## Offline operation inspection
+
+With the controller stopped, an operator who can read its state database can
+inspect the last recorded status of one operation:
+
+```sh
+controller operation-status --store /path/to/controller.db OPERATION_ID
+```
+
+The command prints a JSON summary with the operation ID and type, server and
+environment IDs, status, last update time, and current step ID when present.
+It opens the existing database read-only. A running controller can hold an
+exclusive lock; use the authenticated HTTP endpoint for live inspection.
+
 ## HTTP operation inspection
 
 The Go management API package currently implements only

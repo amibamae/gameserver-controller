@@ -49,7 +49,7 @@ func (a *Adapter) uploadVerified(ctx context.Context, request adapter.InvokeRequ
 	defer stream.Close()
 	staged, err := stageVerifiedUpload(stream, input.ExpectedSizeBytes, input.ExpectedChecksum.Digest)
 	if err != nil {
-		return nil, errors.New("upload stream did not match its declared size and checksum")
+		return nil, errors.New("upload stream did not match its declared size and Checksum")
 	}
 	defer discardStaged(staged)
 	client, err := a.openClient(ctx, request)
@@ -99,7 +99,7 @@ func stageVerifiedUpload(stream io.Reader, expectedSize int64, expectedDigest st
 	count, err := io.Copy(io.MultiWriter(file, hasher), io.LimitReader(stream, expectedSize+1))
 	if err != nil || count != expectedSize || !strings.EqualFold(hex.EncodeToString(hasher.Sum(nil)), expectedDigest) {
 		discardStaged(file)
-		return nil, errors.New("upload data does not match the declared size and checksum")
+		return nil, errors.New("upload data does not match the declared size and Checksum")
 	}
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		discardStaged(file)

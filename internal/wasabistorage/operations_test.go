@@ -199,7 +199,7 @@ func TestCopyVerifiesReadbackAndRefusesOverwrite(t *testing.T) {
 	provider := newProvider(map[string]string{"server/world.tar": "world bytes", "server/taken.tar": "old"})
 	registry, _ := registryFor(t, provider, testConfig())
 	deadline := time.Now().Add(time.Minute)
-	input := copyInput{SourceRef: testRef("server/world.tar", "version-1"), Destination: testRef("server/copy.tar", "").objectTarget,
+	input := CopyInput{SourceRef: testRef("server/world.tar", "version-1"), Destination: testRef("server/copy.tar", "").objectTarget,
 		ExpectedSizeBytes: int64(len("world bytes")), ExpectedChecksum: checksumOf("world bytes")}
 	var output struct {
 		CopyState   string          `json:"copy_state"`
@@ -275,7 +275,7 @@ func TestVersioningAndRetentionInspection(t *testing.T) {
 	}
 	for status, want := range map[types.BucketVersioningStatus]string{"": "disabled", types.BucketVersioningStatusEnabled: "enabled", types.BucketVersioningStatusSuspended: "suspended"} {
 		provider.versioning = status
-		decode(t, invoke(t, registry, "storage.object.versioning.inspect", versioningInput{ContainerRef: testContainer()}, deadline, "", 0, nil, nil), &versioning)
+		decode(t, invoke(t, registry, "storage.object.versioning.inspect", VersioningInput{ContainerRef: testContainer()}, deadline, "", 0, nil, nil), &versioning)
 		if versioning.State != want {
 			t.Fatalf("versioning %q reported %q", status, versioning.State)
 		}
@@ -287,7 +287,7 @@ func TestVersioningAndRetentionInspection(t *testing.T) {
 		LegalHold   string  `json:"legal_hold"`
 		RetainUntil *string `json:"retain_until"`
 	}
-	input := retentionInput{ObjectRef: testRef("server/world.tar", "version-1")}
+	input := RetentionInput{ObjectRef: testRef("server/world.tar", "version-1")}
 	provider.noLock = true
 	decode(t, invoke(t, registry, "storage.object.retention.inspect", input, deadline, "", 0, nil, nil), &retention)
 	if retention.State != "observed" || retention.Mode != "none" || retention.LegalHold != "off" || retention.RetainUntil != nil {

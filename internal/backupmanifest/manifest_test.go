@@ -64,6 +64,31 @@ func TestValidateManifest(t *testing.T) {
 	}
 }
 
+func TestValidateManifestRejectsEachMissingLocatorField(t *testing.T) {
+	full := ObjectTarget{AdapterID: "a", StorageProfile: "p", EnvironmentID: "e", Container: "c", Key: "k"}
+	cases := map[string]struct {
+		clear func(*ObjectTarget)
+		want  string
+	}{
+		"adapter":     {func(o *ObjectTarget) { o.AdapterID = "" }, "adapter_id=, storage_profile=p, environment_id=e, container=c, key=k"},
+		"profile":     {func(o *ObjectTarget) { o.StorageProfile = "" }, "adapter_id=a, storage_profile=, environment_id=e, container=c, key=k"},
+		"environment": {func(o *ObjectTarget) { o.EnvironmentID = "" }, "adapter_id=a, storage_profile=p, environment_id=, container=c, key=k"},
+		"container":   {func(o *ObjectTarget) { o.Container = "" }, "adapter_id=a, storage_profile=p, environment_id=e, container=, key=k"},
+		"key":         {func(o *ObjectTarget) { o.Key = "" }, "adapter_id=a, storage_profile=p, environment_id=e, container=c, key="},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			target := full
+			tc.clear(&target)
+			err := ValidateManifest(Manifest{ObjectRef: ObjectReference{ObjectTarget: target}})
+			want := "object reference is invalid: missing " + tc.want
+			if err == nil || err.Error() != want {
+				t.Fatalf("error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
 func TestComputeSHA256(t *testing.T) {
 	hash := ComputeSHA256([]byte("test data"))
 	// Just verify we got a non-empty hash

@@ -189,7 +189,7 @@ func testCapacityReadyAdapterFilter(t *testing.T) {
 	var result CapacityReservation
 	err := repository.db.Update(func(tx *bolt.Tx) error {
 		var err error
-		result, err = recordCapacityReadyTx(tx, "srv", "staging", "vm-a", "hosting.other", time.Now().UTC())
+		result, err = recordCapacityReadyTx(tx, capacityInstanceQuery{ServerID: "srv", EnvironmentID: "staging", ProviderInstanceID: "vm-a", AdapterID: "hosting.other"}, time.Now().UTC())
 		return err
 	})
 	capacityRefactorAssertSentinel(t, err, ErrCapacityNotFound)

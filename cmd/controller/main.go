@@ -39,18 +39,29 @@ func main() {
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
+	if len(args) > 0 && args[0] == "operation-status" {
+		return operationStatus(args[1:], stdout, stderr)
+	}
 	if len(args) == 1 && args[0] == "version" {
 		_, err := fmt.Fprintln(stdout, buildIdentity)
 		return err
 	}
+	if len(args) > 0 && args[0] == "doctor" {
+		return runDoctor(args[1:], stdout, stderr)
+	}
 	if len(args) == 0 || args[0] != "serve" {
-		fmt.Fprintln(stderr, "usage: controller serve --config PATH")
+		fmt.Fprintln(stderr, "usage: controller serve --config PATH\n       controller version\n       controller doctor [--config PATH]")
+		fmt.Fprintln(stderr, "       controller operation-status --store PATH OPERATION_ID")
 		return errors.New("unsupported command")
 	}
+	return runServe(ctx, args[1:], stdout, stderr)
+}
+
+func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("controller serve", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	configPath := flags.String("config", "", "validated controller YAML configuration")
-	if err := flags.Parse(args[1:]); err != nil {
+	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
@@ -78,6 +89,11 @@ func serve(ctx context.Context, value config.Config, configPath string, stdout i
 	if err != nil {
 		return err
 	}
+	return serveHTTPS(ctx, value, configPath, stdout, tlsConfig)
+}
+
+func serveHTTPS(ctx context.Context, value config.Config, configPath string, stdout io.Writer, tlsConfig *tls.Config) error {
+	management := value.Controller.ManagementAPI
 	runtime, err := controllerruntime.Build(ctx, value, configPath, controllerruntime.Options{
 		CredentialDirectory: os.Getenv("CREDENTIALS_DIRECTORY"),
 		ControllerVersion:   buildIdentity,

@@ -39,7 +39,7 @@ func evaluateBackupCaptureCase(pkg *protocolPackage, fixture, input, evaluation 
 	schemas := bc.schemaChecks(pkg)
 	requestTargetBound := backupCaptureRequestTargetBound(request, bc.requestContext)
 	preparationBound := schemas.preparation && backupCapturePreparationBound(request, bc.preparation)
-	transferAuthorized := schemas.transfer && backupCaptureTransferAuthorized(fixture, input, bc.requestContext, request, bc.scope, bc.transfer)
+	transferAuthorized := schemas.transfer && backupCaptureTransferAuthorized(fixture, input, bc)
 	bindingExact := backupCaptureBindingExact(request, bc.output)
 	streamBytes := []byte(stringValue(evaluation, "stream_bytes"))
 	stream := checkBackupCaptureStream(bc, evaluation, streamBytes)
@@ -47,7 +47,10 @@ func evaluateBackupCaptureCase(pkg *protocolPackage, fixture, input, evaluation 
 	dispatchPermitted := schemas.allowsDispatch(requestTargetBound, preparationBound, transferAuthorized)
 	resultBound := schemas.output && bindingExact
 	captureAccepted := dispatchPermitted && resultBound && outcome == "captured" && stream.accepted()
-	requiresReconciliation := backupCaptureNeedsReconciliation(schemas.output, outcome, captureAccepted, bindingExact, dispatchPermitted, len(streamBytes))
+	requiresReconciliation := backupCaptureSettlement{
+		outputValid: schemas.output, outcome: outcome, captureAccepted: captureAccepted,
+		bindingExact: bindingExact, dispatchPermitted: dispatchPermitted, streamedBytes: len(streamBytes),
+	}.needsReconciliation()
 	watermarkBound := backupCaptureWatermarkBound(request, bc.output)
 
 	return map[string]any{
@@ -115,18 +118,27 @@ func (s backupCaptureSchemas) all() bool {
 	return s.input && s.output && s.requestContext && s.transfer
 }
 
-// backupCaptureNeedsReconciliation: an invalid or unknown result, a
-// "captured" result that was not accepted, or a "rejected" result that is
-// unbound, was never permitted, or still streamed bytes, must be reconciled
-// before anything else happens.
-func backupCaptureNeedsReconciliation(outputValid bool, outcome string, captureAccepted, bindingExact, dispatchPermitted bool, streamedBytes int) bool {
+// backupCaptureSettlement is what a capture result, and the checks around
+// it, show about whether the capture settled.
+type backupCaptureSettlement struct {
+	outputValid                                      bool
+	outcome                                          string
+	captureAccepted, bindingExact, dispatchPermitted bool
+	streamedBytes                                    int
+}
+
+// needsReconciliation: an invalid or unknown result, a "captured" result
+// that was not accepted, or a "rejected" result that is unbound, was never
+// permitted, or still streamed bytes, must be reconciled before anything
+// else happens.
+func (s backupCaptureSettlement) needsReconciliation() bool {
 	switch {
-	case !outputValid || outcome == "outcome_unknown":
+	case !s.outputValid || s.outcome == "outcome_unknown":
 		return true
-	case outcome == "captured":
-		return !captureAccepted
-	case outcome == "rejected":
-		return !bindingExact || !dispatchPermitted || streamedBytes != 0
+	case s.outcome == "captured":
+		return !s.captureAccepted
+	case s.outcome == "rejected":
+		return !s.bindingExact || !s.dispatchPermitted || s.streamedBytes != 0
 	default:
 		return false
 	}
@@ -167,12 +179,19 @@ func backupCapturePreparationBound(request, preparation map[string]any) bool {
 	if stringValue(preparation, "outcome") != "prepared" || !reflect.DeepEqual(request["target"], preparation["target"]) {
 		return false
 	}
-	for _, field := range []string{"release_id", "backup_id", "data_generation_id", "preparation_id", "consistency_mode"} {
-		if stringValue(request, field) != stringValue(preparation, field) {
+	return backupCaptureStringFieldsMatch(request, preparation, "release_id", "backup_id", "data_generation_id", "preparation_id", "consistency_mode") &&
+		containsString(arrayValue(preparation, "data_set_ids"), stringValue(request, "data_set_id"))
+}
+
+// backupCaptureStringFieldsMatch: left and right hold the same string, or
+// both no string, under every field.
+func backupCaptureStringFieldsMatch(left, right map[string]any, fields ...string) bool {
+	for _, field := range fields {
+		if stringValue(left, field) != stringValue(right, field) {
 			return false
 		}
 	}
-	return containsString(arrayValue(preparation, "data_set_ids"), stringValue(request, "data_set_id"))
+	return true
 }
 
 // backupCaptureStream reports how the captured stream compares with what the
@@ -188,22 +207,43 @@ func (s backupCaptureStream) accepted() bool {
 }
 
 func checkBackupCaptureStream(bc backupCaptureCase, evaluation map[string]any, streamBytes []byte) backupCaptureStream {
-	maximumBytes, maximumErr := integerValue(bc.transfer["maximum_bytes"])
-	reportedBytes, sizeErr := integerValue(bc.output["size_bytes"])
-	streamCompleted, hasStreamCompleted := bc.output["stream_completed"].(bool)
+	return backupCaptureStream{
+		completed:     backupCaptureStreamCompleted(bc.output, evaluation),
+		withinBounds:  backupCaptureStreamWithinBounds(bc.transfer, bc.output, int64(len(streamBytes))),
+		checksumValid: backupCaptureChecksumValid(bc.output, streamBytes),
+	}
+}
+
+// backupCaptureStreamCompleted: the adapter reported a completed stream and
+// the transport, unless the evaluation says otherwise, completed too.
+func backupCaptureStreamCompleted(output, evaluation map[string]any) bool {
+	streamCompleted, hasStreamCompleted := output["stream_completed"].(bool)
 	transportCompleted := true
 	if configured, ok := evaluation["stream_transport_complete"].(bool); ok {
 		transportCompleted = configured
 	}
-	checksum := asObject(bc.output["checksum"])
-	streamDigest := sha256.Sum256(streamBytes)
-	return backupCaptureStream{
-		completed: hasStreamCompleted && streamCompleted && transportCompleted,
-		withinBounds: maximumErr == nil && sizeErr == nil && maximumBytes >= 0 &&
-			reportedBytes == int64(len(streamBytes)) && int64(len(streamBytes)) <= maximumBytes,
-		checksumValid: stringValue(checksum, "algorithm") == "sha256" &&
-			stringValue(checksum, "digest") == hex.EncodeToString(streamDigest[:]),
+	return hasStreamCompleted && streamCompleted && transportCompleted
+}
+
+// backupCaptureStreamWithinBounds: the transfer's maximum and the reported
+// size are integers, the maximum is not negative, the reported size is the
+// streamed size, and the streamed size fits the maximum.
+func backupCaptureStreamWithinBounds(transfer, output map[string]any, streamedBytes int64) bool {
+	maximumBytes, maximumErr := integerValue(transfer["maximum_bytes"])
+	reportedBytes, sizeErr := integerValue(output["size_bytes"])
+	if maximumErr != nil || sizeErr != nil {
+		return false
 	}
+	return maximumBytes >= 0 && reportedBytes == streamedBytes && streamedBytes <= maximumBytes
+}
+
+// backupCaptureChecksumValid: the reported checksum is the SHA-256 digest of
+// the streamed bytes.
+func backupCaptureChecksumValid(output map[string]any, streamBytes []byte) bool {
+	checksum := asObject(output["checksum"])
+	streamDigest := sha256.Sum256(streamBytes)
+	return stringValue(checksum, "algorithm") == "sha256" &&
+		stringValue(checksum, "digest") == hex.EncodeToString(streamDigest[:])
 }
 
 // backupCaptureCurrentGenerationProven reports whether an accepted capture
@@ -220,9 +260,9 @@ func backupCaptureCurrentGenerationProven(captureAccepted bool, evaluation, requ
 		stringValue(request, "consistency_mode") == "offline"
 }
 
-func backupCaptureTransferAuthorized(fixture, fixtureInput, requestContext, request, scope, transfer map[string]any) bool {
-	return backupCaptureTransferTimely(fixtureInput, requestContext, transfer) &&
-		backupCaptureScopeMatches(fixture, fixtureInput, requestContext, request, scope, transfer)
+func backupCaptureTransferAuthorized(fixture, fixtureInput map[string]any, bc backupCaptureCase) bool {
+	return backupCaptureTransferTimely(fixtureInput, bc.requestContext, bc.transfer) &&
+		backupCaptureScopeMatches(fixture, fixtureInput, bc)
 }
 
 // backupCaptureTransferTimely: the transfer is unexpired, lives at most
@@ -244,38 +284,48 @@ func backupCaptureTransferTimely(fixtureInput, requestContext, transfer map[stri
 // this adapter-to-controller transfer, size and expiry, for this operation
 // step, capability, adapter, target, data generation, data set and
 // capture.
-func backupCaptureScopeMatches(fixture, fixtureInput, requestContext, request, scope, transfer map[string]any) bool {
+func backupCaptureScopeMatches(fixture, fixtureInput map[string]any, bc backupCaptureCase) bool {
+	return backupCaptureScopeGrantsTransfer(bc.scope, bc.transfer) &&
+		backupCaptureScopeNamesStep(fixture, fixtureInput, bc.scope, bc.requestContext) &&
+		backupCaptureScopeNamesCapture(bc.scope, bc.request, bc.requestContext) &&
+		!backupCaptureBoolValue(bc.scope["consumed"])
+}
+
+// backupCaptureScopeGrantsTransfer: the scope grants exactly this
+// adapter-to-controller transfer, with its size and expiry.
+func backupCaptureScopeGrantsTransfer(scope, transfer map[string]any) bool {
+	return backupCaptureScopeSizeMatches(scope, transfer) && stringValue(transfer, "direction") == "adapter_to_controller" &&
+		backupCaptureStringFieldsMatch(scope, transfer, "direction", "transfer_id", "expires_at")
+}
+
+// backupCaptureScopeSizeMatches: the scope and the transfer allow the same
+// integer maximum size.
+func backupCaptureScopeSizeMatches(scope, transfer map[string]any) bool {
 	maximumBytes, maxErr := integerValue(transfer["maximum_bytes"])
 	scopeMaximumBytes, scopeMaxErr := integerValue(scope["maximum_bytes"])
-	target := asObject(request["target"])
-	return maxErr == nil && scopeMaxErr == nil && maximumBytes == scopeMaximumBytes &&
-		stringValue(transfer, "direction") == "adapter_to_controller" &&
-		stringValue(scope, "direction") == stringValue(transfer, "direction") &&
-		stringValue(scope, "transfer_id") == stringValue(transfer, "transfer_id") &&
-		stringValue(scope, "expires_at") == stringValue(transfer, "expires_at") &&
-		stringValue(scope, "operation_id") == stringValue(requestContext, "operation_id") &&
-		stringValue(scope, "step_id") == stringValue(requestContext, "step_id") &&
+	return maxErr == nil && scopeMaxErr == nil && maximumBytes == scopeMaximumBytes
+}
+
+// backupCaptureScopeNamesStep: the scope is for this operation step, the
+// fixture's capability and the fixture's adapter.
+func backupCaptureScopeNamesStep(fixture, fixtureInput, scope, requestContext map[string]any) bool {
+	return backupCaptureStringFieldsMatch(scope, requestContext, "operation_id", "step_id") &&
 		stringValue(scope, "capability") == stringValue(fixture, "capability") &&
-		stringValue(scope, "adapter_id") == stringValue(fixtureInput, "adapter_id") &&
-		reflect.DeepEqual(scope["target"], request["target"]) &&
-		stringValue(scope, "data_generation_id") == stringValue(request, "data_generation_id") &&
-		stringValue(scope, "data_set_id") == stringValue(request, "data_set_id") &&
-		stringValue(scope, "capture_id") == stringValue(request, "capture_id") &&
-		stringValue(requestContext, "server_id") == stringValue(target, "server_id") &&
-		stringValue(requestContext, "environment_id") == stringValue(target, "environment_id") &&
-		!backupCaptureBoolValue(scope["consumed"])
+		stringValue(scope, "adapter_id") == stringValue(fixtureInput, "adapter_id")
+}
+
+// backupCaptureScopeNamesCapture: the scope is for the request's target,
+// data generation, data set and capture, and the invocation context names
+// the same target.
+func backupCaptureScopeNamesCapture(scope, request, requestContext map[string]any) bool {
+	return reflect.DeepEqual(scope["target"], request["target"]) &&
+		backupCaptureStringFieldsMatch(scope, request, "data_generation_id", "data_set_id", "capture_id") &&
+		backupCaptureRequestTargetBound(request, requestContext)
 }
 
 func backupCaptureBindingExact(request, output map[string]any) bool {
-	if !reflect.DeepEqual(request["target"], output["target"]) {
-		return false
-	}
-	for _, field := range []string{"release_id", "backup_id", "data_generation_id", "preparation_id", "data_set_id", "capture_id", "consistency_mode"} {
-		if stringValue(request, field) != stringValue(output, field) {
-			return false
-		}
-	}
-	return true
+	return reflect.DeepEqual(request["target"], output["target"]) &&
+		backupCaptureStringFieldsMatch(request, output, "release_id", "backup_id", "data_generation_id", "preparation_id", "data_set_id", "capture_id", "consistency_mode")
 }
 
 func containsString(values []any, target string) bool {

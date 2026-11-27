@@ -67,7 +67,7 @@ func describeObject(value map[string]any, result *s3.HeadObjectOutput) {
 }
 
 // fullObjectSHA256 returns the provider's whole-object SHA-256 in hex. A
-// composite (per-part) checksum, or one that does not decode to a SHA-256
+// composite (per-part) Checksum, or one that does not decode to a SHA-256
 // digest, is not reported.
 func fullObjectSHA256(result *s3.HeadObjectOutput) (string, bool) {
 	if result.ChecksumType != types.ChecksumTypeFullObject || result.ChecksumSHA256 == nil {

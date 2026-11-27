@@ -199,29 +199,6 @@ type HeadInput struct {
 	ObjectRef objectReference `json:"object_ref"`
 }
 
-// headInput is an internal variant of HeadInput for testing.
-type headInput struct {
-	ObjectRef objectReference `json:"object_ref"`
-}
-
-// CopyInput is exported for external use; copyInput is internal.
-type copyInput struct {
-	SourceRef         objectReference `json:"source_ref"`
-	Destination       objectTarget    `json:"destination"`
-	ExpectedSizeBytes int64           `json:"expected_size_bytes"`
-	ExpectedChecksum  Checksum        `json:"expected_checksum"`
-}
-
-// VersioningInput is exported for external use; versioningInput is internal.
-type versioningInput struct {
-	ContainerRef containerReference `json:"container_ref"`
-}
-
-// RetentionInput is exported for external use; retentionInput is internal.
-type retentionInput struct {
-	ObjectRef objectReference `json:"object_ref"`
-}
-
 // confirmedVersion returns the exact version a read observed. A requested
 // version must be echoed by the provider; with none requested, the observed
 // version is kept when it is immutable.

@@ -13,7 +13,6 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/fakeadapter"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
-	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
@@ -72,10 +71,7 @@ func (f *restoreStreamConsumingFake) Invoke(ctx context.Context, request adapter
 }
 
 func TestRestoreCompatibilityRequiresExactManifestAndRelease(t *testing.T) {
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	profile := ServerRestoreProfile{GameAdapterID: "game.paper", GameReleaseID: "paper-1", GameVersion: "1.21.4", RequiredCompatibilityCheckIDs: []string{"world.check"}}
 	manifest := json.RawMessage(`{"manifest_version":"1","backup_id":"backup-1","server_id":"server-1","environment_id":"staging","data_generation_id":"generation-source","created_at":"2026-11-08T10:00:00Z","source_operation_id":"backup-op","game":{"adapter_id":"game.paper","name":"Paper","version":"1.21.4"},"consistency":{"mode":"offline","evidence":"stopped"},"objects":[{"object_ref":{"adapter_id":"storage.fake","storage_profile_id":"storage-1","environment_id":"staging","container":"backups","key":"server-1/world.tar","version_id":"version-1"},"size_bytes":1,"checksum_algorithm":"sha256","checksum":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}`)
 	release := json.RawMessage(`{"game_adapter_id":"game.paper","game_name":"Paper","release_id":"paper-1","game_version":"1.21.4","targets":[{"os_family":"linux","architecture":"x86_64"}],"artifacts":[{"artifact_id":"server-jar","artifact_uri":"https://example.invalid/paper.jar","checksum":{"algorithm":"sha256","digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}],"runtime_requirements":[{"runtime_id":"java","version_requirement":"21"}],"configuration_schema_uri":"https://example.invalid/config.schema.json","configuration_schema_checksum":{"algorithm":"sha256","digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},"data_format":{"format_id":"paper-world","version":"1"},"required_execution_capabilities":["systemd"]}`)
@@ -99,10 +95,7 @@ func TestRestoreCompatibilityRequiresExactManifestAndRelease(t *testing.T) {
 }
 
 func TestRestoreApplyRequiresNewTargetGenerationAndSourceBinding(t *testing.T) {
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	target := json.RawMessage(`{"server_id":"server-1","environment_id":"staging","instance_ref":{"adapter_id":"hosting.fake","environment_id":"staging","resource_kind":"instance","external_id":"vm-1"}}`)
 	execution := json.RawMessage(`{"adapter_id":"game.paper","environment_id":"staging","resource_kind":"restore-execution","external_id":"restore-1"}`)
 	input := json.RawMessage(`{"source_backup":{"operation_type":"server.backup","partial":false,"failed_steps":[],"unresolved_conditions":[],"operation_data":{"backup_id":"backup-1","environment_id":"staging","data_generation_id":"generation-source","manifest":{}}},"target":` + string(target) + `,"target_release_id":"paper-1","target_data_generation_id":"restore-restore-op","required_check_ids":["world.check"],"object_streams":[{"object_ref":{"adapter_id":"storage.fake","storage_profile_id":"storage-1","environment_id":"staging","container":"backups","key":"server-1/world.tar","version_id":"version-1"}}]}`)
@@ -191,10 +184,7 @@ func TestRestoreStreamPlanBindsVerifiedBackupAndOrderedObjects(t *testing.T) {
 }
 
 func TestRestoreExecutionReferenceMustMatchAdapterEnvironmentAndKind(t *testing.T) {
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	valid := json.RawMessage(`{"adapter_id":"game.paper","environment_id":"staging","resource_kind":"restore-execution","external_id":"restore-1"}`)
 	if !validateRestoreExecutionRef(schemas, valid, "game.paper", "staging") {
 		t.Fatal("matching restore execution reference was rejected")
@@ -211,10 +201,7 @@ func TestRestoreExecutionReferenceMustMatchAdapterEnvironmentAndKind(t *testing.
 }
 
 func TestRestoreReconciliationRejectsWrongExecutionReferenceBeforeAdapterCall(t *testing.T) {
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	registry, err := adapter.NewRegistry(schemas)
 	if err != nil {
 		t.Fatal(err)
@@ -292,10 +279,7 @@ func TestRestoreRuntimeObservationMustBeCurrentAndUnknownDataRequiresApproval(t 
 }
 
 func TestRestoreLifecycleProjectionMarksAttemptedFailureUnknown(t *testing.T) {
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	workflow := &ServerRestoreWorkflow{schemas: schemas}
 	server := store.StoredLogicalServer{Record: store.LogicalServer{
 		ServerID: "server-1", EnvironmentID: "staging", GameAdapterID: "game.paper",

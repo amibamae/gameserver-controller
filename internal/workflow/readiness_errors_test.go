@@ -7,17 +7,13 @@ import (
 	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
-	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
 // TestBuildReadinessAssertionIsExact pins the assertion bytes for the
 // fixture, so the evidence binding cannot change silently.
 func TestBuildReadinessAssertionIsExact(t *testing.T) {
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	operation, server, step := readinessFixture(schemas.ProtocolVersion())
 	got, err := buildReadinessAssertionAt(schemas, operation, server, step.StepID, time.Minute, readinessFixtureNow())
 	if err != nil {
@@ -32,10 +28,7 @@ func TestBuildReadinessAssertionIsExact(t *testing.T) {
 // TestBuildReadinessAssertionReportsWhyEvidenceIsRejected pins the error each
 // rule reports, so the order of the checks cannot change silently.
 func TestBuildReadinessAssertionReportsWhyEvidenceIsRejected(t *testing.T) {
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	replaceOutput := func(old, new string) func(*store.OperationRecord, *store.LogicalServer, *store.OperationStep, *time.Time) {
 		return func(_ *store.OperationRecord, _ *store.LogicalServer, step *store.OperationStep, _ *time.Time) {
 			step.Output = json.RawMessage(strings.Replace(string(step.Output), old, new, 1))

@@ -1,0 +1,13 @@
+# Not installed or enabled automatically. Opt in explicitly after review.
+[Unit]
+Description=Optional GSC controller journal export timer
+
+[Timer]
+OnBootSec=90s
+OnUnitInactiveSec=30s
+AccuracySec=10s
+Persistent=true
+Unit=gsc-victorialogs-controller.service
+
+[Install]
+WantedBy=timers.target

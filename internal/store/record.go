@@ -93,41 +93,6 @@ type StoredOperation struct {
 	Revision uint64
 }
 
-func prepareNewRecord(record OperationRecord, now time.Time) (OperationRecord, error) {
-	if record.BackupInitialLifecycleState != "" {
-		return OperationRecord{}, fmt.Errorf("%w: backup initial state is core-owned", ErrInvalidRecord)
-	}
-	if record.Status == "" {
-		record.Status = protocolstate.OperationPending
-	}
-	if record.Status != protocolstate.OperationPending {
-		return OperationRecord{}, fmt.Errorf("%w: new operations must start pending", ErrInvalidRecord)
-	}
-	if record.Steps == nil {
-		record.Steps = []OperationStep{}
-	}
-	for i := range record.Steps {
-		if record.Steps[i].Status == "" {
-			record.Steps[i].Status = protocolstate.StepPending
-		}
-		if record.Steps[i].Status != protocolstate.StepPending {
-			return OperationRecord{}, fmt.Errorf("%w: new operation steps must start pending", ErrInvalidRecord)
-		}
-		if len(record.Steps[i].ResolvedInput) > 0 {
-			return OperationRecord{}, fmt.Errorf("%w: resolved step inputs are written by the engine before dispatch", ErrInvalidRecord)
-		}
-	}
-	if record.StartedAt != nil || record.CompletedAt != nil || len(record.Result) != 0 || len(record.Error) != 0 {
-		return OperationRecord{}, fmt.Errorf("%w: new operation cannot contain an execution outcome", ErrInvalidRecord)
-	}
-	record.CreatedAt = now.UTC()
-	record.UpdatedAt = record.CreatedAt
-	if err := validateRecord(record); err != nil {
-		return OperationRecord{}, err
-	}
-	return record, nil
-}
-
 // validateRecord checks an operation record before it is stored or after it
 // is loaded. The checks run in a fixed order and the first failure is
 // returned, so callers and tests see the same field name for the same record.
@@ -152,15 +117,31 @@ func validateRecord(record OperationRecord) error {
 // lifecycle state it started from, and allows that field only on server.backup
 // with a ready, degraded, or stopped state.
 func validateBackupInitialState(record OperationRecord) error {
-	if record.OperationType == "server.backup" && record.Status == protocolstate.OperationSucceeded && record.BackupInitialLifecycleState == "" {
+	if !backupInitialStateValid(record) {
 		return invalidField("backup_initial_lifecycle_state")
 	}
-	if state := record.BackupInitialLifecycleState; state != "" {
-		if record.OperationType != "server.backup" || (state != protocolstate.ServerReady && state != protocolstate.ServerDegraded && state != protocolstate.ServerStopped) {
-			return invalidField("backup_initial_lifecycle_state")
-		}
-	}
 	return nil
+}
+
+// backupInitialStateValid requires the state on a succeeded server.backup,
+// and limits a recorded state to server.backup with a backup start state.
+func backupInitialStateValid(record OperationRecord) bool {
+	isBackup := record.OperationType == "server.backup"
+	if record.BackupInitialLifecycleState == "" {
+		return !isBackup || record.Status != protocolstate.OperationSucceeded
+	}
+	return isBackup && backupStartState(record.BackupInitialLifecycleState)
+}
+
+// backupStartState reports the lifecycle states a server.backup may start
+// from.
+func backupStartState(state protocolstate.ServerState) bool {
+	switch state {
+	case protocolstate.ServerReady, protocolstate.ServerDegraded, protocolstate.ServerStopped:
+		return true
+	default:
+		return false
+	}
 }
 
 // validateRecordIdentity checks the record's identity fields in a fixed
@@ -353,19 +334,31 @@ func validateStepResolvedInput(i int, step OperationStep) error {
 // and error documents. Only a succeeded step has output, and a succeeded
 // adapter step must have it.
 func validateStepOutcome(_ OperationRecord, i int, step OperationStep) error {
-	if len(step.Output) > 0 && (!isJSONObject(step.Output) || step.Status != protocolstate.StepSucceeded) {
+	if !stepOutputValid(step) {
 		return invalidField(fmt.Sprintf("steps[%d].output", i))
 	}
-	if step.Status == protocolstate.StepSucceeded && step.CapabilityName != "" && len(step.Output) == 0 {
-		return invalidField(fmt.Sprintf("steps[%d].output", i))
-	}
-	if len(step.ExternalOperationRef) > 0 && !isJSONObject(step.ExternalOperationRef) {
+	if !optionalJSONObject(step.ExternalOperationRef) {
 		return invalidField(fmt.Sprintf("steps[%d].external_operation_ref", i))
 	}
-	if len(step.Error) > 0 && !isJSONObject(step.Error) {
+	if !optionalJSONObject(step.Error) {
 		return invalidField(fmt.Sprintf("steps[%d].error", i))
 	}
 	return nil
+}
+
+// stepOutputValid allows output only on a succeeded step and only as an
+// object, and requires it on a succeeded adapter step.
+func stepOutputValid(step OperationStep) bool {
+	succeeded := step.Status == protocolstate.StepSucceeded
+	if len(step.Output) > 0 {
+		return succeeded && isJSONObject(step.Output)
+	}
+	return !succeeded || step.CapabilityName == ""
+}
+
+// optionalJSONObject accepts an absent document or a JSON object.
+func optionalJSONObject(value json.RawMessage) bool {
+	return len(value) == 0 || isJSONObject(value)
 }
 
 // validateStepTimes requires step timestamps to fall within the record's

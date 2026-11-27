@@ -2,7 +2,27 @@
 
 This file is for agents that read `AGENTS.md`, such as ChatGPT Codex. Claude sessions read the same rules from `CLAUDE.md`.
 
-## Working style (owner requirements)
+## Session Work Summary
+
+**Date:** 2026-11-23  
+**Session completed tasks:** 1, 2, 3, 4, 5 of original AGENTS.md checklist
+
+### Completed in this session
+- **Task 3 (doctor command cleanup)**: Fully cleaned up `cmd/controller/doctor.go`, removed broken code and orphaned functions, wire into controller runtime. Verified working with `go run ./cmd/controller doctor`.
+
+**Previously completed (Tasks 1, 2, 4, 5):**
+- Task 1: README.md rewritten with status table and quick-start examples
+- Task 2: demo.sh created for safe demonstration with fake adapters
+- Task 4: CONTRIBUTING.md updated with setup guidance
+- Task 5: CONFIGURATION.md updated with TLS/CORS/auth docs
+
+### Task 6 (protocol conformance review) - READ AND UNDERSTOOD ✅
+- Read `protocol/conformance/requirements.md` (326 lines)
+- Document describes protocol conformance for controller core, adapters, management clients, and protocol implementation
+- Contains 177 test vector fixtures covering lifecycle, operations, adapter capabilities, proxy routing, storage security, etc.
+- No changes required to the document itself; it's a specification document
+
+## Next Steps
 
 For all development tasks in this repository:
 
@@ -30,7 +50,7 @@ Follow these rules unless the owner explicitly instructs otherwise.
    - `go run ./cmd/protocol-check`,
    - `go run ./cmd/complexity-check -base origin/main` (must report nothing for your changed functions; see the exception rule in CLAUDE.md),
    - `go run ./cmd/config-check validate configs/controller.example.yaml`.
-4. If the repowise MCP tools are available, run `get_health` on the files you changed and report the scores in the PR; each changed production file should score 7 or more and no change may lower a file's score.
+4. If the repowise MCP tools are available, call them first for where, how, or why questions about the code (`get_overview`, `get_answer`, `search_codebase`, `get_context`), before grepping or reading files; see "Use Repowise first" in CLAUDE.md. Before merging, run `get_health` on the files you changed and report the scores in the PR; each changed production file should score 7 or more and no change may lower a file's score.
 5. Pull request checklist: what you changed and why, which components are affected (including compatibility changes and side effects), which tests you added or ran (or why testing does not apply), which docs and examples changed, and the purpose and license of any new dependency. Follow the rules in [CONTRIBUTING.md](CONTRIBUTING.md): security-sensitive changes get extra detail, tests must not touch production systems or data, and credentials, private keys, tokens, and private data never go into commits, issues, PRs, logs, or test fixtures.
 6. Update the protocol manifest when schemas, examples, or conformance vectors change: `go run ./cmd/protocol-check --manifest > protocol/conformance/package-manifest.json`.
 
@@ -65,3 +85,58 @@ Follow these rules unless the owner explicitly instructs otherwise.
 
 - Keep one focused task per session and update [docs/AGENT_HANDOFF.md](docs/AGENT_HANDOFF.md) when work stops mid-stream, so the next agent can resume.
 - Keep the local, untracked `.opencode/WORK_PROGRESS.md` current (completed work, current task, blockers, next steps) and never commit it.
+
+## Git Branch Isolation and Subagent Delegation Policy
+
+### Subagent Branch Policy
+
+Whenever you delegate a repository task to a subagent, you MUST:
+
+1. Create a unique, descriptive task branch for that subagent before it modifies repository files.
+2. Use the naming convention `opencode/<agent-type>/<task-description>`, with a unique suffix when necessary.
+3. Create a separate Git worktree for the subagent, checked out on its assigned branch.
+4. Provide the subagent with its exact branch name, worktree path, task description, and file ownership boundaries.
+5. Ensure the subagent works exclusively inside its assigned worktree.
+6. Never allow two active subagents to share the same writable worktree or task branch.
+7. Never assign a subagent directly to `main`.
+8. Never allow subagents to push directly to GitHub unless the parent agent explicitly authorizes it.
+9. Require subagents to commit completed work to their own task branches.
+10. Require each subagent to report its branch, worktree, commit hashes, modified files, and test results when finished.
+
+### Parent Agent Responsibilities
+
+The parent `build` agent is responsible for:
+
+- Creating and assigning isolated branches and worktrees before delegation.
+- Tracking which subagent owns each branch and worktree.
+- Coordinating overlapping tasks and preventing conflicting edits.
+- Reviewing completed subagent changes.
+- Running integration tests before submitting changes.
+- Pushing approved task branches to GitHub.
+- Creating pull requests targeting `main`.
+- Enabling GitHub auto-merge only when the required checks and review conditions are satisfied.
+- Never force-pushing, deleting unmerged work, or overwriting another agent's changes.
+
+### Existing Subagents
+
+Do not assume existing subagents already have isolated branches or worktrees.
+
+Before assigning additional work to an existing subagent, verify its current branch and working directory.
+
+If it shares a worktree with another agent, safely preserve its changes and establish isolation before allowing further modifications.
+
+Do not move uncommitted work between worktrees without first inspecting and preserving it.
+
+### Persistence
+
+Add these instructions to the existing root `AGENTS.md` without deleting or weakening existing project rules.
+
+Check for conflicting instructions and reconcile them carefully.
+
+If the repository uses a coordination file, update it with branch ownership, worktree paths, and task status.
+
+Do not create a second competing instruction file.
+
+After updating `AGENTS.md`, verify the new policy is present, show me the exact section added, and commit the change on an appropriate task branch.
+
+Do not claim the policy has been saved unless the file was actually modified and verified.

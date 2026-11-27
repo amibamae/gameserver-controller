@@ -174,6 +174,38 @@ func renderServiceUnit(value config.Config, layout Layout) string {
 // accepted for idempotency; differing files are preserved and cause failure.
 // It reloads systemd but never enables or starts the service.
 func ApplyInstallBundle(ctx context.Context, root string, host Host, bundle InstallBundle, operations InstallerHost) error {
+	if err := checkInstallerInputs(ctx, host, root, bundle, operations); err != nil {
+		return err
+	}
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return errors.New("resolve installation root")
+	}
+	if checkInstallationRootExists(root) != nil {
+		return errors.New("installation root must be an existing real directory")
+	}
+	if err := preflightInstallBundle(root, bundle); err != nil {
+		return err
+	}
+	if err := operations.EnsureServiceAccount(ctx, serviceAccount, mapRootPath(root, bundle.StateDir)); err != nil {
+		return errors.New("create or validate controller service account failed")
+	}
+	if err := installDirectories(ctx, root, bundle.Directories, operations); err != nil {
+		return err
+	}
+	created, err := installFiles(ctx, root, bundle.Files, operations)
+	if err != nil {
+		return err
+	}
+	if err := operations.DaemonReload(ctx); err != nil {
+		rollbackFiles(created)
+		_ = operations.DaemonReload(ctx)
+		return errors.New("systemd daemon reload failed; newly installed files were removed")
+	}
+	return nil
+}
+
+func checkInstallerInputs(ctx context.Context, host Host, root string, bundle InstallBundle, operations InstallerHost) error {
 	if checkNilContextAndOperations(ctx, operations) != nil {
 		return errors.New("installer context and host operations are required")
 	}
@@ -189,13 +221,10 @@ func ApplyInstallBundle(ctx context.Context, root string, host Host, bundle Inst
 	if err := checkInstallationBundleComplete(bundle); err != nil {
 		return errors.New("installation bundle is incomplete or contains an invalid state directory")
 	}
-	root, err := filepath.Abs(root)
-	if err != nil {
-		return errors.New("resolve installation root")
-	}
-	if checkInstallationRootExists(root) != nil {
-		return errors.New("installation root must be an existing real directory")
-	}
+	return nil
+}
+
+func preflightInstallBundle(root string, bundle InstallBundle) error {
 	for _, dir := range bundle.Directories {
 		if unsafeInstallMode(dir.Mode) {
 			return errors.New("installation directory permissions are unsafe")
@@ -232,10 +261,11 @@ func ApplyInstallBundle(ctx context.Context, root string, host Host, bundle Inst
 			return err
 		}
 	}
-	if err := operations.EnsureServiceAccount(ctx, serviceAccount, mapRootPath(root, bundle.StateDir)); err != nil {
-		return errors.New("create or validate controller service account failed")
-	}
-	for _, dir := range bundle.Directories {
+	return nil
+}
+
+func installDirectories(ctx context.Context, root string, directories []InstallDirectory, operations InstallerHost) error {
+	for _, dir := range directories {
 		path, _ := mapInstallPath(root, dir.Path)
 		if err := ensureInstallParents(root, filepath.Dir(path)); err != nil {
 			return errors.New("prepare installation directory failed")
@@ -247,28 +277,27 @@ func ApplyInstallBundle(ctx context.Context, root string, host Host, bundle Inst
 			return errors.New("set installation directory ownership failed")
 		}
 	}
-	created := make([]string, 0, len(bundle.Files))
-	for _, file := range bundle.Files {
+	return nil
+}
+
+func installFiles(ctx context.Context, root string, files []InstallFile, operations InstallerHost) ([]string, error) {
+	created := make([]string, 0, len(files))
+	for _, file := range files {
 		path, _ := mapInstallPath(root, file.Path)
 		if err := ensureInstallParents(root, filepath.Dir(path)); err != nil {
 			rollbackFiles(created)
-			return errors.New("prepare installation file directory failed")
+			return nil, errors.New("prepare installation file directory failed")
 		}
 		wasCreated, err := installFile(ctx, path, file, operations)
 		if err != nil {
 			rollbackFiles(created)
-			return errors.New("install controller file failed")
+			return nil, errors.New("install controller file failed")
 		}
 		if wasCreated {
 			created = append(created, path)
 		}
 	}
-	if err := operations.DaemonReload(ctx); err != nil {
-		rollbackFiles(created)
-		_ = operations.DaemonReload(ctx)
-		return errors.New("systemd daemon reload failed; newly installed files were removed")
-	}
-	return nil
+	return created, nil
 }
 
 // checkNilContextAndOperations returns an error if context or operations are nil.

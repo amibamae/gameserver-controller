@@ -1,0 +1,7 @@
+.opencode/
+__pycache__/
+*.pyc
+
+# Coordination CLI lock and temporary files
+COORDINATION/.lock
+COORDINATION/.*.tmp-*

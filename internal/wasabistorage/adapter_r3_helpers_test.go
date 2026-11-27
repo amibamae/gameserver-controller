@@ -31,14 +31,14 @@ type storageR3Client struct {
 	putVersion  *string
 	putETag     *string
 	putCalls    int
-	putInput    *s3.PutObjectInput
+	PutInput    *s3.PutObjectInput
 	stagedModes []os.FileMode
 	tempDir     string
 
 	getErr     error
 	getBody    []byte
 	getVersion *string
-	getInput   *s3.GetObjectInput
+	GetInput   *s3.GetObjectInput
 	bodies     []*storageR3Reader
 
 	headErr    error
@@ -48,7 +48,7 @@ type storageR3Client struct {
 
 func (c *storageR3Client) PutObject(_ context.Context, input *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 	c.putCalls++
-	c.putInput = input
+	c.PutInput = input
 	c.recordStagedModes()
 	if _, err := io.ReadAll(input.Body); err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func (c *storageR3Client) recordStagedModes() {
 }
 
 func (c *storageR3Client) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
-	c.getInput = input
+	c.GetInput = input
 	if c.getErr != nil {
 		return nil, c.getErr
 	}

@@ -1,6 +1,6 @@
 # Agent handoff
 
-Written 2026-11-11, last updated 2026-11-15. It is for another AI agent (Claude, ChatGPT Codex or another) or a human taking over when the previous session can't continue, for example after a usage limit. It reflects the state at the time of writing, so check `git log`, open PRs and remote branches before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`).
+Written 2026-11-11, last updated 2026-11-15. It is for another AI agent (Claude, ChatGPT Codex or another) or a human taking over when the previous session can't continue. It reflects the state at the time of writing, so check `git log`, open PRs and remote branches before acting. The repository is `amibamae/gameserver-controller` (Go, draft protocol `0.21.0-draft`).
 
 Read [CLAUDE.md](../CLAUDE.md) first. Its rules are standing requirements from the project owner and apply to every agent, whatever tool runs it. [AGENTS.md](../AGENTS.md) points here for tools that read that file instead.
 
@@ -54,7 +54,7 @@ The owner's goal is a repowise average health of **7–8**. The method:
 
 ### Who owns what (check this before you start anything)
 
-Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is continuing the code-health backlog. Keep unfinished Claude scopes on hold when their work is unavailable. Check the published branches and open PRs before resuming any scope.
+Claude resumed on 2026-11-26 with the three Claude rows below. Codex is continuing the rest of the code-health backlog. Check the published branches and open PRs before resuming any scope.
 
 | Owner | Files | Branch or PR | Status (2026-11-14) |
 |---|---|---|---|
@@ -67,12 +67,20 @@ Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is cont
 | Codex | `internal/store/logical_servers.go` | #254 merged | done (8.47) |
 | Codex | `internal/workflow/server_provision*.go` | `codex/finish-provision-health` | Continuing the five published Claude commits from `3f68309`; local worktree `/private/tmp/gsc-finish-provision-health`; checker passed; local provision score 6.25 → 7.17 after extracting plan, preconditions, reconciliation, completion and results; extracted files score 8.58–10.00 |
 | Codex | `internal/workflow/server_restore*.go` | `codex/finish-restore-health` | Five published Claude commits rebased locally in `/private/tmp/gsc-finish-restore-health`; focused restore suite and checker passed after correcting schema-first test expectations; score and full validation pending |
-| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | `claude/r3-server-start-stop` | WIP pushed (1 commit, tests only), unfinished; no PR |
-| Claude | `internal/workflow/file_stream_broker*.go` | `claude/r3-file-stream-broker` | WIP pushed (4 commits), unfinished; no PR |
-| Claude | `internal/store/record.go`, `internal/store/bolt.go` | `claude/r3-store-record-bolt` | WIP pushed (12 commits), unfinished; no PR |
-| Claude | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `claude/r3-storage-staging` | WIP pushed (10 commits), unfinished; no PR |
+| Claude | `internal/workflow/server_start*.go`, `server_stop*.go` | #446 merged | done (2026-11-26): split into plan, preconditions, reconcile, completion and lifecycle files plus shared `runtime_step_*` helpers; no function over 10; was 5.61 and 4.84, re-index pending |
+| Claude | `internal/workflow/file_stream_broker*.go` | #447 merged | done (2026-11-26): split into record, staging and stream files; no function over 10; was 4.72, re-index pending |
+| Claude | `internal/store/record.go` | #445 merged | done (2026-11-26): no function over 8; was 5.09, mostly churn, re-index pending |
+| Codex | `internal/store/bolt.go` | `codex/recover-claude-store` merged | done (9.0) |
+| Codex | `internal/wasabistorage/adapter.go`, `internal/capturestage/files.go` | `codex/recover-claude-storage` merged | done (9.0 each) |
 | Codex | `cmd/complexity-check/*`, its CI step | #260 merged | checker runs on PRs |
 | OpenCode | `plugins/velocity/src/**` | `feat/velocity-bridge-disable-start-locks` | **done locally** (2026-11-15): the 3 hard start-up locks (token-file perms, loopback bind, fallback in `velocity.toml`) are now disableable via a `[security]` table — `enforce-token-permissions` (default on), `enforce-loopback-bind` (default on), `enforce-fallback` (default **off**, since the controller registers the fallback backend at runtime). 41 tests green. 5 commits: `4049b0b`→`2cb8b4a`→`29b836e`→`6643885`→`6e7d2a0`. Owner-authorized to review and merge once green; review in progress, not yet pushed. |
+| Claude | `internal/store/capacity.go` | #452 merged | done (2026-11-27): split into 9 files, no function over 7; was 3.61, re-index pending |
+| Claude | `internal/adapter/adapter.go`, `internal/captureinvoke/runtime.go` | #454 merged | done (2026-11-27): no function over 9; was 3.90 and 3.93, re-index pending |
+| Claude | `internal/workflow/engine.go` | #453 merged | done (2026-11-27): split into 11 files, no function over 10; was 4.05, re-index pending |
+| Claude | `internal/wasabistorage/operations.go` | #451 merged | done (2026-11-27): split into 7 files, no function over 8; was 5.93, re-index pending |
+| Claude | `cmd/protocol-check/unit_restart_conformance.go`, `cmd/protocol-check/backup_capture_conformance.go` | #459 merged | done (2026-11-28): evaluator output byte-identical for all 185 fixtures; was 5.47 and 6.08, re-index pending |
+| Claude | `internal/velocityproxy/adapter.go` | #457 merged | done (2026-11-28): split by responsibility; was 6.23, re-index pending |
+| Claude | `internal/controllerruntime/runtime.go` | #458 merged | done (2026-11-28): `Build` and `registerAdapters` split; was 6.78, re-index pending |
 | either | `docs/AGENT_HANDOFF.md` | — | keep it current; rebase before you edit it |
 
 **Next up (2026-11-15, design confirmed with the owner):** secure the bridge for a proxy on a separate machine from the controller. A follow-up branch, starting from the merged start-locks branch — do not start it while that branch is still open.
@@ -84,14 +92,13 @@ Claude is paused until November 19, 2026 at 4 a.m. Vancouver time. Codex is cont
 - **Hot rotation (owner requirement, high availability):** the certificate, key, and CA are re-read from disk without a restart. A `TlsMaterialManager` watches the paths, validates a new set atomically (parse, key matches certificate, expiry, permissions), and swaps the `SSLContext`/`HttpsConfigurator` on the already-listening `HttpServer` with a single `setHttpsConfigurator` call; existing connections finish on the old material. A bad or world-readable new file is rejected and the last good material is kept. Rotation has a zero-downtime overlap window: during a swap the plugin accepts the union of old and new CA anchors (and the controller may present either old or new client certificate) until the operator removes the old material; a failed rotation is therefore always recoverable. The Go client rotates the same way: its transport's `GetClientCertificate` callback re-reads the keypair per handshake and the CA bundle is re-read alongside it. Let's Encrypt auto-renewal is just "certbot writes the files, the plugin notices".
 - **Scope:** plugin `[tls]` table + `TlsMaterialManager` with start-up and per-swap permission checks; Go client client-cert transport (cert/key from the credential accessor, CA file re-read); docs — `docs/PROXY_BRIDGE_API.md` (topologies A and B with the no-plain-inner-hop rule), `docs/CONFIGURATION.md` (TLS setup and rotation procedure). Tests: certificate/key permission checks, mTLS accept/reject, rotation keeps an existing connection working, a corrupted new file leaves the old material in place.
 
-**Dropped Claude WIP, kept for reference only:** `claude/r3-server-backup`, `claude/r3-server-destroy`, `claude/r3-supervised-pilot` and `claude/r3-controller-setup` hold unfinished work on Codex-owned files, based on an old `main`. Do not merge them. Codex may read them for ideas or delete them.
+**Old `claude/r3-*` branches:** all have been deleted from GitHub. Their useful work is on `main`, through Codex's recovery merges and Claude's #445–#447.
 
-**Claude session paused (2026-11-14):** its six round-3 agents stopped on the account's weekly usage limit, which resets 2026-11-19 at 11:00 UTC. Their unfinished work was committed as `wip:` and pushed to the `claude/r3-*` branches above. Those commits are unreviewed, and their tests may not pass. To continue a row:
-1. Check out its branch and rebase onto `main`.
-2. Run every check. Characterization tests must pass on the old code before any refactor commit; check the branch's commit order.
-3. Finish the work and open the PR.
+**Claude round 6 (2026-11-27 to 28):** done. #457–#459 merged after green CI. After this round, every production file still below 7 is Codex-owned.
 
-If a branch looks wrong, redo it from `main` instead. The owner decides whether Codex or the resumed Claude session takes these rows; update the table when that happens.
+**Claude round 5 (2026-11-26 to 27):** done. #451–#454 merged with characterization tests first. Known leftovers: `NewEngine` and `protocolError` keep 7 parameters, because callers outside the scope use them (`protocolError` is called from Codex-owned workflows); `fail`, `invokeStep` and `completeReconciledStep` also still take more than 5.
+
+**Claude round 4 (2026-11-26):** done. #445–#447 merged with tests written first, and `complexity-check -base origin/main` passed. Known leftovers: five 9–13 line clone findings between matching start and stop files (same shape, different messages and types), and `exactCapability` keeps 7 parameters because Codex-owned workflows call it.
 
 Claude's earlier backup, destroy, supervised-pilot and controller-setup agents were stopped unpublished, so their local work is dropped and those files are Codex's.
 
@@ -226,6 +233,10 @@ Keep new schemas in `0.21.0-draft` until R14.
   - For `cmd/protocol-check`, a byte-identical comparison of every evaluator's output across all 183 fixtures before and after.
 - **Repowise:** health scores come from the repowise MCP tools (`get_health`, `get_risk`, `setup_status` for the indexed commit). The owner triggers re-indexes; scores are only real after a re-index of the current `main`. The `refactoring_targets` pagination in `get_health` repeats the same 25 entries, so rank functions with a local complexity count instead.
 
+### Config validation refactor (2026-11-25)
+
+Repowise scored `internal/config/config.go` at 3.45 on `fb544c7` and reported complexity 30 for `Validate`. [PR #433](https://github.com/amibamae/gameserver-controller/pull/433) splits validation by profile type and shares the validated environment index across adapter checks. On the original base (`d1a75e0`) and the refactored branch, the config package passes the same characterization test for duplicate IDs, network validation, lifecycle rules and storage isolation. Re-index the merged commit to measure the file scores.
+
 ### PaperMC & systemd investigation (2026-11-16)
 
 Completed systematic investigation of systemd integration patterns for PaperMC server deployments:
@@ -237,8 +248,8 @@ Completed systematic investigation of systemd integration patterns for PaperMC s
 
 2. **Systemd unit files** (`scripts/bootstrap/minecraft-debian.sh.tmpl`):
    - `minecraft-restore.service`: One-shot oneshot service to restore from Wasabi (RemainAfterExit=yes)
-   - `minecraft-vanilla.service`: Main Minecraft Paper server, depends on restore completing
-   - `mcrcon.socket` + `mcrcon.service`: Socket activation for secure localhost RCON (25577)
+   - `minecraft-vanilla.service`: Main Minecraft Paper server, depends on restore completing; its start script sizes the Java heap from the VM's memory
+   - No RCON: the mcrcon units added on 2026-11-16 could not work and stopped the bootstrap, so they were removed. Minecraft's own RCON is set in the restored `server.properties`, which the bootstrap does not write.
    - **No dedicated health check unit** - uses protocol-level unit inspection
 
 3. **Volume mounting pattern**:

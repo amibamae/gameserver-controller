@@ -61,9 +61,19 @@ func BuildManifest(object ObjectReference, format string, size int64, sha256sum 
 	}
 }
 
+// targetComplete reports whether every field that locates an object is set.
+func targetComplete(t ObjectTarget) bool {
+	for _, field := range []string{t.AdapterID, t.StorageProfile, t.EnvironmentID, t.Container, t.Key} {
+		if field == "" {
+			return false
+		}
+	}
+	return true
+}
+
 // ValidateManifest checks that the manifest has all required fields.
 func ValidateManifest(m Manifest) error {
-	if m.ObjectRef.AdapterID == "" || m.ObjectRef.StorageProfile == "" || m.ObjectRef.EnvironmentID == "" || m.ObjectRef.Container == "" || m.ObjectRef.Key == "" {
+	if !targetComplete(m.ObjectRef.ObjectTarget) {
 		return fmt.Errorf("object reference is invalid: missing adapter_id=%s, storage_profile=%s, environment_id=%s, container=%s, key=%s", m.ObjectRef.AdapterID, m.ObjectRef.StorageProfile, m.ObjectRef.EnvironmentID, m.ObjectRef.Container, m.ObjectRef.Key)
 	}
 	if m.Format == "" {

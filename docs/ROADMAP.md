@@ -4,7 +4,7 @@
 
 ## Estimated timeline
 
-These ranges are elapsed calendar time from November 2026. Plan for **12–18 months for the full roadmap through Phase 7**, with room to extend the schedule if usage limits or live testing cause longer pauses. The milestones overlap, so the ranges are measured from the same starting point.
+These ranges are elapsed calendar time from November 2026. Plan for **12–18 months for the full roadmap through Phase 7**, with room to extend the schedule if agent availability or live testing cause longer pauses. The milestones overlap, so the ranges are measured from the same starting point.
 
 | Milestone | Estimated calendar time | What needs to be proven |
 | --- | --- | --- |
@@ -12,7 +12,7 @@ These ranges are elapsed calendar time from November 2026. Plan for **12–18 mo
 | First production deployment | 4–8 months | Wire the required lifecycle workflows to real adapters, verify recovery and cleanup on staging, then restore a fresh backup of the live world onto the larger production VM and verify it before an approved cutover. |
 | Full roadmap through Phase 7 | 12–18 months | Complete production orchestration and scaling, release rollback, automated staging updates, and validation with another hosting provider and game. |
 
-Agents work in sessions when usage is available. Several agents can make progress in parallel, but usage limits can pause them for days or weeks, and some work has to wait for another change, review, or CI run. The ranges include time for those gaps, fixes after staging tests, and operator availability for live checks. Revisit the estimates after the first successful staging restore and whenever the pace of work changes materially.
+Agents work in sessions when they are available. Several agents can make progress in parallel, but they can pause for days or weeks, and some work has to wait for another change, review, or CI run. The ranges include time for those gaps, fixes after staging tests, and operator availability for live checks. Revisit the estimates after the first successful staging restore and whenever the pace of work changes materially.
 
 The optional hosted subdomain service and other-language contributions are outside this schedule. Stable protocol 1.0 follows the implementation evidence gate below.
 
@@ -125,7 +125,7 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - [x] The Velocity plugin moves waiting players to their server by itself once the controller has registered it and it passes the health check: 5 every 5 seconds by default, skipping players who chose the lobby (integrations section 3.3, vector `proxy-cohort-automatic-move.json`).
 - Use them in workflows: register backends after readiness, move the waiting cohort, drain before stop, and update direct-join and backend DNS records.
 - Record provision-to-Paper-ready duration locally for estimates and an advisory progress bar; offer separate owner-enabled sharing of boot-time averages to the hosted lobby/DNS service, with extra rejoin buffer and no provider credentials exposed.
-- Detect when the backend is idle. Treat `idle_shutdown` as a minimum and keep the server until its billing decision window (by default minutes 58 to 59 of each hour since creation) before backing up and destroying it; time added capacity the same way. The decision logic is in `internal/scalingpolicy`; the scheduler that applies it is future work.
+- Detect when the backend is idle. Treat `idle_shutdown` as a minimum and keep the server until its billing decision window (by default minutes 58 to 59 of each hour since creation) before backing up and destroying it; time added capacity the same way. The decision logic is in `internal/scalingpolicy`; `internal/idlescheduler` applies it on each tick and requests the stop, verified backup and destroy sequence through an injected interface. Wiring the scheduler into the controller runtime is future work.
 - Stop Paper, back up and verify the world, then destroy the VM.
 - Add vertical auto-scaling: move a server one plan up or down an operator-defined plan ladder at a time, through a `server.migrate` operation to a migration target server. During the migration handover, players move to the migration target, and the old live server is destroyed only after its final backup is verified. A migration target server is the only case allowed to exceed two managed servers, controlled by `migration_targets.enabled` (default true) and `migration_targets.max_servers` (default 1, 0 for no limit), controller-wide with a per-server override. Vertical scaling itself has a separate per-server switch, `scaling.vertical.enabled`. See [the design](CORE_DESIGN.md#vertical-auto-scaling-planned).
 - Add manual scaling: an operator schedules a move to any plan with the timing `immediate`, `end_of_billing_period` or `next_start` (the next boot after everyone has left). A manual move pauses auto-scaling for that server until it completes, and the operator is told and can turn auto-scaling off or on per server. See [the design](CORE_DESIGN.md#manual-scaling-planned).
@@ -160,6 +160,14 @@ Other-language implementations are welcome, but they are not Phase 1 exit criter
 - Add another game after the game contract stabilizes.
 - Welcome adapter and tooling contributions in other languages; do not require them for release.
 - Review trust boundaries and compatibility for plugins and extensions.
+
+## Controller resilience and self-maintenance (future)
+
+**Status:** Planned, not required now. These items are for future implementation, after the single-controller lifecycle is complete and stable. None of them are release gates today; see the [architecture notes](ARCHITECTURE.md#controller-resilience-future).
+
+- Run two or three controllers for peer failover: the controllers elect who takes over, and exactly one is active at a time. Shared durable store, per-server locks, idempotency, and audit must stay authoritative across replicas so a takeover never double-dispatches an operation. Optional for operators who want the highest uptime.
+- Self-healing controller: detect an unsafe state and spin up a replacement controller on the same machine to take over its duties, reducing the need for multiple replicas. Must be an audited lifecycle operation that verifies the exact target and environment, never bypasses lifecycle policy or authorization, and starts the replacement from the same durable state.
+- Controller auto-update: update the controller itself automatically, respecting release discipline (immutable versioned releases, validation before promotion, compatibility and world-format checks, operator approval for anything affecting a running server), and coordinate with self-healing and failover so an update never drops ownership of live state. Only in scope once the rest of the controller lifecycle is implemented.
 
 ## Future management clients
 

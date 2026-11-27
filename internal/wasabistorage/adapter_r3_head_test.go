@@ -36,7 +36,7 @@ func (c storageR3HeadCase) run(t *testing.T) {
 	impl := storageR3Adapter(t, storageR3Config(c.config), client, c.creds, nil)
 	ref := objectReference{objectTarget: storageR3Target("server/world.tar")}
 	storageR3Apply(c.ref, &ref)
-	input := headInput{ObjectRef: ref}
+	input := HeadInput{ObjectRef: ref}
 	request := requestFor("storage.object.head", input, time.Now().Add(time.Minute), "", 0)
 	storageR3Apply(c.request, &request)
 	response, err := impl.Invoke(context.Background(), request)
@@ -82,7 +82,7 @@ func (c storageR3HeadOutput) run(t *testing.T) {
 	client := storageR3NewClient()
 	client.headErr, client.headOutput = c.err, c.output
 	impl := storageR3Adapter(t, storageR3Config(c.config), client, nil, nil)
-	input := headInput{ObjectRef: objectReference{objectTarget: storageR3Target("server/world.tar"), VersionID: c.requested}}
+	input := HeadInput{ObjectRef: objectReference{objectTarget: storageR3Target("server/world.tar"), VersionID: c.requested}}
 	response, err := impl.Invoke(context.Background(), requestFor("storage.object.head", input, time.Now().Add(time.Minute), "", 0))
 	if err != nil {
 		t.Fatal(err)
@@ -110,10 +110,10 @@ func TestStorageR3HeadOutputs(t *testing.T) {
 				hex.EncodeToString(digest[:]) + `"},"provider_etag":"\"e\"","size_bytes":5}`},
 		{name: "exact version", requested: "version-1", wantVersion: aws.String("version-1"), output: &s3.HeadObjectOutput{VersionId: aws.String("version-1"), ContentLength: aws.Int64(0)},
 			want: `{"object_ref":` + storageR3Ref + `,"version_id":"version-1"},"object_state":"present","observed_at":"T","size_bytes":0}`},
-		{name: "composite checksum and empty etag", output: &s3.HeadObjectOutput{ETag: aws.String(""), ChecksumType: types.ChecksumTypeComposite, ChecksumSHA256: aws.String(full)}, want: present},
-		{name: "full checksum missing", output: &s3.HeadObjectOutput{ChecksumType: types.ChecksumTypeFullObject}, want: present},
-		{name: "checksum not base64", output: &s3.HeadObjectOutput{ChecksumType: types.ChecksumTypeFullObject, ChecksumSHA256: aws.String("%%%")}, want: present},
-		{name: "checksum wrong length", output: &s3.HeadObjectOutput{ChecksumType: types.ChecksumTypeFullObject, ChecksumSHA256: aws.String(short)}, want: present},
+		{name: "composite Checksum and empty etag", output: &s3.HeadObjectOutput{ETag: aws.String(""), ChecksumType: types.ChecksumTypeComposite, ChecksumSHA256: aws.String(full)}, want: present},
+		{name: "full Checksum missing", output: &s3.HeadObjectOutput{ChecksumType: types.ChecksumTypeFullObject}, want: present},
+		{name: "Checksum not base64", output: &s3.HeadObjectOutput{ChecksumType: types.ChecksumTypeFullObject, ChecksumSHA256: aws.String("%%%")}, want: present},
+		{name: "Checksum wrong length", output: &s3.HeadObjectOutput{ChecksumType: types.ChecksumTypeFullObject, ChecksumSHA256: aws.String(short)}, want: present},
 		{name: "null version unrequired", output: &s3.HeadObjectOutput{VersionId: aws.String("null")}, want: present},
 	}
 	for _, test := range tests {

@@ -8,9 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -158,113 +156,6 @@ func finish(value *Config) error {
 		_ = resolveSettings(&value.Adapters[i]) // Validate reports failures.
 	}
 	return Validate(*value)
-}
-
-func Validate(value Config) error {
-	var problems []string
-	add := func(ok bool, message string) {
-		if !ok {
-			problems = append(problems, message)
-		}
-	}
-	add(value.SchemaVersion == SchemaVersion, "schema_version must be 1")
-	validateController(&problems, value.Controller)
-	add(len(value.Adapters) > 0, "at least one adapter profile is required")
-	add(len(value.Environments) > 0, "at least one environment is required")
-	add(len(value.Servers) > 0, "at least one server profile is required")
-
-	adapterByID := make(map[string]AdapterProfile, len(value.Adapters))
-	for i, profile := range value.Adapters {
-		label := profileLabel(profile.Source, i)
-		// Decode settings on this copy so environment and zone checks work
-		// for a Config that was not produced by Parse. Errors are reported by
-		// validateImplementation below.
-		_ = resolveSettings(&profile)
-		add(adapterIDPattern.MatchString(profile.ID), label+".id must be a lower-case dotted adapter ID")
-		add(validCategory(profile.Category), label+".category is unsupported")
-		if expectedPrefix, ok := categoryPrefix(profile.Category); ok {
-			add(strings.HasPrefix(profile.ID, expectedPrefix), label+".id must use the category prefix "+expectedPrefix)
-		}
-		if _, exists := adapterByID[profile.ID]; exists {
-			problems = append(problems, "duplicate adapter ID: "+profile.ID)
-		} else if profile.ID != "" {
-			adapterByID[profile.ID] = profile
-		}
-		for name, reference := range profile.SecretRefs {
-			validateSecretReference(&problems, label+".secret_refs."+name, name, reference)
-		}
-	}
-
-	environmentByID := make(map[string]Environment, len(value.Environments))
-	hasProduction := false
-	for i, environment := range value.Environments {
-		label := fmt.Sprintf("environments[%d]", i)
-		add(identifierPattern.MatchString(environment.ID), label+".id must be a lower-case identifier")
-		add(environment.Classification == "production" || environment.Classification == "staging" || environment.Classification == "testing", label+".classification must be production, staging, or testing")
-		add(environment.ProductionBackupAccess == "none" || environment.ProductionBackupAccess == "read_only" || environment.ProductionBackupAccess == "read_write", label+".production_backup_access must be none, read_only, or read_write")
-		if environment.Classification == "production" {
-			hasProduction = true
-			add(environment.ProductionBackupAccess == "read_write", label+" production backup access must be read_write")
-		} else {
-			add(environment.ProductionBackupAccess != "read_write", label+" staging/testing must not have production backup write access")
-		}
-		if _, exists := environmentByID[environment.ID]; exists {
-			problems = append(problems, "duplicate environment ID: "+environment.ID)
-		} else if environment.ID != "" {
-			environmentByID[environment.ID] = environment
-		}
-	}
-	add(hasProduction, "at least one production environment is required")
-	for i, profile := range value.Adapters {
-		validateImplementation(&problems, profileLabel(profile.Source, i), profile, environmentByID)
-	}
-
-	serverIDs := make(map[string]struct{}, len(value.Servers))
-	for i, server := range value.Servers {
-		label := fmt.Sprintf("servers[%d]", i)
-		add(identifierPattern.MatchString(server.ID), label+".id must be a lower-case identifier")
-		if _, exists := serverIDs[server.ID]; exists {
-			problems = append(problems, "duplicate server ID: "+server.ID)
-		} else if server.ID != "" {
-			serverIDs[server.ID] = struct{}{}
-		}
-		if _, exists := environmentByID[server.EnvironmentID]; !exists {
-			problems = append(problems, label+" references unknown environment "+server.EnvironmentID)
-		}
-		checkServerAdapter(&problems, label+".adapters.hosting", server.Adapters.Hosting, "hosting", adapterByID, true)
-		checkServerAdapter(&problems, label+".adapters.storage", server.Adapters.Storage, "storage", adapterByID, true)
-		for field, id := range map[string]string{"hosting": server.Adapters.Hosting, "storage": server.Adapters.Storage, "execution": server.Adapters.Execution,
-			"game": server.Adapters.Game, "integration": server.Adapters.Integration} {
-			if environment := BoundEnvironment(adapterByID[id]); id != "" && environment != "" && environment != server.EnvironmentID {
-				problems = append(problems, label+".adapters."+field+" must use an adapter bound to the same environment as the server")
-			}
-		}
-		checkServerAdapter(&problems, label+".adapters.execution", server.Adapters.Execution, "execution", adapterByID, true)
-		checkServerAdapter(&problems, label+".adapters.game", server.Adapters.Game, "game", adapterByID, true)
-		checkServerAdapter(&problems, label+".adapters.integration", server.Adapters.Integration, "integration", adapterByID, false)
-		validateServerNetwork(&problems, label, server, adapterByID)
-		if server.Lifecycle.IdleShutdown != "" {
-			idle, err := time.ParseDuration(server.Lifecycle.IdleShutdown)
-			add(err == nil && idle > 0 && idle <= 7*24*time.Hour, label+".lifecycle.idle_shutdown must be greater than zero and no more than 168h")
-		}
-		if _, err := backuppolicy.Resolve(server.Lifecycle.Backups); err != nil {
-			problems = append(problems, label+".lifecycle.backups: "+err.Error())
-		}
-		if _, err := scalingpolicy.Resolve(server.Lifecycle.Scaling); err != nil {
-			problems = append(problems, label+".lifecycle.scaling: "+err.Error())
-		}
-		add(server.Lifecycle.RequireVerifiedBackupBeforeDestroy, label+".lifecycle.require_verified_backup_before_destroy must be true")
-		add(server.Lifecycle.RequireApprovalForDestroy, label+".lifecycle.require_approval_for_destroy must be true")
-	}
-	validateStorageSecretIsolation(&problems, value.Servers, environmentByID, adapterByID)
-	validateUniqueBackendHostnames(&problems, value.Servers)
-	validateProxyBackendIDs(&problems, value.Servers)
-
-	if len(problems) > 0 {
-		sort.Strings(problems)
-		return fmt.Errorf("configuration is invalid:\n - %s", strings.Join(problems, "\n - "))
-	}
-	return nil
 }
 
 func validateSecretReference(problems *[]string, label, name string, reference SecretReference) {

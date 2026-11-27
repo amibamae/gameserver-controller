@@ -21,7 +21,7 @@ type downloaded struct {
 }
 
 // get streams an object to the controller while hashing it, and reports it
-// complete only when its size, checksum, and version all match.
+// complete only when its size, Checksum, and version all match.
 func (a *Adapter) get(ctx context.Context, request adapter.InvokeRequest) (any, error) {
 	input, err := a.decodeGet(request)
 	if err != nil {
@@ -81,7 +81,7 @@ func downloadVerified(ctx context.Context, client s3Client, input GetInput, sink
 	}
 	digest := hex.EncodeToString(hasher.Sum(nil))
 	if !strings.EqualFold(digest, input.ExpectedChecksum.Digest) {
-		return downloaded{}, errors.New("Wasabi object checksum does not match the backup manifest")
+		return downloaded{}, errors.New("Wasabi object Checksum does not match the backup manifest")
 	}
 	return downloaded{count: count, digest: digest, version: result.VersionId}, nil
 }

@@ -1,9 +1,7 @@
 package controllerruntime
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,6 +36,9 @@ func TestHelperRuntimeAdapter(t *testing.T) {
 			OutputSchemaURI: "urn:gameserver-controller:" + schemas.ProtocolVersion() + ":common:external-resource-ref", RequiredPermissions: []string{}}}})
 	if err := adapterprocess.Serve(context.Background(), fake, os.Stdin, os.Stdout, adapterprocess.ServeOptions{Schemas: schemas}); err != nil {
 		os.Exit(2)
+	}
+	if err := runtimeR6LogExit(adapterID); err != nil {
+		os.Exit(3)
 	}
 	os.Exit(0)
 }
@@ -162,15 +163,7 @@ func TestBuildRegistersConfiguredAdaptersAndRunsServerDefine(t *testing.T) {
 		t.Fatal("a declared-only adapter was registered")
 	}
 
-	parameters := json.RawMessage(`{"server_id":"server-define","environment_id":"staging","display_name":"Test Server","hosting_profile":"vultr-small","storage_profile":"wasabi-worlds","game":{"adapter_id":"game.paper","release_channel":"stable"},"execution":{"adapter_id":"execution.systemd","profile":"paper-default"}}`)
-	record := store.OperationRecord{OperationID: "define-operation", OperationType: "server.define", ProtocolVersion: runtime.Schemas.ProtocolVersion(),
-		Target: store.OperationTarget{ServerID: "server-define", EnvironmentID: "staging"}, ActorID: "operator-1", IdempotencyKey: "define-key",
-		RequestFingerprint: "sha256:" + strings.Repeat("a", 64), RequestSnapshot: store.RequestSnapshot{OperationType: "server.define", Parameters: parameters}}
-	proof := store.IdempotencyProof{ActiveKeyVersion: "test-v1", Candidates: []store.IdempotencyVerifier{{KeyVersion: "test-v1",
-		Digest: bytes.Repeat([]byte{1}, 32), BindingDigest: bytes.Repeat([]byte{2}, 32)}}}
-	if _, _, err := runtime.Store.AcceptOperation(record, proof, []string{store.LogicalServerLockScope("staging", "server-define")}); err != nil {
-		t.Fatal(err)
-	}
+	runtimeR6AcceptDefine(t, runtime.Store, runtime.Schemas.ProtocolVersion(), runtimeR6DefineParameters)
 	completed, err := runtime.Engine.Run(context.Background(), "define-operation")
 	if err != nil || completed.Record.Status != protocolstate.OperationSucceeded {
 		t.Fatalf("server.define = %q, %v", completed.Record.Status, err)

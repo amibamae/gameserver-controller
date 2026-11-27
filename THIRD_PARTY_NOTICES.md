@@ -2,6 +2,60 @@
 
 For source or binary distributions that include a component below, include this file and its linked license and attribution material with the distribution. Go module versions match [go.mod](go.mod). Test-only modules recorded only in go.sum are omitted because their source is not vendored or linked into project binaries. The repository's AGPL-3.0 license does not replace the separate terms attached to these components.
 
+
+## Python 3 interpreter (optional observability runtime)
+
+- **Component:** Python 3, supplied by the system's Debian `python3` package and by the GitHub Actions Ubuntu runner. The optional VictoriaLogs forwarding scripts and Homelable topology helper use only Python's standard library; Python's runtime is **not bundled or vendored** in GSC.
+- **Version:** the supported Python 3 version selected by the target Debian distribution / GitHub runner, rather than a fixed version shipped with this project. Check the installed distro package before deployment.
+- **License:** Python Software Foundation License Version 2 (PSF-2.0) and applicable historical notices bundled with the runtime; see [official Python licensing and attribution](https://docs.python.org/3/license.html) and [CPython license file](https://github.com/python/cpython/blob/main/LICENSE).
+- **Attribution:** Copyright © Python Software Foundation and contributors. The distribution packages retain their own notices. GSC is not distributing the interpreter in this repository.
+
+## Optional observability services and host tools (not bundled)
+
+The optional VictoriaLogs and Homelable follow-up adds only project-owned Python,
+Go, shell, documentation, and systemd *unit templates*. No VictoriaLogs or
+Homelable binary, Python package, systemd binary, or upstream source code is
+copied, linked, vendored, or shipped by the controller. These integrations
+remain disabled by default. Versions of operator-deployed services and system
+tools are selected by the operator or by the host OS, not pinned by GSC.
+The upstream license files linked below were checked on 2026-11-23. No new
+third-party dependency or bundled upstream material was added by the lifecycle
+reconciliation and collector recovery fixes.
+
+- **VictoriaLogs Community Edition** ([upstream](https://github.com/VictoriaMetrics/VictoriaLogs),
+  [license](https://github.com/VictoriaMetrics/VictoriaLogs/blob/master/LICENSE)):
+  Apache License 2.0; Copyright 2019–2026 VictoriaMetrics, Inc.
+  This is a separately installed optional *server*, accessed via its HTTPS
+  ingestion API. An Enterprise edition is also offered under separate terms;
+  an operator choosing it must check that edition's applicable agreement.
+- **Homelable** ([upstream](https://github.com/Pouzor/homelable),
+  [license](https://github.com/Pouzor/homelable/blob/main/LICENSE)):
+  MIT License; Copyright (c) 2026 Remy Jardinet. This is a separately
+  installed optional *server*, accessed via its authenticated HTTP API.
+- **systemd, systemctl, journald, journalctl** ([upstream](https://github.com/systemd/systemd),
+  [licensing notes](https://github.com/systemd/systemd/blob/main/LICENSES/README.md)):
+  host OS utilities used for optional timers, journald reads, and systemd
+  credential delivery. The systemd project is generally LGPL-2.1-or-later,
+  with per-file exceptions described upstream; Copyright the systemd
+  contributors, including Lennart Poettering and Kay Sievers. Supplied by
+  the operating system rather than distributed in the GSC repository.
+- **POSIX /bin/sh**: the optional one-shot topology wrapper uses the
+  operating system's shell. The executable and its exact license depend on
+  the operator's chosen OS and shell package; GSC does not bundle a shell.
+
+The optional Python scripts use **only the standard library** and the
+already-documented OS-provided Python 3 interpreter above. No Python wheel,
+new Go module, container image, or new CI action was added. The GSC-owned
+service/timer example files are not copies of upstream files and follow the
+repository's own [LICENSE](LICENSE).
+
+**Distribution boundary:** mere API interoperability with these separately
+installed services does not include their binaries in a GSC distribution.
+If future packaging ships VictoriaLogs, Homelable, systemd, or a Python runtime,
+re-check the exact version's licenses and notices and add required license
+copies to `licenses/` as part of that packaging change.
+
+
 ## AWS SDK for Go v2
 
 The Wasabi storage adapter uses the AWS SDK for Go v2, including its S3 client,
@@ -60,6 +114,13 @@ These run in GitHub Actions workflows and are not distributed with the project o
 All GitHub Actions used in [.github/workflows/](.github/workflows/) are MIT licensed:
 
 - **GitHub Actions** (all MIT, Copyright (c) 2018 GitHub, Inc. and contributors): [`actions/checkout@v7`](https://github.com/actions/checkout), [`actions/setup-go@v7`](https://github.com/actions/setup-go), [`actions/setup-java@v4`](https://github.com/actions/setup-java). Text: [licenses/github-actions-LICENSE](licenses/github-actions-LICENSE).
+
+### Runner command-line tools
+
+The [Repowise runtime evidence workflow](.github/workflows/repowise-evidence.yml) uses these tools as preinstalled on the GitHub Actions Ubuntu runner. The version is whatever the runner image provides; this project does not install or distribute them.
+
+- **curl**: curl license (MIT-style), Copyright Daniel Stenberg and contributors ([upstream license](https://github.com/curl/curl/blob/master/COPYING)).
+- **jq**: MIT-style license, Copyright (C) 2012 Stephen Dolan ([upstream license](https://github.com/jqlang/jq/blob/master/COPYING)). Checked at the upstream COPYING file in November 2026.
 
 ### Eclipse Temurin JDK 21
 
@@ -184,6 +245,14 @@ The four JSON resources in `cmd/protocol-check/openapi-schema/` are byte-for-byt
 - License: the OpenSSH license (BSD-style, several parts), checked in the Debian package's copyright file in November 2026
 - Copyright: Tatu Ylonen, Markus Friedl, Theo de Raadt, Niels Provos, Dug Song, Damien Miller, and other contributors
 - Upstream: [openssh-portable LICENCE](https://github.com/openssh/openssh-portable/blob/master/LICENCE)
+
+## Git (developer host)
+
+The coordination CLI (`cmd/coordination`) runs the host's `git worktree list --porcelain` to find the main worktree's `COORDINATION/` directory when neither `--dir` nor `$GSC_COORDINATION_DIR` is given. Its tests also run `git init`, `git commit` and `git worktree add` in temporary directories. Git is provided by the operating system or the developer's Git installation and is not distributed, linked or vendored by this project.
+
+- License: GNU General Public License version 2 only, as stated in Git's COPYING file (checked at the upstream file in November 2026); some bundled parts carry their own compatible licenses
+- Copyright: Linus Torvalds, Junio C Hamano, and the Git contributors
+- Upstream: [git COPYING](https://github.com/git/git/blob/master/COPYING)
 
 ## Rust conformance consumer (`conformance-rs`)
 
@@ -345,4 +414,4 @@ The workflow files in [.github/workflows/](.github/workflows/) are project-owned
 
 ## Last Updated
 
-November 16, 2026
+November 23, 2026

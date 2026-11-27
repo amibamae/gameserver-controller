@@ -46,8 +46,8 @@ func TestPutGetHeadAgainstProtocolRegistry(t *testing.T) {
 	target := objectTarget{AdapterID: testAdapterID, StorageProfile: testConfig().StorageProfileID,
 		EnvironmentID: testConfig().EnvironmentID, Container: "backups", Key: "server/world.tar"}
 
-	putInput := PutInput{Target: target, ExpectedSizeBytes: int64(len(content)), ExpectedChecksum: Checksum{Algorithm: "sha256", Digest: hex.EncodeToString(digest[:])}}
-	putResponse := invoke(t, registry, "storage.object.put", putInput, deadline, "controller_to_adapter", int64(len(content)),
+	PutInput := PutInput{Target: target, ExpectedSizeBytes: int64(len(content)), ExpectedChecksum: Checksum{Algorithm: "sha256", Digest: hex.EncodeToString(digest[:])}}
+	putResponse := invoke(t, registry, "storage.object.put", PutInput, deadline, "controller_to_adapter", int64(len(content)),
 		map[string]io.ReadCloser{testTransferID(): io.NopCloser(bytes.NewReader(content))}, nil)
 	var putOutput struct {
 		UploadState string          `json:"upload_state"`
@@ -60,9 +60,9 @@ func TestPutGetHeadAgainstProtocolRegistry(t *testing.T) {
 		t.Fatalf("unexpected put output: %+v", putOutput)
 	}
 
-	getInput := GetInput{ObjectRef: putOutput.ObjectRef, ExpectedSizeBytes: int64(len(content)), ExpectedChecksum: putInput.ExpectedChecksum}
+	GetInput := GetInput{ObjectRef: putOutput.ObjectRef, ExpectedSizeBytes: int64(len(content)), ExpectedChecksum: PutInput.ExpectedChecksum}
 	destination := &bytes.Buffer{}
-	getResponse := invoke(t, registry, "storage.object.get", getInput, deadline, "adapter_to_controller", int64(len(content)),
+	getResponse := invoke(t, registry, "storage.object.get", GetInput, deadline, "adapter_to_controller", int64(len(content)),
 		nil, map[string]io.WriteCloser{testTransferID(): nopWriteCloser{destination}})
 	var getOutput struct {
 		TransferState string   `json:"transfer_state"`
@@ -76,7 +76,7 @@ func TestPutGetHeadAgainstProtocolRegistry(t *testing.T) {
 		t.Fatalf("unexpected get result: %+v, body=%q", getOutput, destination.Bytes())
 	}
 
-	headResponse := invoke(t, registry, "storage.object.head", headInput{ObjectRef: putOutput.ObjectRef}, deadline, "", 0, nil, nil)
+	headResponse := invoke(t, registry, "storage.object.head", HeadInput{ObjectRef: putOutput.ObjectRef}, deadline, "", 0, nil, nil)
 	var headOutput struct {
 		ObjectState string `json:"object_state"`
 		SizeBytes   int64  `json:"size_bytes"`
@@ -103,7 +103,7 @@ func TestPutRejectsWrongChecksumBeforeProviderWrite(t *testing.T) {
 	request.Params.RequestContext.SetStreamSources(map[string]io.ReadCloser{testTransferID(): io.NopCloser(bytes.NewReader(content))})
 	_, err = impl.Invoke(context.Background(), request)
 	if err == nil {
-		t.Fatal("accepted an upload with the wrong checksum")
+		t.Fatal("accepted an upload with the wrong Checksum")
 	}
 	if len(provider.objects) != 0 {
 		t.Fatalf("invalid stream reached the provider; stored %d objects", len(provider.objects))
@@ -135,7 +135,7 @@ func TestObjectOperationsRejectBucketAndKeyOutsideProfile(t *testing.T) {
 		{AdapterID: testAdapterID, StorageProfile: "staging-storage", EnvironmentID: "staging", Container: "other-bucket", Key: "server/world.tar"},
 		{AdapterID: testAdapterID, StorageProfile: "staging-storage", EnvironmentID: "staging", Container: "backups", Key: "production/world.tar"},
 	} {
-		input := headInput{ObjectRef: objectReference{objectTarget: target}}
+		input := HeadInput{ObjectRef: objectReference{objectTarget: target}}
 		request := requestFor("storage.object.head", input, time.Now().Add(time.Minute), "", 0)
 		if _, err := impl.Invoke(context.Background(), request); err == nil {
 			t.Fatalf("accepted object outside configured bucket/prefix: %#v", target)
