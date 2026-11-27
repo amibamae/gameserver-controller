@@ -52,17 +52,22 @@ Record implementation status separately from verification: planned, partial, imp
 
 ## Estimated timeline
 
-These ranges are elapsed calendar time from November 2026. Plan for **12–18 months for the full roadmap through Phase 7**, with room to extend the schedule if agent availability or live testing cause longer pauses. The milestones overlap, so the ranges are measured from the same starting point.
+These are deliberately conservative elapsed-calendar-time planning ranges measured from November 2026, not deadlines or estimates of continuous agent working hours. Plan for **24–36 months for the existing roadmap through Phase 7**, with a further **12 months of contingency** if necessary (up to 48 months as a planning allowance, not a completion promise). Milestones overlap and use the same starting point; do not add the ranges together. Progress may be faster, but no milestone is accepted before its evidence and safety gates are met.
 
-| Milestone | Estimated calendar time | What needs to be proven |
+| Milestone | Estimated calendar time from November 2026 | What needs to be proven |
 | --- | --- | --- |
-| Supervised staging pilot | 1–3 months | Use the lower-cost Vultr VM to verify Debian bootstrap, Paper readiness, and a backup and restore of a disposable world through Wasabi. |
-| First production deployment | 4–8 months | Wire the required lifecycle workflows to real adapters, verify recovery and cleanup on staging, then restore a fresh backup of the live world onto the larger production VM and verify it before an approved cutover. |
-| Full roadmap through Phase 7 | 12–18 months | Complete production orchestration and scaling, release rollback, automated staging updates, and validation with another hosting provider and game. |
+| Remediation foundation and supervised staging pilot | 3–6 months | Address critical runtime and maintainability defects; use the lower-cost isolated Vultr VM to verify Debian bootstrap, Paper readiness, and backup and restore of a synthetic disposable world through Wasabi. |
+| End-to-end reference lifecycle and alpha candidate | 6–12 months | Connect the real adapters and durable workflows; demonstrate routing, same-instance recovery, safe drain, verified backup, authorized staging-only destruction and successful redeployment with preserved world state; provide reproducible installation and independent review. |
+| First approved production deployment | 12–18 months | Complete sustained staging and fault-injection verification, demonstrate safe recovery and rollback, and independently verify a fresh backup of the live world before an explicitly approved production cutover. Production destruction remains disabled unless separately authorized by the owner. |
+| Operator usability and measured economic value | 18–24 months | Complete prioritized management and diagnostic functionality; validate operating costs, startup and recovery performance, backup efficiency and justified optional improvements. |
+| Full existing roadmap through Phase 7 | 24–36 months | Complete production orchestration and scaling, release rollback, automated staging updates, and validation with another hosting provider and game, subject to their individual acceptance gates. |
+| Additional contingency, if needed | 36–48 months | Allow for extended testing, provider changes, security remediation, integration rework, resource or budget constraints, and long interruptions in development. Replan beyond this window if evidence or resources require it. |
 
-Agents work in sessions when they are available. Several agents can make progress in parallel, but they can pause for days or weeks, and some work has to wait for another change, review, or CI run. The ranges include time for those gaps, fixes after staging tests, and operator availability for live checks. Revisit the estimates after the first successful staging restore and whenever the pace of work changes materially.
+Reserve substantial calendar slack for independent reviews, repeated failure and recovery testing, provider outages and API changes, CI delays, agent usage limits and context recovery, competing workstreams, maintainer availability and authorization for isolated live tests. Parallel development is useful but does not eliminate dependencies or guarantee throughput. Do not accelerate a release by weakening safety checks, reducing meaningful verification or treating fake-tested functionality as live-tested. An incomplete or blocked milestone stays incomplete even if its planning window has passed.
 
-The optional hosted subdomain service and other-language contributions are outside this schedule. Stable protocol 1.0 follows the implementation evidence gate below.
+Review these ranges after the first successful staging restore, after each major milestone, and whenever availability or scope changes materially. Keep the current-focus priorities above aligned with the existing coordination workflow; unrelated authorized feature work may continue in parallel. Candidate competitive features are not all committed deliverables and must earn their place through evidence of user value and maintenance cost.
+
+The optional hosted subdomain service, other-language contributions, and advanced availability research beyond the existing Phase 7 scope are outside this schedule. Stable protocol 1.0 follows the implementation evidence gate below. Availability and durability objectives require separate measured evidence and must not be inferred from calendar progress.
 
 ## Phase 0: Project foundation
 
