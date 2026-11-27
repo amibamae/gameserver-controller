@@ -66,6 +66,12 @@ func (c SettingsCheck) Require(ok bool, problem string) {
 	}
 }
 
+// Fail records a fatal problem for the settings block, prefixed with the
+// settings block path, unless ok.
+func (c SettingsCheck) Fail(ok bool, problem string) {
+	c.Require(ok, problem)
+}
+
 // KnownEnvironment reports whether id names a configured environment.
 func (c SettingsCheck) KnownEnvironment(id string) bool {
 	_, ok := c.environments[id]
@@ -128,6 +134,74 @@ func BoundEnvironment(profile AdapterProfile) string {
 	return ""
 }
 
+// buildInlineYAML constructs YAML text from a block's Content array for an
+// implementation settings block. For an inline block with `,inline`, the
+// Content may contain flat scalar key-value pairs at alternating positions,
+// or a MappingNode wrapping nested content (like secret_refs).
+func buildInlineYAML(content []*yaml.Node, builder *strings.Builder) error {
+	if len(content) == 0 {
+		return nil
+	}
+
+	// If first element is a MappingNode, it wraps the content; otherwise they're flat scalars/sequences
+	if content[0].Kind == yaml.MappingNode {
+		// Wrapped structure - iterate MappingNode children
+		return buildInlineYAMLWrapped(content[0].Content, builder)
+	}
+
+	// Flat structure - alternating key-value pairs at positions 0,1 / 2,3 / ...
+	for i := 0; i+1 < len(content); i += 2 {
+		keyNode := content[i]
+		valueNode := content[i+1]
+
+		if strings.TrimSpace(keyNode.Value) == "" {
+			continue
+		}
+
+		builder.WriteString(keyNode.Value + ":")
+
+		switch valueNode.Kind {
+		case yaml.ScalarNode:
+			builder.WriteString(valueNode.Value + "\n")
+		case yaml.SequenceNode:
+			builder.WriteString("\n")
+			for _, item := range valueNode.Content {
+				if item.Kind == yaml.ScalarNode && strings.HasPrefix(item.Tag, "!!str") {
+					builder.WriteString("  - " + item.Value + "\n")
+				}
+			}
+		case yaml.MappingNode:
+			// Nested mapping in flat content (rare)
+			return buildInlineYAMLWrapped(valueNode.Content, builder)
+		}
+	}
+
+	return nil
+}
+
+// buildInlineYAMLWrapped processes a MappingNode's children as key-value pairs.
+func buildInlineYAMLWrapped(content []*yaml.Node, builder *strings.Builder) error {
+	for _, child := range content {
+		switch child.Kind {
+		case yaml.MappingNode:
+			// Nested mapping - process its children recursively
+			return buildInlineYAMLWrapped(child.Content, builder)
+		case yaml.ScalarNode:
+			line := strings.TrimSpace(child.Value)
+			if colonIdx := strings.Index(line, ":"); colonIdx >= 0 {
+				builder.WriteString(line + "\n")
+			}
+		case yaml.SequenceNode:
+			for _, item := range child.Content {
+				if item.Kind == yaml.ScalarNode && strings.HasPrefix(item.Tag, "!!str") {
+					builder.WriteString("  - " + item.Value + "\n")
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // resolveSettings decodes the profile's settings block for its implementation.
 func resolveSettings(profile *AdapterProfile) error {
 	if profile.Implementation == "" || profile.Settings != nil {
@@ -142,11 +216,15 @@ func resolveSettings(profile *AdapterProfile) error {
 		return errMissingBlock
 	}
 	settings := implementation.NewSettings()
-	data, err := yaml.Marshal(&block)
-	if err != nil {
-		return errInvalidBlock
+
+	var builder strings.Builder
+
+	// Build YAML from block node's Content array using inline format.
+	if err := buildInlineYAML(block.Content, &builder); err != nil {
+		return err
 	}
-	decoder := yaml.NewDecoder(bytes.NewReader(data))
+
+	decoder := yaml.NewDecoder(bytes.NewReader([]byte(builder.String())))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(settings); err != nil {
 		// Decoder errors can quote values; keep them out of messages.
