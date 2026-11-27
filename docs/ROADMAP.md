@@ -21,7 +21,7 @@ This section sets priorities across the existing phases; it does not replace the
 ### P1: Make the controller usable
 
 - [ ] Complete the operator-facing management API, CLI setup, configuration validation, diagnostics and operation progress (including cold-start progress and actionable failure reasons).
-- [ ] Evaluate maintenance lockout, scheduled backups and maintenance, scoped player/delegated administration and a secure remote console. Prefer existing SSH/SFTP facilities for file transfer; keep an independent panel or Discord command client optional, with least-privilege authorization.
+- [ ] Evaluate maintenance lockout, scheduled backups and maintenance, scoped player/delegated administration and a secure remote console. Use Wasabi object storage for persistent world data, backups and versioned deployment artifacts; prefer verified, authorized object transfers and reviewed bootstrap or configuration workflows over a separate remote file manager. SFTP is not a product requirement. Retain pinned SSH for secure host handoff and remote execution. Keep an independent panel or Discord command client optional, with least-privilege authorization.
 - [ ] Improve deployment templates, installation reproducibility, and documentation for an independent operator to deploy without AI assistance. Review privacy and consent for any player-related controls or metrics.
 
 ### P2: Demonstrate operational and economic value
