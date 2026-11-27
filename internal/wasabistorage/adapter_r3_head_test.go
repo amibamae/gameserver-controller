@@ -36,7 +36,8 @@ func (c storageR3HeadCase) run(t *testing.T) {
 	impl := storageR3Adapter(t, storageR3Config(c.config), client, c.creds, nil)
 	ref := objectReference{objectTarget: storageR3Target("server/world.tar")}
 	storageR3Apply(c.ref, &ref)
-	request := requestFor("storage.object.head", headInput{ObjectRef: ref}, time.Now().Add(time.Minute), "", 0)
+	input := headInput{ObjectRef: ref}
+	request := requestFor("storage.object.head", input, time.Now().Add(time.Minute), "", 0)
 	storageR3Apply(c.request, &request)
 	response, err := impl.Invoke(context.Background(), request)
 	storageR3Failed(t, response, err, c.want, false)

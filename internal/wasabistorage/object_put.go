@@ -19,7 +19,7 @@ import (
 // put stages and verifies the controller's stream before anything reaches
 // Wasabi, then uploads the verified copy.
 func (a *Adapter) put(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	input, err := decodeInput(request, "invalid object upload request", func(input putInput) bool {
+	input, err := decodeInput(request, "invalid object upload request", func(input PutInput) bool {
 		return a.acceptsTransfer(request, input.Target, input.ExpectedSizeBytes, input.ExpectedChecksum)
 	})
 	if err != nil {
@@ -35,7 +35,7 @@ func (a *Adapter) put(ctx context.Context, request adapter.InvokeRequest) (any, 
 // uploadVerified claims the upload stream, stages it privately, and uploads
 // the staged copy. The staging file is closed and removed, then the stream is
 // closed, on every path after each was opened.
-func (a *Adapter) uploadVerified(ctx context.Context, request adapter.InvokeRequest, input putInput) (*manager.UploadOutput, error) {
+func (a *Adapter) uploadVerified(ctx context.Context, request adapter.InvokeRequest, input PutInput) (*manager.UploadOutput, error) {
 	transfer, err := singleTransfer(request, "controller_to_adapter", input.ExpectedSizeBytes)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func (a *Adapter) uploadVerified(ctx context.Context, request adapter.InvokeRequ
 	return uploadStaged(ctx, client, input, staged)
 }
 
-func uploadStaged(ctx context.Context, client s3Client, input putInput, staged *os.File) (*manager.UploadOutput, error) {
+func uploadStaged(ctx context.Context, client s3Client, input PutInput, staged *os.File) (*manager.UploadOutput, error) {
 	uploader := manager.NewUploader(client, func(u *manager.Uploader) {
 		u.PartSize = partSize(input.ExpectedSizeBytes)
 		u.Concurrency = 1
@@ -76,7 +76,7 @@ func uploadStaged(ctx context.Context, client s3Client, input putInput, staged *
 	return result, nil
 }
 
-func (a *Adapter) putOutput(input putInput, result *manager.UploadOutput) (any, error) {
+func (a *Adapter) putOutput(input PutInput, result *manager.UploadOutput) (any, error) {
 	ref := objectReference{objectTarget: input.Target, VersionID: observedVersion(result.VersionID)}
 	if a.missingRequiredVersion(ref.VersionID) {
 		return nil, sideEffectError("Wasabi did not return the required immutable object version")

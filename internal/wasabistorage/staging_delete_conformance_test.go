@@ -43,7 +43,7 @@ func TestStagingDeleteConformanceDeniesProductionTarget(t *testing.T) {
 	ref := testRef(key, "version-1")
 	ref.EnvironmentID = fixture.Target
 	deadline := time.Now().Add(time.Minute)
-	request := requestFor(fixture.Capability, deleteInput{ObjectRef: ref}, deadline, "", 0)
+	request := requestFor(fixture.Capability, DeleteInput{ObjectRef: ref}, deadline, "", 0)
 	request.Params.RequestContext.EnvironmentID = fixture.Actor
 	ctx := context.Background()
 	_, err = impl.Invoke(ctx, request)
@@ -59,7 +59,7 @@ func TestStagingDeleteConformanceDeniesProductionTarget(t *testing.T) {
 
 	// The same version can be deleted inside the actor's environment.
 	ref.EnvironmentID = fixture.Actor
-	control := requestFor(fixture.Capability, deleteInput{ObjectRef: ref}, deadline, "", 0)
+	control := requestFor(fixture.Capability, DeleteInput{ObjectRef: ref}, deadline, "", 0)
 	control.Params.RequestContext.EnvironmentID = fixture.Actor
 	if _, err := impl.Invoke(ctx, control); err != nil {
 		t.Fatalf("same-environment control: %v", err)
