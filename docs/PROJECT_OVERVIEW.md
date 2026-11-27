@@ -33,6 +33,17 @@ The initial reference stack is:
 The protocol is provider- and game-agnostic. Adding a provider, storage backend
 or game should not require rewriting core lifecycle rules.
 
+### Design principle
+
+**Simple by default, sophisticated when necessary.** The standalone deployment
+is a first-class product, not a reduced-function demonstration. Prefer the
+least complex maintainable solution that meets actual user needs. Advanced
+infrastructure and power-user capabilities must be independently opt-in,
+with no unnecessary dependencies or configuration for users who leave them
+disabled. Essential world-data protection, authorization and recovery
+remain mandatory. See the [roadmap's scope discipline](ROADMAP.md#competitive-review-and-scope-discipline)
+and [optional reliability tiers](decisions/0006-optional-ha-and-reliability-tiers.md).
+
 ### 1.1 Intended deployment models
 
 | Model | Goal |
