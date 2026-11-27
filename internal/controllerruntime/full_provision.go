@@ -8,7 +8,7 @@ import (
 type FullProvisionWorkflow struct{}
 
 // Run executes the full provision workflow with both Wasabi storage and Paper game adapters.
-func (p *FullProvisionWorkflow) Run(serverProfile ServerProfile, wasabiStorage StorageProfile, paperGame GameProfile) (*WorkflowResult, error) {
+func (FullProvisionWorkflow) Run(serverProfile ServerProfile, wasabiStorage StorageProfile, paperGame GameProfile) (*WorkflowResult, error) {
 	result := &WorkflowResult{
 		OperationID: "provision-" + serverProfile.ID,
 		Status:      "succeeded",
@@ -47,10 +47,10 @@ func (p *FullProvisionWorkflow) Run(serverProfile ServerProfile, wasabiStorage S
 	}
 
 	result.Data = map[string]any{
-		"wasabi_config":    wasabiStorage,
-		"paper_config":     paperGame,
+		"wasabi_config":     wasabiStorage,
+		"paper_config":      paperGame,
 		"json_result_bytes": jsonResult,
-		"message":          "Wasabi storage and Paper game adapters successfully linked for provision",
+		"message":           "Wasabi storage and Paper game adapters successfully linked for provision",
 	}
 
 	return result, nil
@@ -58,10 +58,10 @@ func (p *FullProvisionWorkflow) Run(serverProfile ServerProfile, wasabiStorage S
 
 // WorkflowResult contains the results of a provision workflow.
 type WorkflowResult struct {
-	OperationID string  `json:"operation_id"`
-	Status      string  `json:"status"`
-	Stages      []WorkflowStage  `json:"stages,omitempty"`
-	Data        map[string]any   `json:"data,omitempty"`
+	OperationID string          `json:"operation_id"`
+	Status      string          `json:"status"`
+	Stages      []WorkflowStage `json:"stages,omitempty"`
+	Data        map[string]any  `json:"data,omitempty"`
 }
 
 // WorkflowStage represents a stage in the provision workflow.
@@ -82,16 +82,16 @@ type ServerProfile struct {
 
 // StorageProfile represents a storage adapter configuration.
 type StorageProfile struct {
-	ID            string
-	Category      string
+	ID             string
+	Category       string
 	Implementation string
-	Wasabi        *WasabiSettings
+	Wasabi         *WasabiSettings
 }
 
 // GameProfile represents a game adapter configuration.
 type GameProfile struct {
-	ID            string
-	Category      string
+	ID             string
+	Category       string
 	Implementation string
-	Paper         *PaperSettings
+	Paper          *PaperSettings
 }

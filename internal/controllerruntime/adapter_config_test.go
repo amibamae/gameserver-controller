@@ -136,7 +136,6 @@ var implementedConfig = strings.NewReplacer(
       start_timeout: 10s
 `).Replace(configFixture)
 
-
 func TestValidateRejectsInvalidImplementedAdapterProfiles(t *testing.T) {
 	tests := []struct {
 		name, before, after, want string

@@ -33,12 +33,12 @@ func TestParseImplementedAdapterProfilesWithPaperAndWasabi(t *testing.T) {
 			adapterID := tt.id
 			category := tt.category
 			implementation := tt.impl
-			
+
 			// Check that the adapter configuration structure is valid
 			if adapterID == "" || category == "" || implementation == "" {
 				t.Errorf("empty adapter id, category, or implementation")
 			}
-			
+
 			// Validate paper settings are correctly structured with empty check
 			settings := &PaperSettings{
 				ReleaseChannel: "stable", // Example valid setting

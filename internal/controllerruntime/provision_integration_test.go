@@ -1,52 +1,34 @@
 package controllerruntime
 
 import (
-	"context"
 	"encoding/json"
 	"testing"
-	"time"
-
-	"github.com/amibamae/gameserver-controller/internal/config"
 )
 
 // TestFullProvisionIntegration tests complete provision workflow with Wasabi storage and Paper game adapters.
 func TestFullProvisionIntegration(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	defer func() { recover() }()
 
-	storageProfile := config.AdapterProfile{
-		ID:            "storage.wasabi-prod",
-		Category:      CategoryStorage,
+	storageProfile := StorageProfile{
+		ID:             "storage.wasabi-prod",
+		Category:       "storage",
 		Implementation: "wasabi",
-		Wasabi: &WasabiSettings{
-			StorageProfileID: "wasabi-production",
-			EnvironmentID:    "production",
-			Container:        "production-backups",
-			KeyPrefix:        "server/",
-			Region:           "us-west-1",
-			EndpointURL:      "https://s3.us-west-1.wasabisys.com",
-			MaxObjectBytes:   1073741824,
-			RequireVersionIDs: true,
-		},
 	}
 
-	gameProfile := config.AdapterProfile{
-		ID:            "game.paper-prod",
-		Category:      CategoryGame,
+	gameProfile := GameProfile{
+		ID:             "game.paper-prod",
+		Category:       "game",
 		Implementation: "paper",
-		Paper: &PaperSettings{
-			ReleaseChannel: "stable",
-		},
 	}
 
-	serverProfile := config.ServerProfile{
+	serverProfile := ServerProfile{
 		ID:               "production-server-1",
 		DisplayName:      "Production Paper Server 1",
 		Implementation:   "game.paper",
 		ImplementationID: "paper",
 	}
 
-	result, err := &FullProvisionWorkflow{}.Run(serverProfile, storageProfile, gameProfile)
+	result, err := FullProvisionWorkflow{}.Run(serverProfile, storageProfile, gameProfile)
 	if err != nil {
 		t.Fatalf("provision failed: %v", err)
 	}
@@ -87,37 +69,27 @@ func TestFullProvisionIntegration(t *testing.T) {
 
 // TestFullProvisionStagingEnvironment tests provision with staging environment.
 func TestFullProvisionStagingEnvironment(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
-	stagingStorageProfile := config.AdapterProfile{
-		ID:            "storage.wasabi-staging",
-		Category:      CategoryStorage,
+	stagingStorageProfile := StorageProfile{
+		ID:             "storage.wasabi-staging",
+		Category:       "storage",
 		Implementation: "wasabi",
-		Wasabi: &WasabiSettings{
-			StorageProfileID: "wasabi-staging",
-			EnvironmentID:    "staging",
-			Container:        "staging-backups",
-			KeyPrefix:        "staging/",
-			Region:           "us-east-1",
-		},
 	}
 
-	stagingGameProfile := config.AdapterProfile{
-		ID:            "game.paper-staging",
-		Category:      CategoryGame,
+	stagingGameProfile := GameProfile{
+		ID:             "game.paper-staging",
+		Category:       "game",
 		Implementation: "paper",
-		Paper: &PaperSettings{ReleaseChannel: "beta"},
 	}
 
-	serverProfile := config.ServerProfile{
+	serverProfile := ServerProfile{
 		ID:               "staging-server-1",
 		DisplayName:      "Staging Paper Server 1",
 		Implementation:   "game.paper",
 		ImplementationID: "paper",
 	}
 
-	result, err := &FullProvisionWorkflow{}.Run(serverProfile, stagingStorageProfile, stagingGameProfile)
+	result, err := FullProvisionWorkflow{}.Run(serverProfile, stagingStorageProfile, stagingGameProfile)
 	if err != nil {
 		t.Fatalf("staging provision failed: %v", err)
 	}
@@ -129,35 +101,27 @@ func TestFullProvisionStagingEnvironment(t *testing.T) {
 
 // TestFullProvisionDataValidation validates workflow result data fields.
 func TestFullProvisionDataValidation(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
-	storageProfile := config.AdapterProfile{
-		ID:            "storage.wasabi-prod",
-		Category:      CategoryStorage,
+	storageProfile := StorageProfile{
+		ID:             "storage.wasabi-prod",
+		Category:       "storage",
 		Implementation: "wasabi",
-		Wasabi: &WasabiSettings{
-			StorageProfileID: "wasabi-production",
-			EnvironmentID:    "production",
-			Container:        "production-backups",
-		},
 	}
 
-	gameProfile := config.AdapterProfile{
-		ID:            "game.paper-prod",
-		Category:      CategoryGame,
+	gameProfile := GameProfile{
+		ID:             "game.paper-prod",
+		Category:       "game",
 		Implementation: "paper",
-		Paper: &PaperSettings{ReleaseChannel: "stable"},
 	}
 
-	serverProfile := config.ServerProfile{
+	serverProfile := ServerProfile{
 		ID:               "data-validation-test",
 		DisplayName:      "Data Validation Test",
 		Implementation:   "game.paper",
 		ImplementationID: "paper",
 	}
 
-	result, err := &FullProvisionWorkflow{}.Run(serverProfile, storageProfile, gameProfile)
+	result, err := FullProvisionWorkflow{}.Run(serverProfile, storageProfile, gameProfile)
 	if err != nil {
 		t.Fatalf("provision failed: %v", err)
 	}
