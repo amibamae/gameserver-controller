@@ -1,6 +1,7 @@
 // Package testharness indexes the repository's test harness packages. Its
 // tests fail when a harness lacks the label, a labeled package is missing
-// from the index, or production code imports a harness. See
+// from the index, production code imports a harness, or a production package
+// declares an exported Fake or Scripted name. See
 // docs/TEST_HARNESSES.md.
 package testharness
 

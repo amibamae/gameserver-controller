@@ -3,7 +3,9 @@ package controllerruntime
 import (
 	"context"
 	"fmt"
+	"reflect"
 
+	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/config"
 	"github.com/amibamae/gameserver-controller/internal/credential"
 )
@@ -45,6 +47,15 @@ func (r *Runtime) buildAndRegister(build adapterBuild, profile config.AdapterPro
 	build.protocolVersion = r.Schemas.ProtocolVersion()
 	build.schemas = r.Schemas
 	build.credentials = credentials.forAdapter(profile.ID)
+	return r.registerBuilt(builder, build)
+}
+
+// registerBuilt runs builder for build.profile and registers what it built.
+// A builder that returns no implementation is refused before anything is
+// tracked: a production adapter must be a real implementation, never a nil
+// placeholder.
+func (r *Runtime) registerBuilt(builder adapterBuilder, build adapterBuild) error {
+	profile := build.profile
 	built, err := builder.build(build)
 	if built.process != nil {
 		r.processes = append(r.processes, built.process)
@@ -52,12 +63,30 @@ func (r *Runtime) buildAndRegister(build adapterBuild, profile config.AdapterPro
 	if err != nil {
 		return fmt.Errorf("adapter %s: %w", profile.ID, err)
 	}
+	if missingImplementation(built.implementation) {
+		return fmt.Errorf("adapter %s: implementation %s built no adapter; its builder must return a real implementation, not nil", profile.ID, profile.Implementation)
+	}
 	r.track(profile, built)
 	if err := r.Registry.Register(built.implementation); err != nil {
 		return fmt.Errorf("adapter %s: %w", profile.ID, err)
 	}
 	r.adapters = append(r.adapters, profile.ID)
 	return nil
+}
+
+// missingImplementation reports a nil implementation, including a typed nil
+// such as a nil pointer stored in the interface.
+func missingImplementation(implementation adapter.Implementation) bool {
+	if implementation == nil {
+		return true
+	}
+	value := reflect.ValueOf(implementation)
+	switch value.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Slice, reflect.Func, reflect.Chan:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
 // track records what the runtime needs to know about a built adapter: an
