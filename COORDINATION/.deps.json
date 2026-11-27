@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "dependencies": [
+    {
+      "id": "DEP-CORE-001",
+      "title": "Core lifecycle rules and permissions",
+      "requiredBy": ["TASK-CORE-001", "TASK-LC-001"],
+      "description": "Fundamental lifecycle management, permission model, approval workflow, audit logging"
+    },
+    {
+      "id": "DEP-CORE-002",
+      "title": "Credential resolution and validation",
+      "requiredBy": ["TASK-LC-001", "TASK-LC-002", "TASK-LC-003"],
+      "description": "Systemd credential resolver, API key bounds checking, TLS certificate management"
+    },
+    {
+      "id": "DEP-CORE-003",
+      "title": "Storage safety invariant",
+      "requiredBy": ["TASK-LC-003", "TASK-LC-005"],
+      "description": "Backup verification before destroy, streaming uploads without full-load"
+    },
+    {
+      "id": "DEP-ADAPTER-VULTR",
+      "title": "Vultr hosting adapter",
+      "requiredBy": ["TASK-LC-001", "TASK-LC-002"],
+      "description": "VM creation, startup script management, network configuration"
+    },
+    {
+      "id": "DEP-ADAPTER-WASABI",
+      "title": "Wasabi storage adapter",
+      "requiredBy": ["TASK-LC-003", "TASK-LC-005"],
+      "description": "Bounded put/get/head, SHA-256 verification, streaming uploads"
+    },
+    {
+      "id": "DEP-ADAPTER-SYSTEMD",
+      "title": "Systemd integration",
+      "requiredBy": ["TASK-LC-001"],
+      "description": "Service unit installation, lifecycle hooks, log rotation"
+    },
+    {
+      "id": "DEP-ADAPTER-PAPER",
+      "title": "Paper MC adapter",
+      "requiredBy": ["TASK-LC-004"],
+      "description": "Game server health checks, readiness probes, crash recovery"
+    },
+    {
+      "id": "DEP-ADAPTER-VELOCITY",
+      "title": "Velocity proxy integration",
+      "requiredBy": ["TASK-PROD-001"],
+      "description": "Proxy routing, protocol translation, rate limiting"
+    },
+    {
+      "id": "DEP-ADAPTER-DNS",
+      "title": "Cloudflare DNS adapter",
+      "requiredBy": ["TASK-PROD-002"],
+      "description": "Record management, TTL propagation checks, health endpoints"
+    }
+  ]
+}
