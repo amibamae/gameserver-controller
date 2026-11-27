@@ -14,8 +14,9 @@ existing value, and never prints the credential. `controller serve` can run a
 disabled-by-default HTTPS listener for the authenticated operation-inspection
 route. It requires a fixed audience and a TLS certificate/private-key pair; the
 current API exposes no lifecycle mutation routes. Provider credential
-installation is a separate command. Provider credential checks, audit
-integration, remaining management API routes, password login, and session
+installation is a separate command; apply refuses to change the host until every
+configured credential is stored. Each mutating setup command is recorded in a
+local audit log. Remaining management API routes, password login, and session
 issuance are not implemented. The example configuration keeps the listener
 disabled. These instructions document behavior; they do not authorize applying
 it to a live host.
@@ -32,8 +33,10 @@ and fixed destination paths. Applying that example would install placeholders,
 not working provider credentials.
 
 To apply a reviewed configuration on the target machine, build both Go
-executables for that Linux machine, inspect the plan, then run the explicit
-confirmation command as root:
+executables for that Linux machine and inspect the plan. Store every credential
+the configuration references with `controller-setup credentials set` or
+`credentials generate` (described below), then run the explicit confirmation
+command as root:
 
 ```sh
 go build -o /tmp/controller ./cmd/controller
@@ -53,9 +56,11 @@ systemd. It does not enable, start, or stop the service. If installation fails,
 new files are rolled back when possible; the service account or directories
 created earlier in the attempt may remain. Review the host before retrying.
 
-After installing a real configuration, store each configured provider
-credential with `controller-setup credentials set` as described below. That
-command uses hidden input and encrypted systemd credentials. If the management
+Before any host change, apply checks that each credential the configuration
+references is a non-empty, owner-only regular file in `/etc/credstore.encrypted`,
+where the unit's `LoadCredentialEncrypted=` lines read it. It lists any missing
+names and stops. It checks file metadata only and never decrypts a credential.
+`credentials set` uses hidden input and encrypted systemd credentials. If the management
 API is enabled in the configuration, valid TLS files must already be present
 at the configured paths and readable by the dedicated service account. A
 private key can be installed as `root:gameserver-controller` mode `0640`, with
@@ -104,6 +109,22 @@ secret values are never command-line arguments. See the upstream
 [`systemd-ask-password`](https://freedesktop.org/software/systemd/man/latest/systemd-ask-password.html)
 and [`systemd-creds`](https://freedesktop.org/software/systemd/man/latest/systemd-creds.html)
 manuals for the host tools it uses.
+
+## Setup audit log
+
+When run as root, `apply`, `credentials`, `ssh-key`, and `keys` append JSON
+lines to `/var/log/gameserver-controller/setup-audit.jsonl` (directory mode
+`0750`, file mode `0600`). Each command writes a `start` record before it acts
+and a `finish` record with `succeeded` or `failed` and the error text. Records
+name the subcommand and its action word, the time, and the user ID. They never
+include flag values or secret values. A failure's error text can name a
+configured credential, as the missing-credential refusal does. If the `start` record cannot be written, the command stops before it
+changes anything. `plan` is read-only and is not recorded.
+
+```json
+{"time":"2026-11-27T12:00:00Z","command":"credentials set","event":"start","uid":0}
+{"time":"2026-11-27T12:00:01Z","command":"credentials set","event":"finish","outcome":"succeeded","uid":0}
+```
 
 ## Setup on an existing machine
 

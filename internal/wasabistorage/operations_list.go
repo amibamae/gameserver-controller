@@ -16,7 +16,7 @@ import (
 // Continuation tokens are wrapped in an HMAC bound to this adapter instance,
 // container, environment, and prefix, so a token cannot be replayed elsewhere.
 func (a *Adapter) list(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	input, err := decodeInput(request, "invalid object list request", func(in listInput) bool { return a.acceptsList(request, in) })
+	input, err := decodeInput(request, "invalid object list request", func(in ListInput) bool { return a.acceptsList(request, in) })
 	if err != nil {
 		return nil, err
 	}
@@ -42,7 +42,7 @@ func (a *Adapter) list(ctx context.Context, request adapter.InvokeRequest) (any,
 	return value, nil
 }
 
-func (a *Adapter) acceptsList(request adapter.InvokeRequest, input listInput) bool {
+func (a *Adapter) acceptsList(request adapter.InvokeRequest, input ListInput) bool {
 	return a.acceptsContainer(request, input.ContainerRef) && a.authorizedListPrefix(input.Prefix) && validPageSize(input.MaximumItems)
 }
 
@@ -57,7 +57,7 @@ func validPageSize(items int32) bool {
 
 // providerListToken opens the caller's continuation token, if any, into the
 // provider's own token.
-func (a *Adapter) providerListToken(input listInput) (string, error) {
+func (a *Adapter) providerListToken(input ListInput) (string, error) {
 	if input.ContinuationToken == "" {
 		return "", nil
 	}
@@ -68,7 +68,7 @@ func (a *Adapter) providerListToken(input listInput) (string, error) {
 	return token, nil
 }
 
-func (a *Adapter) listRequest(input listInput, providerToken string) *s3.ListObjectsV2Input {
+func (a *Adapter) listRequest(input ListInput, providerToken string) *s3.ListObjectsV2Input {
 	list := &s3.ListObjectsV2Input{Bucket: aws.String(a.config.Container), Prefix: aws.String(input.Prefix), MaxKeys: aws.Int32(input.MaximumItems)}
 	if providerToken != "" {
 		list.ContinuationToken = aws.String(providerToken)
@@ -78,7 +78,7 @@ func (a *Adapter) listRequest(input listInput, providerToken string) *s3.ListObj
 
 // listItems converts one provider page, refusing any object outside the
 // requested prefix and any page larger than requested.
-func (a *Adapter) listItems(objects []types.Object, input listInput) ([]map[string]any, error) {
+func (a *Adapter) listItems(objects []types.Object, input ListInput) ([]map[string]any, error) {
 	items := make([]map[string]any, 0, len(objects))
 	for _, object := range objects {
 		// Never report keys outside the requested prefix, even if the provider does.

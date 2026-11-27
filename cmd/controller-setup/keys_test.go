@@ -109,6 +109,33 @@ func TestRunKeyIssueRejectsInvalidScopeAndLifetimeBeforeCreatingKey(t *testing.T
 	}
 }
 
+func TestKeyCommandValidationOrder(t *testing.T) {
+	const usage = "usage: controller-setup keys {issue|revoke} [options]\n"
+	for _, tc := range []struct {
+		name, args, want, stderr string
+	}{
+		{"no operation", "", "invalid command", usage},
+		{"database before operation", "unknown", "--database must name the existing controller database", ""},
+		{"unknown operation", "unknown --database missing", "invalid command", usage},
+		{"arguments before operation", "issue --database missing extra", "--database must name the existing controller database", ""},
+		{"mixed issue flags", "issue --database missing --key-id old", "issue does not accept revocation flags", ""},
+		{"mixed revoke flags", "revoke --database missing --actor someone", "revoke does not accept issuance flags", ""},
+		{"required issue flags", "issue --database missing", "issue requires --actor, --audience, --expires-in, and at least one --scope", ""},
+		{"duration before scope", "issue --database missing --actor a --audience b --expires-in bad --scope bad", "--expires-in must be a Go duration between 1m and 90d", ""},
+		{"scope before authorization", "issue --database missing --actor a --audience b --expires-in 1h --scope bad", "each --scope must be permission:environment:resource", ""},
+		{"confirm before authorization", "revoke --database missing --key-id a --confirm-key-id b", "revoke requires --key-id and --confirm-key-id with the exact same identifier", ""},
+		{"authorize before opening database", "revoke --database missing --key-id a --confirm-key-id a", "key administration requires local administrator privileges", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			err := runKeyCommand(strings.Fields(tc.args), &stdout, &stderr, false, 1001)
+			if err == nil || err.Error() != tc.want || stdout.Len() != 0 || stderr.String() != tc.stderr {
+				t.Fatalf("error %v, stdout %q, stderr %q", err, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
 func createExistingDatabase(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "controller.db")

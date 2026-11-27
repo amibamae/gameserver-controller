@@ -21,7 +21,7 @@ type downloaded struct {
 }
 
 // get streams an object to the controller while hashing it, and reports it
-// complete only when its size, checksum, and version all match.
+// complete only when its size, Checksum, and version all match.
 func (a *Adapter) get(ctx context.Context, request adapter.InvokeRequest) (any, error) {
 	input, err := a.decodeGet(request)
 	if err != nil {
@@ -49,15 +49,15 @@ func (a *Adapter) get(ctx context.Context, request adapter.InvokeRequest) (any, 
 	return a.getOutput(input, observed)
 }
 
-func (a *Adapter) decodeGet(request adapter.InvokeRequest) (getInput, error) {
-	input, err := decodeInput(request, "invalid object download request", func(input getInput) bool {
+func (a *Adapter) decodeGet(request adapter.InvokeRequest) (GetInput, error) {
+	input, err := decodeInput(request, "invalid object download request", func(input GetInput) bool {
 		return a.acceptsTransfer(request, input.ObjectRef.objectTarget, input.ExpectedSizeBytes, input.ExpectedChecksum)
 	})
 	if err != nil {
-		return getInput{}, err
+		return GetInput{}, err
 	}
 	if a.config.RequireVersionIDs && input.ObjectRef.VersionID == "" {
-		return getInput{}, errors.New("an exact object version is required by this storage profile")
+		return GetInput{}, errors.New("an exact object version is required by this storage profile")
 	}
 	return input, nil
 }
@@ -65,7 +65,7 @@ func (a *Adapter) decodeGet(request adapter.InvokeRequest) (getInput, error) {
 // downloadVerified copies at most one byte more than expected to sink and
 // checks the size and SHA-256 digest. The provider body is closed on every
 // path after it was opened.
-func downloadVerified(ctx context.Context, client s3Client, input getInput, sink io.Writer) (downloaded, error) {
+func downloadVerified(ctx context.Context, client s3Client, input GetInput, sink io.Writer) (downloaded, error) {
 	ref := input.ObjectRef
 	result, err := client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(ref.Container), Key: aws.String(ref.Key), VersionId: optionalVersion(ref.VersionID)})
 	if err != nil {
@@ -81,12 +81,12 @@ func downloadVerified(ctx context.Context, client s3Client, input getInput, sink
 	}
 	digest := hex.EncodeToString(hasher.Sum(nil))
 	if !strings.EqualFold(digest, input.ExpectedChecksum.Digest) {
-		return downloaded{}, errors.New("Wasabi object checksum does not match the backup manifest")
+		return downloaded{}, errors.New("Wasabi object Checksum does not match the backup manifest")
 	}
 	return downloaded{count: count, digest: digest, version: result.VersionId}, nil
 }
 
-func (a *Adapter) getOutput(input getInput, observed downloaded) (any, error) {
+func (a *Adapter) getOutput(input GetInput, observed downloaded) (any, error) {
 	ref := input.ObjectRef
 	version, err := confirmedVersion(input.ObjectRef.VersionID, observed.version)
 	if err != nil {
@@ -99,7 +99,7 @@ func (a *Adapter) getOutput(input getInput, observed downloaded) (any, error) {
 		return nil, errors.New("Wasabi object did not resolve to an immutable version")
 	}
 	return map[string]any{"object_ref": ref, "transfer_state": "complete", "bytes_sent": observed.count,
-		"computed_checksum": checksum{Algorithm: "sha256", Digest: observed.digest}, "observed_at": now()}, nil
+		"computed_checksum": Checksum{Algorithm: "sha256", Digest: observed.digest}, "observed_at": now()}, nil
 }
 
 // optionalVersion leaves the version unset when none was requested.

@@ -118,3 +118,21 @@ func TestListFirewallRulesFollowsPages(t *testing.T) {
 		t.Fatalf("rules = %+v, %v", rules, err)
 	}
 }
+
+func TestListFirewallRulesRejectsMalformedPagination(t *testing.T) {
+	cases := map[string]map[string]any{
+		"missing meta":           {"firewall_rules": []FirewallRule{{ID: 1}}},
+		"total mismatch":         {"firewall_rules": []FirewallRule{{ID: 1}}, "meta": map[string]any{"total": 2, "links": map[string]any{"next": ""}}},
+		"empty page with cursor": {"firewall_rules": []FirewallRule{}, "meta": map[string]any{"total": 2, "links": map[string]any{"next": "next"}}},
+	}
+	for name, response := range cases {
+		t.Run(name, func(t *testing.T) {
+			client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewEncoder(w).Encode(response)
+			})
+			if rules, err := client.ListFirewallRules(context.Background(), []byte("synthetic-token"), "fw-1"); err != ErrInvalidResponse || rules != nil {
+				t.Fatalf("rules = %+v, err = %v, want nil and ErrInvalidResponse", rules, err)
+			}
+		})
+	}
+}

@@ -12,6 +12,33 @@ import (
 	"testing"
 )
 
+func TestPrivateKeyHeaderErrorPrecedence(t *testing.T) {
+	var header bytes.Buffer
+	header.WriteString(privateKeyMagic)
+	writeString(&header, []byte("aes256-ctr"))
+	writeString(&header, []byte("bcrypt"))
+	writeString(&header, nil)
+	// Structural header errors win until the key count can be read.
+	// With a complete header, encryption takes precedence over count and payload.
+	for _, tc := range []struct {
+		name  string
+		count []byte
+		want  error
+	}{
+		{"incomplete count", []byte{0, 0, 0}, ErrInvalidKey},
+		{"complete but unsupported count", []byte{0, 0, 0, 2}, ErrEncryptedKey},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := append(bytes.Clone(header.Bytes()), tc.count...)
+			data := pem.EncodeToMemory(&pem.Block{Type: "OPENSSH PRIVATE KEY", Bytes: body})
+			key, err := ParsePrivateKey(data)
+			if key != nil || !errors.Is(err, tc.want) {
+				t.Fatalf("got key present %t, error %v; want %v", key != nil, err, tc.want)
+			}
+		})
+	}
+}
+
 func TestRoundTripAndFormats(t *testing.T) {
 	public, private, err := Generate()
 	if err != nil {

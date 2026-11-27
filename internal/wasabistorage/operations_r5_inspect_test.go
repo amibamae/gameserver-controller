@@ -20,8 +20,8 @@ const (
 	wasabiR5RetentionCalls    = "GetObjectRetention GetObjectLegalHold"
 )
 
-func wasabiR5Versioning(mutate func(*containerReference)) versioningInput {
-	return versioningInput{ContainerRef: wasabiR5Container(mutate)}
+func wasabiR5Versioning(mutate func(*containerReference)) VersioningInput {
+	return VersioningInput{ContainerRef: wasabiR5Container(mutate)}
 }
 
 func wasabiR5Status(status types.BucketVersioningStatus, err error) func(*wasabiR5Client) {
@@ -58,8 +58,8 @@ func TestWasabiR5Versioning(t *testing.T) {
 	})
 }
 
-func wasabiR5Retention(version string) retentionInput {
-	return retentionInput{ObjectRef: wasabiR5Ref(wasabiR5Version(version))}
+func wasabiR5Retention(version string) RetentionInput {
+	return RetentionInput{ObjectRef: wasabiR5Ref(wasabiR5Version(version))}
 }
 
 // wasabiR5Lock scripts both object-lock reads.
@@ -89,8 +89,8 @@ func TestWasabiR5RetentionRejectsBeforeProvider(t *testing.T) {
 	wasabiR5Run(t, "storage.object.retention.inspect", []wasabiR5Case{
 		{name: "malformed input", input: wasabiR5Retention("version-1"), mutate: wasabiR5BadJSON, want: wasabiR5RetentionInvalid},
 		{name: "request environment", input: wasabiR5Retention("version-1"), mutate: wasabiR5WrongEnvironment, want: wasabiR5RetentionInvalid},
-		{name: "outside prefix", input: retentionInput{ObjectRef: wasabiR5Ref(wasabiR5OutsideRef)}, want: wasabiR5RetentionInvalid},
-		{name: "other bucket", input: retentionInput{ObjectRef: wasabiR5Ref(wasabiR5OtherBucket)}, want: wasabiR5RetentionInvalid},
+		{name: "outside prefix", input: RetentionInput{ObjectRef: wasabiR5Ref(wasabiR5OutsideRef)}, want: wasabiR5RetentionInvalid},
+		{name: "other bucket", input: RetentionInput{ObjectRef: wasabiR5Ref(wasabiR5OtherBucket)}, want: wasabiR5RetentionInvalid},
 		{name: "required version missing", config: wasabiR5RequireVersions, input: wasabiR5Retention(""), want: wasabiR5RetentionVersion},
 		{name: "required version null", config: wasabiR5RequireVersions, input: wasabiR5Retention("null"), want: wasabiR5RetentionVersion},
 		{name: "null version", input: wasabiR5Retention("null"), want: wasabiR5RetentionVersion},

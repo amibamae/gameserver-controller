@@ -24,7 +24,7 @@ func newTestAdapter(t *testing.T) *Adapter {
 
 func TestInvokeRejectsBeforeDispatch(t *testing.T) {
 	impl := newTestAdapter(t)
-	head := headInput{ObjectRef: objectReference{objectTarget: objectTarget{AdapterID: testAdapterID,
+	head := HeadInput{ObjectRef: objectReference{objectTarget: objectTarget{AdapterID: testAdapterID,
 		StorageProfile: "staging-storage", EnvironmentID: "staging", Container: "backups", Key: "server/world.tar"}}}
 	var missing context.Context
 	tests := []struct {

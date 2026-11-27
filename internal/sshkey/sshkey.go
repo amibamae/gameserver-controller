@@ -147,9 +147,20 @@ func ParsePrivateKey(data []byte) (ed25519.PrivateKey, error) {
 		return nil, ErrInvalidKey
 	}
 	r := bytes.NewReader(block.Bytes)
+	if err := validatePrivateHeader(r); err != nil {
+		return nil, err
+	}
+	public, secret, err := readPrivatePayload(r)
+	if err != nil {
+		return nil, err
+	}
+	return decodePrivateSecret(public, secret)
+}
+
+func validatePrivateHeader(r *bytes.Reader) error {
 	magic := make([]byte, len(privateKeyMagic))
 	if _, err := r.Read(magic); err != nil || string(magic) != privateKeyMagic {
-		return nil, ErrInvalidKey
+		return ErrInvalidKey
 	}
 	cipher, err1 := readString(r)
 	kdf, err2 := readString(r)
@@ -157,23 +168,31 @@ func ParsePrivateKey(data []byte) (ed25519.PrivateKey, error) {
 	var count uint32
 	err4 := binary.Read(r, binary.BigEndian, &count)
 	if err := errors.Join(err1, err2, err3, err4); err != nil {
-		return nil, ErrInvalidKey
+		return ErrInvalidKey
 	}
 	if string(cipher) != "none" || string(kdf) != "none" {
-		return nil, ErrEncryptedKey
+		return ErrEncryptedKey
 	}
 	if count != 1 {
-		return nil, ErrInvalidKey
+		return ErrInvalidKey
 	}
+	return nil
+}
+
+func readPrivatePayload(r *bytes.Reader) (ed25519.PublicKey, []byte, error) {
 	publicBlob, err1 := readString(r)
 	secret, err2 := readString(r)
 	if errors.Join(err1, err2) != nil || r.Len() != 0 || len(secret)%8 != 0 {
-		return nil, ErrInvalidKey
+		return nil, nil, ErrInvalidKey
 	}
 	public, err := parseWireKey(publicBlob)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	return public, secret, nil
+}
+
+func decodePrivateSecret(public ed25519.PublicKey, secret []byte) (ed25519.PrivateKey, error) {
 	s := bytes.NewReader(secret)
 	var check1, check2 uint32
 	if binary.Read(s, binary.BigEndian, &check1) != nil || binary.Read(s, binary.BigEndian, &check2) != nil || check1 != check2 {
@@ -182,7 +201,7 @@ func ParsePrivateKey(data []byte) (ed25519.PrivateKey, error) {
 	keyType, err1 := readString(s)
 	innerPublic, err2 := readString(s)
 	private, err3 := readString(s)
-	_, err4 = readString(s)
+	_, err4 := readString(s)
 	if errors.Join(err1, err2, err3, err4) != nil {
 		return nil, ErrInvalidKey
 	}

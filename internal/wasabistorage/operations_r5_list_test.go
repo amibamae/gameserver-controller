@@ -20,14 +20,14 @@ const (
 	wasabiR5ListOutside = "Wasabi listing returned an object outside the authorized prefix"
 )
 
-func wasabiR5List(mutate func(*listInput)) listInput {
-	value := listInput{ContainerRef: testContainer(), Prefix: "server/", MaximumItems: 2}
+func wasabiR5List(mutate func(*ListInput)) ListInput {
+	value := ListInput{ContainerRef: testContainer(), Prefix: "server/", MaximumItems: 2}
 	storageR3Apply(mutate, &value)
 	return value
 }
 
-func wasabiR5ListToken(token string) listInput {
-	return wasabiR5List(func(in *listInput) { in.ContinuationToken = token })
+func wasabiR5ListToken(token string) ListInput {
+	return wasabiR5List(func(in *ListInput) { in.ContinuationToken = token })
 }
 
 func wasabiR5Listed(objects ...types.Object) func(*wasabiR5Client) {
@@ -62,7 +62,7 @@ func wasabiR5Item(key string, size int64, extra map[string]any) map[string]any {
 }
 
 func TestWasabiR5ListRejectsBeforeProvider(t *testing.T) {
-	signed := func(environment, container, prefix, provider string) listInput {
+	signed := func(environment, container, prefix, provider string) ListInput {
 		return wasabiR5ListToken(wasabiR5Sign(wasabiR5Payload(environment, container, prefix, provider)))
 	}
 	valid := wasabiR5Sign(wasabiR5Payload("staging", "backups", "server/", "p1"))
@@ -70,15 +70,15 @@ func TestWasabiR5ListRejectsBeforeProvider(t *testing.T) {
 	wasabiR5Run(t, "storage.object.list", []wasabiR5Case{
 		{name: "malformed input", input: wasabiR5List(nil), mutate: wasabiR5BadJSON, want: wasabiR5ListInvalid},
 		{name: "request environment", input: wasabiR5List(nil), mutate: wasabiR5WrongEnvironment, want: wasabiR5ListInvalid},
-		{name: "container adapter", input: wasabiR5List(func(in *listInput) { in.ContainerRef.AdapterID = "storage.other" }), want: wasabiR5ListInvalid},
-		{name: "container profile", input: wasabiR5List(func(in *listInput) { in.ContainerRef.StorageProfile = "other" }), want: wasabiR5ListInvalid},
-		{name: "container environment", input: wasabiR5List(func(in *listInput) { in.ContainerRef.EnvironmentID = "production" }), want: wasabiR5ListInvalid},
-		{name: "container bucket", input: wasabiR5List(func(in *listInput) { in.ContainerRef.Container = "other" }), want: wasabiR5ListInvalid},
-		{name: "prefix outside profile", input: wasabiR5List(func(in *listInput) { in.Prefix = "other/" }), want: wasabiR5ListInvalid},
-		{name: "prefix too long", input: wasabiR5List(func(in *listInput) { in.Prefix = "server/" + strings.Repeat("k", 2042) }), want: wasabiR5ListInvalid},
-		{name: "zero items", input: wasabiR5List(func(in *listInput) { in.MaximumItems = 0 }), want: wasabiR5ListInvalid},
-		{name: "too many items", input: wasabiR5List(func(in *listInput) { in.MaximumItems = 1001 }), want: wasabiR5ListInvalid},
-		{name: "invalid before token", input: wasabiR5List(func(in *listInput) { in.MaximumItems = 0; in.ContinuationToken = "x" }), want: wasabiR5ListInvalid},
+		{name: "container adapter", input: wasabiR5List(func(in *ListInput) { in.ContainerRef.AdapterID = "storage.other" }), want: wasabiR5ListInvalid},
+		{name: "container profile", input: wasabiR5List(func(in *ListInput) { in.ContainerRef.StorageProfile = "other" }), want: wasabiR5ListInvalid},
+		{name: "container environment", input: wasabiR5List(func(in *ListInput) { in.ContainerRef.EnvironmentID = "production" }), want: wasabiR5ListInvalid},
+		{name: "container bucket", input: wasabiR5List(func(in *ListInput) { in.ContainerRef.Container = "other" }), want: wasabiR5ListInvalid},
+		{name: "prefix outside profile", input: wasabiR5List(func(in *ListInput) { in.Prefix = "other/" }), want: wasabiR5ListInvalid},
+		{name: "prefix too long", input: wasabiR5List(func(in *ListInput) { in.Prefix = "server/" + strings.Repeat("k", 2042) }), want: wasabiR5ListInvalid},
+		{name: "zero items", input: wasabiR5List(func(in *ListInput) { in.MaximumItems = 0 }), want: wasabiR5ListInvalid},
+		{name: "too many items", input: wasabiR5List(func(in *ListInput) { in.MaximumItems = 1001 }), want: wasabiR5ListInvalid},
+		{name: "invalid before token", input: wasabiR5List(func(in *ListInput) { in.MaximumItems = 0; in.ContinuationToken = "x" }), want: wasabiR5ListInvalid},
 		{name: "token without separator", input: wasabiR5ListToken("token"), want: wasabiR5ListRefused},
 		{name: "token payload encoding", input: wasabiR5ListToken("!!." + mac), want: wasabiR5ListRefused},
 		{name: "token signature encoding", input: wasabiR5ListToken(payload + ".!!"), want: wasabiR5ListRefused},
@@ -109,11 +109,11 @@ func TestWasabiR5ListRequest(t *testing.T) {
 			output: wasabiR5Page(t, "complete", nil), check: sent("server/", 2, "")},
 		{name: "bound token", input: wasabiR5ListToken(wasabiR5Sign(wasabiR5Payload("staging", "backups", "server/", "p1"))),
 			script: wasabiR5Listed(), calls: "ListObjectsV2", output: wasabiR5Page(t, "complete", nil), check: sent("server/", 2, "p1")},
-		{name: "prefix at limit", input: wasabiR5List(func(in *listInput) { in.Prefix = long }), script: wasabiR5Listed(),
+		{name: "prefix at limit", input: wasabiR5List(func(in *ListInput) { in.Prefix = long }), script: wasabiR5Listed(),
 			calls: "ListObjectsV2", output: wasabiR5Page(t, "complete", nil), check: sent(long, 2, "")},
-		{name: "one item", input: wasabiR5List(func(in *listInput) { in.MaximumItems = 1 }), script: wasabiR5Listed(),
+		{name: "one item", input: wasabiR5List(func(in *ListInput) { in.MaximumItems = 1 }), script: wasabiR5Listed(),
 			calls: "ListObjectsV2", output: wasabiR5Page(t, "complete", nil), check: sent("server/", 1, "")},
-		{name: "item limit", input: wasabiR5List(func(in *listInput) { in.MaximumItems = 1000 }), script: wasabiR5Listed(),
+		{name: "item limit", input: wasabiR5List(func(in *ListInput) { in.MaximumItems = 1000 }), script: wasabiR5Listed(),
 			calls: "ListObjectsV2", output: wasabiR5Page(t, "complete", nil), check: sent("server/", 1000, "")},
 		{name: "provider failure", input: wasabiR5List(nil), script: func(c *wasabiR5Client) { c.listErr = wasabiR5Coded("AccessDenied") },
 			calls: "ListObjectsV2", want: "Wasabi object listing failed"},
@@ -134,7 +134,7 @@ func TestWasabiR5ListItems(t *testing.T) {
 			output: wasabiR5Page(t, "complete", nil, wasabiR5Item("server/c", 1, nil))},
 		{name: "key at limit", input: wasabiR5List(nil), script: wasabiR5Listed(wasabiR5Object(longKey, aws.Int64(1))), calls: "ListObjectsV2",
 			output: wasabiR5Page(t, "complete", nil, wasabiR5Item(longKey, 1, nil))},
-		{name: "outside prefix", input: wasabiR5List(func(in *listInput) { in.Prefix = "server/a/" }),
+		{name: "outside prefix", input: wasabiR5List(func(in *ListInput) { in.Prefix = "server/a/" }),
 			script: wasabiR5Listed(wasabiR5Object("server/b", aws.Int64(1))), calls: "ListObjectsV2", want: wasabiR5ListOutside},
 		{name: "key too long", input: wasabiR5List(nil), script: wasabiR5Listed(wasabiR5Object(longKey+"k", aws.Int64(1))),
 			calls: "ListObjectsV2", want: wasabiR5ListOutside},

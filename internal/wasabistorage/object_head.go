@@ -17,7 +17,7 @@ import (
 // head reports whether an object exists and, when it does, the provider's
 // size, ETag, modification time, and full-object SHA-256.
 func (a *Adapter) head(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	input, err := decodeInput(request, "invalid object inspection request", func(input headInput) bool {
+	input, err := decodeInput(request, "invalid object inspection request", func(input HeadInput) bool {
 		return a.validRequestEnvironment(request) && a.validReference(input.ObjectRef)
 	})
 	if err != nil {
@@ -62,12 +62,12 @@ func describeObject(value map[string]any, result *s3.HeadObjectOutput) {
 		value["last_modified"] = result.LastModified.UTC().Format(time.RFC3339Nano)
 	}
 	if digest, ok := fullObjectSHA256(result); ok {
-		value["provider_checksum"] = checksum{Algorithm: "sha256", Digest: digest}
+		value["provider_checksum"] = Checksum{Algorithm: "sha256", Digest: digest}
 	}
 }
 
 // fullObjectSHA256 returns the provider's whole-object SHA-256 in hex. A
-// composite (per-part) checksum, or one that does not decode to a SHA-256
+// composite (per-part) Checksum, or one that does not decode to a SHA-256
 // digest, is not reported.
 func fullObjectSHA256(result *s3.HeadObjectOutput) (string, bool) {
 	if result.ChecksumType != types.ChecksumTypeFullObject || result.ChecksumSHA256 == nil {

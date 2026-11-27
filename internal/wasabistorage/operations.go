@@ -26,30 +26,30 @@ type containerReference struct {
 	Container      string `json:"container"`
 }
 
-type listInput struct {
+type ListInput struct {
 	ContainerRef      containerReference `json:"container_ref"`
 	Prefix            string             `json:"prefix"`
 	ContinuationToken string             `json:"continuation_token,omitempty"`
 	MaximumItems      int32              `json:"maximum_items"`
 }
 
-type copyInput struct {
+type CopyInput struct {
 	SourceRef         objectReference `json:"source_ref"`
 	Destination       objectTarget    `json:"destination"`
 	ExpectedSizeBytes int64           `json:"expected_size_bytes"`
-	ExpectedChecksum  checksum        `json:"expected_checksum"`
+	ExpectedChecksum  Checksum        `json:"expected_checksum"`
 }
 
-type deleteInput struct {
+type DeleteInput struct {
 	ObjectRef   objectReference `json:"object_ref"`
 	IfMatchETag string          `json:"if_match_etag,omitempty"`
 }
 
-type versioningInput struct {
+type VersioningInput struct {
 	ContainerRef containerReference `json:"container_ref"`
 }
 
-type retentionInput struct {
+type RetentionInput struct {
 	ObjectRef objectReference `json:"object_ref"`
 }
 

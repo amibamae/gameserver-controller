@@ -17,14 +17,14 @@ const (
 	wasabiR5DeleteCalls   = "HeadObject DeleteObject HeadObject"
 )
 
-func wasabiR5Delete(mutate func(*deleteInput)) deleteInput {
-	value := deleteInput{ObjectRef: wasabiR5Ref(nil)}
+func wasabiR5Delete(mutate func(*DeleteInput)) DeleteInput {
+	value := DeleteInput{ObjectRef: wasabiR5Ref(nil)}
 	storageR3Apply(mutate, &value)
 	return value
 }
 
-func wasabiR5DeleteETag(etag string) deleteInput {
-	return wasabiR5Delete(func(in *deleteInput) { in.IfMatchETag = etag })
+func wasabiR5DeleteETag(etag string) DeleteInput {
+	return wasabiR5Delete(func(in *DeleteInput) { in.IfMatchETag = etag })
 }
 
 // wasabiR5DeleteScript scripts the inspection before and after deletion.
@@ -45,12 +45,12 @@ func TestWasabiR5DeleteRejectsBeforeProvider(t *testing.T) {
 	wasabiR5Run(t, "storage.object.delete", []wasabiR5Case{
 		{name: "malformed input", input: wasabiR5Delete(nil), mutate: wasabiR5BadJSON, want: wasabiR5DeleteInvalid},
 		{name: "request environment", input: wasabiR5Delete(nil), mutate: wasabiR5WrongEnvironment, want: wasabiR5DeleteInvalid},
-		{name: "outside prefix", input: wasabiR5Delete(func(in *deleteInput) { wasabiR5OutsideRef(&in.ObjectRef) }), want: wasabiR5DeleteInvalid},
-		{name: "other bucket", input: wasabiR5Delete(func(in *deleteInput) { wasabiR5OtherBucket(&in.ObjectRef) }), want: wasabiR5DeleteInvalid},
-		{name: "invalid before version", input: wasabiR5Delete(func(in *deleteInput) { wasabiR5OutsideRef(&in.ObjectRef); in.ObjectRef.VersionID = "" }), want: wasabiR5DeleteInvalid},
-		{name: "no version", input: wasabiR5Delete(func(in *deleteInput) { in.ObjectRef.VersionID = "" }), want: wasabiR5DeleteVersion},
-		{name: "null version", input: wasabiR5Delete(func(in *deleteInput) { in.ObjectRef.VersionID = "null" }), want: wasabiR5DeleteVersion},
-		{name: "version before credentials", input: wasabiR5Delete(func(in *deleteInput) { in.ObjectRef.VersionID = "" }), mutate: wasabiR5NoSecrets, want: wasabiR5DeleteVersion},
+		{name: "outside prefix", input: wasabiR5Delete(func(in *DeleteInput) { wasabiR5OutsideRef(&in.ObjectRef) }), want: wasabiR5DeleteInvalid},
+		{name: "other bucket", input: wasabiR5Delete(func(in *DeleteInput) { wasabiR5OtherBucket(&in.ObjectRef) }), want: wasabiR5DeleteInvalid},
+		{name: "invalid before version", input: wasabiR5Delete(func(in *DeleteInput) { wasabiR5OutsideRef(&in.ObjectRef); in.ObjectRef.VersionID = "" }), want: wasabiR5DeleteInvalid},
+		{name: "no version", input: wasabiR5Delete(func(in *DeleteInput) { in.ObjectRef.VersionID = "" }), want: wasabiR5DeleteVersion},
+		{name: "null version", input: wasabiR5Delete(func(in *DeleteInput) { in.ObjectRef.VersionID = "null" }), want: wasabiR5DeleteVersion},
+		{name: "version before credentials", input: wasabiR5Delete(func(in *DeleteInput) { in.ObjectRef.VersionID = "" }), mutate: wasabiR5NoSecrets, want: wasabiR5DeleteVersion},
 		{name: "credentials", input: wasabiR5Delete(nil), mutate: wasabiR5NoSecrets, want: wasabiR5Credentials},
 	})
 }
