@@ -67,25 +67,23 @@ transfer manager, credential provider, and event-stream modules.
   `github.com/aws/aws-sdk-go-v2/credentials v1.21.3`,
   `github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.23.28`,
   `github.com/aws/aws-sdk-go-v2/service/s3 v1.116.0`, and
-  `github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.2` (indirect), pinned in
+  `github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.27` (indirect), pinned in
   [go.mod](go.mod)
 
-### Transitive Dependencies (from go.sum)
+### Transitive Dependencies
 
-The following AWS SDK transitive dependencies are pulled in automatically:
+These AWS SDK modules are linked into the builds (`go list -deps ./...`). Other
+modules in the module graph, such as `config`, `service/sso`, `service/ssooidc`
+and `service/sts`, are not linked into any package and are not shipped.
 
-- `github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.11`
-- `github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.11`
-- `github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4`
-- `github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.11`
-- `github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.2`
-- `github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.2`
-- `github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.11`
-- `github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.11`
-- `github.com/aws/aws-sdk-go-v2/service/sso v1.29.8`
-- `github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.3`
-- `github.com/aws/aws-sdk-go-v2/service/sts v1.38.9`
-- `github.com/aws/smithy-go v1.23.1`
+- `github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.12`
+- `github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.12`
+- `github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.12`
+- `github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.25`
+- `github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.13`
+- `github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.12`
+- `github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.12`
+- `github.com/aws/smithy-go v1.28.9`
 
 All AWS SDK for Go v2 components are licensed under **Apache License 2.0**.
 
@@ -202,16 +200,16 @@ When distributing binaries containing Go runtime or standard-library code, repro
 
 ### golang.org/x/sys
 
-- Version: `v0.29.0`, pinned in [go.mod](go.mod)
-- Upstream: [golang.org/x/sys](https://github.com/golang/sys/tree/v0.29.0)
+- Version: `v0.48.0`, pinned in [go.mod](go.mod)
+- Upstream: [golang.org/x/sys](https://github.com/golang/sys/tree/v0.48.0)
 - License: BSD 3-Clause
 - Copyright: Copyright 2009 The Go Authors
 - The pinned upstream license text matches [licenses/go-LICENSE](licenses/go-LICENSE) exactly; include that full text for x/sys as well.
 
 ### golang.org/x/text
 
-- Version: `v0.14.0`, pinned in [go.mod](go.mod)
-- Upstream: [golang.org/x/text](https://github.com/golang/text/tree/v0.14.0)
+- Version: `v0.42.0`, pinned in [go.mod](go.mod)
+- Upstream: [golang.org/x/text](https://github.com/golang/text/tree/v0.42.0)
 - License: BSD 3-Clause
 - Copyright: Copyright (c) 2009 The Go Authors. All rights reserved.
 - Full license: [licenses/x-text-LICENSE](licenses/x-text-LICENSE)
