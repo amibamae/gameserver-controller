@@ -237,6 +237,10 @@ Keep new schemas in `0.21.0-draft` until R14.
 
 Repowise scored `internal/config/config.go` at 3.45 on `fb544c7` and reported complexity 30 for `Validate`. [PR #433](https://github.com/amibamae/gameserver-controller/pull/433) splits validation by profile type and shares the validated environment index across adapter checks. On the original base (`d1a75e0`) and the refactored branch, the config package passes the same characterization test for duplicate IDs, network validation, lifecycle rules and storage isolation. Re-index the merged commit to measure the file scores.
 
+### Controller health work (2026-11-25)
+
+PRs #433 through #436 merged the config, Vultr adoption, installer, schema loading and pilot capacity refactors. The subsequent setup CLI change moves API-key administration into `cmd/controller-setup/keys.go`. The repository checker measures `runKeyCommand` at 8 and its largest extracted helper at 10. The CLI characterization test pins eleven error and output cases, including flag errors before authorization and authorization before database access. Repowise last measured the original function at 32 on `fb544c7`.
+
 ### PaperMC & systemd investigation (2026-11-16)
 
 Completed systematic investigation of systemd integration patterns for PaperMC server deployments:
