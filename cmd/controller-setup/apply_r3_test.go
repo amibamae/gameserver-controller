@@ -451,6 +451,7 @@ func setupR3ConflictingFile(t *testing.T, args []string, binary string) {
 		t.Fatal(err)
 	}
 	setupR3WriteFile(t, existing, 0o640, []byte("other: true\n"))
+	setupStoreCredentials(t, root, args[1])
 	operations := &setupR3CmdHost{}
 	var stdout, stderr bytes.Buffer
 	err := runApplyCommand(args, &stdout, &stderr, true, setupR3Debian, root, operations)
@@ -465,6 +466,7 @@ func setupR3ConflictingFile(t *testing.T, args []string, binary string) {
 func setupR3InstallSuccess(t *testing.T, args []string, binary string) {
 	t.Helper()
 	root := t.TempDir()
+	setupStoreCredentials(t, root, args[1])
 	operations := &setupR3CmdHost{}
 	var stdout, stderr bytes.Buffer
 	if err := runApplyCommand(args, &stdout, &stderr, true, setupR3Debian, root, operations); err != nil {

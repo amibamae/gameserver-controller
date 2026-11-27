@@ -134,6 +134,7 @@ func TestApplyInstallsBuiltControllerWithoutStartingService(t *testing.T) {
 		t.Fatal(err)
 	}
 	installRoot := t.TempDir()
+	setupStoreCredentials(t, installRoot, configPath)
 	operations := &fakeApplyHost{t: t}
 	var stdout, stderr bytes.Buffer
 	err = runApplyCommand([]string{
