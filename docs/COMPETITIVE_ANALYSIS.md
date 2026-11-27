@@ -154,7 +154,7 @@ Terms: native, optional adapter, delegate to existing software, defer, reject. M
 | Agones / GameLift for this workload | Allocation and fleets | Reject | Needs Kubernetes or a cloud account; no persistent-world model [E1][E8] | Lock-in or cluster ops | Apache-2.0 / proprietary | High |
 | LinuxGSM | Install, update, monitor | Reject | tmux conflicts with systemd supervision and exact-instance identity; stops server on backup; no structured status found [E9] | Weaker supervision | MIT | Med |
 | DNS-query triggers | Start without a plugin | Reject | minecraft-ondemand: any DNS lookup starts a server, no authorization [D7] | Unauthenticated start enables cost abuse | n/a | Low |
-| Remote console; player-authorized start | Operator and player controls | Defer | Not product requirements. outpost's RCON denylist and MineCloud's Discord roles are references [D3][D4] | A console must refuse `stop` and `save-off` | n/a | Med |
+| Remote console; player-authorized start | Operator and player controls | Defer until the reference lifecycle works | Roadmap P1 lists both for evaluation; neither is a release gate. outpost's RCON denylist and MineCloud's Discord roles are references [D3][D4] | A console must refuse `stop` and `save-off` and use least-privilege authorization | n/a | Med |
 | SFTP / dedicated file manager | File access | Reject (not a requirement) | Owner constraint; pinned SSH stays | n/a | n/a | n/a |
 
 ## 6. Ideas worth borrowing (concepts, not code)
