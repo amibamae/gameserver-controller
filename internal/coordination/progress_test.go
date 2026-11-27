@@ -95,26 +95,22 @@ func TestRegisterReusesSessionAndID(t *testing.T) {
 	mustApply(t, s, Register(Registration{Name: "Claude", SessionID: "ses-1"}))
 	c.advance(time.Hour)
 	res := mustApply(t, s, Register(Registration{Name: "Claude 2", SessionID: "ses-1", Role: "review"}))
-	if res.Events[0].Action != "re-register" || res.Notes[0] != "agent id: agent-1" {
-		t.Fatalf("result = %+v", res)
-	}
+	wantEqual(t, "action", res.Events[0].Action, "re-register")
+	wantEqual(t, "notes", res.Notes, []string{"agent id: agent-1"})
 	// An idle agent registering by ID becomes available again.
 	mustApply(t, s, Register(Registration{ID: "a3", Name: "three"}))
 	st := mustLoad(t, s)
-	if a := st.Agent("agent-1"); a.Name != "Claude 2" || a.Role != "review" || deref(a.LastHeartbeat) != ts(time.Hour) {
-		t.Fatalf("agent-1 = %+v", a)
-	}
-	if st.Agent("a3").Status != AgentAvailable || len(st.Agents.Agents) != 4 {
-		t.Fatalf("a3 = %+v, agents = %d", st.Agent("a3"), len(st.Agents.Agents))
-	}
+	a := st.Agent("agent-1")
+	wantEqual(t, "agent-1", []string{a.Name, a.Role, deref(a.LastHeartbeat)}, []string{"Claude 2", "review", ts(time.Hour)})
+	wantEqual(t, "a3 status", st.Agent("a3").Status, AgentAvailable)
+	wantEqual(t, "agent count", len(st.Agents.Agents), 4)
 	// A new session gets a new ID past the highest agent-N.
 	res = mustApply(t, s, Register(Registration{Name: "x", SessionID: "ses-2"}))
-	if res.Notes[0] != "agent id: agent-2" {
-		t.Fatalf("notes = %q", res.Notes)
-	}
+	wantEqual(t, "notes", res.Notes, []string{"agent id: agent-2"})
 	res = mustApply(t, s, Register(Registration{ID: "custom", Name: "y"}))
-	if res.Events[0].Action != "register" || mustLoad(t, s).Agent("custom") == nil {
-		t.Fatalf("result = %+v", res)
+	wantEqual(t, "action", res.Events[0].Action, "register")
+	if mustLoad(t, s).Agent("custom") == nil {
+		t.Fatal("agent custom was not registered")
 	}
 }
 

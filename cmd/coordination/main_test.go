@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -116,56 +117,80 @@ func TestHelpExitsZero(t *testing.T) {
 	}
 }
 
+// cliStep is one command of a scripted session and what it must print.
+// Empty expectations match anything.
+type cliStep struct {
+	args         []string
+	code         int
+	stdoutPrefix string
+	stdoutSuffix string
+	stderrPrefix string
+}
+
+func runSteps(t *testing.T, env map[string]string, steps []cliStep) {
+	t.Helper()
+	for _, s := range steps {
+		r := runCLI(t, env, s.args...)
+		if !stepMatches(r, s) {
+			t.Fatalf("%q: %+v", s.args, r)
+		}
+	}
+}
+
+func stepMatches(r result, s cliStep) bool {
+	return r.code == s.code &&
+		strings.HasPrefix(r.stdout, s.stdoutPrefix) &&
+		strings.HasSuffix(r.stdout, s.stdoutSuffix) &&
+		strings.HasPrefix(r.stderr, s.stderrPrefix)
+}
+
 func TestWorkflowThroughTheCLI(t *testing.T) {
 	dir := writeState(t, cleanState)
 	env := map[string]string{envDir: dir}
-	r := runCLI(t, env, "--register", "--name", "Claude", "--sessionID", "ses-9", "--version", "1.0", "--capabilities", "go, docs,")
-	if r.code != 0 || !strings.HasPrefix(r.stdout, "register agent-1: Claude (session ses-9, version 1.0)\nagent id: agent-1\nstate revision 1\n") {
-		t.Fatalf("register: %+v", r)
-	}
+	runSteps(t, env, []cliStep{{
+		args:         []string{"--register", "--name", "Claude", "--sessionID", "ses-9", "--version", "1.0", "--capabilities", "go, docs,"},
+		stdoutPrefix: "register agent-1: Claude (session ses-9, version 1.0)\nagent id: agent-1\nstate revision 1\n",
+	}})
 	env[envAgent] = "agent-1"
-	r = runCLI(t, env, "claim", "--task-id", "T2")
-	if r.code != 0 || !strings.HasSuffix(r.stdout, "warning: T2 depends on T1, which is available\nstate revision 2\n") {
-		t.Fatalf("claim: %+v", r)
-	}
-	r = runCLI(t, env, "claim", "--agent", "a1", "--task-id", "T2")
-	if r.code != 1 || !strings.HasPrefix(r.stderr, "coordination: task T2 is already claimed by agent-1 until ") {
-		t.Fatalf("second claim: %+v", r)
-	}
-	r = runCLI(t, env, "reserve", "--files", "cmd/a.go,cmd/b.go", "cmd/c.go")
-	if r.code != 0 || !strings.HasPrefix(r.stdout, "reserve T2: reserved cmd/a.go, cmd/b.go, cmd/c.go until ") {
-		t.Fatalf("reserve: %+v", r)
-	}
-	wantRun(t, runCLI(t, env, "update", "--task-id", "T2", "--progress", "half", "--expect-revision", "1"), 1, "",
-		"coordination: stale update: coordination state is at revision 3, expected 1; reload state and retry\n")
-	steps := [][]string{
-		{"update", "--task-id", "T2", "--progress", "half", "--expect-revision", "3"},
-		{"block", "--task-id", "T2", "--reason", "waiting"},
-		{"update", "--task-id", "T2", "--progress", "go", "--unblock"},
-		{"handoff", "--task-id", "T2", "--to-agent", "a1", "--reason", "timeout"},
-		{"release", "--agent", "a1", "--task-id", "T2"},
-		{"complete", "--agent", "a1", "--task-id", "T2", "--pr-number", "7"},
-	}
-	for _, args := range steps {
-		if r := runCLI(t, env, args...); r.code != 0 {
-			t.Fatalf("%q: %+v", args, r)
-		}
-	}
+	runSteps(t, env, []cliStep{
+		{args: []string{"claim", "--task-id", "T2"}, stdoutSuffix: "warning: T2 depends on T1, which is available\nstate revision 2\n"},
+		{args: []string{"claim", "--agent", "a1", "--task-id", "T2"}, code: 1,
+			stderrPrefix: "coordination: task T2 is already claimed by agent-1 until "},
+		{args: []string{"reserve", "--files", "cmd/a.go,cmd/b.go", "cmd/c.go"},
+			stdoutPrefix: "reserve T2: reserved cmd/a.go, cmd/b.go, cmd/c.go until "},
+		{args: []string{"update", "--task-id", "T2", "--progress", "half", "--expect-revision", "1"}, code: 1,
+			stderrPrefix: "coordination: stale update: coordination state is at revision 3, expected 1; reload state and retry\n"},
+		{args: []string{"update", "--task-id", "T2", "--progress", "half", "--expect-revision", "3"}},
+		{args: []string{"block", "--task-id", "T2", "--reason", "waiting"}},
+		{args: []string{"update", "--task-id", "T2", "--progress", "go", "--unblock"}},
+		{args: []string{"handoff", "--task-id", "T2", "--to-agent", "a1", "--reason", "timeout"}},
+		{args: []string{"release", "--agent", "a1", "--task-id", "T2"}},
+		{args: []string{"complete", "--agent", "a1", "--task-id", "T2", "--pr-number", "7"}},
+	})
 	wantRun(t, runCLI(t, env, "reconcile"), 0, "nothing to change; state stays at revision 9\n", "")
-	r = runCLI(t, env, "status")
-	for _, want := range []string{"agent-1 available -", "T2 completed a1", "(none reserved)"} {
-		if !hasRow(r.stdout, want) {
-			t.Errorf("status lacks %q:\n%s", want, r.stdout)
-		}
-	}
+	wantRows(t, runCLI(t, env, "status").stdout, "agent-1 available -", "T2 completed a1", "(none reserved)")
 	wantRun(t, runCLI(t, env, "available"), 0, "T1\tP\tone\n", "")
 	wantRun(t, runCLI(t, env, "validate"), 0, "0 error(s), 0 warning(s) at revision 9\n", "")
+	wantAuditEntries(t, dir, 10)
+}
+
+func wantRows(t *testing.T, out string, rows ...string) {
+	t.Helper()
+	for _, want := range rows {
+		if !hasRow(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func wantAuditEntries(t *testing.T, dir string, want int) {
+	t.Helper()
 	audit, err := os.ReadFile(filepath.Join(dir, "audit.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := strings.Count(string(audit), "\n- "); n != 10 {
-		t.Fatalf("audit has %d entries, want 10:\n%s", n, audit)
+	if n := strings.Count(string(audit), "\n- "); n != want {
+		t.Fatalf("audit has %d entries, want %d:\n%s", n, want, audit)
 	}
 }
 
@@ -173,10 +198,7 @@ func TestStatusShowsReservations(t *testing.T) {
 	dir := writeState(t, cleanState)
 	runCLI(t, nil, "claim", "--dir", dir, "--agent", "a1", "--task-id", "T1")
 	runCLI(t, nil, "reserve", "--dir", dir, "--agent", "a1", "--files", "x/b.go,x/a.go")
-	r := runCLI(t, nil, "status", "--dir", dir)
-	if !hasRow(r.stdout, "x/a.go a1 T1") || !hasRow(r.stdout, "x/b.go a1 T1") {
-		t.Fatalf("status:\n%s", r.stdout)
-	}
+	wantRows(t, runCLI(t, nil, "status", "--dir", dir).stdout, "x/a.go a1 T1", "x/b.go a1 T1")
 }
 
 // hasRow reports whether a line of out, with its runs of spaces collapsed,
@@ -191,10 +213,7 @@ func hasRow(out, prefix string) bool {
 }
 
 func TestAvailableShowsExpiredClaimsAndNone(t *testing.T) {
-	files := map[string]string{}
-	for k, v := range cleanState {
-		files[k] = v
-	}
+	files := maps.Clone(cleanState)
 	files["registry.json"] = `{"version": "1.0", "tasks": [
   {"id": "T1", "title": "one", "phase": "P", "status": "claimed", "dependencies": ["T9"], "acceptanceCriteria": [],
    "estimatedScope": "s", "requiredFiles": [], "assignedTo": "a1", "claimedAt": null, "expiresAt": "2000-01-01T00:00:00Z", "notes": ""}]}`

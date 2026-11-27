@@ -1,7 +1,6 @@
 package coordination
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -9,26 +8,27 @@ import (
 
 func TestClaimSetsOwnerExpiryAndAgent(t *testing.T) {
 	s, _ := newTestStore(t)
+	before := mustLoad(t, s)
 	res := mustApply(t, s, Claim("a1", "T2"))
-	wantNotes := []string{
+	wantEqual(t, "notes", res.Notes, []string{
 		"warning: T2 depends on T1, which is available",
 		"warning: T2 depends on MISSING, which is not defined in registry.json",
-	}
-	if !reflect.DeepEqual(res.Notes, wantNotes) {
-		t.Fatalf("notes = %q", res.Notes)
-	}
+	})
 	st := mustLoad(t, s)
-	task, agent := st.Task("T2"), st.Agent("a1")
-	if task.Status != StatusClaimed || deref(task.AssignedTo) != "a1" || deref(task.ClaimedAt) != ts(0) || deref(task.ExpiresAt) != ts(ClaimTTL) {
-		t.Fatalf("task = %+v", task)
-	}
-	if agent.Status != AgentActive || deref(agent.CurrentTask) != "T2" || deref(agent.LastHeartbeat) != ts(0) {
-		t.Fatalf("agent = %+v", agent)
-	}
-	want := "- " + ts(0) + " | rev 1 | a1 | claim | T2 | claimed until " + ts(ClaimTTL)
-	if got := auditLines(t, s); len(got) != 1 || got[0] != want {
-		t.Fatalf("audit = %q, want %q", got, want)
-	}
+	wantTask := *before.Task("T2")
+	wantTask.Status = StatusClaimed
+	wantTask.AssignedTo = strPtr("a1")
+	wantTask.ClaimedAt = strPtr(ts(0))
+	wantTask.ExpiresAt = strPtr(ts(ClaimTTL))
+	wantEqual(t, "task", *st.Task("T2"), wantTask)
+	wantAgent := *before.Agent("a1")
+	wantAgent.Status = AgentActive
+	wantAgent.CurrentTask = strPtr("T2")
+	wantAgent.LastHeartbeat = strPtr(ts(0))
+	wantEqual(t, "agent", *st.Agent("a1"), wantAgent)
+	wantEqual(t, "audit", auditLines(t, s), []string{
+		"- " + ts(0) + " | rev 1 | a1 | claim | T2 | claimed until " + ts(ClaimTTL),
+	})
 }
 
 func TestClaimRejections(t *testing.T) {
@@ -198,19 +198,22 @@ func TestCompleteByOwner(t *testing.T) {
 	mustApply(t, s, Claim("a1", "T1"))
 	mustApply(t, s, Reserve("a1", "T1", []string{"x/a.go"}))
 	mustApply(t, s, Block("a1", "T1", "waiting"))
+	blocked := *mustLoad(t, s).Task("T1")
 	c.advance(time.Minute)
 	res := mustApply(t, s, Complete("a1", "T1", "PR-12"))
-	if res.Events[0].Detail != "completed, dropped 1 reservation(s), PR PR-12" {
-		t.Fatalf("detail = %q", res.Events[0].Detail)
-	}
+	wantEqual(t, "detail", res.Events[0].Detail, "completed, dropped 1 reservation(s), PR PR-12")
 	st := mustLoad(t, s)
-	task := st.Task("T1")
-	if task.Status != StatusCompleted || task.CompletedBy != "a1" || task.CompletedAt != ts(time.Minute) || task.PRNumber != "PR-12" || task.ExpiresAt != nil || task.BlockedReason != "" {
-		t.Fatalf("task = %+v", task)
-	}
-	if a := st.Agent("a1"); a.CurrentTask != nil || a.Status != AgentAvailable || len(st.Files.CurrentOwners) != 0 {
-		t.Fatalf("agent = %+v, owners = %v", a, st.Files.CurrentOwners)
-	}
+	want := blocked
+	want.Status = StatusCompleted
+	want.ExpiresAt = nil
+	want.BlockedReason = ""
+	want.CompletedBy = "a1"
+	want.CompletedAt = ts(time.Minute)
+	want.PRNumber = "PR-12"
+	wantEqual(t, "task", *st.Task("T1"), want)
+	wantEqual(t, "agent status", st.Agent("a1").Status, AgentAvailable)
+	wantEqual(t, "agent task", st.Agent("a1").CurrentTask, (*string)(nil))
+	wantEqual(t, "owners", st.Files.CurrentOwners, map[string]Reservation{})
 }
 
 func TestCompleteAfterRelease(t *testing.T) {

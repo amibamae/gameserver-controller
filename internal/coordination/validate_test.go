@@ -1,11 +1,13 @@
 package coordination
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func findingStrings(fs []Finding) []string {
@@ -113,20 +115,30 @@ func TestValidateReportsBrokenState(t *testing.T) {
 	}
 }
 
+// availableSummary lists Available's result as "<task> by <expired
+// owner> warnings <count>".
+func availableSummary(t *testing.T, st *State, now time.Time) []string {
+	t.Helper()
+	got, err := Available(st, now)
+	if err != nil {
+		t.Fatalf("Available: %v", err)
+	}
+	out := make([]string, 0, len(got))
+	for _, c := range got {
+		out = append(out, fmt.Sprintf("%s by %s warnings %d", c.Task.ID, orDash(c.ExpiredOwner), len(c.Warnings)))
+	}
+	return out
+}
+
 func TestAvailableListsClaimableTasks(t *testing.T) {
 	s, c := newTestStore(t)
 	mustApply(t, s, Claim("a1", "T1"))
 	st := mustLoad(t, s)
-	got, err := Available(st, t0)
-	if err != nil || len(got) != 1 || got[0].Task.ID != "T2" || got[0].ExpiredOwner != "" || len(got[0].Warnings) != 2 {
-		t.Fatalf("Available = %+v, %v", got, err)
-	}
+	wantEqual(t, "available", availableSummary(t, st, t0), []string{"T2 by - warnings 2"})
 	c.advance(ClaimTTL)
-	got, err = Available(st, c.now)
-	if err != nil || len(got) != 2 || got[0].Task.ID != "T1" || got[0].ExpiredOwner != "a1" {
-		t.Fatalf("Available after expiry = %+v, %v", got, err)
-	}
+	wantEqual(t, "available after expiry", availableSummary(t, st, c.now),
+		[]string{"T1 by a1 warnings 0", "T2 by - warnings 2"})
 	st.Task("T1").ExpiresAt = strPtr("bad")
-	_, err = Available(st, t0)
+	_, err := Available(st, t0)
 	wantErr(t, err, `task T1 has invalid expiry "bad"`)
 }

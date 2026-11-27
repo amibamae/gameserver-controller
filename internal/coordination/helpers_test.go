@@ -3,6 +3,7 @@ package coordination
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -147,3 +148,11 @@ func auditLines(t *testing.T, s *Store) []string {
 }
 
 func ts(d time.Duration) string { return formatTime(t0.Add(d)) }
+
+// wantEqual fails unless got deeply equals want.
+func wantEqual(t *testing.T, what string, got, want any) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("%s =\n  %+v\nwant\n  %+v", what, got, want)
+	}
+}

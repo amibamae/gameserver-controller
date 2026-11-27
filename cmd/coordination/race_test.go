@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -37,22 +39,47 @@ func TestConcurrentClaimAcrossProcesses(t *testing.T) {
 		t.Skip("starts subprocesses")
 	}
 	const n = 6
-	agents := `{"version": "1.0", "agents": [`
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			agents += ","
+	dir := stateWithAgents(t, n)
+	runs := claimInProcesses(dir, n)
+	wins := 0
+	for i, r := range runs {
+		switch r.code {
+		case 0:
+			wins++
+		case 1:
+		default:
+			t.Errorf("process %d exited %d:\n%s", i, r.code, r.output)
 		}
-		agents += fmt.Sprintf(`{"id": "p%d", "name": "p", "role": "r", "capabilities": [], "status": "available", "lastHeartbeat": null, "currentTask": null, "worktree": null}`, i)
 	}
-	files := map[string]string{}
-	for k, v := range cleanState {
-		files[k] = v
+	if wins != 1 {
+		t.Fatalf("%d processes claimed T1, want exactly 1: %+v", wins, runs)
 	}
-	files[".agents.json"] = agents + "]}"
-	dir := writeState(t, files)
+	if rev := registryRevision(t, dir); rev != 1 {
+		t.Fatalf("revision = %d; want one committed claim", rev)
+	}
+}
 
-	codes := make([]int, n)
-	outputs := make([][]byte, n)
+// stateWithAgents writes the clean state with agents p0 to p<n-1>.
+func stateWithAgents(t *testing.T, n int) string {
+	t.Helper()
+	agents := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		agents = append(agents, fmt.Sprintf(`{"id": "p%d", "name": "p", "role": "r", "capabilities": [], "status": "available", "lastHeartbeat": null, "currentTask": null, "worktree": null}`, i))
+	}
+	files := maps.Clone(cleanState)
+	files[".agents.json"] = `{"version": "1.0", "agents": [` + strings.Join(agents, ",") + "]}"
+	return writeState(t, files)
+}
+
+type processRun struct {
+	code   int
+	output string
+}
+
+// claimInProcesses runs "claim --task-id T1" as agent p<i> in n processes
+// at once.
+func claimInProcesses(dir string, n int) []processRun {
+	runs := make([]processRun, n)
 	var wg sync.WaitGroup
 	for i := 0; i < n; i++ {
 		cmd := exec.Command(os.Args[0], "-test.run=^TestHelperProcess$", "--",
@@ -62,33 +89,29 @@ func TestConcurrentClaimAcrossProcesses(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			out, err := cmd.CombinedOutput()
-			outputs[i] = out
-			var exit *exec.ExitError
-			switch {
-			case err == nil:
-				codes[i] = 0
-			case errors.As(err, &exit):
-				codes[i] = exit.ExitCode()
-			default:
-				codes[i] = -1
-			}
+			runs[i] = processRun{exitCode(err), string(out)}
 		}()
 	}
 	wg.Wait()
+	return runs
+}
 
-	wins := 0
-	for i, code := range codes {
-		switch code {
-		case 0:
-			wins++
-		case 1:
-		default:
-			t.Errorf("process %d exited %d:\n%s", i, code, outputs[i])
-		}
+// exitCode maps a finished command's error to its exit code, or -1 when
+// the process could not run.
+func exitCode(err error) int {
+	var exit *exec.ExitError
+	switch {
+	case err == nil:
+		return 0
+	case errors.As(err, &exit):
+		return exit.ExitCode()
+	default:
+		return -1
 	}
-	if wins != 1 {
-		t.Fatalf("%d processes claimed T1, want exactly 1; exit codes %v", wins, codes)
-	}
+}
+
+func registryRevision(t *testing.T, dir string) int64 {
+	t.Helper()
 	var reg struct {
 		Revision int64 `json:"revision"`
 	}
@@ -96,7 +119,8 @@ func TestConcurrentClaimAcrossProcesses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := json.Unmarshal(data, &reg); err != nil || reg.Revision != 1 {
-		t.Fatalf("revision = %d, %v; want one committed claim", reg.Revision, err)
+	if err := json.Unmarshal(data, &reg); err != nil {
+		t.Fatal(err)
 	}
+	return reg.Revision
 }
