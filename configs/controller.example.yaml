@@ -27,6 +27,7 @@ controller:
 adapters:
   - id: hosting.example
     category: hosting
+    implementation: vultr
     secret_refs:
       api_token:
         secret_ref: systemd-credential://example-vultr-api-token
@@ -36,6 +37,7 @@ adapters:
           - hosting.instance.inspect
   - id: storage.example
     category: storage
+    implementation: wasabi
     secret_refs:
       backup_writer:
         secret_ref: systemd-credential://example-wasabi-staging-writer
@@ -44,8 +46,14 @@ adapters:
           - storage.backup.write
   - id: execution.example
     category: execution
+    implementation: process
   - id: game.paper
     category: game
+    implementation: paper
+    secret_refs:
+      paper_version:
+        secret_ref: systemd-credential://example-paper-stable
+        purpose: Paper version selection (stable channel)
 
 environments:
   - id: production
