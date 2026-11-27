@@ -63,10 +63,10 @@ transfer manager, credential provider, and event-stream modules.
 
 ### Direct Dependencies (from go.mod)
 
-- Modules and versions: `github.com/aws/aws-sdk-go-v2 v1.39.4`,
-  `github.com/aws/aws-sdk-go-v2/credentials v1.18.19`,
-  `github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.0`,
-  `github.com/aws/aws-sdk-go-v2/service/s3 v1.88.7`, and
+- Modules and versions: `github.com/aws/aws-sdk-go-v2 v1.48.0`,
+  `github.com/aws/aws-sdk-go-v2/credentials v1.21.3`,
+  `github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.23.28`,
+  `github.com/aws/aws-sdk-go-v2/service/s3 v1.116.0`, and
   `github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.2` (indirect), pinned in
   [go.mod](go.mod)
 
@@ -100,7 +100,7 @@ All AWS SDK for Go v2 components are licensed under **Apache License 2.0**.
 The embedded operation store uses [bbolt](https://github.com/etcd-io/bbolt), maintained by the etcd project and derived from Bolt by Ben Johnson.
 
 - Module: `go.etcd.io/bbolt`
-- Version: `v1.4.3`, pinned in [go.mod](go.mod)
+- Version: `v1.5.0`, pinned in [go.mod](go.mod)
 - License: MIT
 - Copyright: Copyright (c) 2013 Ben Johnson
 - Full upstream notice: [licenses/bbolt-LICENSE](licenses/bbolt-LICENSE)
@@ -113,7 +113,7 @@ These run in GitHub Actions workflows and are not distributed with the project o
 
 All GitHub Actions used in [.github/workflows/](.github/workflows/) are MIT licensed:
 
-- **GitHub Actions** (all MIT, Copyright (c) 2018 GitHub, Inc. and contributors): [`actions/checkout@v7`](https://github.com/actions/checkout), [`actions/setup-go@v7`](https://github.com/actions/setup-go), [`actions/setup-java@v4`](https://github.com/actions/setup-java). Text: [licenses/github-actions-LICENSE](licenses/github-actions-LICENSE).
+- **GitHub Actions** (all MIT, Copyright (c) 2018 GitHub, Inc. and contributors): [`actions/checkout@v7` and `@v4`](https://github.com/actions/checkout), [`actions/setup-go@v7` and `@v5`](https://github.com/actions/setup-go), [`actions/setup-java@v6`](https://github.com/actions/setup-java). Text: [licenses/github-actions-LICENSE](licenses/github-actions-LICENSE).
 
 ### Runner command-line tools
 
@@ -146,8 +146,8 @@ The [VM bootstrap](scripts/bootstrap/minecraft-debian.sh.tmpl) installs these De
 
 ## github.com/dlclark/regexp2
 
-- Version: `v1.11.0`, pinned in [go.mod](go.mod)
-- Upstream: [github.com/dlclark/regexp2](https://github.com/dlclark/regexp2/tree/v1.11.0)
+- Version: `v1.12.0`, pinned in [go.mod](go.mod)
+- Upstream: [github.com/dlclark/regexp2](https://github.com/dlclark/regexp2/tree/v1.12.0)
 - License: MIT
 - Copyright: Doug Clark
 - Full license: [licenses/regexp2-LICENSE](licenses/regexp2-LICENSE)
@@ -191,9 +191,9 @@ Preserve both the license and NOTICE when distributing a build that includes thi
 
 Built Go executables include the Go runtime and the standard-library packages they use.
 
-### Go 1.23 Runtime
+### Go 1.26 Runtime
 
-- Toolchain: Go 1.23.12, as pinned in [go.mod](go.mod)
+- Language version: Go 1.26.0, as set in [go.mod](go.mod)
 - License: Go license (BSD-style)
 - Copyright: Copyright 2009 The Go Authors
 - Full upstream notice: [licenses/go-LICENSE](licenses/go-LICENSE)

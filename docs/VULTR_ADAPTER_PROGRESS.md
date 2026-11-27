@@ -1,3 +1,5 @@
+> **Status: NOT IMPLEMENTED.** `internal/vultrhosting/` contains only `config.yaml.example`; the `adapter.go` described below and the obsolete `IMPLEMENTATION_SUMMARY.md` do not exist, and there is no `vultrhosting.New`. The working Vultr provider client is `internal/vultrapi/`.
+
 # Vultr Hosting Adapter Implementation Progress Report
 
 **Date:** November 16, 2026  
