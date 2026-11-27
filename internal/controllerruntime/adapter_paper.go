@@ -9,14 +9,14 @@ import (
 // will be replaced with a real one in Phase 4.
 
 const (
-	paperVersionSecret   = "paper_version"
+	paperVersionSecret    = "paper_version"
 	paperReleaseRefSecret = "release_ref"
 )
 
 // PaperSettings is the `paper:` block configuration.
 type PaperSettings struct {
 	ReleaseChannel string `yaml:"release_channel,omitempty"` // stable, beta, alpha
-	ReleaseRef     string `yaml:"release_ref,omitempty"`    // exact version like "paper:1.21.4"
+	ReleaseRef     string `yaml:"release_ref,omitempty"`     // exact version like "paper:1.21.4"
 }
 
 func (p *PaperSettings) Validate(check config.SettingsCheck) {

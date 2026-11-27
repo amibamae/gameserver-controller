@@ -13,7 +13,7 @@ func TestParsePaperSettings(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name: "empty settings fails",
+			name:     "empty settings fails",
 			settings: &PaperSettings{},
 		},
 		{
