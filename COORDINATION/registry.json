@@ -1,0 +1,144 @@
+{
+  "version": "1.0",
+  "tasks": [
+    {
+      "id": "TASK-LC-001",
+      "title": "Complete controller setup on existing machine",
+      "phase": "Phase 3",
+      "status": "available",
+      "dependencies": ["TASK-CORE-002"],
+      "acceptanceCriteria": [
+        "Controller CLI validates configuration without side effects",
+        "Runtime builds and serves on configured endpoint",
+        "Systemd unit installs with correct permissions",
+        "Provider credential checks verify before any host changes",
+        "Local audit log captures all operations",
+        "Dry-run mode shows plan before applying changes"
+      ],
+      "estimatedScope": "medium",
+      "requiredFiles": [
+        "cmd/controller/setup.go",
+        "internal/controller/runtime.go",
+        "configs/controller.setup.yaml"
+      ],
+      "assignedTo": null,
+      "claimedAt": null,
+      "expiresAt": null,
+      "notes": "Requires Vultr hosting adapter integration and systemd credential resolver"
+    },
+    {
+      "id": "TASK-LC-002",
+      "title": "Wire Vultr hosting adapter integration",
+      "phase": "Phase 3",
+      "status": "completed",
+      "dependencies": ["TASK-CORE-001"],
+      "acceptanceCriteria": [
+        "Controller runtime registers Vultr hosting adapter",
+        "Adapter capabilities declared in schema registry",
+        "VM creation requires explicit confirmation and capacity check",
+        "Startup script ID and SHA-256 digest verified before create"
+      ],
+      "estimatedScope": "completed",
+      "requiredFiles": [
+        "internal/vultrapi/CAPABILITIES_FINDINGS.md",
+        "internal/vultrapi/SCHHEMA_REGISTRY.json",
+        "VULTR_API_INVESTIGATION_RESULTS.md"
+      ],
+      "assignedTo": "agent-1",
+      "claimedAt": "2026-11-XXT00:00:00Z",
+      "expiresAt": null,
+      "notes": "Schema investigation complete. Integration into runtime remains."
+    },
+    {
+      "id": "TASK-LC-003",
+      "title": "Implement Wasabi storage adapter runtime",
+      "phase": "Phase 3",
+      "status": "available",
+      "dependencies": ["TASK-CORE-002"],
+      "acceptanceCriteria": [
+        "Controller configures and wires Wasabi adapter from configs/",
+        "Bounded put/get/head operations with SHA-256 verification",
+        "Systemd credential resolver loads Wasabi credentials securely",
+        "Put operations stream uploads without loading complete objects into RAM"
+      ],
+      "estimatedScope": "medium",
+      "requiredFiles": [
+        "configs/controller.storage.yaml",
+        "internal/wasabistorage/runtime_wiring.go"
+      ],
+      "assignedTo": null,
+      "claimedAt": null,
+      "expiresAt": null,
+      "notes": "Package exists in internal/wasabistorage but lacks runtime wiring"
+    },
+    {
+      "id": "TASK-LC-004",
+      "title": "Add game readiness checks for Minecraft/Paper",
+      "phase": "Phase 3",
+      "status": "available",
+      "dependencies": ["TASK-CORE-001"],
+      "acceptanceCriteria": [
+        "Lifecycle workflow waits for Paper server to pass health check",
+        "Readiness probe checks process exists and responds to commands",
+        "Workflow handles unresponsive or crashed servers gracefully",
+        "Readiness evidence persisted with operation record"
+      ],
+      "estimatedScope": "small",
+      "requiredFiles": [
+        "internal/papermc/readiness.go",
+        "cmd/controller/doctor.go"
+      ],
+      "assignedTo": null,
+      "claimedAt": null,
+      "expiresAt": null,
+      "notes": "Doctor command already exists; needs integration into workflow engine"
+    },
+    {
+      "id": "TASK-LC-005",
+      "title": "Complete backup/restore workflows with verification",
+      "phase": "Phase 3",
+      "status": "available",
+      "dependencies": ["TASK-LC-002", "TASK-LC-003"],
+      "acceptanceCriteria": [
+        "Backup workflow: save → upload → verify checksum → complete",
+        "Restore workflow: select verified backup → stop server → restore → start",
+        "Lifecycle recovery restores from last successful timestamp",
+        "Failed or uncertain backup blocks destroy operation"
+      ],
+      "estimatedScope": "medium",
+      "requiredFiles": [
+        "internal/controller/workflow_backup.go",
+        "internal/controller/workflow_restore.go"
+      ],
+      "assignedTo": null,
+      "claimedAt": null,
+      "expiresAt": null,
+      "notes": "Factored into separate fixtures in conformance tests"
+    },
+    {
+      "id": "TASK-ARCH-001",
+      "title": "Implement infrastructure simulation test harness (Agent 8)",
+      "phase": "Phase 0",
+      "status": "available",
+      "dependencies": [],
+      "acceptanceCriteria": [
+        "Stateful simulators for Vultr, Wasabi, SSH, systemd, Paper, Velocity, DNS",
+        "Deterministic virtual clocks for time manipulation",
+        "Fault injection capabilities (timeout, network failures, API errors)",
+        "Safety invariant verification throughout simulation",
+        "Memory-efficient streaming for large data operations",
+        "CI integration with separate testing tiers"
+      ],
+      "estimatedScope": "large",
+      "requiredFiles": [
+        "internal/simulation/*.go",
+        "tests/simulation/*_test.go"
+      ],
+      "assignedTo": null,
+      "claimedAt": null,
+      "expiresAt": null,
+      "handoffFrom": "agent-9",
+      "notes": "Assigned to Agent 8. See RESOURCE_REQUIREMENTS.md for design requirements."
+    }
+  ]
+}
