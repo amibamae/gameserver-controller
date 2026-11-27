@@ -141,14 +141,8 @@ func (f fixture) load(t *testing.T, text string) config.Config {
 
 func (f fixture) build(t *testing.T, value config.Config, credentials string) (*Runtime, error) {
 	t.Helper()
-	// Skip executable existence validation for now on Windows.
+	// Skip executable existence validation for Windows compatibility.
 	// In CI, we use fake adapters that don't require real executables.
-	for i := range value.Adapters {
-		if settings, ok := config.SettingsOf[*ProcessSettings](value.Adapters[i]); ok {
-			// Skip executable check - will be validated by Build() anyway
-			settings.Executable = true // mark as skip-exec-check (hack for Windows)
-		}
-	}
 	return Build(context.Background(), value, f.configPath, Options{CredentialDirectory: credentials, ControllerVersion: "test-build"})
 }
 
