@@ -14,51 +14,76 @@ disagrees with the linked document, the linked document wins.
 
 ## 1. What this project is
 
-Game Server Controller (GSC) is a lifecycle controller for game servers. Its
-concrete job, in the owner's words:
+Game Server Controller (GSC) is an open-source, self-hosted lifecycle
+controller for running game servers on demand. It aims to reduce cloud costs,
+local electricity consumption and operator workload while protecting persistent
+game data. The first measure of success is safe operation of the owner's
+production Minecraft network, before broader competitive expansion.
 
-> Bring a backend online when players need it, restore the world, send players
-> across only after the game is ready, and remove the VM only after a fresh
-> backup has been verified.
+The initial reference stack is:
 
-It is built against a real reference stack so the first adapters have something
-concrete to handle:
+- **Vultr:** cloud provider for disposable VMs.
+- **Wasabi:** S3-compatible off-site object storage for verified world backups
+  and versioned artifacts.
+- **Paper:** Minecraft Java server.
+- **Velocity:** player-facing proxy, with existing Java/Bedrock and voice-chat
+  connectivity to be preserved.
+- **Debian and systemd:** host bootstrap and execution environment.
 
-- **Vultr** – cloud provider for disposable VMs
-- **Wasabi** – S3-compatible object storage for world backups
-- **Paper** – the Minecraft Java server
-- **Velocity** – the player-facing proxy
-- **Debian** – the host OS, provisioned by versioned bootstrap scripts
+The protocol is provider- and game-agnostic. Adding a provider, storage backend
+or game should not require rewriting core lifecycle rules.
 
-The protocol is intentionally provider- and game-agnostic. Adding a new cloud
-provider, storage backend, or game must be possible without rewriting the core.
-That constraint is the single most important architectural decision in the
-project.
+### 1.1 Intended deployment models
+
+| Model | Goal |
+|---|---|
+| Cloud-only | Vultr hosting with no local server, Proxmox or LAN wake agent required. |
+| Self-hosted | Optional Proxmox VE hosting, with on-demand guest start and stop. |
+| Hybrid | Local hosting plus optional cloud fallback or additional capacity within configured limits. |
+
+Vultr is a first-class option for all users, not merely a fallback. Proxmox
+support is planned. The owner's eventual preference is local consolidation if
+measured workload capacity, connectivity, cost and recovery justify it. Wasabi
+remains the reference off-site store so a local host failure does not also
+remove the only backup.
 
 The project is **in development**. The Phase 1 protocol package is reviewed for
-draft `0.21.0-draft`. The durable operation model, in-process adapter boundary,
-workflow engine, credential accessor, and a supervised pilot exist and are
-tested. The end-to-end production lifecycle (real Vultr/Wasabi/Paper/Velocity
-adapters wired to the core, with standard workflows `server.start` through
-`server.destroy`) is **not yet complete**. See [the roadmap](ROADMAP.md) for
-what is done and what is not, phase by phase.
+draft `0.21.0-draft`. A durable store, workflow engine, adapter boundary,
+configuration loading and supervised pilot exist. Only `server.define` is
+registered as a runnable operation in the normal controller runtime in the
+reviewed source. Other standard workflow definitions exist and are fake-tested;
+a complete live lifecycle, Proxmox support and minigame orchestration have not
+been demonstrated. See [the roadmap](ROADMAP.md) for priorities, phase status
+and evidence gates.
 
 ---
 
 ## 2. The one-paragraph mental model
 
-A player connects to the Velocity proxy. When the proxy needs a backend and
-there isn't one, the **core** accepts a durable operation, provisions a fresh
-Debian VM on Vultr, restores the latest verified world backup from Wasabi,
-waits until Paper reports ready, and only then tells Velocity to route
-traffic. When the server goes idle, the core drains the proxy, runs a game
-save, uploads a new backup, **verifies** it, and only then destroys the VM.
-Every destructive step is gated on a verified backup; every unclear provider
-answer is reconciled before retrying; staging can never write to production
-storage.
+For a persistent world, a player requests a backend through the lobby. The
+core durably records the operation, allocates or starts the required
+infrastructure, restores the selected verified world when necessary, starts
+Paper, validates fresh readiness and permits routing. When idle, it drains
+players, saves the world and verifies a backup before any authorized
+destruction of the exact instance. A stopped local guest can instead be
+retained. Reconcile uncertain provider outcomes before retrying, and never
+allow staging to write to production storage.
 
-That is the target behavior. The repository has the scaffolding for all of it;
-the production wiring is still in progress.
+For a minigame, the planned flow creates or starts a session from a reviewed
+versioned template, queues and routes players after readiness, completes the
+match, persists and verifies required results, returns players to the lobby
+and reclaims session resources. Only explicitly classified disposable arena
+state may be discarded under a reviewed policy. Unknown state fails closed.
+
+Cloud idle policies reduce billed compute time; guest shutdown on Proxmox
+reclaims local resources. Optional physical-host shutdown requires a dedicated
+enrolled host, no active or protected workloads, and a trusted independent
+always-available wake path. The public entry point and wake-request functions
+cannot depend exclusively on the sleeping machine.
+
+These are target behaviors, not a claim of working end-to-end orchestration.
+Production destruction remains disabled pending separate authorization.
+See [the roadmap](ROADMAP.md).
 
 ---
 
@@ -82,7 +107,7 @@ the production wiring is still in progress.
 └──────┬──────────┬──────────┬──────────┬──────────┬────────┘
        │          │          │          │          │
    hosting     storage   execution    game   integration
-   (Vultr)    (Wasabi)   (Paper)    (Paper)  (Velocity/
+   (Vultr)    (Wasabi)   (systemd)  (Paper)  (Velocity/
                                          DNS)
 ```
 
@@ -115,10 +140,10 @@ The adapter boundary is split into exactly five categories. Keep them
 distinct; do not merge game logic into the execution adapter, and do not put
 provider branches into core.
 
-| Category | Reference implementation | Responsibility |
+| Category | Reference target | Responsibility |
 |---|---|---|
-| **hosting** | Vultr | Create/destroy/inspect VMs, attach storage, manage firewall rules |
-| **storage** | Wasabi | Upload, download, list, verify world backups |
+| **hosting** | Vultr; Proxmox planned | Create/destroy/inspect instances, manage provider resources and firewall rules |
+| **storage** | Wasabi | Upload, download, list, verify world backups and release artifacts |
 | **execution** | Paper on systemd | Start/stop the game process, collect readiness signals |
 | **game** | Paper | Game-native save, install a release, restore a backup, report game state |
 | **integration** | Velocity / DNS | Route player traffic, drain a backend, manage DNS handoff |
@@ -169,16 +194,16 @@ The `protocol/` directory is organized by concern:
 
 ### 4.2 Standard operations (the catalog)
 
-These are the operations the core understands. They are the stable surface
-that operators and clients call:
+These are the standard operations in the draft protocol. They are the intended
+client surface, not a list of all currently runnable runtime operations:
 
 - `server.define` – declare a server definition
-- `server.start` – provision, restore, and bring a server online
-- `server.stop` – drain, save, back up, and tear down a server
-- `server.backup` – take and verify a backup without stopping the server
-- `server.restore` – restore a named backup
-- `server.destroy` – permanently remove a server (gated on a verified backup)
-- `server.status` – query current lifecycle state
+- `server.provision` – create and prepare an instance, optionally restore an explicitly selected backup, start and validate
+- `server.start` – start the recorded execution unit and validate readiness
+- `server.stop` – drain, save and stop; retain the logical server and VM
+- `server.backup` – capture and verify a consistent backup, with resume behavior governed by policy
+- `server.restore` – restore an explicitly identified verified backup
+- `server.destroy` – remove the exact infrastructure instance after backup and authorization checks; retain logical metadata and backup references
 
 The full catalog, including optional operations and the approval gates, is in
 [protocol/operation-catalog.md](../protocol/operation-catalog.md).
@@ -197,37 +222,23 @@ transition is the most important thing for a new contributor to internalize.
 
 ### 5.1 The states
 
+A simplified persistent-world lifecycle uses the protocol's actual state names:
+
 ```
-  defined ──► provisioning ──► restoring ──► starting ──► running
-     ▲           │                │             │             │
-     │           │                │             │             │
-     │           ▼                ▼             ▼             ▼
-     │        failed          failed         failed         stopping
-     │                                          │             │
-     │                                          │             ▼
-     │                                          │        draining
-     │                                          │             │
-     │                                          │             ▼
-     │                                          │          saving
-     │                                          │             │
-     │                                          │             ▼
-     │                                          │         backing up
-     │                                          │             │
-     │                                          │             ▼
-     │                                          │        verifying backup
-     │                                          │             │
-     │                                          │             ▼
-     │                                          │          destroying
-     │                                          │             │
-     │                                          └─────────────┘
-     │                                          (only if backup verified)
-     └──────────────────────────────────────────────────────────────────────
-                        (failed states can be retried via reconciliation)
+unprovisioned -> provisioning -> preparing -> restoring (if requested)
+    -> starting -> validating -> ready
+    -> draining -> stopping -> stopped
+    -> backing_up (when required) -> stopped
+    -> destroying (only when authorized and backup verified) -> destroyed
 ```
 
-The exact state names and allowed transitions are defined in
-[protocol/lifecycle.md](../protocol/lifecycle.md). The diagram above is an
-orientation aid; the protocol document is authoritative.
+A ready server may become degraded. Failure may lead to `failed` with known
+partial effects retained for recovery. The diagram is illustrative, not a
+complete transition graph: backup, restore, start and recovery have distinct
+operation-specific transitions. See [protocol/lifecycle.md](../protocol/lifecycle.md)
+for normative transitions and [the operation catalog](../protocol/operation-catalog.md)
+for preconditions. A stopped server may retain its VM; a destroyed server
+retains logical metadata and backup references.
 
 ### 5.2 The safety invariants
 
@@ -278,9 +289,11 @@ Key properties:
 - **Restart recovery:** On controller restart, the engine lists all
   in-flight operations from the operation store and resumes them.
 
-The first fully-wired workflow is `server.stop` (graceful stop with save and
-backup). `server.start` with a fake adapter is implemented for testing.
-Production workflows are still being wired to real adapters.
+The normal runtime currently registers only `server.define`. Provision,
+start, stop, backup, restore and destroy workflow definitions are implemented
+and fake-tested, not fully connected to production adapters. Recovery and
+reconciliation primitives exist; continuous scheduling of waiting work and
+queue-saturation recovery still need verification and remediation.
 
 **Deep link:** [docs/WORKFLOW_ENGINE.md](WORKFLOW_ENGINE.md) – the engine's
 API, step model, reconciliation contract, and the currently-implemented
@@ -375,8 +388,9 @@ documented line by line in [docs/CONFIGURATION.md](CONFIGURATION.md).
 Operators control when and how a server scales through per-server `lifecycle`
 settings. These are the knobs that matter day to day:
 
-**`idle_shutdown`** (implemented) – the minimum amount of time a server must be
-idle before the controller will shut it down. While the server is running, the
+**`idle_shutdown`** (policy implemented; runtime automation pending) – the
+minimum amount of time a server must be idle before the planned controller
+shutdown sequence can begin. While the server is running, the
 controller only starts or stops servers inside the billing decision window
 (default: minutes 58–59 of each running hour), so a server that idles at minute
 50 will not be destroyed until the next window opens. If the plan's hourly
@@ -489,7 +503,7 @@ gameserver-controller/
 │   ├── PROXY_BRIDGE_API.md   #   Velocity proxy bridge API
 │   ├── PROTOCOL_INTEROPERABILITY_PLAN.md # Cross-language interop plan
 │   ├── AI_DISCLOSURE.md      #   AI-agent use disclosure
-│   └── decisions/            #   Architecture Decision Records (ADR 0001–0005)
+│   └── decisions/            #   Architecture Decision Records (ADR 0001–0006)
 │
 ├── cmd/                      # Go command-line tools
 │   ├── controller/           #   The main controller binary
@@ -517,8 +531,8 @@ gameserver-controller/
 │   ├── schemaregistry/       #   Local JSON Schema registry
 │   ├── store/                #   bbolt operation store
 │   ├── velocityproxy/        #   Velocity proxy integration adapter
-│   ├── vultrapi/             #   Vultr hosting adapter
-│   ├── wasabisto/            #   Wasabi storage adapter
+│   ├── vultrapi/             #   Vultr API client
+│   ├── wasabistorage/        #   Wasabi storage adapter
 │   └── workflow/             #   Durable workflow engine
 │
 ├── plugins/                  # Out-of-tree plugin examples (if any)
@@ -549,30 +563,27 @@ gameserver-controller/
 
 ## 11. Current implementation status
 
-This section is deliberately short and points to the roadmap for detail. The
-roadmap is the authoritative status document; this table is a snapshot.
+The roadmap is the authoritative planning document. This snapshot distinguishes
+implemented components from runtime integration and live verification.
 
 | Component | Status |
 |---|---|
-| Protocol schemas (`0.21.0-draft`) | Reviewed, Phase 1 complete |
-| `cmd/protocol-check` conformance checker | Implemented |
-| bbolt operation store (`internal/store`) | Implemented, tested |
-| In-process adapter API (`internal/adapter`) | Implemented |
-| Durable workflow engine (`internal/workflow`) | Implemented; `server.stop` wired |
-| `server.define` | Implemented |
-| `server.start` (fake adapter) | Implemented for testing |
-| `server.stop` (graceful, with save) | Implemented |
-| Vultr hosting adapter (`internal/vultrapi`) | Implemented (pilot scope) |
-| Wasabi storage adapter (`internal/wasabisto`) | Implemented (pilot scope) |
-| Supervised pilot (Vultr VM + Wasabi backup) | Implemented, tested |
-| Production `server.start` (real adapters) | **Not yet wired** |
-| `server.destroy` (production) | **Not yet wired** |
-| `server.backup` / `server.restore` (standard workflows) | **In progress** |
-| Scaling policy enforcement in the runtime loop | **In progress** |
-| Release tooling and rollback | **Planned (Phase 6)** |
+| Protocol schemas (`0.21.0-draft`) and Go conformance checker | Reviewed draft and implemented validation; stable 1.0 pending |
+| bbolt operation store and adapter boundary | Implemented, tested |
+| Workflow engine | Implemented recovery/reconciliation primitives; continuous scheduling and real integration need work |
+| `server.define` | Runnable metadata-only workflow in the normal runtime |
+| Provision, start, stop, backup, restore and destroy | Workflow definitions exist and are fake-tested; not runnable end to end through the normal runtime |
+| Management API | Authenticated capability, server, operation inspection and submission handlers; runnable operation types limited; cancellation/events pending |
+| Vultr API client and supervised pilot | Guarded real provider provisioning and backup-service tools; not a complete runtime hosting adapter |
+| Wasabi (`internal/wasabistorage`) | Initial storage adapter and runtime registration; lifecycle wiring and isolated live verification incomplete |
+| Velocity and Cloudflare | Initial adapters and runtime registration; full routing/DNS lifecycle integration and verification incomplete |
+| Billing-aware idle policy | Policy and scheduler components exist; runtime wiring pending |
+| VictoriaLogs and Homelable | Optional tools implemented, disabled by default; production deployment not implied |
+| On-demand minigames, Proxmox and hybrid hosting | Planned; no completed reference implementation |
+| Release tooling, rollback and automated staging updates | Planned in Phases 5 and 6 |
 
-**Deep link:** [docs/ROADMAP.md](ROADMAP.md) – the full phase-by-phase status
-with what each phase needs to prove before the next one starts.
+See [the roadmap](ROADMAP.md) for current priorities and evidence gates.
+Passing CI and fake-adapter tests does not establish live production readiness.
 
 ---
 
@@ -608,10 +619,11 @@ requirements.
 
 This repository is developed under a multi-agent AI workflow with explicit
 coordination rules. The standing requirements are in [AGENTS.md](../AGENTS.md)
-and [CLAUDE.md](../CLAUDE.md). The current coordination state (which agent owns
-which file group, which branches are in flight) is in
-[docs/AGENT_HANDOFF.md](AGENT_HANDOFF.md) – **read it before starting work**
-so you do not collide with another agent's in-progress changes.
+and [CLAUDE.md](../CLAUDE.md). Read [the coordination guide](../GSC_COORDINATION.md),
+[CLI documentation](COORDINATION_CLI.md) and [agent handoff](AGENT_HANDOFF.md)
+before starting. Use the live coordination registry, not the committed
+snapshot or historical handoff, to claim work and reserve files. Keep task
+branches and worktrees isolated and coordinate overlapping changes.
 
 ---
 
@@ -629,6 +641,7 @@ current design was chosen and what alternatives were rejected.
 | [0003](decisions/0003-execution-agnostic-runtime.md) | Execution-agnostic runtime | VM-first, but the protocol must not require Kubernetes |
 | [0004](decisions/0004-protocol-encoding-and-bindings.md) | Protocol encoding and bindings | JSON + JSON Schema 2020-12 + JSON-RPC 2.0 + OpenAPI 3.2.1 |
 | [0005](decisions/0005-operation-store.md) | Initial operation store | bbolt embedded store, one process, exclusive file lock |
+| [0006](decisions/0006-optional-ha-and-reliability-tiers.md) | Optional HA and reliability tiers | Standalone remains supported; advanced reliability profiles are optional goals, not measured guarantees |
 
 ---
 
