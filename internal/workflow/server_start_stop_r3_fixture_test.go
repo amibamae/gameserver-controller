@@ -138,10 +138,7 @@ func startStopR3Checks() []ReadinessRequirement {
 
 func newStartStopR3Fixture(t *testing.T) *startStopR3Fixture {
 	t.Helper()
-	registry, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	registry := workflowTestSchemas(t)
 	version := registry.ProtocolVersion()
 	declared := []any{}
 	for _, check := range startStopR3Checks() {

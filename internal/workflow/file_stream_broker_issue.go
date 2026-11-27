@@ -152,7 +152,7 @@ func (b *FileServerBackupTransferBroker) issuableExpectation(expectation ServerB
 }
 
 func (b *FileServerBackupTransferBroker) withinStagingBudget(maximumBytes int64) bool {
-	return maximumBytes >= 1 && maximumBytes <= b.maxStagingBytes
+	return withinBudget(maximumBytes, b.maxStagingBytes)
 }
 
 // issuableSize allows -1 (unknown) only for sinks, and otherwise 0..maximum.

@@ -9,13 +9,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/amibamae/gameserver-controller/internal/acceptance"
 	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/adapterprocess"
 	"github.com/amibamae/gameserver-controller/internal/config"
-	"github.com/amibamae/gameserver-controller/internal/credential"
 	"github.com/amibamae/gameserver-controller/internal/integrationmonitor"
 	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 	"github.com/amibamae/gameserver-controller/internal/store"
@@ -82,10 +80,7 @@ func (r *Runtime) UnreachableProxies() []string {
 // supplies the check (see adapter_registry.go).
 func Validate(value config.Config) error {
 	var problems []string
-	for _, profile := range value.Adapters {
-		if profile.Implementation == "" {
-			continue
-		}
+	for _, profile := range implementedProfiles(value) {
 		builder, ok := adapterBuilders[profile.Implementation]
 		if !ok {
 			problems = append(problems, fmt.Sprintf("adapter %s: implementation %s has no runtime builder", profile.ID, profile.Implementation))
@@ -104,136 +99,46 @@ func Validate(value config.Config) error {
 	return nil
 }
 
-// Build composes the runtime. On any failure it closes what it already built.
-// Startup recovery marks steps left running by a previous process as
-// outcome_unknown; it makes no adapter calls. A recovery failure stops
-// startup, because serving with unrecoverable durable state is unsafe.
-func Build(ctx context.Context, value config.Config, configPath string, options Options) (_ *Runtime, err error) {
+// Build composes the runtime: schemas, store, adapter registry, monitoring
+// policy, adapters (creating the credential resolver when one first needs
+// it), workflow definitions, engine, recovery, and the idempotency keyring,
+// in that order (see runtimeBuildSteps). On any failure it closes what it
+// already built. Startup recovery marks steps left running by a previous
+// process as outcome_unknown; it makes no adapter calls. A recovery failure
+// stops startup, because serving with unrecoverable durable state is unsafe.
+func Build(ctx context.Context, value config.Config, configPath string, options Options) (*Runtime, error) {
 	if ctx == nil || options.ControllerVersion == "" {
 		return nil, errors.New("context and controller version are required")
 	}
 	if err := Validate(value); err != nil {
 		return nil, err
 	}
-	runtime := &Runtime{servers: map[string]config.ServerProfile{}, adapterEnvironments: map[string]string{}}
-	for _, server := range value.Servers {
-		runtime.servers[server.ID] = server
-	}
-	defer func() {
-		if err != nil {
-			runtime.Close()
-		}
-	}()
-	if runtime.Schemas, err = schemaregistry.Load(); err != nil {
-		return nil, fmt.Errorf("load protocol schemas: %w", err)
-	}
-	if runtime.Store, err = store.OpenBolt(config.ResolveStateStorePath(configPath, value.Controller.StateStore.Path)); err != nil {
+	build := newRuntimeBuild(ctx, value, configPath, options)
+	if err := build.run(); err != nil {
+		// The build error is the one to report. Close still stops every
+		// process and closes the store before returning its own error, so
+		// nothing is left running; that error would only hide the cause.
+		_ = build.runtime.Close()
 		return nil, err
 	}
-	if runtime.Registry, err = adapter.NewRegistry(runtime.Schemas); err != nil {
-		return nil, err
-	}
-	if runtime.monitorPolicy, err = value.Controller.Monitoring.ProxyPolicy(); err != nil {
-		return nil, fmt.Errorf("controller.monitoring.proxy: %w", err)
-	}
-	if err = runtime.registerAdapters(ctx, value, options); err != nil {
-		return nil, err
-	}
-	definitions := workflow.NewDefinitions()
-	define, err := workflow.NewServerDefineDefinition(runtime.Store)
-	if err != nil {
-		return nil, err
-	}
-	if err = definitions.Register("server.define", define); err != nil {
-		return nil, err
-	}
-	timeout, err := time.ParseDuration(value.Controller.Defaults.OperationTimeout)
-	if err != nil {
-		return nil, errors.New("controller.defaults.operation_timeout is invalid")
-	}
-	attempts := 1
-	if value.Controller.Defaults.RetryLimit != nil {
-		attempts += *value.Controller.Defaults.RetryLimit
-	}
-	if runtime.Engine, err = workflow.NewEngine(runtime.Store, runtime.Registry, runtime.Schemas, definitions, denyResume{}, timeout, attempts); err != nil {
-		return nil, err
-	}
-	recovered, err := runtime.Engine.Recover(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("recover durable operations: %w", err)
-	}
-	for _, operation := range recovered {
-		runtime.recovered = append(runtime.recovered, operation.Record.OperationID)
-	}
-	if runtime.keyring, err = buildKeyring(value.Controller.IdempotencyKeys, options.CredentialDirectory); err != nil {
-		return nil, err
-	}
-	return runtime, nil
-}
-
-func (r *Runtime) registerAdapters(ctx context.Context, value config.Config, options Options) error {
-	var resolver *credential.Resolver
-	for _, profile := range value.Adapters {
-		if profile.Implementation == "" {
-			continue
-		}
-		builder, ok := adapterBuilders[profile.Implementation]
-		if !ok {
-			return fmt.Errorf("adapter %s: unsupported implementation %s", profile.ID, profile.Implementation)
-		}
-		profileID := profile.ID
-		built, err := builder.build(adapterBuild{
-			ctx: ctx, value: value, profile: profile, protocolVersion: r.Schemas.ProtocolVersion(), options: options, schemas: r.Schemas,
-			credentials: func() (credentialResolver, error) {
-				if resolver == nil {
-					var err error
-					if resolver, err = credential.NewResolver(options.CredentialDirectory); err != nil {
-						return nil, fmt.Errorf("adapter %s needs systemd credentials: %w", profileID, err)
-					}
-				}
-				return resolver, nil
-			},
-		})
-		if built.process != nil {
-			r.processes = append(r.processes, built.process)
-		}
-		if err != nil {
-			return fmt.Errorf("adapter %s: %w", profile.ID, err)
-		}
-		if built.unreachableProxy {
-			r.unreachableProxies = append(r.unreachableProxies, profile.ID)
-		}
-		if built.monitor != nil {
-			r.monitorTargets = append(r.monitorTargets, *built.monitor)
-		}
-		if built.destination != nil {
-			r.destinations = append(r.destinations, *built.destination)
-		}
-		if environment := config.BoundEnvironment(profile); environment != "" {
-			r.adapterEnvironments[profile.ID] = environment
-		}
-		if err := r.Registry.Register(built.implementation); err != nil {
-			return fmt.Errorf("adapter %s: %w", profile.ID, err)
-		}
-		r.adapters = append(r.adapters, profile.ID)
-	}
-	return nil
+	return build.runtime, nil
 }
 
 // MonitoredIntegrations returns the adapter IDs the outage monitor probes.
 func (r *Runtime) MonitoredIntegrations() []string {
-	ids := make([]string, 0, len(r.monitorTargets))
-	for _, target := range r.monitorTargets {
-		ids = append(ids, target.Subject.AdapterID)
-	}
-	return ids
+	return adapterIDsOf(r.monitorTargets, func(target integrationmonitor.Target) string { return target.Subject.AdapterID })
 }
 
 // Notifiers returns the notifier adapter IDs that receive monitor events.
 func (r *Runtime) Notifiers() []string {
-	ids := make([]string, 0, len(r.destinations))
-	for _, destination := range r.destinations {
-		ids = append(ids, destination.AdapterID)
+	return adapterIDsOf(r.destinations, func(destination integrationmonitor.Destination) string { return destination.AdapterID })
+}
+
+// adapterIDsOf returns the adapter ID of each item, in order.
+func adapterIDsOf[T any](items []T, adapterID func(T) string) []string {
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, adapterID(item))
 	}
 	return ids
 }

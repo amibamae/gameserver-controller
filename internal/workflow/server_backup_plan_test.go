@@ -9,7 +9,6 @@ import (
 
 	"github.com/amibamae/gameserver-controller/internal/adapter"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
-	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
@@ -89,10 +88,7 @@ func TestDegradedBackupResumesOnlyOnExplicitRequestAndRequiresFreshReadiness(t *
 
 func newBackupPlanFixture(t *testing.T, resume bool) (*ServerBackupWorkflow, store.OperationRecord) {
 	t.Helper()
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	server := backupLifecycleServer("ready")
 	server.DisplayName = "Pilot"
 	server.StorageProfile = "storage-profile"

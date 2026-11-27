@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "reservations": {
+    "shared-protocol-schemas": [],
+    "shared-config-updates": [],
+    "adapter-implementations": [
+      "internal/vultrapi/*",
+      "internal/wasabistorage/*"
+    ],
+    "core-workflow": ["internal/controller/workflow_*.go"],
+    "simulation-harness": ["internal/simulation/*"]
+  },
+  "currentOwners": {},
+  "pendingClaims": []
+}

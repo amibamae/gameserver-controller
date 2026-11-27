@@ -1,0 +1,96 @@
+{
+  "version": "1.0",
+  "agents": [
+    {
+      "id": "agent-1",
+      "name": "Vultr Hosting Agent",
+      "role": "implementation",
+      "capabilities": ["vultr-api", "vm-management", "network-config"],
+      "status": "idle",
+      "lastHeartbeat": null,
+      "currentTask": null,
+      "worktree": null
+    },
+    {
+      "id": "agent-2",
+      "name": "Wasabi Storage Agent",
+      "role": "implementation",
+      "capabilities": ["wasabi-s3", "object-storage", "streaming-upload"],
+      "status": "idle",
+      "lastHeartbeat": null,
+      "currentTask": null,
+      "worktree": null
+    },
+    {
+      "id": "agent-3",
+      "name": "Systemd + Game Agent",
+      "role": "implementation",
+      "capabilities": ["systemd-units", "service-management", "game-lifecycle"],
+      "status": "idle",
+      "lastHeartbeat": null,
+      "currentTask": null,
+      "worktree": null
+    },
+    {
+      "id": "agent-4",
+      "name": "Conformance Testing Agent",
+      "role": "implementation",
+      "capabilities": ["protocol-tests", "conformance-checks", "regression-tests"],
+      "status": "idle",
+      "lastHeartbeat": null,
+      "currentTask": null,
+      "worktree": null
+    },
+    {
+      "id": "agent-5",
+      "name": "General Development Agent",
+      "role": "implementation",
+      "capabilities": ["general-purpose", "bug-fixing", "refactoring"],
+      "status": "available",
+      "lastHeartbeat": null,
+      "currentTask": null,
+      "worktree": null
+    },
+    {
+      "id": "agent-6",
+      "name": "General Development Agent",
+      "role": "implementation",
+      "capabilities": ["general-purpose", "bug-fixing", "refactoring"],
+      "status": "available",
+      "lastHeartbeat": null,
+      "currentTask": null,
+      "worktree": null
+    },
+    {
+      "id": "agent-7",
+      "name": "General Development Agent",
+      "role": "implementation",
+      "capabilities": ["general-purpose", "bug-fixing", "refactoring"],
+      "status": "available",
+      "lastHeartbeat": null,
+      "currentTask": null,
+      "worktree": null
+    },
+    {
+      "id": "agent-8",
+      "name": "Simulation Harness Agent",
+      "role": "implementation",
+      "capabilities": ["simulator", "fault-injection", "performance-tests"],
+      "status": "available",
+      "lastHeartbeat": null,
+      "currentTask": null,
+      "worktree": null,
+      "handoffFrom": "agent-9"
+    },
+    {
+      "id": "agent-9",
+      "name": "Coordination Agent",
+      "role": "coordination",
+      "capabilities": ["orchestration", "task-management", "lifecycle-governance"],
+      "status": "active",
+      "lastHeartbeat": null,
+      "currentTask": "monitoring-agent-coordination",
+      "worktree": null
+    }
+  ]
+}

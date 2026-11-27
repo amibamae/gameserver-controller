@@ -350,7 +350,7 @@ func TestBrokerR3StagedRecordMatches(t *testing.T) {
 	for _, tc := range cases {
 		record := base
 		tc.mutate(&record)
-		if got := stagedRecordMatches(record, call.operation, call.step, call.expectation, brokerR3Sink, true); got != tc.want {
+		if got := stagedRecordMatches(record, stepStreams{operation: call.operation, step: call.step, direction: brokerR3Sink, storesBytes: true}, call.expectation); got != tc.want {
 			t.Errorf("%s: stagedRecordMatches = %v, want %v", tc.name, got, tc.want)
 		}
 	}

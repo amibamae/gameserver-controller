@@ -307,30 +307,37 @@ func matchesExpectedReason(actual, expected string) bool {
 }
 
 func decide(policy policyDocument, environment string, instances []existingInstance) decision {
-	requestedGroup := ""
-	var requestedCapacity int
-	for groupID, group := range policy.CapacityGroups {
-		for _, accepted := range group.AcceptedEnvironments {
-			if environment == accepted {
-				requestedGroup = groupID
-				requestedCapacity = group.MaxInstances
-				break
-			}
-		}
-		if requestedGroup != "" {
-			break
-		}
-	}
+	requestedGroup, requestedCapacity := capacityGroupFor(policy.CapacityGroups, environment)
 	if requestedGroup == "" {
 		return decision{Allowed: false, Reason: "unsupported_environment"}
 	}
+	occupied, groupOccupied := occupiedCapacity(policy, requestedGroup, instances)
+	if occupied >= policy.MaxInstancesTotal {
+		return decision{Allowed: false, Reason: "total_limit_reached"}
+	}
+	if groupOccupied >= requestedCapacity {
+		return decision{Allowed: false, Reason: "slot_occupied"}
+	}
+	return decision{Allowed: true, Reason: "slot_available"}
+}
 
+func capacityGroupFor(groups map[string]capacityGroup, environment string) (string, int) {
+	for groupID, group := range groups {
+		for _, accepted := range group.AcceptedEnvironments {
+			if environment == accepted {
+				return groupID, group.MaxInstances
+			}
+		}
+	}
+	return "", 0
+}
+
+func occupiedCapacity(policy policyDocument, requestedGroup string, instances []existingInstance) (int, int) {
 	releasedStates := make(map[string]bool)
 	for _, state := range policy.CreatePolicy.Occupancy.ReleaseOnlyAfterProviderConfirmation {
 		releasedStates[state] = true
 	}
-	occupied := 0
-	groupOccupied := 0
+	occupied, groupOccupied := 0, 0
 	groupEnvironments := make(map[string]bool)
 	for _, accepted := range policy.CapacityGroups[requestedGroup].AcceptedEnvironments {
 		groupEnvironments[accepted] = true
@@ -344,11 +351,5 @@ func decide(policy policyDocument, environment string, instances []existingInsta
 			groupOccupied++
 		}
 	}
-	if occupied >= policy.MaxInstancesTotal {
-		return decision{Allowed: false, Reason: "total_limit_reached"}
-	}
-	if groupOccupied >= requestedCapacity {
-		return decision{Allowed: false, Reason: "slot_occupied"}
-	}
-	return decision{Allowed: true, Reason: "slot_available"}
+	return occupied, groupOccupied
 }

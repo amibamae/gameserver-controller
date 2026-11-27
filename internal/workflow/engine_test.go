@@ -18,7 +18,6 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/fakeadapter"
 	"github.com/amibamae/gameserver-controller/internal/inputbinding"
 	"github.com/amibamae/gameserver-controller/internal/protocolstate"
-	"github.com/amibamae/gameserver-controller/internal/schemaregistry"
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
@@ -139,10 +138,7 @@ func TestBoundStepPersistsValidatedResolvedInputBeforeDispatch(t *testing.T) {
 }
 
 func TestServerDefineCompletesWithTypedResultWithoutAdapterDispatch(t *testing.T) {
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	adapterRegistry, err := adapter.NewRegistry(schemas)
 	if err != nil {
 		t.Fatal(err)
@@ -549,10 +545,7 @@ func newLifecycleEngineFixture(t *testing.T) engineFixture {
 
 func newEngineFixtureForOperation(t *testing.T, operationID, capabilityVersion string, replies []fakeadapter.Reply, mutating bool, operationType string, projectLifecycle bool, extraSteps ...store.OperationStep) engineFixture {
 	t.Helper()
-	schemas, err := schemaregistry.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	schemas := workflowTestSchemas(t)
 	adapterRegistry, err := adapter.NewRegistry(schemas)
 	if err != nil {
 		t.Fatal(err)

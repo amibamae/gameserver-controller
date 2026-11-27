@@ -408,7 +408,7 @@ func TestCapacityReadinessRollsBackWithLifecycleTransaction(t *testing.T) {
 	observePresent(t, repository, reservation, "atomic-vm", now, now)
 	abort := errors.New("lifecycle transaction failed")
 	err := repository.db.Update(func(tx *bolt.Tx) error {
-		if _, err := recordCapacityReadyTx(tx, "atomic-server", "staging", "atomic-vm", "", now.Add(time.Second)); err != nil {
+		if _, err := recordCapacityReadyTx(tx, capacityInstanceQuery{ServerID: "atomic-server", EnvironmentID: "staging", ProviderInstanceID: "atomic-vm"}, now.Add(time.Second)); err != nil {
 			return err
 		}
 		return abort
