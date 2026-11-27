@@ -12,7 +12,7 @@ import (
 // filesystem would copy those secrets into /var/log and can fill the disk.
 func TestFailureHandlerOnlyRecordsTheFailure(t *testing.T) {
 	handler := between(t, renderedForTest(t), "on_error() {\n", "\n}\n")
-	if line := regexp.MustCompile(`(?m)^\s*tar\s.*$`).FindString(handler); line != "" {
+	if line := regexp.MustCompile(`(?m)^.*(?:^|[\s|;&(/])(?:tar|zip|cpio)\s.*$`).FindString(handler); line != "" {
 		t.Fatalf("the failure handler archives files: %q", strings.TrimSpace(line))
 	}
 	for _, want := range []string{
