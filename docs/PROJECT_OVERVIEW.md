@@ -419,8 +419,10 @@ lifecycle:
 
 **`scaling.vertical`** (planned; validator rejects until accepted) – turns on
 vertical auto-scaling for one server. When enabled, the controller moves the
-server one rung at a time through a plan ladder (cheapest first) via a
-migration to a migration target server. A manual scaling command pauses
+server along a plan ladder (cheapest first) via a migration to a migration
+target server. It sizes for forecast traffic: a scale-up may skip rungs when
+many players keep joining, and a scale-down moves one rung at a time, so the
+server is not switched over and over. A manual scaling command pauses
 auto-scaling for that server until it completes.
 
 ```yaml
