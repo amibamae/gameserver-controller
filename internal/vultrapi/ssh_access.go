@@ -134,34 +134,58 @@ func (c *Client) ListFirewallRules(ctx context.Context, token []byte, groupID st
 		if err != nil {
 			return nil, err
 		}
-		var envelope struct {
-			Rules []FirewallRule    `json:"firewall_rules"`
-			Meta  *instanceListMeta `json:"meta"`
-		}
-		if decodeJSON(response, &envelope) != nil || envelope.Rules == nil || envelope.Meta == nil || envelope.Meta.Total == nil ||
-			envelope.Meta.Links == nil || envelope.Meta.Links.Next == nil {
+		page, ok := decodeFirewallRulePage(response)
+		if !ok {
 			return nil, ErrInvalidResponse
 		}
 		if total == -1 {
-			total = *envelope.Meta.Total
+			total = page.total
 		}
-		if total < 0 || total > maximumPages*100 || total != *envelope.Meta.Total || len(envelope.Rules) > 100 {
+		if page.total != total || len(page.rules) > 100 {
 			return nil, ErrInvalidResponse
 		}
-		rules = append(rules, envelope.Rules...)
-		cursor = *envelope.Meta.Links.Next
+		rules = append(rules, page.rules...)
+		cursor = page.next
 		if cursor == "" {
 			if len(rules) != total {
 				return nil, ErrInvalidResponse
 			}
 			return rules, nil
 		}
-		if len(envelope.Rules) == 0 || len(rules) >= total || len(cursor) > 2048 || cursors[cursor] {
+		if len(page.rules) == 0 || len(rules) >= total || len(cursor) > 2048 || cursors[cursor] {
 			return nil, ErrInvalidResponse
 		}
 		cursors[cursor] = true
 	}
 	return nil, ErrInvalidResponse
+}
+
+type firewallRulePage struct {
+	rules []FirewallRule
+	total int
+	next  string
+}
+
+func decodeFirewallRulePage(response []byte) (firewallRulePage, bool) {
+	var envelope struct {
+		Rules []FirewallRule    `json:"firewall_rules"`
+		Meta  *instanceListMeta `json:"meta"`
+	}
+	if decodeJSON(response, &envelope) != nil || !validFirewallEnvelope(envelope.Rules, envelope.Meta) {
+		return firewallRulePage{}, false
+	}
+	total := *envelope.Meta.Total
+	if total < 0 || total > maximumPages*100 {
+		return firewallRulePage{}, false
+	}
+	return firewallRulePage{rules: envelope.Rules, total: total, next: *envelope.Meta.Links.Next}, true
+}
+
+func validFirewallEnvelope(rules []FirewallRule, meta *instanceListMeta) bool {
+	if rules == nil || meta == nil || meta.Total == nil {
+		return false
+	}
+	return meta.Links != nil && meta.Links.Next != nil
 }
 
 // SSHOnlyFrom reports whether a firewall group admits TCP port 22 only from
