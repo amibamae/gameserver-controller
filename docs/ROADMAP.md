@@ -60,6 +60,21 @@ Maintain a source-backed feature-gap assessment as part of roadmap review. Usefu
 
 For each proposed feature, establish the user problem, current GSC status, evidence of a gap, safety and licensing implications, maintenance cost and a simpler alternative. Choose native implementation, optional adapter/client, external tooling, deferral or rejection. Do not treat feature parity as a release gate or infer that a competitor lacks undocumented safety mechanisms.
 
+**Simple by default, sophisticated when necessary.** Treat unnecessary
+complexity as a product and maintenance defect. Apply the following criteria
+to new features and to reviews of existing abstractions:
+
+- Identify a concrete user or operational need, measurable benefit and the simplest safe alternative. Prefer reuse, focused implementations or deferral over speculative infrastructure. Optionality alone is not justification to build a feature.
+- Keep the standalone path first-class: no mandatory PostgreSQL, clustering, Kubernetes, external monitoring or additional hosting providers. Advanced availability, scaling, integrations and power-user options must be explicitly enabled, independently configurable where applicable, documented and testable.
+- Verify baseline installation, startup, upgrades, core workflows and recovery without optional features or their dependencies. Test each enabled feature's behavior and relevant failure/isolation paths; absence or outage of a nonessential integration must not prevent normal core operation. An enabled feature may require its own dependencies and must fail safely.
+- Evaluate complexity over the full lifecycle: configuration, code comprehension, resource use, security, testing, upgrades and ongoing maintenance. Document tradeoffs in the proposal or PR; remove redundant abstractions through behavior-preserving, reviewed changes rather than adding layers to satisfy metrics.
+- Keep essential security, authorization, durable recovery, world integrity and exact-target destructive-action checks mandatory. Never make a safety invariant an optional power-user setting.
+
+Do not make optional advanced capabilities prerequisites for personal
+production readiness unless evidence establishes a real dependency. Preserve
+the existing long-term reliability objectives as optional tiers or research,
+not as promises or mandatory infrastructure.
+
 ### Parallel delivery and evidence
 
 Use the existing [coordination workflow](../GSC_COORDINATION.md) and [CLI](COORDINATION_CLI.md), active task claims, file reservations, isolated branches/worktrees and handoffs. Check current ownership before editing, coordinate shared interface changes and reuse work already underway. This prioritization applies to remediation work; it does not revoke other agents' authorization, block unrelated changes, or permit overwriting their work. Continue independent tasks when a dependency is occupied or blocked.
