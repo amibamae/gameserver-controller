@@ -19,6 +19,7 @@ The project owner requires this for all work, including future conversations.
 - Run `gofmt -l .`, `go vet ./...`, `go test ./...`, and `go run ./cmd/protocol-check` before pushing.
 - Open a pull request for each change, merge after CI is green, and delete the branch.
 - Integration is a responsibility category, not an optional one. Every backend gets its own domain from one naming scheme.
+- Test harnesses (fakes, simulators) follow [docs/TEST_HARNESSES.md](docs/TEST_HARNESSES.md): check the index there before writing a new fake, give every harness the label line, list it in `internal/testharness`, and import it only from `_test.go` files. Never register a harness as a runtime adapter.
 
 ## Code health for new and changed code
 
