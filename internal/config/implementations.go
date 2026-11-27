@@ -139,6 +139,7 @@ func BoundEnvironment(profile AdapterProfile) string {
 // Content may contain flat scalar key-value pairs at alternating positions,
 // or a MappingNode wrapping nested content (like secret_refs).
 func buildInlineYAML(content []*yaml.Node, builder *strings.Builder) error {
+	fmt.Printf("buildInlineYAML ENTRY: len(content)=%d\n", len(content))
 	if len(content) == 0 {
 		return nil
 	}
@@ -218,6 +219,7 @@ func resolveSettings(profile *AdapterProfile) error {
 	settings := implementation.NewSettings()
 
 	var builder strings.Builder
+	fmt.Printf("resolveSettings %q: var builder declared\n", profile.Implementation)
 
 	// Build YAML from block node's Content array using inline format.
 	if err := buildInlineYAML(block.Content, &builder); err != nil {
