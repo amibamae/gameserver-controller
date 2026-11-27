@@ -38,6 +38,8 @@ func evaluateManagementSubmitDecision(_ *protocolPackage, fixture map[string]any
 			switch prior {
 			case "different_request":
 				status, code = 409, "core.operation.idempotency_conflict"
+			case "expired_key":
+				status, code = 409, "core.operation.idempotency_key_expired"
 			}
 		}
 		if stringValue(c, "route") == "define" {
