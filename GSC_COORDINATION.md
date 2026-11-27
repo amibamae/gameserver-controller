@@ -1,6 +1,49 @@
-# GSC Coordination File - Bootstrap Implementation Complete ✅
+# GSC coordination
 
-## Baseline
+Agents working in this repository claim tasks and reserve files through the coordination CLI, `cmd/coordination`. [docs/COORDINATION_CLI.md](docs/COORDINATION_CLI.md) documents every command. Check the registry before you start work, and claim a task before you edit files for it.
+
+## Where the coordination state lives
+
+On the owner's workstation every agent shares one state directory:
+
+```
+C:\Users\water\.opencode\coordination\state
+```
+
+Point the CLI at it in every shell before running a command:
+
+```powershell
+$env:GSC_COORDINATION_DIR = 'C:\Users\water\.opencode\coordination\state'
+```
+
+```bash
+export GSC_COORDINATION_DIR='C:/Users/water/.opencode/coordination/state'
+```
+
+Never run the CLI there without `GSC_COORDINATION_DIR` (or `--dir`). Without it, the CLI falls back to `COORDINATION/` in the clone's main worktree. On that machine the main worktree is a checkout where other agents have uncommitted work, and the fallback would edit tracked files in it.
+
+A prebuilt binary is at `C:\Users\water\.opencode\coordination\bin\gsc-coordination.exe`. Anywhere else, use `go run ./cmd/coordination` from your worktree. The `COORDINATION/` directory in this repository is the committed copy of the registry, not the live state.
+
+## Workflow
+
+Commands that change state need your agent ID: pass `--agent`, or set `$GSC_AGENT_ID`.
+
+1. Register once: `register --name "<agent-name>" --session-id <session-id>`.
+2. Find work: `available` lists claimable tasks with dependency warnings, and `status` shows who holds what.
+3. Claim: `claim --task-id <TASK-ID>`. If the claim is refused, someone else holds the task. Pick another task. Never edit the state files by hand.
+4. Reserve the files you will edit: `reserve --files '<path-or-glob>,...'`.
+5. Report progress with `update --task-id <TASK-ID> --progress "<step>"`, or `block --task-id <TASK-ID> --reason "<why>"` when you are blocked. Each of these counts as a heartbeat; a claim expires after 24 hours without one.
+6. Finish: open the pull request, then run `complete --task-id <TASK-ID> --pr-number <N>`. If you stop without finishing, run `handoff` or `release` instead.
+
+Do your work on a task branch in your own worktree, never in a checkout another agent is using (see `AGENTS.md`).
+
+---
+
+## Archive: bootstrap session log
+
+The rest of this file is an earlier session's status log, kept for history. It is not the current coordination state.
+
+### Baseline
 - `origin/main` at `fb606f54de6268ff0fe1e76c67014571364404cb` (HEAD)
 - Current session: `gsc-restore-health` (detached at origin/main)
 
