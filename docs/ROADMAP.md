@@ -2,6 +2,54 @@
 
 **Status:** Planning document. The phases are ordered to reduce production risk; dates are not commitments.
 
+## Current focus: product readiness and competitive usefulness
+
+**Priority set on 2026-11-27.** The primary product is a self-hosted, provider-independent controller for persistent game worlds on cost-aware, disposable infrastructure. Its value must be demonstrated by a working reference deployment, recoverable world data, measurable operational benefits and understandable code, rather than the number of schemas, adapters, tests or merged pull requests.
+
+This section sets priorities across the existing phases; it does not replace their checklists, declare unfinished work complete, change protocol contracts or freeze other authorized development. The first reference deployment remains Go + bbolt + systemd, Vultr, Wasabi, Paper and Velocity. Advanced reliability and portability work remains on the roadmap, with optional integrations and independent clients rather than mandatory infrastructure.
+
+### P0: Finish and prove the reference lifecycle
+
+- [ ] Connect the real hosting, storage, execution, game and integration adapters to the durable runtime and management operations for provision, start, stop, backup, restore and authorized destruction. Reuse existing implementations and in-progress work; distinguish runtime registration from actual workflow integration.
+- [ ] Ensure durably accepted operations cannot be stranded by queue saturation or worker failure. Reconcile waiting and ambiguous outcomes automatically with bounded backoff, resource locking, restart recovery and observable errors. Preserve authorized operator intervention.
+- [ ] Demonstrate the complete reference lifecycle on isolated resources: player joins the lobby; create the exact VM; secure bootstrap and pinned SSH handoff; restore the authoritative world; start Paper; establish fresh readiness and route players; recover a Paper crash on the same healthy VM; safely drain and stop; save and independently verify a fresh backup; destroy only the exact authorized staging VM; confirm provider absence; recreate and restore the latest world.
+- [ ] Verify world integrity, inventories and progress after restoration; bind backup proof to the correct world, environment, instance and data generation. Prevent stale-world overwrite, unsafe concurrent writers and destructive cleanup after failed or uncertain verification. Keep production destruction disabled and preserve configurable backup/rollback retention.
+- [ ] Exercise real failure paths in isolation: lost provider responses, duplicate requests, controller crashes around side effects, queue saturation, stale readiness, SSH and provider outages, corrupted or incomplete backups, disk exhaustion, players joining during shutdown and uncertain destruction. Test fakes must never be production adapters; use the existing [test harness rules](TEST_HARNESSES.md).
+- [ ] Stabilize maintainability: audit duplicated or unnecessary abstractions, stale implementation reports and committed build outputs; prefer focused behavior-preserving changes with characterization tests and independent review. Preserve existing safety invariants, protocol-first discipline and code-health rules.
+- [ ] Prepare a reproducible alpha candidate with installation instructions, versioned build artifacts, documented limitations and evidence of staging recovery. Independent review and authorized live verification are required before making production-readiness claims.
+
+### P1: Make the controller usable
+
+- [ ] Complete the operator-facing management API, CLI setup, configuration validation, diagnostics and operation progress (including cold-start progress and actionable failure reasons).
+- [ ] Evaluate maintenance lockout, scheduled backups and maintenance, scoped player/delegated administration and a secure remote console. Prefer existing SSH/SFTP facilities for file transfer; keep an independent panel or Discord command client optional, with least-privilege authorization.
+- [ ] Improve deployment templates, installation reproducibility, and documentation for an independent operator to deploy without AI assistance. Review privacy and consent for any player-related controls or metrics.
+
+### P2: Demonstrate operational and economic value
+
+- [ ] Measure idle CPU and memory, database growth, boot/restore/readiness time, player wait, backup and verification duration, network/disk usage, recovery time and billed VM hours. Compare total operating cost against fixed-price hosting for representative workloads; distinguish measurements from estimates.
+- [ ] Evaluate actual session-cost accounting, configurable spending limits and alerts, and billing-aware shutdown using documented provider behavior. Do not let cost optimization bypass data safety or active-player protections.
+- [ ] Evaluate optional scheduled prewarming and idle grace policies to reduce cold starts; disclose the cost tradeoff and keep scale-to-zero available.
+- [ ] Evaluate incremental/deduplicated backups and direct VM-to-object-storage transfers with independent verification. Prefer mature tools where compatible with world lineage, authorization and restore guarantees.
+
+### P3: Expand through justified optional integrations
+
+- Evaluate a second real hosting provider and game implementation after the reference path provides a credible baseline; use the existing adapter contracts rather than duplicating orchestration.
+- Evaluate LinuxGSM, existing Minecraft container tooling, backup tools such as Restic, and infrastructure-as-code integrations where they reduce implementation and maintenance cost. Adoption requires license/security review and the same save, readiness, recovery and restore guarantees as native adapters.
+- Keep VictoriaLogs, Homelable, external panels, Discord clients, container execution and other deployment choices optional. Failure or absence of an optional integration must not prevent core operation.
+- Evaluate region/latency/cost-aware placement, vertical and horizontal scaling, warm pools and advanced availability profiles against measured demand. The existing scaling and reliability decisions remain in place; they are not prerequisites for a usable standalone controller. See [ADR 0006](decisions/0006-optional-ha-and-reliability-tiers.md). Availability and world-durability targets are objectives, not demonstrated guarantees.
+
+### Competitive review and scope discipline
+
+Maintain a source-backed feature-gap assessment as part of roadmap review. Useful references include [Impulse](https://github.com/Arson-Club/Impulse) and [lazymc](https://github.com/timvisee/lazymc) for wake-on-demand and player experience; [MineCloud](https://github.com/VeriorPies/MineCloud) and [exaroton](https://exaroton.com/) for on-demand hosting and delegated controls; [Pterodactyl](https://pterodactyl.io/) and [Pelican](https://pelican.dev/) for operator experience; [Agones](https://agones.dev/) for allocation and scaling; [LinuxGSM](https://linuxgsm.com/), [Restic](https://restic.net/) and [Temporal](https://temporal.io/) for reusable components and implementation patterns. Review other alternatives as relevant.
+
+For each proposed feature, establish the user problem, current GSC status, evidence of a gap, safety and licensing implications, maintenance cost and a simpler alternative. Choose native implementation, optional adapter/client, external tooling, deferral or rejection. Do not treat feature parity as a release gate or infer that a competitor lacks undocumented safety mechanisms.
+
+### Parallel delivery and evidence
+
+Use the existing [coordination workflow](../GSC_COORDINATION.md) and [CLI](COORDINATION_CLI.md), active task claims, file reservations, isolated branches/worktrees and handoffs. Check current ownership before editing, coordinate shared interface changes and reuse work already underway. This prioritization applies to remediation work; it does not revoke other agents' authorization, block unrelated changes, or permit overwriting their work. Continue independent tasks when a dependency is occupied or blocked.
+
+Record implementation status separately from verification: planned, partial, implemented but not runtime-connected, fake-tested, locally verified, live staging verified or production verified, as applicable. A completion claim needs source and reproducible evidence; green CI alone is not live verification. Keep unverified criteria visible. Respect independent review, required checks and owner authorization for infrastructure spending, destructive actions and releases.
+
 ## Estimated timeline
 
 These ranges are elapsed calendar time from November 2026. Plan for **12–18 months for the full roadmap through Phase 7**, with room to extend the schedule if agent availability or live testing cause longer pauses. The milestones overlap, so the ranges are measured from the same starting point.
