@@ -25,7 +25,7 @@ See the [roadmap's scope discipline](docs/ROADMAP.md#competitive-review-and-scop
 | Self-hosted | Start and stop game workloads on Proxmox VE; optionally power down dedicated idle hosts when a safe independent wake path exists. |
 | Hybrid | Use local and cloud capacity together, subject to resource limits, cost policies and verified recovery. |
 
-Vultr remains a first-class hosting option. Proxmox and hybrid orchestration are planned, not currently supported end to end. The owner intends to migrate compute locally only if capacity, networking and recovery tests justify it. Wasabi remains the reference off-site object store for backups and versioned artifacts, independent of the compute provider.
+Vultr remains a first-class hosting option. Proxmox and hybrid orchestration are planned, not currently supported end to end. The owner intends to migrate compute locally only if capacity, networking and recovery tests justify it. Wasabi remains the primary persistent object store for world data, backups and versioned artifacts, independent of the compute provider.
 
 ## Intended workloads
 
