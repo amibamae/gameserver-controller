@@ -48,21 +48,21 @@ func (a *Adapter) copyObject(ctx context.Context, request adapter.InvokeRequest)
 	return copyOutput(input.Destination, ref, count, result), nil
 }
 
-func (a *Adapter) decodeCopy(request adapter.InvokeRequest) (copyInput, error) {
-	return decodeChecked(request, inputRules[copyInput]{
+func (a *Adapter) decodeCopy(request adapter.InvokeRequest) (CopyInput, error) {
+	return decodeChecked(request, inputRules[CopyInput]{
 		rejection: "invalid object copy request",
-		accept:    func(in copyInput) bool { return a.acceptsCopy(request, in) },
+		accept:    func(in CopyInput) bool { return a.acceptsCopy(request, in) },
 		check:     a.copyPreconditions,
 	})
 }
 
-func (a *Adapter) acceptsCopy(request adapter.InvokeRequest, input copyInput) bool {
+func (a *Adapter) acceptsCopy(request adapter.InvokeRequest, input CopyInput) bool {
 	return a.validRequestEnvironment(request) && a.validReference(input.SourceRef) && a.validTarget(input.Destination) &&
 		validExpected(input.ExpectedSizeBytes, input.ExpectedChecksum, a.config.MaxObjectBytes)
 }
 
 // copyPreconditions refuses a copy the profile or a single request cannot make.
-func (a *Adapter) copyPreconditions(input copyInput) error {
+func (a *Adapter) copyPreconditions(input CopyInput) error {
 	switch {
 	case a.refusedVersion(input.SourceRef.VersionID):
 		return errors.New("an exact source object version is required by this storage profile")
@@ -75,7 +75,7 @@ func (a *Adapter) copyPreconditions(input copyInput) error {
 }
 
 // checkCopySource confirms the requested source version and its size.
-func (a *Adapter) checkCopySource(ctx context.Context, client s3Client, input copyInput) error {
+func (a *Adapter) checkCopySource(ctx context.Context, client s3Client, input CopyInput) error {
 	source, err := client.HeadObject(ctx, a.headRequest(input.SourceRef.Key, input.SourceRef.VersionID))
 	if err != nil {
 		return errors.New("Wasabi copy source could not be inspected")
@@ -101,7 +101,7 @@ func (a *Adapter) checkCopyDestination(ctx context.Context, client s3Client, des
 	return nil
 }
 
-func (a *Adapter) copyRequest(input copyInput) *s3.CopyObjectInput {
+func (a *Adapter) copyRequest(input CopyInput) *s3.CopyObjectInput {
 	return &s3.CopyObjectInput{Bucket: aws.String(a.config.Container), Key: aws.String(input.Destination.Key),
 		CopySource: aws.String(a.copySource(input.SourceRef)), ChecksumAlgorithm: types.ChecksumAlgorithmSha256}
 }
@@ -127,7 +127,7 @@ func (a *Adapter) copiedReference(destination objectTarget, result *s3.CopyObjec
 
 // verifyCopy reads the copy back and returns its size once its size and
 // SHA-256 match the expected values.
-func (a *Adapter) verifyCopy(ctx context.Context, client s3Client, ref objectReference, input copyInput) (int64, error) {
+func (a *Adapter) verifyCopy(ctx context.Context, client s3Client, ref objectReference, input CopyInput) (int64, error) {
 	readback := &s3.GetObjectInput{Bucket: aws.String(a.config.Container), Key: aws.String(ref.Key), VersionId: optionalVersion(ref.VersionID)}
 	body, err := client.GetObject(ctx, readback)
 	if err != nil {
@@ -139,12 +139,12 @@ func (a *Adapter) verifyCopy(ctx context.Context, client s3Client, ref objectRef
 	hasher := sha256.New()
 	count, err := io.Copy(hasher, io.LimitReader(body.Body, input.ExpectedSizeBytes+1))
 	if err != nil || !copiedAsExpected(count, hasher.Sum(nil), input) {
-		return 0, sideEffectError("Wasabi copy does not match the expected size and checksum")
+		return 0, sideEffectError("Wasabi copy does not match the expected size and Checksum")
 	}
 	return count, nil
 }
 
-func copiedAsExpected(count int64, digest []byte, input copyInput) bool {
+func copiedAsExpected(count int64, digest []byte, input CopyInput) bool {
 	return count == input.ExpectedSizeBytes && strings.EqualFold(hex.EncodeToString(digest), input.ExpectedChecksum.Digest)
 }
 

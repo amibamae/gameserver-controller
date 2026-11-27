@@ -230,7 +230,7 @@ func TestStorageR3StageVerifiedUploadRemovesRejectedBytes(t *testing.T) {
 			tempDir := storageR3PrivateTemp(t)
 			file, err := stageVerifiedUpload(bytes.NewReader(stream), int64(len(storageR3Content)), storageR3Checksum(storageR3Content).Digest)
 			text := storageR3Text(err)
-			storageR3Equal(t, "error", text, "upload data does not match the declared size and checksum")
+			storageR3Equal(t, "error", text, "upload data does not match the declared size and Checksum")
 			storageR3Equal(t, "file", file, nil)
 			storageR3NoStaging(t, tempDir)
 		})
@@ -246,6 +246,6 @@ func TestStorageR3StagingUnavailable(t *testing.T) {
 	impl := storageR3Adapter(t, testConfig(), storageR3NewClient(), nil, nil)
 	request, source := storageR3PutRequest(storageR3PutInput(), storageR3Content)
 	response, err := impl.Invoke(context.Background(), request)
-	storageR3Failed(t, response, err, "upload stream did not match its declared size and checksum", false)
+	storageR3Failed(t, response, err, "upload stream did not match its declared size and Checksum", false)
 	storageR3Equal(t, "upload stream closes", source.closed, 1)
 }

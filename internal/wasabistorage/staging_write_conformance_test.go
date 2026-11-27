@@ -57,8 +57,8 @@ func TestStagingWriteConformanceDeniesProductionTarget(t *testing.T) {
 	content := []byte("fixture backup")
 	digest := sha256.Sum256(content)
 	target := testRef("server/world.tar", "").objectTarget
-	input := putInput{Target: target, ExpectedSizeBytes: int64(len(content)),
-		ExpectedChecksum: checksum{Algorithm: "sha256", Digest: hex.EncodeToString(digest[:])}}
+	input := PutInput{Target: target, ExpectedSizeBytes: int64(len(content)),
+		ExpectedChecksum: Checksum{Algorithm: "sha256", Digest: hex.EncodeToString(digest[:])}}
 	invokeForTarget := func(environment string) error {
 		input.Target.EnvironmentID = environment
 		request := requestFor(fixture.Capability, input, time.Now().Add(time.Minute), "controller_to_adapter", int64(len(content)))

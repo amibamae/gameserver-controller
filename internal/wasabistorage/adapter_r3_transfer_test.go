@@ -24,13 +24,13 @@ const storageR3Ref = `{"adapter_id":"storage.wasabi-staging","storage_profile_id
 
 var storageR3Content = []byte("world archive bytes")
 
-func storageR3PutInput() putInput {
-	return putInput{Target: storageR3Target("server/world.tar"), ExpectedSizeBytes: int64(len(storageR3Content)), ExpectedChecksum: storageR3Checksum(storageR3Content)}
+func storageR3PutInput() PutInput {
+	return PutInput{Target: storageR3Target("server/world.tar"), ExpectedSizeBytes: int64(len(storageR3Content)), ExpectedChecksum: storageR3Checksum(storageR3Content)}
 }
 
 // storageR3PutRequest builds a put request whose one upload stream carries
 // content and counts its Close calls.
-func storageR3PutRequest(input putInput, content []byte) (adapter.InvokeRequest, *storageR3Reader) {
+func storageR3PutRequest(input PutInput, content []byte) (adapter.InvokeRequest, *storageR3Reader) {
 	request := requestFor("storage.object.put", input, time.Now().Add(time.Minute), "controller_to_adapter", int64(len(storageR3Content)))
 	source := &storageR3Reader{Reader: bytes.NewReader(content)}
 	request.Params.RequestContext.SetStreamSources(map[string]io.ReadCloser{testTransferID(): source})
@@ -43,7 +43,7 @@ type storageR3PutCase struct {
 	client     func(*storageR3Client)
 	creds      CredentialResolver
 	content    []byte // stream content; defaults to the declared content
-	input      func(*putInput)
+	input      func(*PutInput)
 	request    func(*adapter.InvokeRequest)
 	noSource   bool
 	ctx        func() context.Context
@@ -80,23 +80,23 @@ func (c storageR3PutCase) run(t *testing.T) {
 func TestStorageR3PutPaths(t *testing.T) {
 	invalid := "invalid object upload request"
 	transfer := "storage stream handle does not match the bounded transfer"
-	staging := "upload stream did not match its declared size and checksum"
+	staging := "upload stream did not match its declared size and Checksum"
 	unauthorized := "Wasabi credential references are not authorized for this invocation"
 	required := func(c *Config) { c.RequireVersionIDs = true }
 	tests := []storageR3PutCase{
 		{name: "malformed input", request: func(r *adapter.InvokeRequest) { r.Params.Input = json.RawMessage(`{`) }, want: invalid},
 		{name: "unknown shape", request: func(r *adapter.InvokeRequest) { r.Params.Input = json.RawMessage(`[]`) }, want: invalid},
 		{name: "wrong environment", request: func(r *adapter.InvokeRequest) { r.Params.RequestContext.EnvironmentID = "production" }, want: invalid},
-		{name: "target adapter", input: func(i *putInput) { i.Target.AdapterID = "storage.other" }, want: invalid},
-		{name: "target profile", input: func(i *putInput) { i.Target.StorageProfile = "other" }, want: invalid},
-		{name: "target environment", input: func(i *putInput) { i.Target.EnvironmentID = "production" }, want: invalid},
-		{name: "target container", input: func(i *putInput) { i.Target.Container = "other" }, want: invalid},
-		{name: "target prefix", input: func(i *putInput) { i.Target.Key = "other/world.tar" }, want: invalid},
-		{name: "negative size", input: func(i *putInput) { i.ExpectedSizeBytes = -1 }, want: invalid},
+		{name: "target adapter", input: func(i *PutInput) { i.Target.AdapterID = "storage.other" }, want: invalid},
+		{name: "target profile", input: func(i *PutInput) { i.Target.StorageProfile = "other" }, want: invalid},
+		{name: "target environment", input: func(i *PutInput) { i.Target.EnvironmentID = "production" }, want: invalid},
+		{name: "target container", input: func(i *PutInput) { i.Target.Container = "other" }, want: invalid},
+		{name: "target prefix", input: func(i *PutInput) { i.Target.Key = "other/world.tar" }, want: invalid},
+		{name: "negative size", input: func(i *PutInput) { i.ExpectedSizeBytes = -1 }, want: invalid},
 		{name: "size above profile", config: func(c *Config) { c.MaxObjectBytes = 4 }, want: invalid},
-		{name: "checksum algorithm", input: func(i *putInput) { i.ExpectedChecksum.Algorithm = "md5" }, want: invalid},
-		{name: "checksum length", input: func(i *putInput) { i.ExpectedChecksum.Digest = "abcd" }, want: invalid},
-		{name: "checksum hex", input: func(i *putInput) { i.ExpectedChecksum.Digest = strings.Repeat("z", 64) }, want: invalid},
+		{name: "Checksum algorithm", input: func(i *PutInput) { i.ExpectedChecksum.Algorithm = "md5" }, want: invalid},
+		{name: "Checksum length", input: func(i *PutInput) { i.ExpectedChecksum.Digest = "abcd" }, want: invalid},
+		{name: "Checksum hex", input: func(i *PutInput) { i.ExpectedChecksum.Digest = strings.Repeat("z", 64) }, want: invalid},
 		{name: "no transfer", request: func(r *adapter.InvokeRequest) { r.Params.RequestContext.StreamTransfers = nil }, want: "storage transfer requires exactly one stream handle"},
 		{name: "two transfers", request: func(r *adapter.InvokeRequest) {
 			r.Params.RequestContext.StreamTransfers = append(r.Params.RequestContext.StreamTransfers, r.Params.RequestContext.StreamTransfers[0])
@@ -171,10 +171,10 @@ func (c storageR3PutSuccess) run(t *testing.T) {
 	storageR3Equal(t, "upload stream closes", source.closed, 1)
 	storageR3Equal(t, "client factory calls", storageR3JSON(t, len(calls)), "1")
 	storageR3Equal(t, "client factory call", calls[0], storageR3FactoryCall{"us-west-1", "https://s3.us-west-1.wasabisys.com", "access-value", "secret-value"})
-	put := client.putInput
+	put := client.PutInput
 	storageR3Sent(t, put.Bucket, put.Key, nil, nil)
 	storageR3Equal(t, "provider content length", aws.ToInt64(put.ContentLength), int64(len(storageR3Content)))
-	storageR3Equal(t, "provider checksum algorithm", put.ChecksumAlgorithm, types.ChecksumAlgorithmSha256)
+	storageR3Equal(t, "provider Checksum algorithm", put.ChecksumAlgorithm, types.ChecksumAlgorithmSha256)
 	storageR3Equal(t, "staging files during transfer", len(client.stagedModes), 1)
 	storageR3PrivateMode(t, client.stagedModes[0])
 	storageR3NoStaging(t, tempDir)
@@ -202,7 +202,7 @@ type storageR3GetCase struct {
 	config     func(*Config)
 	client     func(*storageR3Client)
 	creds      CredentialResolver
-	input      func(*getInput)
+	input      func(*GetInput)
 	request    func(*adapter.InvokeRequest)
 	noSink     bool
 	want       string
@@ -215,7 +215,7 @@ func (c storageR3GetCase) run(t *testing.T) {
 	client.getBody = storageR3Content
 	storageR3Apply(c.client, client)
 	impl := storageR3Adapter(t, storageR3Config(c.config), client, c.creds, nil)
-	input := getInput{ObjectRef: objectReference{objectTarget: storageR3Target("server/world.tar")}, ExpectedSizeBytes: int64(len(storageR3Content)), ExpectedChecksum: storageR3Checksum(storageR3Content)}
+	input := GetInput{ObjectRef: objectReference{objectTarget: storageR3Target("server/world.tar")}, ExpectedSizeBytes: int64(len(storageR3Content)), ExpectedChecksum: storageR3Checksum(storageR3Content)}
 	storageR3Apply(c.input, &input)
 	request := requestFor("storage.object.get", input, time.Now().Add(time.Minute), "adapter_to_controller", int64(len(storageR3Content)))
 	sink := &storageR3Writer{}
@@ -239,10 +239,10 @@ func TestStorageR3GetPaths(t *testing.T) {
 	tests := []storageR3GetCase{
 		{name: "malformed input", request: func(r *adapter.InvokeRequest) { r.Params.Input = json.RawMessage(`{`) }, want: invalid},
 		{name: "wrong environment", request: func(r *adapter.InvokeRequest) { r.Params.RequestContext.EnvironmentID = "production" }, want: invalid},
-		{name: "reference prefix", input: func(i *getInput) { i.ObjectRef.Key = "other/world.tar" }, want: invalid},
-		{name: "reference container", input: func(i *getInput) { i.ObjectRef.Container = "other" }, want: invalid},
+		{name: "reference prefix", input: func(i *GetInput) { i.ObjectRef.Key = "other/world.tar" }, want: invalid},
+		{name: "reference container", input: func(i *GetInput) { i.ObjectRef.Container = "other" }, want: invalid},
 		{name: "size above profile", config: func(c *Config) { c.MaxObjectBytes = 4 }, want: invalid},
-		{name: "checksum algorithm", input: func(i *getInput) { i.ExpectedChecksum.Algorithm = "sha1" }, want: invalid},
+		{name: "Checksum algorithm", input: func(i *GetInput) { i.ExpectedChecksum.Algorithm = "sha1" }, want: invalid},
 		{name: "required version absent", config: func(c *Config) { c.RequireVersionIDs = true }, want: "an exact object version is required by this storage profile"},
 		{name: "no transfer", request: func(r *adapter.InvokeRequest) { r.Params.RequestContext.StreamTransfers = nil }, want: "storage transfer requires exactly one stream handle"},
 		{name: "wrong direction", request: func(r *adapter.InvokeRequest) {
@@ -257,11 +257,11 @@ func TestStorageR3GetPaths(t *testing.T) {
 		{name: "object short", client: func(c *storageR3Client) { c.getBody = storageR3Content[:4] }, want: size, sinkOpened: true, bodyOpened: true},
 		{name: "object long", client: func(c *storageR3Client) { c.getBody = append(append([]byte(nil), storageR3Content...), '!') }, want: size, sinkOpened: true, bodyOpened: true},
 		{name: "object altered", client: func(c *storageR3Client) { c.getBody = bytes.Repeat([]byte("x"), len(storageR3Content)) },
-			want: "Wasabi object checksum does not match the backup manifest", sinkOpened: true, bodyOpened: true},
-		{name: "requested version not confirmed", input: func(i *getInput) { i.ObjectRef.VersionID = "version-9" }, want: unconfirmed, sinkOpened: true, bodyOpened: true},
-		{name: "requested version unreported", input: func(i *getInput) { i.ObjectRef.VersionID = "version-1" }, client: func(c *storageR3Client) { c.getVersion = nil },
+			want: "Wasabi object Checksum does not match the backup manifest", sinkOpened: true, bodyOpened: true},
+		{name: "requested version not confirmed", input: func(i *GetInput) { i.ObjectRef.VersionID = "version-9" }, want: unconfirmed, sinkOpened: true, bodyOpened: true},
+		{name: "requested version unreported", input: func(i *GetInput) { i.ObjectRef.VersionID = "version-1" }, client: func(c *storageR3Client) { c.getVersion = nil },
 			want: unconfirmed, sinkOpened: true, bodyOpened: true},
-		{name: "requested null version", input: func(i *getInput) { i.ObjectRef.VersionID = "null" },
+		{name: "requested null version", input: func(i *GetInput) { i.ObjectRef.VersionID = "null" },
 			want: "the mutable null object version is not accepted as an exact version", sinkOpened: true, bodyOpened: true},
 	}
 	for _, test := range tests {
@@ -284,7 +284,7 @@ func (c storageR3GetSuccess) run(t *testing.T) {
 	client.getBody, client.getVersion = storageR3Content, c.observed
 	impl := storageR3Adapter(t, storageR3Config(c.config), client, nil, nil)
 	ref := objectReference{objectTarget: storageR3Target("server/world.tar"), VersionID: c.requested}
-	input := getInput{ObjectRef: ref, ExpectedSizeBytes: int64(len(storageR3Content)), ExpectedChecksum: checksum{Algorithm: "sha256", Digest: c.expected}}
+	input := GetInput{ObjectRef: ref, ExpectedSizeBytes: int64(len(storageR3Content)), ExpectedChecksum: Checksum{Algorithm: "sha256", Digest: c.expected}}
 	request := requestFor("storage.object.get", input, time.Now().Add(time.Minute), "adapter_to_controller", int64(len(storageR3Content)))
 	sink := &storageR3Writer{}
 	request.Params.RequestContext.SetStreamDestinations(map[string]io.WriteCloser{testTransferID(): sink})
@@ -297,7 +297,7 @@ func (c storageR3GetSuccess) run(t *testing.T) {
 	storageR3Equal(t, "download stream closes", sink.closed, 1)
 	storageR3Equal(t, "provider bodies opened", len(client.bodies), 1)
 	storageR3Equal(t, "provider body closes", client.bodies[0].closed, 1)
-	storageR3Sent(t, client.getInput.Bucket, client.getInput.Key, client.getInput.VersionId, c.wantVersion)
+	storageR3Sent(t, client.GetInput.Bucket, client.GetInput.Key, client.GetInput.VersionId, c.wantVersion)
 }
 
 func TestStorageR3GetSuccessOutput(t *testing.T) {

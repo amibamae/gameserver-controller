@@ -26,7 +26,7 @@ var (
 )
 
 func (a *Adapter) inspectVersioning(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	input, err := decodeInput(request, "invalid versioning inspection request", func(in versioningInput) bool { return a.acceptsContainer(request, in.ContainerRef) })
+	input, err := decodeInput(request, "invalid versioning inspection request", func(in VersioningInput) bool { return a.acceptsContainer(request, in.ContainerRef) })
 	if err != nil {
 		return nil, err
 	}
@@ -72,15 +72,15 @@ func (a *Adapter) inspectRetention(ctx context.Context, request adapter.InvokeRe
 	return value, nil
 }
 
-func (a *Adapter) decodeRetention(request adapter.InvokeRequest) (retentionInput, error) {
-	return decodeChecked(request, inputRules[retentionInput]{
+func (a *Adapter) decodeRetention(request adapter.InvokeRequest) (RetentionInput, error) {
+	return decodeChecked(request, inputRules[RetentionInput]{
 		rejection: "invalid retention inspection request",
-		accept:    func(in retentionInput) bool { return a.acceptsObject(request, in.ObjectRef) },
+		accept:    func(in RetentionInput) bool { return a.acceptsObject(request, in.ObjectRef) },
 		check:     a.retentionVersion,
 	})
 }
 
-func (a *Adapter) retentionVersion(input retentionInput) error {
+func (a *Adapter) retentionVersion(input RetentionInput) error {
 	if a.refusedVersion(input.ObjectRef.VersionID) {
 		return errors.New("an exact object version is required by this storage profile")
 	}

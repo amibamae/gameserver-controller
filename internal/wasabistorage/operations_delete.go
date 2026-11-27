@@ -38,15 +38,15 @@ func (a *Adapter) deleteObject(ctx context.Context, request adapter.InvokeReques
 	return deleteOutput(input.ObjectRef, stateAfterDelete(ctx, client, head)), nil
 }
 
-func (a *Adapter) decodeDelete(request adapter.InvokeRequest) (deleteInput, error) {
-	return decodeChecked(request, inputRules[deleteInput]{
+func (a *Adapter) decodeDelete(request adapter.InvokeRequest) (DeleteInput, error) {
+	return decodeChecked(request, inputRules[DeleteInput]{
 		rejection: "invalid object delete request",
-		accept:    func(in deleteInput) bool { return a.acceptsObject(request, in.ObjectRef) },
+		accept:    func(in DeleteInput) bool { return a.acceptsObject(request, in.ObjectRef) },
 		check:     exactDelete,
 	})
 }
 
-func exactDelete(input deleteInput) error {
+func exactDelete(input DeleteInput) error {
 	if !immutableVersion(input.ObjectRef.VersionID) {
 		return errors.New("deletion requires an exact object version")
 	}
@@ -54,7 +54,7 @@ func exactDelete(input deleteInput) error {
 }
 
 // deletable confirms the inspected version and, when asked, its ETag.
-func deletable(input deleteInput, current *s3.HeadObjectOutput) error {
+func deletable(input DeleteInput, current *s3.HeadObjectOutput) error {
 	if _, err := confirmedVersion(input.ObjectRef.VersionID, current.VersionId); err != nil {
 		return err
 	}

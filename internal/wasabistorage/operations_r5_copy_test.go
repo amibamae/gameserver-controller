@@ -20,19 +20,19 @@ const (
 	wasabiR5CopyInvalid  = "invalid object copy request"
 	wasabiR5CopyVersion  = "an exact source object version is required by this storage profile"
 	wasabiR5CopySize     = "Wasabi copy source size does not match the expected size"
-	wasabiR5CopyMismatch = "Wasabi copy does not match the expected size and checksum"
+	wasabiR5CopyMismatch = "Wasabi copy does not match the expected size and Checksum"
 	wasabiR5CopyCalls    = "HeadObject HeadObject CopyObject GetObject"
 )
 
-func wasabiR5Copy(mutate func(*copyInput)) copyInput {
-	value := copyInput{SourceRef: wasabiR5Ref(nil), Destination: testRef("server/copy.tar", "").objectTarget,
+func wasabiR5Copy(mutate func(*CopyInput)) CopyInput {
+	value := CopyInput{SourceRef: wasabiR5Ref(nil), Destination: testRef("server/copy.tar", "").objectTarget,
 		ExpectedSizeBytes: 5, ExpectedChecksum: checksumOf("hello")}
 	storageR3Apply(mutate, &value)
 	return value
 }
 
-func wasabiR5CopySource(version string) func(*copyInput) {
-	return func(in *copyInput) { in.SourceRef.VersionID = version }
+func wasabiR5CopySource(version string) func(*CopyInput) {
+	return func(in *CopyInput) { in.SourceRef.VersionID = version }
 }
 
 // wasabiR5CopyScript scripts a successful copy, then applies mutate.
@@ -73,27 +73,27 @@ func wasabiR5Copied(t *testing.T, version string, etag any) string {
 
 func TestWasabiR5CopyRejectsBeforeProvider(t *testing.T) {
 	sixGiB := func(config *Config) { config.MaxObjectBytes = 6 << 30 }
-	oversize := func(in *copyInput) { in.ExpectedSizeBytes = maxServerSideCopySize + 1 }
-	sameKey := func(in *copyInput) { in.Destination.Key = in.SourceRef.Key }
+	oversize := func(in *CopyInput) { in.ExpectedSizeBytes = maxServerSideCopySize + 1 }
+	sameKey := func(in *CopyInput) { in.Destination.Key = in.SourceRef.Key }
 	wasabiR5Run(t, "storage.object.copy", []wasabiR5Case{
 		{name: "malformed input", input: wasabiR5Copy(nil), mutate: wasabiR5BadJSON, want: wasabiR5CopyInvalid},
 		{name: "request environment", input: wasabiR5Copy(nil), mutate: wasabiR5WrongEnvironment, want: wasabiR5CopyInvalid},
-		{name: "source outside prefix", input: wasabiR5Copy(func(in *copyInput) { wasabiR5OutsideRef(&in.SourceRef) }), want: wasabiR5CopyInvalid},
-		{name: "source bucket", input: wasabiR5Copy(func(in *copyInput) { wasabiR5OtherBucket(&in.SourceRef) }), want: wasabiR5CopyInvalid},
-		{name: "destination outside prefix", input: wasabiR5Copy(func(in *copyInput) { in.Destination.Key = "production/copy.tar" }), want: wasabiR5CopyInvalid},
-		{name: "destination profile", input: wasabiR5Copy(func(in *copyInput) { in.Destination.StorageProfile = "other" }), want: wasabiR5CopyInvalid},
-		{name: "negative size", input: wasabiR5Copy(func(in *copyInput) { in.ExpectedSizeBytes = -1 }), want: wasabiR5CopyInvalid},
-		{name: "size above profile", input: wasabiR5Copy(func(in *copyInput) { in.ExpectedSizeBytes = 1<<30 + 1 }), want: wasabiR5CopyInvalid},
-		{name: "checksum algorithm", input: wasabiR5Copy(func(in *copyInput) { in.ExpectedChecksum.Algorithm = "md5" }), want: wasabiR5CopyInvalid},
-		{name: "checksum length", input: wasabiR5Copy(func(in *copyInput) { in.ExpectedChecksum.Digest = "abcd" }), want: wasabiR5CopyInvalid},
-		{name: "checksum hex", input: wasabiR5Copy(func(in *copyInput) { in.ExpectedChecksum.Digest = strings.Repeat("z", 64) }), want: wasabiR5CopyInvalid},
-		{name: "invalid before version", input: wasabiR5Copy(func(in *copyInput) { in.ExpectedSizeBytes = -1; in.SourceRef.VersionID = "null" }), want: wasabiR5CopyInvalid},
+		{name: "source outside prefix", input: wasabiR5Copy(func(in *CopyInput) { wasabiR5OutsideRef(&in.SourceRef) }), want: wasabiR5CopyInvalid},
+		{name: "source bucket", input: wasabiR5Copy(func(in *CopyInput) { wasabiR5OtherBucket(&in.SourceRef) }), want: wasabiR5CopyInvalid},
+		{name: "destination outside prefix", input: wasabiR5Copy(func(in *CopyInput) { in.Destination.Key = "production/copy.tar" }), want: wasabiR5CopyInvalid},
+		{name: "destination profile", input: wasabiR5Copy(func(in *CopyInput) { in.Destination.StorageProfile = "other" }), want: wasabiR5CopyInvalid},
+		{name: "negative size", input: wasabiR5Copy(func(in *CopyInput) { in.ExpectedSizeBytes = -1 }), want: wasabiR5CopyInvalid},
+		{name: "size above profile", input: wasabiR5Copy(func(in *CopyInput) { in.ExpectedSizeBytes = 1<<30 + 1 }), want: wasabiR5CopyInvalid},
+		{name: "Checksum algorithm", input: wasabiR5Copy(func(in *CopyInput) { in.ExpectedChecksum.Algorithm = "md5" }), want: wasabiR5CopyInvalid},
+		{name: "Checksum length", input: wasabiR5Copy(func(in *CopyInput) { in.ExpectedChecksum.Digest = "abcd" }), want: wasabiR5CopyInvalid},
+		{name: "Checksum hex", input: wasabiR5Copy(func(in *CopyInput) { in.ExpectedChecksum.Digest = strings.Repeat("z", 64) }), want: wasabiR5CopyInvalid},
+		{name: "invalid before version", input: wasabiR5Copy(func(in *CopyInput) { in.ExpectedSizeBytes = -1; in.SourceRef.VersionID = "null" }), want: wasabiR5CopyInvalid},
 		{name: "required version missing", config: wasabiR5RequireVersions, input: wasabiR5Copy(wasabiR5CopySource("")), want: wasabiR5CopyVersion},
 		{name: "required version null", config: wasabiR5RequireVersions, input: wasabiR5Copy(wasabiR5CopySource("null")), want: wasabiR5CopyVersion},
 		{name: "null version", input: wasabiR5Copy(wasabiR5CopySource("null")), want: wasabiR5CopyVersion},
-		{name: "version before same key", input: wasabiR5Copy(func(in *copyInput) { sameKey(in); in.SourceRef.VersionID = "null" }), want: wasabiR5CopyVersion},
+		{name: "version before same key", input: wasabiR5Copy(func(in *CopyInput) { sameKey(in); in.SourceRef.VersionID = "null" }), want: wasabiR5CopyVersion},
 		{name: "same key", input: wasabiR5Copy(sameKey), want: "copy destination must differ from its source"},
-		{name: "same key before size", config: sixGiB, input: wasabiR5Copy(func(in *copyInput) { sameKey(in); oversize(in) }), want: "copy destination must differ from its source"},
+		{name: "same key before size", config: sixGiB, input: wasabiR5Copy(func(in *CopyInput) { sameKey(in); oversize(in) }), want: "copy destination must differ from its source"},
 		{name: "above copy limit", config: sixGiB, input: wasabiR5Copy(oversize), mutate: wasabiR5NoSecrets, want: "object is larger than the single-request server-side copy limit"},
 		{name: "credentials", input: wasabiR5Copy(nil), mutate: wasabiR5NoSecrets, want: wasabiR5Credentials},
 	})
@@ -125,7 +125,7 @@ func TestWasabiR5CopyInspections(t *testing.T) {
 		{name: "source size differs", input: wasabiR5Copy(nil), script: wasabiR5CopyHead(0, sized(aws.Int64(4), aws.String("version-1"))),
 			calls: "HeadObject", want: wasabiR5CopySize},
 		{name: "size at copy limit", config: func(c *Config) { c.MaxObjectBytes = 6 << 30 },
-			input: wasabiR5Copy(func(in *copyInput) { in.ExpectedSizeBytes = maxServerSideCopySize }), script: wasabiR5CopyScript(nil),
+			input: wasabiR5Copy(func(in *CopyInput) { in.ExpectedSizeBytes = maxServerSideCopySize }), script: wasabiR5CopyScript(nil),
 			calls: "HeadObject", want: wasabiR5CopySize},
 		{name: "unversioned source", input: wasabiR5Copy(wasabiR5CopySource("")), script: wasabiR5CopyHead(0, sized(aws.Int64(5), aws.String("other"))),
 			calls: wasabiR5CopyCalls, output: wasabiR5Copied(t, "version-2", "\"copy-etag\""), check: sourceHead("")},
@@ -148,10 +148,10 @@ func TestWasabiR5CopyRequest(t *testing.T) {
 			storageR3Equal(t, "copy bucket", aws.ToString(c.copyIn.Bucket), "backups")
 			storageR3Equal(t, "copy key", aws.ToString(c.copyIn.Key), "server/copy.tar")
 			storageR3Equal(t, "copy source", aws.ToString(c.copyIn.CopySource), source)
-			storageR3Equal(t, "copy checksum", c.copyIn.ChecksumAlgorithm, types.ChecksumAlgorithmSha256)
+			storageR3Equal(t, "copy Checksum", c.copyIn.ChecksumAlgorithm, types.ChecksumAlgorithmSha256)
 		}
 	}
-	escaped := func(in *copyInput) { in.SourceRef.Key = "server/a b/c+d%.tar"; in.SourceRef.VersionID = "v 1&x/y" }
+	escaped := func(in *CopyInput) { in.SourceRef.Key = "server/a b/c+d%.tar"; in.SourceRef.VersionID = "v 1&x/y" }
 	escapedHead := wasabiR5CopyHead(0, wasabiR5Head{out: &s3.HeadObjectOutput{ContentLength: aws.Int64(5), VersionId: aws.String("v 1&x/y")}})
 	wasabiR5Run(t, "storage.object.copy", []wasabiR5Case{
 		{name: "versioned source", input: wasabiR5Copy(nil), script: wasabiR5CopyScript(nil), calls: wasabiR5CopyCalls,
@@ -180,7 +180,7 @@ func TestWasabiR5CopyVersionAndReadback(t *testing.T) {
 		return wasabiR5CopyResult(&s3.CopyObjectOutput{VersionId: version})
 	}
 	const noVersion = "Wasabi did not return the required immutable version for the copy"
-	upper := func(in *copyInput) { in.ExpectedChecksum.Digest = strings.ToUpper(in.ExpectedChecksum.Digest) }
+	upper := func(in *CopyInput) { in.ExpectedChecksum.Digest = strings.ToUpper(in.ExpectedChecksum.Digest) }
 	wasabiR5Run(t, "storage.object.copy", []wasabiR5Case{
 		{name: "required version missing", config: wasabiR5RequireVersions, input: wasabiR5Copy(nil), script: versioned(nil),
 			calls: "HeadObject HeadObject CopyObject", want: noVersion, sideEffect: true},
@@ -200,7 +200,7 @@ func TestWasabiR5CopyVersionAndReadback(t *testing.T) {
 			calls: wasabiR5CopyCalls, want: wasabiR5CopyMismatch, sideEffect: true, check: readback("version-2")},
 		{name: "readback long", input: wasabiR5Copy(nil), script: wasabiR5CopyBody(strings.NewReader("hello!")),
 			calls: wasabiR5CopyCalls, want: wasabiR5CopyMismatch, sideEffect: true},
-		{name: "readback checksum", input: wasabiR5Copy(nil), script: wasabiR5CopyBody(strings.NewReader("jello")),
+		{name: "readback Checksum", input: wasabiR5Copy(nil), script: wasabiR5CopyBody(strings.NewReader("jello")),
 			calls: wasabiR5CopyCalls, want: wasabiR5CopyMismatch, sideEffect: true},
 		{name: "upper-case digest", input: wasabiR5Copy(upper), script: wasabiR5CopyScript(nil), calls: wasabiR5CopyCalls,
 			output: wasabiR5Copied(t, "version-2", "\"copy-etag\""), check: readback("version-2")},
