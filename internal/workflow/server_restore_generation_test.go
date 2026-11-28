@@ -60,12 +60,15 @@ func TestRestoreProvenTransitionsCarryTheRestoredGeneration(t *testing.T) {
 		status     protocolstate.OperationStatus
 		lifecycle  protocolstate.ServerState
 		start      protocolstate.StepStatus
+		attempt    int
+		after      protocolstate.StepStatus // verify-runtime and readiness
 		wantState  protocolstate.ServerState
 		wantStatus string
 	}{
-		{"operation fails after a proven restore", protocolstate.OperationFailed, protocolstate.ServerRestoring, "", protocolstate.ServerFailed, "known"},
-		{"runtime start is dispatched", protocolstate.OperationRunning, protocolstate.ServerRestoring, protocolstate.StepRunning, protocolstate.ServerStarting, "unknown"},
-		{"operation fails after the runtime start", protocolstate.OperationFailed, protocolstate.ServerStarting, protocolstate.StepFailed, protocolstate.ServerFailed, "unknown"},
+		{"operation fails after a proven restore", protocolstate.OperationFailed, protocolstate.ServerRestoring, "", 0, "", protocolstate.ServerFailed, "known"},
+		{"runtime start is dispatched", protocolstate.OperationRunning, protocolstate.ServerRestoring, protocolstate.StepRunning, 1, protocolstate.StepPending, protocolstate.ServerStarting, "unknown"},
+		{"operation fails after the runtime start", protocolstate.OperationFailed, protocolstate.ServerStarting, protocolstate.StepFailed, 1, protocolstate.StepPending, protocolstate.ServerFailed, "unknown"},
+		{"operation fails with the runtime start skipped", protocolstate.OperationFailed, protocolstate.ServerRestoring, protocolstate.StepSkipped, 0, protocolstate.StepSkipped, protocolstate.ServerFailed, "known"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -74,9 +77,9 @@ func TestRestoreProvenTransitionsCarryTheRestoredGeneration(t *testing.T) {
 			if tc.start != "" {
 				operation.RequestSnapshot.Parameters = json.RawMessage(startedRestoreParams)
 				operation.Steps = append(operation.Steps,
-					store.OperationStep{StepID: restoreStartStep, Status: tc.start, Attempt: 1},
-					store.OperationStep{StepID: restoreVerifyRuntimeStep, Status: protocolstate.StepPending},
-					store.OperationStep{StepID: restoreReadinessStep, Status: protocolstate.StepPending})
+					store.OperationStep{StepID: restoreStartStep, Status: tc.start, Attempt: tc.attempt},
+					store.OperationStep{StepID: restoreVerifyRuntimeStep, Status: tc.after, Attempt: tc.attempt},
+					store.OperationStep{StepID: restoreReadinessStep, Status: tc.after, Attempt: tc.attempt})
 			}
 			next, changed, err := proven.project(operation, tc.lifecycle)
 			if err != nil || !changed {
@@ -233,5 +236,26 @@ func seedKnownGeneration(t *testing.T, operationStore *store.BoltStore, version,
 	current.Record.Error = json.RawMessage(`{"code":"test.seed_complete"}`)
 	if _, err := operationStore.UpdateOperation(current.Revision, current.Record); err != nil {
 		t.Fatalf("finish generation seed: %v", err)
+	}
+}
+
+// A started restore that succeeds after validation ends ready. The start
+// lifecycle must not shadow the terminal projection: every start step has
+// left pending by then, which once kept the server validating.
+func TestRestoreStartedSuccessProjectsReady(t *testing.T) {
+	fixture := newPlannedRestoreR3Fixture(t, restoreR3ReplaceStart)
+	restoreR3CompleteAll(t, fixture)
+	assertion, err := BuildReadinessAssertion(fixture.workflow.schemas, fixture.operation, *fixture.server(), restoreReadinessStep, fixture.workflow.assertionTTL)
+	if err != nil {
+		t.Fatalf("could not build readiness assertion: %v", err)
+	}
+	result := restoreR3Patch(t, restoreR3RestoreResultBase(t, fixture), "ready", "operation_data", "final_lifecycle_state")
+	fixture.operation.Result = restoreR3Patch(t, result, json.RawMessage(assertion), "operation_data", "readiness_assertion")
+	fixture.operation.Status = protocolstate.OperationSucceeded
+	server := fixture.servers.record
+	server.Record.LifecycleState = protocolstate.ServerValidating
+	next, changed, err := fixture.workflow.ProjectLifecycle(fixture.operation, server)
+	if err != nil || !changed || next.LifecycleState != protocolstate.ServerReady || next.DesiredState != "running" {
+		t.Fatalf("started restore projected state=%s desired=%s changed=%v err=%v; want ready/running", next.LifecycleState, next.DesiredState, changed, err)
 	}
 }

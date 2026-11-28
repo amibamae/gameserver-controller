@@ -1324,7 +1324,7 @@ func (w *ServerRestoreWorkflow) projectRestoreProgress(operation store.Operation
 	if err != nil {
 		return store.LogicalServer{}, false, err
 	}
-	if parameters.StartAfterRestore {
+	if parameters.StartAfterRestore && operation.Status != protocolstate.OperationSucceeded {
 		if state, starting := restoreStartLifecycle(operation); starting {
 			next.LifecycleState = state
 			next.DesiredState = "running"
@@ -1397,7 +1397,7 @@ func restoreProvenDataStatus(operation store.OperationRecord) string {
 
 func restoreRuntimeStartAttempted(operation store.OperationRecord) bool {
 	start := operationStep(operation, restoreStartStep)
-	return start.Attempt > 0 || (start.StepID != "" && start.Status != protocolstate.StepPending)
+	return start.Attempt > 0 || (start.StepID != "" && start.Status != protocolstate.StepPending && start.Status != protocolstate.StepSkipped)
 }
 
 func restoreBackupID(operation store.OperationRecord) string {
