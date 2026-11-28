@@ -36,6 +36,12 @@
       "type": "string",
       "format": "date-time"
     },
+    "runtime_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "Opaque identity of the runtime incarnation the checks observed, in the same form execution.unit.inspect reports it. A controller binding readiness to a unit start (server.start) MUST require it and MUST require it to equal the runtime_id the unit inspection reported after that start; a missing or different value fails closed."
+    },
     "check_results": {
       "type": "array",
       "minItems": 1,

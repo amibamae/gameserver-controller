@@ -12,29 +12,18 @@ import (
 	"github.com/amibamae/gameserver-controller/internal/store"
 )
 
-// TestStartReadinessMustFollowUnitStart pins that server.start readiness
-// evidence, in aggregate and for every check, is no earlier than the
-// completion of this operation's unit start.
-func TestStartReadinessMustFollowUnitStart(t *testing.T) {
-	const aggregateEarly = "readiness observation predates this operation's unit start"
-	const checkEarly = `readiness check "paper.startup-complete" observation predates this operation's unit start`
-	completedAt := time.Now().UTC().Add(-time.Second)
-	before := completedAt.Add(-time.Millisecond)
-	after := completedAt.Add(time.Millisecond)
-	cases := []struct {
-		name     string
-		evidence startStopR3Evidence
-		want     string
-	}{
-		{name: "aggregate and checks 1ms before start completion",
-			evidence: startStopR3Evidence{startCompletedAt: completedAt, observedAt: before, checkObservedAt: before}, want: aggregateEarly},
-		{name: "checks 1ms before start completion",
-			evidence: startStopR3Evidence{startCompletedAt: completedAt, observedAt: completedAt, checkObservedAt: before}, want: checkEarly},
-		{name: "observed at start completion",
-			evidence: startStopR3Evidence{startCompletedAt: completedAt, observedAt: completedAt, checkObservedAt: completedAt}},
-		{name: "observed 1ms after start completion",
-			evidence: startStopR3Evidence{startCompletedAt: completedAt, observedAt: after, checkObservedAt: after}},
-	}
+// startReadinessCase is one server.start completion with the given readiness
+// evidence and the exact error it must produce, or none.
+type startReadinessCase struct {
+	name     string
+	evidence startStopR3Evidence
+	want     string
+}
+
+// runStartReadinessCases checks that completion validation and the success
+// result both give each case's exact outcome.
+func runStartReadinessCases(t *testing.T, cases []startReadinessCase) {
+	t.Helper()
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
 			f := newStartStopR3Fixture(t)
@@ -47,6 +36,54 @@ func TestStartReadinessMustFollowUnitStart(t *testing.T) {
 			}
 		})
 	}
+}
+
+// startReadinessTimes is fresh evidence for one runtime with the unit start
+// completed at completedAt and readiness observed at the given times.
+func startReadinessTimes(completedAt, observedAt, checkObservedAt time.Time) startStopR3Evidence {
+	evidence := startStopR3FreshEvidence()
+	evidence.startCompletedAt, evidence.observedAt, evidence.checkObservedAt = completedAt, observedAt, checkObservedAt
+	return evidence
+}
+
+// TestStartReadinessMustFollowUnitStart pins that server.start readiness
+// evidence, in aggregate and for every check, is no earlier than the
+// completion of this operation's unit start.
+func TestStartReadinessMustFollowUnitStart(t *testing.T) {
+	const aggregateEarly = "readiness observation predates this operation's unit start"
+	const checkEarly = `readiness check "paper.startup-complete" observation predates this operation's unit start`
+	completedAt := time.Now().UTC().Add(-time.Second)
+	before := completedAt.Add(-time.Millisecond)
+	after := completedAt.Add(time.Millisecond)
+	runStartReadinessCases(t, []startReadinessCase{
+		{name: "aggregate and checks 1ms before start completion", evidence: startReadinessTimes(completedAt, before, before), want: aggregateEarly},
+		{name: "checks 1ms before start completion", evidence: startReadinessTimes(completedAt, completedAt, before), want: checkEarly},
+		{name: "observed at start completion", evidence: startReadinessTimes(completedAt, completedAt, completedAt)},
+		{name: "observed 1ms after start completion", evidence: startReadinessTimes(completedAt, after, after)},
+	})
+}
+
+// startReadinessRuntimes is fresh evidence whose unit inspection and
+// readiness observation report the given runtime IDs.
+func startReadinessRuntimes(inspected, observed string) startStopR3Evidence {
+	evidence := startStopR3FreshEvidence()
+	evidence.inspectRuntimeID, evidence.readinessRuntimeID = inspected, observed
+	return evidence
+}
+
+// TestStartReadinessMustNameTheStartedRuntime pins that server.start
+// readiness is bound to the runtime incarnation the post-start unit
+// inspection reported, and fails closed when either side omits it.
+func TestStartReadinessMustNameTheStartedRuntime(t *testing.T) {
+	runStartReadinessCases(t, []startReadinessCase{
+		{name: "same runtime", evidence: startReadinessRuntimes(startStopR3RuntimeID, startStopR3RuntimeID)},
+		{name: "readiness from another runtime", evidence: startReadinessRuntimes(startStopR3RuntimeID, "paper-runtime-r3-000"),
+			want: "readiness observation runtime_id does not match the started runtime"},
+		{name: "readiness without runtime", evidence: startReadinessRuntimes(startStopR3RuntimeID, ""),
+			want: "readiness observation did not report a runtime_id"},
+		{name: "inspection without runtime", evidence: startReadinessRuntimes("", startStopR3RuntimeID),
+			want: "unit inspection after start did not report a runtime_id"},
+	})
 }
 
 // TestStartReadinessRequiresRecordedStartCompletion pins that a start step
@@ -66,13 +103,14 @@ func TestStartReadinessRequiresRecordedStartCompletion(t *testing.T) {
 // unparseable observation time.
 func TestCheckReadinessFollowsStartFailsClosed(t *testing.T) {
 	completedAt := time.Now().UTC()
+	start := startedRuntime{completedAt: completedAt, runtimeID: startStopR3RuntimeID}
 	cases := map[string]string{
 		`[]`: "decode readiness observation",
 		`{"observed_at":"not-a-time","check_results":[]}`: "readiness observation predates this operation's unit start",
 		`{"observed_at":"` + completedAt.Format(time.RFC3339Nano) + `","check_results":[{"check_id":"paper.world-loaded","observed_at":"x"}]}`: `readiness check "paper.world-loaded" observation predates this operation's unit start`,
 	}
 	for output, want := range cases {
-		if got := startStopR3ErrText(checkReadinessFollowsStart(json.RawMessage(output), completedAt)); got != want {
+		if got := startStopR3ErrText(checkReadinessFollowsStart(json.RawMessage(output), start)); got != want {
 			t.Fatalf("checkReadinessFollowsStart(%s) = %q; want %q", output, got, want)
 		}
 	}

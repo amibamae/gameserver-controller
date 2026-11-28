@@ -1,0 +1,403 @@
+{
+  "fixture_id": "game.readiness.start-bound-evidence",
+  "protocol_version": "0.21.0-draft",
+  "contract_area": "game.readiness.check",
+  "purpose": "Readiness for a start proves that start attempt: the aggregate and every check are observed no earlier than the unit start completed, and the observation names the runtime_id the unit inspection after that start reported. Earlier, unbound, or other-runtime evidence does not permit ready.",
+  "evaluations": [
+    {
+      "case_id": "fresh-same-runtime",
+      "readiness_output": {
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "evidence": [
+              "Paper startup completion marker observed."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "evidence": [
+              "Primary world loaded."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          }
+        ],
+        "environment_id": "staging",
+        "game_release_id": "paper-1.21.11-build-3",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "external_id": "instance-paper-test-001",
+          "resource_kind": "instance"
+        },
+        "observed_at": "2026-11-07T19:30:05Z",
+        "runtime_id": "paper-runtime-017",
+        "server_id": "minecraft-test"
+      },
+      "start_completed_at": "2026-11-07T19:30:00Z",
+      "unit_inspection": {
+        "observed_at": "2026-11-07T19:30:01Z",
+        "release_ref": "paper-1.21.11-build-3",
+        "runtime_id": "paper-runtime-017",
+        "state": "running",
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "external_id": "paper-server",
+          "resource_kind": "systemd-unit"
+        }
+      }
+    },
+    {
+      "case_id": "observed-at-start-completion",
+      "readiness_output": {
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "evidence": [
+              "Paper startup completion marker observed."
+            ],
+            "observed_at": "2026-11-07T19:30:00Z",
+            "result": "pass"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "evidence": [
+              "Primary world loaded."
+            ],
+            "observed_at": "2026-11-07T19:30:00Z",
+            "result": "pass"
+          }
+        ],
+        "environment_id": "staging",
+        "game_release_id": "paper-1.21.11-build-3",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "external_id": "instance-paper-test-001",
+          "resource_kind": "instance"
+        },
+        "observed_at": "2026-11-07T19:30:00Z",
+        "runtime_id": "paper-runtime-017",
+        "server_id": "minecraft-test"
+      },
+      "start_completed_at": "2026-11-07T19:30:00Z",
+      "unit_inspection": {
+        "observed_at": "2026-11-07T19:30:01Z",
+        "release_ref": "paper-1.21.11-build-3",
+        "runtime_id": "paper-runtime-017",
+        "state": "running",
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "external_id": "paper-server",
+          "resource_kind": "systemd-unit"
+        }
+      }
+    },
+    {
+      "case_id": "aggregate-before-start",
+      "readiness_output": {
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "evidence": [
+              "Paper startup completion marker observed."
+            ],
+            "observed_at": "2026-11-07T19:29:59.999Z",
+            "result": "pass"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "evidence": [
+              "Primary world loaded."
+            ],
+            "observed_at": "2026-11-07T19:29:59.999Z",
+            "result": "pass"
+          }
+        ],
+        "environment_id": "staging",
+        "game_release_id": "paper-1.21.11-build-3",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "external_id": "instance-paper-test-001",
+          "resource_kind": "instance"
+        },
+        "observed_at": "2026-11-07T19:29:59.999Z",
+        "runtime_id": "paper-runtime-017",
+        "server_id": "minecraft-test"
+      },
+      "start_completed_at": "2026-11-07T19:30:00Z",
+      "unit_inspection": {
+        "observed_at": "2026-11-07T19:30:01Z",
+        "release_ref": "paper-1.21.11-build-3",
+        "runtime_id": "paper-runtime-017",
+        "state": "running",
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "external_id": "paper-server",
+          "resource_kind": "systemd-unit"
+        }
+      }
+    },
+    {
+      "case_id": "check-before-start",
+      "readiness_output": {
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "evidence": [
+              "Paper startup completion marker observed."
+            ],
+            "observed_at": "2026-11-07T19:29:59.999Z",
+            "result": "pass"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "evidence": [
+              "Primary world loaded."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          }
+        ],
+        "environment_id": "staging",
+        "game_release_id": "paper-1.21.11-build-3",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "external_id": "instance-paper-test-001",
+          "resource_kind": "instance"
+        },
+        "observed_at": "2026-11-07T19:30:05Z",
+        "runtime_id": "paper-runtime-017",
+        "server_id": "minecraft-test"
+      },
+      "start_completed_at": "2026-11-07T19:30:00Z",
+      "unit_inspection": {
+        "observed_at": "2026-11-07T19:30:01Z",
+        "release_ref": "paper-1.21.11-build-3",
+        "runtime_id": "paper-runtime-017",
+        "state": "running",
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "external_id": "paper-server",
+          "resource_kind": "systemd-unit"
+        }
+      }
+    },
+    {
+      "case_id": "other-runtime",
+      "readiness_output": {
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "evidence": [
+              "Paper startup completion marker observed."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "evidence": [
+              "Primary world loaded."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          }
+        ],
+        "environment_id": "staging",
+        "game_release_id": "paper-1.21.11-build-3",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "external_id": "instance-paper-test-001",
+          "resource_kind": "instance"
+        },
+        "observed_at": "2026-11-07T19:30:05Z",
+        "runtime_id": "paper-runtime-016",
+        "server_id": "minecraft-test"
+      },
+      "start_completed_at": "2026-11-07T19:30:00Z",
+      "unit_inspection": {
+        "observed_at": "2026-11-07T19:30:01Z",
+        "release_ref": "paper-1.21.11-build-3",
+        "runtime_id": "paper-runtime-017",
+        "state": "running",
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "external_id": "paper-server",
+          "resource_kind": "systemd-unit"
+        }
+      }
+    },
+    {
+      "case_id": "readiness-without-runtime",
+      "readiness_output": {
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "evidence": [
+              "Paper startup completion marker observed."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "evidence": [
+              "Primary world loaded."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          }
+        ],
+        "environment_id": "staging",
+        "game_release_id": "paper-1.21.11-build-3",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "external_id": "instance-paper-test-001",
+          "resource_kind": "instance"
+        },
+        "observed_at": "2026-11-07T19:30:05Z",
+        "server_id": "minecraft-test"
+      },
+      "start_completed_at": "2026-11-07T19:30:00Z",
+      "unit_inspection": {
+        "observed_at": "2026-11-07T19:30:01Z",
+        "release_ref": "paper-1.21.11-build-3",
+        "runtime_id": "paper-runtime-017",
+        "state": "running",
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "external_id": "paper-server",
+          "resource_kind": "systemd-unit"
+        }
+      }
+    },
+    {
+      "case_id": "inspection-without-runtime",
+      "readiness_output": {
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "evidence": [
+              "Paper startup completion marker observed."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "evidence": [
+              "Primary world loaded."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          }
+        ],
+        "environment_id": "staging",
+        "game_release_id": "paper-1.21.11-build-3",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "external_id": "instance-paper-test-001",
+          "resource_kind": "instance"
+        },
+        "observed_at": "2026-11-07T19:30:05Z",
+        "runtime_id": "paper-runtime-017",
+        "server_id": "minecraft-test"
+      },
+      "start_completed_at": "2026-11-07T19:30:00Z",
+      "unit_inspection": {
+        "observed_at": "2026-11-07T19:30:01Z",
+        "release_ref": "paper-1.21.11-build-3",
+        "state": "running",
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "external_id": "paper-server",
+          "resource_kind": "systemd-unit"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "evaluations": [
+      {
+        "case_id": "fresh-same-runtime",
+        "observed_after_start": true,
+        "ready_transition_permitted": true,
+        "runtime_bound": true,
+        "schemas_valid": true
+      },
+      {
+        "case_id": "observed-at-start-completion",
+        "observed_after_start": true,
+        "ready_transition_permitted": true,
+        "runtime_bound": true,
+        "schemas_valid": true
+      },
+      {
+        "case_id": "aggregate-before-start",
+        "observed_after_start": false,
+        "ready_transition_permitted": false,
+        "runtime_bound": true,
+        "schemas_valid": true
+      },
+      {
+        "case_id": "check-before-start",
+        "observed_after_start": false,
+        "ready_transition_permitted": false,
+        "runtime_bound": true,
+        "schemas_valid": true
+      },
+      {
+        "case_id": "other-runtime",
+        "observed_after_start": true,
+        "ready_transition_permitted": false,
+        "runtime_bound": false,
+        "schemas_valid": true
+      },
+      {
+        "case_id": "readiness-without-runtime",
+        "observed_after_start": true,
+        "ready_transition_permitted": false,
+        "runtime_bound": false,
+        "schemas_valid": true
+      },
+      {
+        "case_id": "inspection-without-runtime",
+        "observed_after_start": true,
+        "ready_transition_permitted": false,
+        "runtime_bound": false,
+        "schemas_valid": true
+      }
+    ]
+  },
+  "side_effect_expected": "none"
+}

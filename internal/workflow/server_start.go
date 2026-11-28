@@ -46,6 +46,7 @@ type executionUnitInspection struct {
 	UnitRef    json.RawMessage `json:"unit_ref"`
 	State      string          `json:"state"`
 	ObservedAt string          `json:"observed_at"`
+	RuntimeID  string          `json:"runtime_id,omitempty"`
 }
 
 type executionUnitStartResult struct {
