@@ -1280,16 +1280,19 @@ func (w *ServerRestoreWorkflow) BuildFailureResult(_ context.Context, operation 
 }
 
 func (w *ServerRestoreWorkflow) ProjectLifecycle(operation store.OperationRecord, current store.StoredLogicalServer) (store.LogicalServer, bool, error) {
-	if operation.OperationType != "server.restore" || current.Record.ServerID != operation.Target.ServerID || current.Record.EnvironmentID != operation.Target.EnvironmentID ||
-		(len(operation.Target.InstanceRef) > 0 && !equalJSON(operation.Target.InstanceRef, current.Record.InstanceRef)) {
+	if operation.OperationType != "server.restore" || !restoreProjectionTargetMatches(operation, current.Record) {
 		return store.LogicalServer{}, false, errors.New("server.restore lifecycle projection target mismatch")
 	}
 	next := current.Record
 	apply := operationStep(operation, restoreApplyStep)
 	if current.Record.LifecycleState == protocolstate.ServerStopped || current.Record.LifecycleState == protocolstate.ServerFailed {
 		if apply.Status != protocolstate.StepPending || apply.Attempt > 0 {
+			// The dispatched restore starts overwriting the target, so its
+			// earlier generation stops being current here.
 			next.LifecycleState = protocolstate.ServerRestoring
 			next.DesiredState = "stopped"
+			next.DataGenerationID = ""
+			next.DataGenerationStatus = "unknown"
 			return next, true, nil
 		}
 		return current.Record, false, nil
@@ -1297,15 +1300,22 @@ func (w *ServerRestoreWorkflow) ProjectLifecycle(operation store.OperationRecord
 	if current.Record.LifecycleState != protocolstate.ServerRestoring && current.Record.LifecycleState != protocolstate.ServerStarting && current.Record.LifecycleState != protocolstate.ServerValidating {
 		return store.LogicalServer{}, false, fmt.Errorf("server.restore cannot project lifecycle from %q", current.Record.LifecycleState)
 	}
-	if operation.Status == protocolstate.OperationSucceeded && restoreApplySucceeded(operation, w.schemas, restoreBackupID(operation), current.Record) &&
-		restoreInspectionSucceeded(operation, w.schemas, restoreBackupID(operation), current.Record) {
-		next.DataGenerationID = restoreDataGeneration(operation.OperationID)
-		next.DataGenerationStatus = "known"
+	return w.projectRestoreProgress(operation, current.Record, w.projectRestoreDataGeneration(operation, next))
+}
+
+// restoreProjectionTargetMatches reports whether the operation targets the
+// server and, when it names one, the server's current instance.
+func restoreProjectionTargetMatches(operation store.OperationRecord, server store.LogicalServer) bool {
+	if server.ServerID != operation.Target.ServerID || server.EnvironmentID != operation.Target.EnvironmentID {
+		return false
 	}
-	if apply.Attempt > 0 && (!restoreApplySucceeded(operation, w.schemas, restoreBackupID(operation), current.Record) || !restoreInspectionSucceeded(operation, w.schemas, restoreBackupID(operation), current.Record)) {
-		next.DataGenerationID = ""
-		next.DataGenerationStatus = "unknown"
-	}
+	return !instanceRefDiffers(operation.Target.InstanceRef, server.InstanceRef)
+}
+
+// projectRestoreProgress projects a dispatched restore. The store commits a
+// server record only with a lifecycle transition, so next, which carries the
+// projected data generation, is returned only when its state changes.
+func (w *ServerRestoreWorkflow) projectRestoreProgress(operation store.OperationRecord, current, next store.LogicalServer) (store.LogicalServer, bool, error) {
 	if operation.Status == protocolstate.OperationFailed {
 		next.LifecycleState = protocolstate.ServerFailed
 		return next, true, nil
@@ -1314,32 +1324,80 @@ func (w *ServerRestoreWorkflow) ProjectLifecycle(operation store.OperationRecord
 	if err != nil {
 		return store.LogicalServer{}, false, err
 	}
+	if parameters.StartAfterRestore && operation.Status != protocolstate.OperationSucceeded {
+		if state, starting := restoreStartLifecycle(operation); starting {
+			next.LifecycleState = state
+			next.DesiredState = "running"
+			return restoreLifecycleTransition(current, next)
+		}
+	}
+	if operation.Status != protocolstate.OperationSucceeded {
+		return current, false, nil
+	}
+	if !hasValidRestoreResult(operation, current, w.schemas) {
+		return store.LogicalServer{}, false, errors.New("terminal server.restore result does not match exact target and data generation")
+	}
+	next.LifecycleState, next.DesiredState = protocolstate.ServerStopped, "stopped"
 	if parameters.StartAfterRestore {
-		if operationStep(operation, restoreReadinessStep).Status != protocolstate.StepPending {
-			next.LifecycleState = protocolstate.ServerValidating
-			next.DesiredState = "running"
-			return next, true, nil
-		}
-		if operationStep(operation, restoreStartStep).Status != protocolstate.StepPending {
-			next.LifecycleState = protocolstate.ServerStarting
-			next.DesiredState = "running"
-			return next, true, nil
-		}
+		next.LifecycleState, next.DesiredState = protocolstate.ServerReady, "running"
 	}
-	if operation.Status == protocolstate.OperationSucceeded {
-		if !hasValidRestoreResult(operation, current.Record, w.schemas) {
-			return store.LogicalServer{}, false, errors.New("terminal server.restore result does not match exact target and data generation")
-		}
-		if parameters.StartAfterRestore {
-			next.LifecycleState = protocolstate.ServerReady
-			next.DesiredState = "running"
-		} else {
-			next.LifecycleState = protocolstate.ServerStopped
-			next.DesiredState = "stopped"
-		}
-		return next, true, nil
+	return next, true, nil
+}
+
+// restoreStartLifecycle is the state a requested runtime start has reached,
+// and false before the start step leaves pending.
+func restoreStartLifecycle(operation store.OperationRecord) (protocolstate.ServerState, bool) {
+	if operationStep(operation, restoreReadinessStep).Status != protocolstate.StepPending {
+		return protocolstate.ServerValidating, true
 	}
-	return next, next.DataGenerationID != current.Record.DataGenerationID || next.DataGenerationStatus != current.Record.DataGenerationStatus, nil
+	if operationStep(operation, restoreStartStep).Status != protocolstate.StepPending {
+		return protocolstate.ServerStarting, true
+	}
+	return "", false
+}
+
+// restoreLifecycleTransition reports next only when it moves the lifecycle
+// state, and otherwise leaves the stored record unchanged.
+func restoreLifecycleTransition(current, next store.LogicalServer) (store.LogicalServer, bool, error) {
+	if next.LifecycleState == current.LifecycleState {
+		return current, false, nil
+	}
+	return next, true, nil
+}
+
+// projectRestoreDataGeneration records which data the target holds. Once the
+// restore is proven on the target, the overwritten generation is gone: the
+// target holds this operation's new generation, as protocol/lifecycle.md
+// requires before the runtime starts. That generation stays known unless a
+// runtime start may have written to it and the operation did not succeed. A
+// dispatched restore that is not proven leaves the data unknown.
+func (w *ServerRestoreWorkflow) projectRestoreDataGeneration(operation store.OperationRecord, next store.LogicalServer) store.LogicalServer {
+	backupID := restoreBackupID(operation)
+	if restoreApplySucceeded(operation, w.schemas, backupID, next) && restoreInspectionSucceeded(operation, w.schemas, backupID, next) {
+		next.DataGenerationID = restoreDataGeneration(operation.OperationID)
+		next.DataGenerationStatus = restoreProvenDataStatus(operation)
+		return next
+	}
+	if operationStep(operation, restoreApplyStep).Attempt > 0 {
+		next.DataGenerationID = ""
+		next.DataGenerationStatus = "unknown"
+	}
+	return next
+}
+
+// restoreProvenDataStatus is "known" for a proven restore unless the runtime
+// start was attempted and the operation did not succeed, so the runtime may
+// have changed the restored data.
+func restoreProvenDataStatus(operation store.OperationRecord) string {
+	if operation.Status == protocolstate.OperationSucceeded || !restoreRuntimeStartAttempted(operation) {
+		return "known"
+	}
+	return "unknown"
+}
+
+func restoreRuntimeStartAttempted(operation store.OperationRecord) bool {
+	start := operationStep(operation, restoreStartStep)
+	return start.Attempt > 0 || (start.StepID != "" && start.Status != protocolstate.StepPending && start.Status != protocolstate.StepSkipped)
 }
 
 func restoreBackupID(operation store.OperationRecord) string {

@@ -485,6 +485,15 @@ set -Eeuo pipefail
 MINECRAFT_DIR="/opt/minecraft/vanilla_no_grief"
 RCLONE_CONFIG="/root/.config/rclone/rclone.conf"
 WASABI_REMOTE="wasabi:@@WASABI_REMOTE_PATH@@"
+RESTORE_MARKER="/var/lib/minecraft-bootstrap/restore-complete"
+
+# rclone sync deletes Wasabi files that are missing locally. Until the
+# restore has completed, the local copy is empty or partial.
+if [[ ! -f "$RESTORE_MARKER" ]]; then
+    echo "ERROR: the Wasabi restore has not completed on this VM." >&2
+    echo "Synchronizing now would replace the Wasabi copy with incomplete local data." >&2
+    exit 1
+fi
 
 echo "Checking Minecraft service state..."
 
