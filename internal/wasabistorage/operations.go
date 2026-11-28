@@ -32,30 +32,30 @@ type containerReference struct {
 	Container      string `json:"container"`
 }
 
-type listInput struct {
+type ListInput struct {
 	ContainerRef      containerReference `json:"container_ref"`
 	Prefix            string             `json:"prefix"`
 	ContinuationToken string             `json:"continuation_token,omitempty"`
 	MaximumItems      int32              `json:"maximum_items"`
 }
 
-type copyInput struct {
+type CopyInput struct {
 	SourceRef         objectReference `json:"source_ref"`
 	Destination       objectTarget    `json:"destination"`
 	ExpectedSizeBytes int64           `json:"expected_size_bytes"`
-	ExpectedChecksum  checksum        `json:"expected_checksum"`
+	ExpectedChecksum  Checksum        `json:"expected_checksum"`
 }
 
-type deleteInput struct {
+type DeleteInput struct {
 	ObjectRef   objectReference `json:"object_ref"`
 	IfMatchETag string          `json:"if_match_etag,omitempty"`
 }
 
-type versioningInput struct {
+type VersioningInput struct {
 	ContainerRef containerReference `json:"container_ref"`
 }
 
-type retentionInput struct {
+type RetentionInput struct {
 	ObjectRef objectReference `json:"object_ref"`
 }
 
@@ -75,7 +75,7 @@ func exactVersion(ref objectReference) bool {
 // Continuation tokens are wrapped in an HMAC bound to this adapter instance,
 // container, environment, and prefix, so a token cannot be replayed elsewhere.
 func (a *Adapter) list(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	var input listInput
+	var input ListInput
 	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validContainer(input.ContainerRef) ||
 		!strings.HasPrefix(input.Prefix, a.config.KeyPrefix) || len(input.Prefix) > 2048 || input.MaximumItems < 1 || input.MaximumItems > maxListItems {
 		return nil, errors.New("invalid object list request")
@@ -185,7 +185,7 @@ func (a *Adapter) openListToken(token, prefix string) (string, bool) {
 // "copied" only after the new object version is read back and matches the
 // expected size and SHA-256. It refuses to overwrite an existing destination.
 func (a *Adapter) copyObject(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	var input copyInput
+	var input CopyInput
 	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validReference(input.SourceRef) ||
 		!a.validTarget(input.Destination) || !validExpected(input.ExpectedSizeBytes, input.ExpectedChecksum, a.config.MaxObjectBytes) {
 		return nil, errors.New("invalid object copy request")
@@ -260,7 +260,7 @@ func (a *Adapter) copyObject(ctx context.Context, request adapter.InvokeRequest)
 // deleteObject removes exactly one object version. It never deletes without a
 // version ID, because an unversioned delete could affect a different object.
 func (a *Adapter) deleteObject(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	var input deleteInput
+	var input DeleteInput
 	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validReference(input.ObjectRef) {
 		return nil, errors.New("invalid object delete request")
 	}
@@ -299,7 +299,7 @@ func (a *Adapter) deleteObject(ctx context.Context, request adapter.InvokeReques
 }
 
 func (a *Adapter) inspectVersioning(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	var input versioningInput
+	var input VersioningInput
 	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validContainer(input.ContainerRef) {
 		return nil, errors.New("invalid versioning inspection request")
 	}
@@ -324,7 +324,7 @@ func (a *Adapter) inspectVersioning(ctx context.Context, request adapter.InvokeR
 // inspectRetention reports object-lock retention and legal hold. A missing
 // object-lock configuration is reported as none/off; any other failure stays unknown.
 func (a *Adapter) inspectRetention(ctx context.Context, request adapter.InvokeRequest) (any, error) {
-	var input retentionInput
+	var input RetentionInput
 	if err := json.Unmarshal(request.Params.Input, &input); err != nil || !a.validRequestEnvironment(request) || !a.validReference(input.ObjectRef) {
 		return nil, errors.New("invalid retention inspection request")
 	}

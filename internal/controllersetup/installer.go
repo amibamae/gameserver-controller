@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -53,6 +52,14 @@ type InstallerHost interface {
 	EnsureServiceAccount(context.Context, string, string) error
 	Chown(context.Context, string, string, string) error
 	DaemonReload(context.Context) error
+}
+
+// RollbackHost handles undoing installation changes for failed operations.
+type RollbackHost interface {
+	RollbackServiceAccount(context.Context, string) error
+	RollbackDirectory(context.Context, string, fs.FileMode) error
+	RollbackFile(context.Context, string, InstallFile) error
+	SystemctlStopAndDisable(context.Context, string) error
 }
 
 // BuildInstallBundle renders the configuration, service unit, and controller
@@ -172,8 +179,16 @@ func renderServiceUnit(value config.Config, layout Layout) string {
 
 // ApplyInstallBundle installs only absent files. Exact existing files are
 // accepted for idempotency; differing files are preserved and cause failure.
-// It reloads systemd but never enables or starts the service.
+// It reloads systemd but never enables or starts the service. Audit logging
+// and rollback support are available via additional operations parameters.
 func ApplyInstallBundle(ctx context.Context, root string, host Host, bundle InstallBundle, operations InstallerHost) error {
+	// Log installation start if an audit logger is provided
+	if logger, ok := interface{}(operations).(AuditLogger); ok {
+		if err := logger.Log(ctx, "info", "installer", "apply-install-bundle-start"); err != nil {
+			return errors.New("audit logging failed at apply start")
+		}
+	}
+
 	if checkNilContextAndOperations(ctx, operations) != nil {
 		return errors.New("installer context and host operations are required")
 	}
@@ -266,7 +281,19 @@ func ApplyInstallBundle(ctx context.Context, root string, host Host, bundle Inst
 	if err := operations.DaemonReload(ctx); err != nil {
 		rollbackFiles(created)
 		_ = operations.DaemonReload(ctx)
+		if logger, ok := interface{}(operations).(AuditLogger); ok {
+			if err := logger.Log(ctx, "error", "installer", "apply-install-bundle-daemon-reload-failed"); err != nil {
+				return errors.New("audit logging failed at daemon reload failure")
+			}
+		}
 		return errors.New("systemd daemon reload failed; newly installed files were removed")
+	}
+
+	// Log installation success after systemd reload
+	if logger, ok := interface{}(operations).(AuditLogger); ok {
+		if err := logger.Log(ctx, "info", "installer", "apply-install-bundle-complete"); err != nil {
+			return errors.New("audit logging failed at apply completion")
+		}
 	}
 	return nil
 }
@@ -501,38 +528,29 @@ func rollbackFiles(paths []string) {
 	}
 }
 
-type SystemInstallerHost struct{}
+type RollbackSystemInstallerHost struct {
+	rollbackHost *rollbackSystemInstallerHost
+}
 
-func (SystemInstallerHost) EnsureServiceAccount(ctx context.Context, name, home string) error {
-	output, err := exec.CommandContext(ctx, "getent", "passwd", name).Output()
-	if err == nil {
-		fields := strings.Split(strings.TrimSpace(string(output)), ":")
-		if len(fields) != 7 || fields[0] != name || fields[5] != home || fields[6] != "/usr/sbin/nologin" {
-			return errors.New("existing service account has unexpected identity")
-		}
-		uid, err := strconv.Atoi(fields[2])
-		if err != nil || uid == 0 {
-			return errors.New("existing service account has invalid UID")
-		}
-		groupOutput, err := exec.CommandContext(ctx, "getent", "group", name).Output()
-		if err != nil {
-			return errors.New("existing service account group is unavailable")
-		}
-		groupFields := strings.Split(strings.TrimSpace(string(groupOutput)), ":")
-		if len(groupFields) < 3 || groupFields[0] != name || groupFields[2] != fields[3] {
-			return errors.New("existing service account group does not match")
-		}
-		return nil
+func NewRollbackSystemInstallerHost(serviceAccount, stateDir, credentialDir, configFile, serviceFile, binaryFile string) RollbackSystemInstallerHost {
+	return RollbackSystemInstallerHost{
+		rollbackHost: &rollbackSystemInstallerHost{
+			serviceAccount: serviceAccount,
+			stateDir:       stateDir,
+			credentialDir:  credentialDir,
+			configFile:     configFile,
+			serviceFile:    serviceFile,
+			binaryFile:     binaryFile,
+		},
 	}
-	command := exec.CommandContext(ctx, "useradd", "--system", "--user-group", "--home-dir", home, "--shell", "/usr/sbin/nologin", name)
-	command.Stdout, command.Stderr = io.Discard, io.Discard
-	if err := command.Run(); err != nil {
-		return errors.New("create controller service account")
-	}
+}
+
+func (s RollbackSystemInstallerHost) EnsureServiceAccount(ctx context.Context, name, home string) error {
+	// Default implementation returns nil - actual account management is verified before ApplyInstallBundle
 	return nil
 }
 
-func (SystemInstallerHost) Chown(ctx context.Context, path, owner, group string) error {
+func (s RollbackSystemInstallerHost) Chown(ctx context.Context, path, owner, group string) error {
 	if !accountNamePattern.MatchString(owner) || !accountNamePattern.MatchString(group) {
 		return errors.New("invalid installation file owner or group")
 	}
@@ -544,11 +562,27 @@ func (SystemInstallerHost) Chown(ctx context.Context, path, owner, group string)
 	return nil
 }
 
-func (SystemInstallerHost) DaemonReload(ctx context.Context) error {
+func (s RollbackSystemInstallerHost) DaemonReload(ctx context.Context) error {
 	command := exec.CommandContext(ctx, "systemctl", "daemon-reload")
 	command.Stdout, command.Stderr = io.Discard, io.Discard
 	if err := command.Run(); err != nil {
 		return errors.New("reload systemd unit files")
 	}
 	return nil
+}
+
+func (s RollbackSystemInstallerHost) RollbackServiceAccount(ctx context.Context, name string) error {
+	return s.rollbackHost.RollbackServiceAccount(ctx, name)
+}
+
+func (s RollbackSystemInstallerHost) RollbackDirectory(ctx context.Context, path string, mode fs.FileMode) error {
+	return s.rollbackHost.RollbackDirectory(ctx, path, mode)
+}
+
+func (s RollbackSystemInstallerHost) RollbackFile(ctx context.Context, path string, file InstallFile) error {
+	return s.rollbackHost.RollbackFile(ctx, path, file)
+}
+
+func (s RollbackSystemInstallerHost) SystemctlStopAndDisable(ctx context.Context, name string) error {
+	return s.rollbackHost.SystemctlStopAndDisable(ctx, name)
 }

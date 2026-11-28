@@ -42,7 +42,7 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) error {
 	if len(args) > 0 && args[0] == "apply" {
-		return runApplyCommand(args[1:], stdout, stderr, os.Geteuid() == 0, inspectHost(), "/", controllersetup.SystemInstallerHost{})
+		return runApplyCommand(args[1:], stdout, stderr, os.Geteuid() == 0, inspectHost(), "/", controllersetup.NewRollbackSystemInstallerHost("gameserver-controller", "/var/lib/gameserver-controller", "/etc/credstore.encrypted", defaultLayout().ConfigFile, defaultLayout().ServiceFile, defaultLayout().BinaryFile))
 	}
 	if len(args) > 0 && args[0] == "keys" {
 		return runKeyCommand(args[1:], stdout, stderr, os.Geteuid() == 0, os.Geteuid())
@@ -91,6 +91,10 @@ func runApplyCommand(args []string, stdout, stderr io.Writer, isRoot bool, host 
 	value, err := config.Load(*configPath)
 	if err != nil {
 		return err
+	}
+	// Validate provider credentials before installation
+	if err := controllersetup.ValidateSystemdCredentials(value); err != nil {
+		return fmt.Errorf("provider credential check failed: %w", err)
 	}
 	if value.Controller.ManagementAPI.Enabled {
 		if _, err := managementapi.LoadTLSConfig(value.Controller.ManagementAPI.TLSCertificate, value.Controller.ManagementAPI.TLSPrivateKey); err != nil {

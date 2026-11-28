@@ -172,9 +172,9 @@ func storageR3Target(key string) objectTarget {
 	return objectTarget{AdapterID: testAdapterID, StorageProfile: "staging-storage", EnvironmentID: "staging", Container: "backups", Key: key}
 }
 
-func storageR3Checksum(content []byte) checksum {
+func storageR3Checksum(content []byte) Checksum {
 	digest := sha256.Sum256(content)
-	return checksum{Algorithm: "sha256", Digest: hex.EncodeToString(digest[:])}
+	return Checksum{Algorithm: "sha256", Digest: hex.EncodeToString(digest[:])}
 }
 
 // storageR3Times converts an expected "was it opened" flag to a Close count.

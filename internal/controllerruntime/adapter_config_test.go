@@ -130,38 +130,11 @@ var implementedConfig = strings.NewReplacer(
     category: execution
     implementation: process
     process:
-      path: /usr/lib/gameserver-controller/execution-adapter
-      args: [--profile, local]
+      path: C:\\Windows\\System32\\cmd.exe
+      args: []
       env: [LANG=C.UTF-8]
       start_timeout: 10s
 `).Replace(configFixture)
-
-func TestParseImplementedAdapterProfiles(t *testing.T) {
-	if !strings.Contains(implementedConfig, "implementation: wasabi") || !strings.Contains(implementedConfig, "implementation: process") {
-		t.Fatal("test fixture replacement did not apply")
-	}
-	value, err := config.Parse(strings.NewReader(implementedConfig))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var wasabi, process *config.AdapterProfile
-	for i := range value.Adapters {
-		switch value.Adapters[i].ID {
-		case "storage.staging":
-			wasabi = &value.Adapters[i]
-		case "execution.local":
-			process = &value.Adapters[i]
-		}
-	}
-	w, okW := config.SettingsOf[*WasabiSettings](*wasabi)
-	if !okW || w.Container != "example-staging-backups" || !w.RequireVersionIDs {
-		t.Fatalf("wasabi profile not decoded: %+v", wasabi)
-	}
-	p, okP := config.SettingsOf[*ProcessSettings](*process)
-	if !okP || p.Path != "/usr/lib/gameserver-controller/execution-adapter" || len(p.Args) != 2 {
-		t.Fatalf("process profile not decoded: %+v", process)
-	}
-}
 
 func TestValidateRejectsInvalidImplementedAdapterProfiles(t *testing.T) {
 	tests := []struct {

@@ -138,9 +138,9 @@ func decode(t *testing.T, response adapter.InvokeResponse, value any) {
 	}
 }
 
-func checksumOf(value string) checksum {
+func checksumOf(value string) Checksum {
 	digest := sha256.Sum256([]byte(value))
-	return checksum{Algorithm: "sha256", Digest: hex.EncodeToString(digest[:])}
+	return Checksum{Algorithm: "sha256", Digest: hex.EncodeToString(digest[:])}
 }
 
 func TestDescriptorAdvertisesAllImplementedCapabilities(t *testing.T) {
@@ -167,20 +167,20 @@ func TestListPagesWithBoundContinuationTokens(t *testing.T) {
 		ListingState string  `json:"listing_state"`
 		Next         *string `json:"next_continuation_token"`
 	}
-	decode(t, invoke(t, registry, "storage.object.list", listInput{ContainerRef: testContainer(), Prefix: "server/", MaximumItems: 2}, deadline, "", 0, nil, nil), &page)
+	decode(t, invoke(t, registry, "storage.object.list", ListInput{ContainerRef: testContainer(), Prefix: "server/", MaximumItems: 2}, deadline, "", 0, nil, nil), &page)
 	if page.ListingState != "truncated" || page.Next == nil || len(page.Items) != 2 || page.Items[0].ObjectRef.Key != "server/a" || page.Items[1].SizeBytes != 2 {
 		t.Fatalf("unexpected first page: %+v", page)
 	}
 	token := *page.Next
 	page.Next = nil
-	decode(t, invoke(t, registry, "storage.object.list", listInput{ContainerRef: testContainer(), Prefix: "server/", MaximumItems: 2, ContinuationToken: token}, deadline, "", 0, nil, nil), &page)
+	decode(t, invoke(t, registry, "storage.object.list", ListInput{ContainerRef: testContainer(), Prefix: "server/", MaximumItems: 2, ContinuationToken: token}, deadline, "", 0, nil, nil), &page)
 	if page.ListingState != "complete" || page.Next != nil || len(page.Items) != 1 || page.Items[0].ObjectRef.Key != "server/c" {
 		t.Fatalf("unexpected second page: %+v", page)
 	}
 
 	// The token is bound to its prefix, cannot be altered, and only this adapter instance accepts it.
 	_, otherInstance := registryFor(t, provider, testConfig())
-	for name, input := range map[string]listInput{
+	for name, input := range map[string]ListInput{
 		"other prefix":    {ContainerRef: testContainer(), Prefix: "server/b", MaximumItems: 2, ContinuationToken: token},
 		"tampered token":  {ContainerRef: testContainer(), Prefix: "server/", MaximumItems: 2, ContinuationToken: token + "x"},
 		"outside profile": {ContainerRef: testContainer(), Prefix: "other/", MaximumItems: 2},
@@ -189,7 +189,7 @@ func TestListPagesWithBoundContinuationTokens(t *testing.T) {
 			t.Fatalf("%s: accepted an unauthorized listing", name)
 		}
 	}
-	reused := listInput{ContainerRef: testContainer(), Prefix: "server/", MaximumItems: 2, ContinuationToken: token}
+	reused := ListInput{ContainerRef: testContainer(), Prefix: "server/", MaximumItems: 2, ContinuationToken: token}
 	if _, err := otherInstance.Invoke(context.Background(), requestFor("storage.object.list", reused, deadline, "", 0)); err == nil {
 		t.Fatal("another adapter instance accepted the continuation token")
 	}
@@ -238,7 +238,7 @@ func TestDeleteRequiresExactVersionAndMatchingETag(t *testing.T) {
 	registry, _ := registryFor(t, provider, testConfig())
 	deadline := time.Now().Add(time.Minute)
 
-	for name, input := range map[string]deleteInput{
+	for name, input := range map[string]DeleteInput{
 		"no version":     {ObjectRef: testRef("server/old.tar", "")},
 		"null version":   {ObjectRef: testRef("server/old.tar", "null")},
 		"etag mismatch":  {ObjectRef: testRef("server/old.tar", "version-1"), IfMatchETag: "\"other\""},
@@ -255,11 +255,11 @@ func TestDeleteRequiresExactVersionAndMatchingETag(t *testing.T) {
 	var output struct {
 		State string `json:"state"`
 	}
-	decode(t, invoke(t, registry, "storage.object.delete", deleteInput{ObjectRef: testRef("server/old.tar", "version-1"), IfMatchETag: "\"fake-etag\""}, deadline, "", 0, nil, nil), &output)
+	decode(t, invoke(t, registry, "storage.object.delete", DeleteInput{ObjectRef: testRef("server/old.tar", "version-1"), IfMatchETag: "\"fake-etag\""}, deadline, "", 0, nil, nil), &output)
 	if output.State != "absent" || provider.deletes != 1 {
 		t.Fatalf("unexpected delete result: %+v, deletes=%d", output, provider.deletes)
 	}
-	decode(t, invoke(t, registry, "storage.object.delete", deleteInput{ObjectRef: testRef("server/old.tar", "version-1")}, deadline, "", 0, nil, nil), &output)
+	decode(t, invoke(t, registry, "storage.object.delete", DeleteInput{ObjectRef: testRef("server/old.tar", "version-1")}, deadline, "", 0, nil, nil), &output)
 	if output.State != "absent" || provider.deletes != 1 {
 		t.Fatal("deleting an absent version must report absent without another provider delete")
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -21,6 +22,9 @@ import (
 const (
 	credentialScheme  = "systemd-credential://"
 	maxProviderSecret = 64 << 10
+
+	// SystemdReferenceScheme is the prefix for systemd credential references.
+	SystemdReferenceScheme = "systemd-credential://"
 )
 
 var credentialNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
@@ -316,6 +320,39 @@ func ensureCredentialDirectory(directory string) error {
 	}
 	if err := os.Chmod(directory, 0o700); err != nil {
 		return errors.New("restrict encrypted credential directory permissions failed")
+	}
+	return nil
+}
+
+// ValidateProviderCredential checks that a provider credential is available and readable before use.
+// It returns the credential path for systems that need to read encrypted files, or nil if using WithCredential.
+func ValidateProviderCredential(reference string) error {
+	if !strings.HasPrefix(reference, SystemdReferenceScheme) {
+		return errors.New("provider credential must be a systemd-credential:// reference")
+	}
+	name := strings.TrimPrefix(reference, SystemdReferenceScheme)
+	path := filepath.Join(os.Getenv("CREDENTIALS_DIRECTORY"), name)
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return errors.New("provider credential is unavailable or has invalid permissions")
+	}
+	if info.Size() == 0 {
+		return errors.New("provider credential is empty")
+	}
+	return nil
+}
+
+// ValidateSystemdCredentials checks that all configured credentials exist and are readable.
+func ValidateSystemdCredentials(value config.Config) error {
+	for _, name := range ConfiguredCredentialNames(value) {
+		path := filepath.Join(os.Getenv("CREDENTIALS_DIRECTORY"), name)
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+			return fmt.Errorf("credential %q is unavailable or has invalid permissions", name)
+		}
+		if info.Size() == 0 {
+			return fmt.Errorf("credential %q is empty", name)
+		}
 	}
 	return nil
 }

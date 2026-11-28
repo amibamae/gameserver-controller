@@ -178,24 +178,47 @@ type objectReference struct {
 	VersionID string `json:"version_id,omitempty"`
 }
 
-type checksum struct {
+type Checksum struct {
 	Algorithm string `json:"algorithm"`
 	Digest    string `json:"digest"`
 }
 
-type putInput struct {
+type PutInput struct {
 	Target            objectTarget `json:"target"`
 	ExpectedSizeBytes int64        `json:"expected_size_bytes"`
-	ExpectedChecksum  checksum     `json:"expected_checksum"`
+	ExpectedChecksum  Checksum     `json:"expected_checksum"`
 }
 
-type getInput struct {
+type GetInput struct {
 	ObjectRef         objectReference `json:"object_ref"`
 	ExpectedSizeBytes int64           `json:"expected_size_bytes"`
-	ExpectedChecksum  checksum        `json:"expected_checksum"`
+	ExpectedChecksum  Checksum        `json:"expected_checksum"`
 }
 
+type HeadInput struct {
+	ObjectRef objectReference `json:"object_ref"`
+}
+
+// headInput is an internal variant of HeadInput for testing.
 type headInput struct {
+	ObjectRef objectReference `json:"object_ref"`
+}
+
+// CopyInput is exported for external use; copyInput is internal.
+type copyInput struct {
+	SourceRef         objectReference `json:"source_ref"`
+	Destination       objectTarget    `json:"destination"`
+	ExpectedSizeBytes int64           `json:"expected_size_bytes"`
+	ExpectedChecksum  Checksum        `json:"expected_checksum"`
+}
+
+// VersioningInput is exported for external use; versioningInput is internal.
+type versioningInput struct {
+	ContainerRef containerReference `json:"container_ref"`
+}
+
+// RetentionInput is exported for external use; retentionInput is internal.
+type retentionInput struct {
 	ObjectRef objectReference `json:"object_ref"`
 }
 
@@ -247,7 +270,7 @@ func decodeInput[T any](request adapter.InvokeRequest, rejection string, accept 
 
 // acceptsTransfer reports a request from this profile's environment for an
 // object inside its bucket and prefix, with a bounded size and a SHA-256.
-func (a *Adapter) acceptsTransfer(request adapter.InvokeRequest, target objectTarget, size int64, expected checksum) bool {
+func (a *Adapter) acceptsTransfer(request adapter.InvokeRequest, target objectTarget, size int64, expected Checksum) bool {
 	return a.validRequestEnvironment(request) && a.validTarget(target) && validExpected(size, expected, a.config.MaxObjectBytes)
 }
 
@@ -275,11 +298,11 @@ func (a *Adapter) validReference(value objectReference) bool {
 	return a.validTarget(value.objectTarget)
 }
 
-func validExpected(size int64, expected checksum, maximum int64) bool {
+func validExpected(size int64, expected Checksum, maximum int64) bool {
 	return size >= 0 && size <= maximum && validSHA256(expected)
 }
 
-func validSHA256(expected checksum) bool {
+func validSHA256(expected Checksum) bool {
 	return expected.Algorithm == "sha256" && len(expected.Digest) == sha256.Size*2 && isHex(expected.Digest)
 }
 
