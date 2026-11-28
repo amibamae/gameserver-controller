@@ -1,10 +1,41 @@
 # Game Server Controller
 
-Game Server Controller is a Minecraft server lifecycle controller in development. I want it to bring a backend online when players need it, restore the world, send players across only after the game is ready, and remove the VM only after a fresh backup has been verified.
+Game Server Controller (GSC) is an open-source, self-hosted orchestration project designed to run game servers on demand across cloud and local infrastructure. The goal is to reduce hosting costs, unnecessary electricity consumption and administrative work while protecting valuable player worlds.
 
-I’m using a real setup to test the design: Debian on Vultr, Paper for Minecraft Java, Velocity as the proxy, and Wasabi for object storage. Those services give the first adapters something concrete to account for. The protocol is meant to support other providers and games too.
+The first priority is safe, routine operation of the owner's production Minecraft network. The initial reference stack is Debian, Vultr, Paper, Velocity and Wasabi, with a lightweight Go controller and embedded bbolt state store.
 
-> **Current status:** The Phase 1 protocol package is reviewed for draft version `0.21.0-draft`. The repository includes a Go protocol validator, durable operation acceptance and storage, a local schema registry, an in-process adapter boundary, a generic durable workflow engine with reconciliation and restart recovery, a bounded systemd credential accessor, and a supervised pilot that can run the existing backup service and create Vultr VMs under a durable two-slot controller-owned capacity policy. The slots are one production VM and one shared staging/testing VM; an unmanaged live production server is excluded. The generic durable `server.destroy` workflow is implemented and fake-tested, but no `gsc-pilot destroy` command or production destruction adapter exists. The `server.start`, `server.stop`, `server.provision`, `server.backup`, and `server.restore` workflows are implemented and fake-adapter-tested over the durable engine, but they are not yet composed into a running controller or wired to production adapters. A disabled-by-default HTTPS management runtime serves only operation inspection (`GET /v1/operations/{operation_id}`) with scoped API-key authentication. A bounded Wasabi put/get/head package exists but has no runtime wiring. `controller serve` now composes the runtime from configuration (store, adapter registry with configured Wasabi and process adapters, workflow engine) and can run `server.define`. Initial Velocity proxy and Cloudflare DNS adapters and a billing-aware scaling policy exist and are tested against fakes, but are not wired into the runtime yet. Remaining management routes, game installation and readiness, logical-server attachment of adopted VMs, and the Paper adapter remain future work. Go is the first implementation language; contributors can build clients or adapters in other languages, but the project does not require a second implementation for release. See the [roadmap](docs/ROADMAP.md).
+## Design philosophy
+
+**Simple by default, sophisticated when necessary.**
+
+GSC should solve real user problems without making ordinary deployments unnecessarily complicated. A small server community should benefit from robust world protection and recovery without needing a distributed database, orchestration cluster or external monitoring stack.
+
+- Prefer the simplest maintainable implementation that meets demonstrated user needs and safety requirements. Reuse mature components where appropriate; avoid speculative abstractions and features built solely for competitive parity.
+- Keep advanced capabilities for power users opt-in, independently configurable and isolated behind clear interfaces. High availability, external databases, multi-region orchestration, Kubernetes, advanced scaling and external observability must not become prerequisites for a standalone deployment.
+- Use safe, understandable defaults and keep the normal installation, configuration and upgrade path small. Optional features must justify their ongoing maintenance, security and operational costs.
+- Never simplify away essential authorization, world-data integrity, recovery or destructive-action safeguards. These protections apply regardless of deployment size or enabled features.
+
+See the [roadmap's scope discipline](docs/ROADMAP.md#competitive-review-and-scope-discipline) for feature acceptance and verification criteria.
+
+## Intended deployment options
+
+| Deployment | Goal |
+|---|---|
+| Cloud-only | Provision disposable Vultr VMs when needed; no local server hardware or Proxmox required. |
+| Self-hosted | Start and stop game workloads on Proxmox VE; optionally power down dedicated idle hosts when a safe independent wake path exists. |
+| Hybrid | Use local and cloud capacity together, subject to resource limits, cost policies and verified recovery. |
+
+Vultr remains a first-class hosting option. Proxmox and hybrid orchestration are planned, not currently supported end to end. The owner intends to migrate compute locally only if capacity, networking and recovery tests justify it. Wasabi remains the primary persistent object store for world data, backups and versioned artifacts, independent of the compute provider.
+
+## Intended workloads
+
+- **Persistent worlds:** Bring survival or other durable game worlds online when needed; save, verify and restore authoritative data safely.
+- **On-demand minigames:** Start sessions from reviewed, versioned map and release templates, route waiting players after readiness, and return them to the lobby when matches finish. Dispose of arena state only under an approved policy after required persistent results are saved and verified.
+- **Energy- and cost-aware operation:** Reclaim idle cloud resources and stop unused local guests. Whole-host shutdown is a separate opt-in feature for dedicated hardware, not a requirement for running GSC.
+
+The design aims to preserve Java and Bedrock connectivity and configured voice chat through the existing Minecraft network. These are deployment goals, not claims of complete controller-managed support.
+
+> **Development status:** Not yet a production-ready end-to-end controller. The Phase 1 protocol is reviewed at draft version `0.21.0-draft`. The runtime currently executes `server.define`; other standard lifecycle definitions exist and have fake-adapter tests, but are not fully connected to real production workflows. A supervised Vultr pilot and initial real storage/integration components exist. Proxmox, on-demand minigame orchestration and the complete reference lifecycle remain planned or incomplete. See the [roadmap](docs/ROADMAP.md) for priorities and verification gates before using the controller with irreplaceable worlds.
 
 ## Why I’m building it
 
@@ -16,17 +47,20 @@ If you work on game-server automation, cloud adapters, storage tooling, or opera
 
 ## What exists now
 
-- Draft language-neutral contracts for lifecycle operations and adapters.
-- JSON Schemas, examples, and behavioral conformance fixtures, checked by Go CI.
-- A Go operation store and acceptance service with protocol-schema request validation and an injected trusted-plan boundary, plus an in-process adapter registry with scripted fakes.
-- A durable logical-server catalog; accepting `server.define` creates its initial `unprovisioned` record atomically with the operation, and its metadata-only workflow returns a typed result without adapter calls.
-- A generic durable workflow engine that persists adapter outcomes and reconciles uncertain steps; lifecycle definitions for start, stop, destroy, backup, provision, and restore exist with fakes; application wiring remains future work.
-- A bounded systemd credential accessor used by the explicitly confirmed Vultr pilot create path; general controller runtime and Wasabi runtime credential wiring remain future work.
-- A configuration validator for the initial local v1 shape. It checks input; it does not load runtime settings or resolve provider credentials.
-- A supervised pilot CLI for backup status/history plus dry-run-by-default Vultr provisioning and capacity visibility. Vultr create requires exact confirmation, the source-controlled two-slot policy, and a systemd-provided credential. It does not install or replace the backup unit or script. Read the [pilot handoff guide](docs/SUPERVISED_PILOT.md).
-- A roadmap that separates working code from planned lifecycle features.
+| Component | Implementation status |
+|---|---|
+| Draft protocol and Go conformance checker | Implemented validation, schemas, examples and behavioral fixtures; stable protocol release pending. |
+| Durable operation store and workflow engine | Implemented, with actor-scoped idempotency, resource locks and reconciliation/restart recovery primitives. Continuous scheduling and real lifecycle recovery still need work. |
+| Logical-server catalog and controller runtime | `server.define` is registered and executable; it creates metadata without external infrastructure effects. |
+| Other standard lifecycle workflows | Provision, start, stop, backup, restore and destroy definitions exist and are fake-tested; normal runtime integration is incomplete. |
+| Management API | Authenticated operation inspection, capability and logical-server routes, and operation submission exist. Runnable operations remain limited; cancellation/events are not implemented. |
+| Vultr supervised pilot | Guarded, explicitly confirmed provisioning under the two-slot capacity policy (one production, one shared staging/testing); an unmanaged live production server is excluded. Backup-service inspection and supervised backup tools exist. No pilot destroy command or complete production hosting adapter. |
+| Wasabi, Velocity and Cloudflare | Initial adapters and configuration/runtime registration exist; end-to-end real lifecycle integration and live verification remain incomplete. |
+| Configuration and credentials | Validator, bounded credential accessor and runtime configuration loading exist; installation and provider validation are still being completed. |
+| Optional observability | VictoriaLogs and Homelable tools exist and are disabled by default; no mandatory observability service or production deployment is implied. |
+| Proxmox, minigames and hybrid placement | Planned; require protocol review, implementation and independent verification. |
 
-Full controller composition, the remaining management API routes, the complete Wasabi adapter, and game bootstrap/readiness still need implementation. A generic durable `server.destroy` workflow exists and is fake-tested, but the pilot CLI cannot destroy VMs and no production hosting adapter is wired to that workflow. The pilot can create a controller-owned Vultr VM but does not install the game, restore a world, configure DNS, adopt existing VMs, or prove backup files are valid.
+The pilot is not a complete production deployment tool. It cannot establish the full install, restore, readiness, routing, verified-backup and cleanup sequence by itself. See the [pilot handoff guide](docs/SUPERVISED_PILOT.md) and [roadmap](docs/ROADMAP.md). Production destruction remains disabled pending separate authorization.
 
 ## How I’m splitting the work
 
@@ -38,7 +72,7 @@ The core should own lifecycle rules, permissions, approvals, audit records, and 
 - **Game** installs Paper or another runtime, checks readiness, and defines safe save and migration behavior.
 - **Integration** connects a proxy such as Velocity and routes players to a backend the core has confirmed ready.
 
-The first reference path uses a regular VM and systemd. Container and Kubernetes adapters are optional.
+The first reference path uses a regular VM and systemd. Proxmox, container and Kubernetes adapters are optional. The controller must work without a hosted management panel, dedicated remote file manager or SFTP service; pinned SSH remains useful for secure host handoff and execution.
 
 The draft requires the controller to save an operation record before it makes a mutating provider call. If the provider's answer disappears, the controller must inspect the actual resource before it retries. An upload acknowledgment does not prove a backup. A running Java process does not prove Paper is ready. A failed or uncertain backup blocks destruction.
 
@@ -49,10 +83,10 @@ The draft requires the controller to save an operation record before it makes a 
 3. A reviewed, pinned bootstrap prepares the host. Credentials arrive separately through scoped secret references.
 4. The game adapter installs the selected release and restores one identified backup.
 5. Paper starts. The controller checks game and network readiness before Velocity routes players to it.
-6. When the server is idle, the controller drains traffic, saves the world, uploads and verifies its backup, then destroys the exact VM.
+6. When the server is idle, the controller drains traffic, saves the world, uploads and verifies its backup, then may destroy the exact authorized disposable VM. A local guest may instead be stopped and retained.
 7. For updates, an isolated test or staging deployment checks the candidate before promotion. Major Minecraft upgrades and world migrations need explicit approval.
 
-That is the target workflow. The repository does not implement it end to end yet.
+That is the target persistent-world workflow. The repository does not implement it end to end yet. Minigame cleanup policies and local host power management are separate planned extensions that must preserve the same applicable safety guarantees.
 
 ## Protocol and implementation
 

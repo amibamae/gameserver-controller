@@ -66,6 +66,12 @@ func (c SettingsCheck) Require(ok bool, problem string) {
 	}
 }
 
+// Fail records a fatal problem for the settings block, prefixed with the
+// settings block path, unless ok.
+func (c SettingsCheck) Fail(ok bool, problem string) {
+	c.Require(ok, problem)
+}
+
 // KnownEnvironment reports whether id names a configured environment.
 func (c SettingsCheck) KnownEnvironment(id string) bool {
 	_, ok := c.environments[id]

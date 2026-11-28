@@ -1,3 +1,5 @@
+> **Status: PARTIALLY IMPLEMENTED.** Only `internal/store/crash_recovery_test.go` and `internal/simulation/faults*.go` exist. `internal/store/crash_simulation_test.go`, `internal/metrics.go`, `internal/handlers/health_metrics.go` and `prometheus/alerting_rules.go` named below are not in the repository, so the observability and four-nines claims are unsupported. Commit and branch details are historical.
+
 # ✅ RELIABILITY STAGE 1 - FOUR-NINES AVAILABILITY FOUNDATION COMPLETE
 
 **Repository:** https://github.com/amibamae/gameserver-controller  

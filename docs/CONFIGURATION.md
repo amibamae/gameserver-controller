@@ -284,6 +284,55 @@ a credential of at least 32 bytes. Create one with
 which stores 64 random hex characters and never displays them. The controller
 does not start if a configured key is missing or too short.
 
+## Monitoring telemetry flags
+
+The controller supports optional monitoring integrations that follow the **fail-closed principle** - they do not block controller operation if unavailable.
+
+### VictoriaLogs adapter (optional)
+
+The `VictoriaLogsAdapter` provides optional log forwarding to VictoriaLogs. It is implemented as a fail-closed feature: if the adapter is unavailable, logs are discarded but controller operation continues normally.
+
+```yaml
+# Optional VictoriaLogs integration in adapters.d/
+id: observability.victorialogs
+category: integration
+implementation: controllerruntime  # optional monitoring adapter
+secret_refs:
+  server_url_token:   # token for authenticated log forwarding
+    secret_ref: systemd-credential://victorialogs-server-token
+    purpose: VictoriaLogs authentication token
+controllerruntime:
+  server_url: https://logs.example.com/api/v1/query_log
+  log_format: json
+```
+
+The adapter is optional and follows fail-closed behavior per [monitoring guidelines](docs/SECURITY_MODEL.md#fail-closed-monitoring).
+
+### Bootstrap log preservation on failure
+
+The bootstrap script (`scripts/bootstrap/minecraft-debian.sh.tmpl`) includes an `on_error` trap handler that preserves logs when bootstrapping fails:
+
+```bash
+# Preserve bootstrap logs for debugging before exit (on_error hook)
+{
+    echo "--------------------------------------------------------------"
+    echo "PRESERVING BOOTSTRAP LOGS TO /var/log/minecraft-bootstrap.tar.gz"
+    echo "Timestamp: $(date --iso-8601=seconds)"
+    echo "Failed exit code: $rc"
+    echo "Command that failed: ${BASH_COMMAND:-unknown}"
+    echo "--------------------------------------------------------------"
+} >> /var/log/minecraft-bootstrap-preserve.log
+
+tar -czf /var/log/minecraft-bootstrap.tar.gz \
+    -C / \
+    . \
+    /etc \
+    /opt \
+    2>&1 | tail -n 5 || true
+```
+
+This ensures that failed bootstrap attempts are logged and packaged for debugging before the script exits with an error code. The archived logs are stored in `/var/log/minecraft-bootstrap.tar.gz` and a summary is appended to `/var/log/minecraft-bootstrap-preserve.log`.
+
 ## Secret references
 
 Version 1 accepts references only in the explicit
@@ -308,6 +357,26 @@ staging storage must use separate least-privilege credentials, with staging
 unable to modify or delete production backups. See [secret management](SECRET_MANAGEMENT.md)
 for the deployment rules. Validation rejects a shared storage credential
 reference across production and staging profiles.
+
+## Privacy filtering middleware
+
+All notification adapters (webhook, SMTP, ntfy) apply privacy filtering before transmitting logs to external services. The `privacy.FilterLog` function redacts:
+
+- IPv4 and IPv6 addresses
+- UUIDs (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+- SHA-256/384 hashes (64-96 hex characters)
+- Base64-encoded strings at line boundaries (minimum 20 characters)
+
+This prevents sensitive data from being exposed in notifications sent to external services. The filtering is applied transparently and does not impact notification delivery.
+
+### Privacy filter integration points
+
+Privacy filtering is integrated into:
+- `internal/notification/webhook.go` (line 53)
+- `internal/notification/smtp.go` (line 84)
+- `internal/notification/ntfy.go` (line 63)
+
+The filters ensure that external notification services never receive logs containing PII like IP addresses, user identifiers, or hashed secrets.
 
 ## What validation covers
 

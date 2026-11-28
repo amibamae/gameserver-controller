@@ -1,5 +1,8 @@
 // Package fakeadapter provides scripted in-process adapters for controller
 // tests. It performs no network, process, or provider calls.
+//
+// TEST HARNESS: for tests only. Production code must not import this package.
+// See docs/TEST_HARNESSES.md.
 package fakeadapter
 
 import (
