@@ -69,8 +69,10 @@ func concurrentRunRefusal(err error) bool {
 }
 
 // TestFaultDuplicateSubmissionNeverMutatesTwice submits the same request
-// again before, during and after its run, from several controller
-// processes at once, and requires one operation and one provider mutation.
+// again before and after its run, runs it from many goroutines of one
+// controller at once, and requires one operation and one provider mutation.
+// Only one controller process can hold the Bolt store open for writing, so
+// concurrency comes from goroutines, not from a second engine.
 func TestFaultDuplicateSubmissionNeverMutatesTwice(t *testing.T) {
 	env := newFaultEnv(t, completedReplies(4)...)
 	original := env.fixture.operation.Record
@@ -80,8 +82,8 @@ func TestFaultDuplicateSubmissionNeverMutatesTwice(t *testing.T) {
 		t.Fatalf("retry before the run = %q replayed=%v err=%v, want the original %q replayed", replayed.Record.OperationID, wasReplayed, err, env.id)
 	}
 
-	engines := []*Engine{env.startController(t, crashPoint{}), env.startController(t, crashPoint{})}
-	for _, err := range runConcurrently(engines, replayed.Record.OperationID, 4) {
+	engines := []*Engine{env.startController(t, crashPoint{})}
+	for _, err := range runConcurrently(engines, replayed.Record.OperationID, 8) {
 		if !concurrentRunRefusal(err) {
 			t.Errorf("concurrent run error = %v, want nil, ErrOperationInProgress or ErrRevisionConflict", err)
 		}
