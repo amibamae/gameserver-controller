@@ -44,18 +44,19 @@ type Client struct {
 // Instance contains the provider fields used by the controller. Additional
 // fields returned by Vultr are intentionally ignored for forward compatibility.
 type Instance struct {
-	ID          string   `json:"id"`
-	DateCreated string   `json:"date_created,omitempty"`
-	Region      string   `json:"region"`
-	Plan        string   `json:"plan"`
-	OSID        int      `json:"os_id"`
-	OS          string   `json:"os"`
-	Label       string   `json:"label"`
-	Hostname    string   `json:"hostname"`
-	Status      string   `json:"status"`
-	PowerStatus string   `json:"power_status"`
-	MainIP      string   `json:"main_ip"`
-	Tags        []string `json:"tags"`
+	ID           string   `json:"id"`
+	DateCreated  string   `json:"date_created,omitempty"`
+	Region       string   `json:"region"`
+	Plan         string   `json:"plan"`
+	OSID         int      `json:"os_id"`
+	OS           string   `json:"os"`
+	Label        string   `json:"label"`
+	Hostname     string   `json:"hostname"`
+	Status       string   `json:"status"`
+	PowerStatus  string   `json:"power_status"`
+	MainIP       string   `json:"main_ip"`
+	ServerStatus string   `json:"server_status"`
+	Tags         []string `json:"tags"`
 }
 
 type CreateInstanceRequest struct {
@@ -320,11 +321,11 @@ func statusError(status int, mutation bool) error {
 	case status == http.StatusRequestTimeout && mutation:
 		return ErrOutcomeUnknown
 	case status >= 400 && status < 500:
-		return fmt.Errorf("%w: HTTP %d", ErrProviderReject, status)
+		return fmt.Errorf("%w: %w", ErrProviderReject, StatusError(status))
 	case mutation:
 		return ErrOutcomeUnknown
 	default:
-		return fmt.Errorf("%w: HTTP %d", ErrRequestFailed, status)
+		return fmt.Errorf("%w: %w", ErrRequestFailed, StatusError(status))
 	}
 }
 
@@ -477,3 +478,11 @@ func ParseOSID(value string) (int, error) {
 	}
 	return parsed, nil
 }
+
+// StatusError is the HTTP status of a request Vultr refused or failed. It is
+// wrapped with ErrProviderReject or ErrRequestFailed, so callers can use
+// errors.As to tell, for example, a missing instance (404) from a rate limit
+// (429) without parsing the message.
+type StatusError int
+
+func (s StatusError) Error() string { return fmt.Sprintf("HTTP %d", int(s)) }

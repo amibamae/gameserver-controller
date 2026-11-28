@@ -28,7 +28,7 @@ func matchIDs(t *testing.T, output map[string]any) []string {
 
 func TestFindByResourceKeyReturnsExactDistinctMatchesUpToTwo(t *testing.T) {
 	running := func(id, label string) vultrapi.Instance {
-		return vultrapi.Instance{ID: id, Label: label, Status: "active", PowerStatus: "running"}
+		return vultrapi.Instance{ID: id, Label: label, Status: "active", PowerStatus: "running", ServerStatus: "ok"}
 	}
 	cases := map[string]struct {
 		instances []vultrapi.Instance

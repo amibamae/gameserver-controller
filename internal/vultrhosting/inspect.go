@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 
 	"github.com/amibamae/gameserver-controller/internal/vultrapi"
 )
@@ -29,14 +30,13 @@ type inspectOutput struct {
 	ObservedAt      string      `json:"observed_at"`
 }
 
-// notReturnedDiagnostic explains an unknown state after Vultr refused the
-// lookup. A 404 can also mean a wrong token or account, so it never proves
+// notReturnedDiagnostic explains an unknown state after a 404. A 404 can also mean a wrong token or account, so it never proves
 // the instance is gone.
 const notReturnedDiagnostic = "Vultr did not return this instance; it may not exist, or the API token may not see it"
 
-// inspect reads one exact instance. Vultr refusing the lookup is reported as
-// state unknown; transport and response failures are returned as errors so
-// the caller can retry.
+// inspect reads one exact instance. A 404 is reported as state unknown, never
+// destroyed. Every other failure, including 401, 403 and 429, is an error so
+// the caller can retry rather than record an observation.
 func (a *Adapter) inspect(ctx context.Context, input json.RawMessage) (any, error) {
 	var request inspectInput
 	if err := decodeStrict(input, &request); err != nil {
@@ -52,7 +52,7 @@ func (a *Adapter) inspect(ctx context.Context, input json.RawMessage) (any, erro
 		return readErr
 	})
 	output := inspectOutput{InstanceRef: request.InstanceRef, ObservedAt: a.observedAt()}
-	if errors.Is(err, vultrapi.ErrProviderReject) {
+	if notFound(err) {
 		output.State, output.SafeDiagnostics = "unknown", []string{notReturnedDiagnostic}
 		return output, nil
 	}
@@ -73,21 +73,39 @@ func (a *Adapter) boundRef(ref instanceRef) bool {
 		ref.ResourceKind == resourceKind && ref.ExternalID != ""
 }
 
-// instanceState maps Vultr's status and power status to the protocol states.
-// Anything Vultr may add later, or a suspended or resizing instance, stays
-// unknown rather than being read as active.
+// notFound reports a 404 from Vultr. Only a 404 is read as an observation;
+// 401, 403, 429 and every other failure stay errors.
+func notFound(err error) bool {
+	var status vultrapi.StatusError
+	return errors.As(err, &status) && status == http.StatusNotFound
+}
+
+// instanceState maps Vultr's status, power_status and server_status to the
+// protocol states. An instance is active only when it is running and its
+// server_status is ok. A locked instance, a suspended or resizing one, or any
+// value Vultr may add later stays unknown rather than being read as active.
 func instanceState(instance vultrapi.Instance) string {
-	if instance.Status == "pending" {
+	switch {
+	case instance.Status == "pending":
 		return "creating"
-	}
-	if instance.Status != "active" {
+	case instance.Status != "active", instance.ServerStatus == "locked":
+		return "unknown"
+	case instance.PowerStatus == "stopped":
+		return "stopped"
+	case instance.PowerStatus != "running":
 		return "unknown"
 	}
-	switch instance.PowerStatus {
-	case "running":
+	return runningState(instance.ServerStatus)
+}
+
+// runningState maps the server_status of a running instance. A missing or
+// unrecognized value is unknown.
+func runningState(serverStatus string) string {
+	switch serverStatus {
+	case "ok":
 		return "active"
-	case "stopped":
-		return "stopped"
+	case "installingbooting":
+		return "creating"
 	default:
 		return "unknown"
 	}

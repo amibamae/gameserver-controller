@@ -8,15 +8,19 @@ An earlier version of this page described a complete adapter with create and sta
 
 | Capability | Vultr call | Notes |
 | --- | --- | --- |
-| `hosting.instance.inspect` | `GET /v2/instances/{id}` | Maps `status` and `power_status` to the protocol states. Anything it cannot map is `unknown`. If Vultr refuses the lookup (any 4xx, including 404) the state is `unknown` with a diagnostic, because a wrong token or account also returns 404. Transport and response failures are errors, so the caller can retry. |
-| `hosting.instance.find_by_resource_key` | `GET /v2/instances?label=…`, every page | Matches instances whose label is exactly the `gsc-<64 hex>` resource key. Returns at most two distinct matches and reports `inventory_complete` only after reading every page. Instances created by the supervised pilot use `gsc-managed-…` labels and are not matched. |
+| `hosting.instance.inspect` | `GET /v2/instances/{id}` | Maps `status`, `power_status` and `server_status` to the protocol states (table below). Anything it cannot map is `unknown`. A 404 is reported as `unknown` with a diagnostic, never `destroyed`, because a wrong token or account also returns 404. Every other failure, including 401, 403 and 429, is an error, so the caller retries instead of recording an observation. |
+| `hosting.instance.find_by_resource_key` | `GET /v2/instances`, every page | Reads the complete account inventory, which the client checks against `meta.total` and for duplicate IDs, then keeps instances whose label is exactly the `gsc-<64 hex>` resource key. Returns at most two distinct matches. |
 
-| Vultr `status` | Vultr `power_status` | Protocol `state` |
-| --- | --- | --- |
-| `pending` | any | `creating` |
-| `active` | `running` | `active` |
-| `active` | `stopped` | `stopped` |
-| anything else | anything else | `unknown` |
+**A find match is a reconciliation candidate, not proof of ownership.** Vultr labels can be edited, so treat one match as the create that lost its response only together with the controller's own durable record of that create. The adapter does not read Vultr tags such as `gsc-operation-…`. Instances created by the supervised pilot use `gsc-managed-…` labels and never match.
+
+| Vultr `status` | `server_status` | `power_status` | Protocol `state` |
+| --- | --- | --- | --- |
+| `pending` | any | any | `creating` |
+| `active` | `locked` | any | `unknown` |
+| `active` | any other | `stopped` | `stopped` |
+| `active` | `ok` | `running` | `active` |
+| `active` | `installingbooting` | `running` | `creating` |
+| anything else | anything else | anything else | `unknown` |
 
 ## Not implemented
 

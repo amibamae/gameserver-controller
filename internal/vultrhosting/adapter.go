@@ -44,7 +44,7 @@ type CredentialResolver interface {
 // instanceReader is the read-only part of the Vultr client this adapter uses.
 type instanceReader interface {
 	GetInstance(ctx context.Context, token []byte, instanceID string) (vultrapi.Instance, error)
-	ListInstancesByLabel(ctx context.Context, token []byte, label string) ([]vultrapi.Instance, error)
+	ListInstances(ctx context.Context, token []byte) ([]vultrapi.Instance, error)
 }
 
 // Adapter implements adapter.Implementation for Vultr hosting reads.

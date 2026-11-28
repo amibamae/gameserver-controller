@@ -36,7 +36,7 @@ func (f *fakeReader) GetInstance(_ context.Context, token []byte, _ string) (vul
 	return f.instance, f.err
 }
 
-func (f *fakeReader) ListInstancesByLabel(_ context.Context, token []byte, _ string) ([]vultrapi.Instance, error) {
+func (f *fakeReader) ListInstances(_ context.Context, token []byte) ([]vultrapi.Instance, error) {
 	f.calls++
 	f.token = string(token)
 	return f.instances, f.err

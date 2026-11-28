@@ -11,19 +11,24 @@ import (
 
 func TestInspectMapsProviderStates(t *testing.T) {
 	cases := map[string]struct {
-		status, power, want string
+		status, power, server, want string
 	}{
-		"running":      {"active", "running", "active"},
-		"stopped":      {"active", "stopped", "stopped"},
-		"pending":      {"pending", "", "creating"},
-		"odd power":    {"active", "restarting", "unknown"},
-		"suspended":    {"suspended", "stopped", "unknown"},
-		"resizing":     {"resizing", "running", "unknown"},
-		"empty status": {"", "running", "unknown"},
+		"running ok":        {"active", "running", "ok", "active"},
+		"running booting":   {"active", "running", "installingbooting", "creating"},
+		"running none":      {"active", "running", "none", "unknown"},
+		"running no server": {"active", "running", "", "unknown"},
+		"running locked":    {"active", "running", "locked", "unknown"},
+		"stopped":           {"active", "stopped", "none", "stopped"},
+		"stopped locked":    {"active", "stopped", "locked", "unknown"},
+		"pending":           {"pending", "", "", "creating"},
+		"odd power":         {"active", "restarting", "ok", "unknown"},
+		"suspended":         {"suspended", "stopped", "ok", "unknown"},
+		"resizing":          {"resizing", "running", "ok", "unknown"},
+		"empty status":      {"", "running", "ok", "unknown"},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {
-			reader := &fakeReader{instance: vultrapi.Instance{ID: "inst-1", Region: "ewr", Plan: "vc2-1c-1gb", Status: test.status, PowerStatus: test.power}}
+			reader := &fakeReader{instance: vultrapi.Instance{ID: "inst-1", Region: "ewr", Plan: "vc2-1c-1gb", Status: test.status, PowerStatus: test.power, ServerStatus: test.server}}
 			output, err := invoke(t, testRegistry(t, reader, fakeCredentials{}), capabilityInspect, inspectInputJSON("inst-1"))
 			if err != nil {
 				t.Fatal(err)
@@ -38,8 +43,22 @@ func TestInspectMapsProviderStates(t *testing.T) {
 	}
 }
 
-func TestInspectReportsProviderRejectAsUnknown(t *testing.T) {
-	reader := &fakeReader{err: fmt.Errorf("%w: HTTP 404", vultrapi.ErrProviderReject)}
+func TestInspectTreatsOnlyNotFoundAsAnObservation(t *testing.T) {
+	for _, status := range []int{401, 403, 429} {
+		reader := &fakeReader{err: fmt.Errorf("%w: %w", vultrapi.ErrProviderReject, vultrapi.StatusError(status))}
+		_, err := invoke(t, testRegistry(t, reader, fakeCredentials{}), capabilityInspect, inspectInputJSON("inst-1"))
+		if !strings.Contains(errorText(err), "Vultr instance inspection failed; the instance state is unknown") {
+			t.Fatalf("HTTP %d: err = %v, want a retryable error", status, err)
+		}
+	}
+	reader := &fakeReader{err: fmt.Errorf("%w: %w", vultrapi.ErrRequestFailed, vultrapi.StatusError(503))}
+	if _, err := invoke(t, testRegistry(t, reader, fakeCredentials{}), capabilityInspect, inspectInputJSON("inst-1")); err == nil {
+		t.Fatal("HTTP 503 was reported as an observation")
+	}
+}
+
+func TestInspectReportsNotFoundAsUnknown(t *testing.T) {
+	reader := &fakeReader{err: fmt.Errorf("%w: %w", vultrapi.ErrProviderReject, vultrapi.StatusError(404))}
 	output, err := invoke(t, testRegistry(t, reader, fakeCredentials{}), capabilityInspect, inspectInputJSON("gone"))
 	if err != nil {
 		t.Fatal(err)

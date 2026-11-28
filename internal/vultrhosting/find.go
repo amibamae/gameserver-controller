@@ -31,8 +31,12 @@ type findOutput struct {
 }
 
 // findByResourceKey looks up instances whose Vultr label is exactly the
-// controller resource key that hosting.instance.create sets. The client reads
-// every page or fails, so a result is always a complete inventory.
+// controller resource key that hosting.instance.create sets. It reads the
+// complete account inventory, which the client checks against meta.total and
+// for duplicate IDs, and filters labels itself. Labels are editable in Vultr,
+// so a match is a reconciliation candidate, not proof that the controller owns
+// the instance. It does not read tags, and supervised-pilot instances, which
+// use gsc-managed-... labels, never match.
 func (a *Adapter) findByResourceKey(ctx context.Context, input json.RawMessage) (any, error) {
 	var request findInput
 	if err := decodeStrict(input, &request); err != nil || !resourceKeyPattern.MatchString(request.ResourceKey) {
@@ -41,7 +45,7 @@ func (a *Adapter) findByResourceKey(ctx context.Context, input json.RawMessage) 
 	var instances []vultrapi.Instance
 	err := a.withToken(func(token []byte) error {
 		var listErr error
-		instances, listErr = a.client.ListInstancesByLabel(ctx, token, request.ResourceKey)
+		instances, listErr = a.client.ListInstances(ctx, token)
 		return listErr
 	})
 	if err != nil {
