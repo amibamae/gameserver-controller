@@ -35,7 +35,7 @@ The management API decides each define or submit request in this order, and stop
 
 1. No `Idempotency-Key`, or an operation type other than `server.define`: 400, `core.validation.invalid_request`.
 2. The actor lacks `server.define` for that exact environment and server ID: 403, `core.authorization.denied`.
-3. The key was already used by this actor: the same request replays the original operation (202); a different request is 409, `core.operation.idempotency_conflict`.
+3. The key was already used by this actor: while the full record is retained, the same request replays the original operation (202) and a different request is 409, `core.operation.idempotency_conflict`. If only the matching tombstone remains, return 409, `core.operation.idempotency_key_expired`; do not replay, create or dispatch an operation. See [operation idempotency](../operations.md#7-idempotency-and-duplicate-requests).
 4. A server with that ID exists in any environment: 409, `core.operation.conflict`. Server IDs are unique across environments, because later routes name only the server.
 5. Otherwise the operation is accepted (202).
 
@@ -46,7 +46,7 @@ The management API decides each define or submit request in this order, and stop
 3. The actor lacks the operation type's permission (for example `server.start`) for that server and environment: 403, `core.authorization.denied`.
 4. The controller has no runnable workflow for the operation type: 422, `core.operation.unsupported_type`. Nothing is accepted that could never run.
 5. The server's network profile needs a missing integration capability: 422, `core.network.capability_missing`.
-6. Key reuse behaves as for define: replay (202) or 409, `core.operation.idempotency_conflict`.
+6. Key reuse behaves as for define: replay (202), 409 `core.operation.idempotency_conflict`, or 409 `core.operation.idempotency_key_expired` for a retained tombstone after full-record expiry.
 7. Otherwise the operation is accepted (202).
 
 ## 3. Evaluate before accepting and dispatching

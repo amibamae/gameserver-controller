@@ -38,7 +38,7 @@ Capability negotiation is separate. An adapter advertises exact capability names
 
 Version `0.21.0-draft` is unstable and pre-1.0. It provides no stable compatibility guarantee, but `protocol_version` still identifies the negotiated wire contract. Peers MUST NOT advertise the same version for different accepted messages or required behavior.
 
-While the protocol is in design, the untagged branch is development source, not a compatibility target for independent implementations. Each published draft snapshot MUST be immutable and use a new SemVer-shaped `0.y.0-draft` version. The project increments the minor component for each pre-1.0 snapshot. A breaking change uses a new protocol version and updates every version-scoped schema ID in the same change. For example, an incompatible change after `0.9.0-draft` uses `0.21.0-draft`. Update examples, fixtures, and the schema inventory with each snapshot.
+While the protocol is in design, the untagged branch is development source, not a compatibility target for independent implementations. Each published draft snapshot MUST be immutable and use a new SemVer-shaped `0.y.0-draft` version. The project increments the minor component for each pre-1.0 snapshot. A breaking change uses a new protocol version and updates every version-scoped schema ID in the same change. For example, the next incompatible published draft after `0.21.0-draft` uses `0.22.0-draft`. Update examples, fixtures, and the schema inventory with each snapshot.
 
 Use `-draft` while designing protocol semantics and before a runnable implementation demonstrates conformance. The project reserves `-alpha` for an early controller or adapter under evaluation. These are maturity labels, not different compatibility guarantees; both are unstable prereleases.
 
@@ -52,7 +52,7 @@ The schema index lists every schema in a protocol package. Implementations valid
 
 Schema IDs are unique within a package. A schema reference resolves through the package's local registry or an explicitly declared in-package reference. Validators MUST NOT make arbitrary network requests to resolve protocol schema IDs.
 
-Once a package is tagged, its schema content and IDs are immutable. A correction creates a new package revision and, if validation meaning changes, a new version-scoped schema ID. To reproduce an earlier operation, retain the package version or digest used when it was accepted.
+Once a package is tagged, its normative text, schema content and IDs, API bindings, examples and fixtures are immutable. The schema and fixture digests in the current manifest do not cover all of those files: pin the exact source commit as well as both digests when identifying a conformance target. A correction creates a new package revision and, if validation meaning changes, a new version-scoped schema ID. To reproduce an earlier operation, retain the package version or digest used when it was accepted.
 
 Generated bindings MAY come from schemas, but the schemas and protocol text remain authoritative. Generated code cannot add semantics absent from them.
 

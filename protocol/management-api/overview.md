@@ -54,7 +54,7 @@ The OpenAPI bearer scheme is a placeholder. It does not require a particular ide
 
 ## 6. Errors
 
-Before operation acceptance, return RFC 9457 Problem Details with protocol error extensions. After acceptance, store errors in the operation resource. If a disconnect or timeout makes acceptance ambiguous, read the operation before sending another mutating request.
+Before operation acceptance, return RFC 9457 Problem Details with protocol error extensions. After acceptance, store errors in the operation resource. If a disconnect or timeout makes acceptance ambiguous, read the original operation using its known operation ID or Location, if available. If the acceptance response was lost before the client learned the operation reference, the client can repeat the identical acceptance request using the same authenticated actor and `Idempotency-Key`, subject to the current authorization and submit-decision rules. A replay is not a new operation. Do not use a fresh key to retry an uncertain acceptance. A denial, unsupported operation, expired key or other failure during recovery does not establish that the first request had no effect; stop and reconcile through authorized inspection or operator assistance rather than issue a new mutation. See [operations section 7](../operations.md#7-idempotency-and-duplicate-requests) and [submit decisions](authorization.md#21-submit-decisions).
 
 ## 7. Compatibility
 
