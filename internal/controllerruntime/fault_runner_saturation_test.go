@@ -145,7 +145,7 @@ func awaitStatus(runtime *Runtime, operationID string, want protocolstate.Operat
 // workers. The accepted operation must reach a terminal state without a
 // controller restart.
 func TestFaultAcceptedOperationRunsAfterQueueSaturation(t *testing.T) {
-	t.Skip("KNOWN DEFECT: runner.submit drops the hint of an operation accepted while the queue is full and nothing rediscovers it until restart; see remediation report")
+	t.Skip("KNOWN DEFECT: runner.submit drops the hint of an operation accepted while the queue is full and nothing rediscovers it until restart; internal/controllerruntime/runner.go submit, fixed by PR #475 - un-skip when it lands")
 	definition := saturationDefinition{started: make(chan string, runnerWorkers), release: make(chan struct{})}
 	runtime := saturationRuntime(t, definition)
 	runtime.StartRunner(context.Background(), nil)
