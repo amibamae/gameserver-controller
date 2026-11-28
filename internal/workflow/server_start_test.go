@@ -198,7 +198,7 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 			{Name: "execution.unit.graceful_stop", Version: "1", Mutating: true,
 				InputSchemaURI:  "urn:gameserver-controller:" + version + ":execution:systemd-unit-graceful-stop-input",
 				OutputSchemaURI: "urn:gameserver-controller:" + version + ":execution:systemd-unit-graceful-stop-output", RequiredPermissions: []string{}},
-			{Name: "execution.unit.inspect", Version: "1", Mutating: false,
+			{Name: "execution.unit.inspect", Version: "2", Mutating: false,
 				InputSchemaURI:  "urn:gameserver-controller:" + version + ":execution:systemd-unit-inspect-input",
 				OutputSchemaURI: "urn:gameserver-controller:" + version + ":execution:systemd-unit-inspect-output", RequiredPermissions: []string{}},
 		},
@@ -216,7 +216,7 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 		AdapterID: "game.paper", Category: adapter.CategoryGame, DisplayName: "fake Paper", ImplementationVersion: "test-1",
 		ProtocolVersions: []string{version}, ContractVersions: []string{"1"}, RequiredPermissions: []string{},
 		Capabilities: []adapter.Capability{
-			{Name: "game.readiness.check", Version: "1", Mutating: false,
+			{Name: "game.readiness.check", Version: "2", Mutating: false,
 				InputSchemaURI:  "urn:gameserver-controller:" + version + ":game:readiness-check-input",
 				OutputSchemaURI: "urn:gameserver-controller:" + version + ":game:readiness-check-output", RequiredPermissions: []string{},
 				Constraints: map[string]any{"readiness_check_sets": []any{map[string]any{

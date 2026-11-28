@@ -36,7 +36,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 200,
-      "description": "Opaque identity of the current runtime incarnation, such as the systemd InvocationID. Adapters advertising restart must supply it while running; it changes after a completed restart. A controller binding game readiness to a unit start (server.start) requires it from the inspection after that start and fails closed without it."
+      "description": "Opaque identity of the current runtime incarnation, such as the systemd InvocationID. Adapters advertising restart must supply it while running; it changes after a completed restart. Required while running from execution.unit.inspect capability version 2; server.start requires that version so game readiness can be bound to the started runtime."
     },
     "target": {
       "$ref": "urn:gameserver-controller:0.21.0-draft:game:game-instance-target",

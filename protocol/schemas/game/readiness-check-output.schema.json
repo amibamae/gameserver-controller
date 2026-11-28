@@ -34,13 +34,14 @@
     },
     "observed_at": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "description": "Evaluation time: when the adapter completed this evaluation in response to the request. It is never the time of an underlying game event, such as a startup log line. A controller binding readiness to a start rejects a value earlier than the readiness request dispatch, less a 30-second clock-skew allowance."
     },
     "runtime_id": {
       "type": "string",
       "minLength": 1,
       "maxLength": 200,
-      "description": "Opaque identity of the runtime incarnation the checks observed, in the same form execution.unit.inspect reports it. A controller binding readiness to a unit start (server.start) MUST require it and MUST require it to equal the runtime_id the unit inspection reported after that start; a missing or different value fails closed."
+      "description": "Opaque identity of the runtime incarnation the checks observed, in the same form execution.unit.inspect reports it. Required from game.readiness.check capability version 2. server.start requires that version and requires this value to equal the runtime_id the unit inspection reported after the start; a missing or different value fails closed."
     },
     "check_results": {
       "type": "array",
@@ -76,7 +77,8 @@
           },
           "observed_at": {
             "type": "string",
-            "format": "date-time"
+            "format": "date-time",
+            "description": "Evaluation time of this check, not the time of the game event it inspects; no later than the aggregate observed_at."
           },
           "evidence": {
             "type": "array",

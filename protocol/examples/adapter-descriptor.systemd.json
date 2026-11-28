@@ -59,7 +59,7 @@
     },
     {
       "name": "execution.unit.inspect",
-      "version": "1",
+      "version": "2",
       "mutating": false,
       "input_schema_uri": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-inspect-input",
       "output_schema_uri": "urn:gameserver-controller:0.21.0-draft:execution:systemd-unit-inspect-output",

@@ -2,10 +2,15 @@
   "fixture_id": "game.readiness.start-bound-evidence",
   "protocol_version": "0.21.0-draft",
   "contract_area": "game.readiness.check",
-  "purpose": "Readiness for a start proves that start attempt: the aggregate and every check are observed no earlier than the unit start completed, and the observation names the runtime_id the unit inspection after that start reported. Earlier, unbound, or other-runtime evidence does not permit ready.",
+  "purpose": "Readiness for a start proves that start attempt. The start is dispatched only when execution.unit.inspect and game.readiness.check are declared at capability version 2, which report runtime_id. Every readiness observed_at is evaluation time and must be no earlier than the readiness dispatch less a 30-second clock-skew allowance, and the observation must name the runtime_id the unit inspection after the start reported.",
   "evaluations": [
     {
+      "capability_versions": {
+        "execution.unit.inspect": "2",
+        "game.readiness.check": "2"
+      },
       "case_id": "fresh-same-runtime",
+      "readiness_dispatched_at": "2026-11-07T19:30:00Z",
       "readiness_output": {
         "check_results": [
           {
@@ -39,7 +44,6 @@
         "runtime_id": "paper-runtime-017",
         "server_id": "minecraft-test"
       },
-      "start_completed_at": "2026-11-07T19:30:00Z",
       "unit_inspection": {
         "observed_at": "2026-11-07T19:30:01Z",
         "release_ref": "paper-1.21.11-build-3",
@@ -54,7 +58,12 @@
       }
     },
     {
-      "case_id": "observed-at-start-completion",
+      "capability_versions": {
+        "execution.unit.inspect": "2",
+        "game.readiness.check": "2"
+      },
+      "case_id": "observed-at-skew-allowance",
+      "readiness_dispatched_at": "2026-11-07T19:30:00Z",
       "readiness_output": {
         "check_results": [
           {
@@ -63,7 +72,7 @@
             "evidence": [
               "Paper startup completion marker observed."
             ],
-            "observed_at": "2026-11-07T19:30:00Z",
+            "observed_at": "2026-11-07T19:29:30Z",
             "result": "pass"
           },
           {
@@ -72,7 +81,7 @@
             "evidence": [
               "Primary world loaded."
             ],
-            "observed_at": "2026-11-07T19:30:00Z",
+            "observed_at": "2026-11-07T19:29:30Z",
             "result": "pass"
           }
         ],
@@ -84,11 +93,10 @@
           "external_id": "instance-paper-test-001",
           "resource_kind": "instance"
         },
-        "observed_at": "2026-11-07T19:30:00Z",
+        "observed_at": "2026-11-07T19:29:30Z",
         "runtime_id": "paper-runtime-017",
         "server_id": "minecraft-test"
       },
-      "start_completed_at": "2026-11-07T19:30:00Z",
       "unit_inspection": {
         "observed_at": "2026-11-07T19:30:01Z",
         "release_ref": "paper-1.21.11-build-3",
@@ -103,7 +111,12 @@
       }
     },
     {
-      "case_id": "aggregate-before-start",
+      "capability_versions": {
+        "execution.unit.inspect": "2",
+        "game.readiness.check": "2"
+      },
+      "case_id": "aggregate-beyond-skew-allowance",
+      "readiness_dispatched_at": "2026-11-07T19:30:00Z",
       "readiness_output": {
         "check_results": [
           {
@@ -112,7 +125,7 @@
             "evidence": [
               "Paper startup completion marker observed."
             ],
-            "observed_at": "2026-11-07T19:29:59.999Z",
+            "observed_at": "2026-11-07T19:29:29.999Z",
             "result": "pass"
           },
           {
@@ -121,7 +134,7 @@
             "evidence": [
               "Primary world loaded."
             ],
-            "observed_at": "2026-11-07T19:29:59.999Z",
+            "observed_at": "2026-11-07T19:29:29.999Z",
             "result": "pass"
           }
         ],
@@ -133,11 +146,10 @@
           "external_id": "instance-paper-test-001",
           "resource_kind": "instance"
         },
-        "observed_at": "2026-11-07T19:29:59.999Z",
+        "observed_at": "2026-11-07T19:29:29.999Z",
         "runtime_id": "paper-runtime-017",
         "server_id": "minecraft-test"
       },
-      "start_completed_at": "2026-11-07T19:30:00Z",
       "unit_inspection": {
         "observed_at": "2026-11-07T19:30:01Z",
         "release_ref": "paper-1.21.11-build-3",
@@ -152,7 +164,12 @@
       }
     },
     {
-      "case_id": "check-before-start",
+      "capability_versions": {
+        "execution.unit.inspect": "2",
+        "game.readiness.check": "2"
+      },
+      "case_id": "check-beyond-skew-allowance",
+      "readiness_dispatched_at": "2026-11-07T19:30:00Z",
       "readiness_output": {
         "check_results": [
           {
@@ -161,7 +178,7 @@
             "evidence": [
               "Paper startup completion marker observed."
             ],
-            "observed_at": "2026-11-07T19:29:59.999Z",
+            "observed_at": "2026-11-07T19:29:29.999Z",
             "result": "pass"
           },
           {
@@ -186,7 +203,6 @@
         "runtime_id": "paper-runtime-017",
         "server_id": "minecraft-test"
       },
-      "start_completed_at": "2026-11-07T19:30:00Z",
       "unit_inspection": {
         "observed_at": "2026-11-07T19:30:01Z",
         "release_ref": "paper-1.21.11-build-3",
@@ -201,7 +217,12 @@
       }
     },
     {
+      "capability_versions": {
+        "execution.unit.inspect": "2",
+        "game.readiness.check": "2"
+      },
       "case_id": "other-runtime",
+      "readiness_dispatched_at": "2026-11-07T19:30:00Z",
       "readiness_output": {
         "check_results": [
           {
@@ -235,7 +256,6 @@
         "runtime_id": "paper-runtime-016",
         "server_id": "minecraft-test"
       },
-      "start_completed_at": "2026-11-07T19:30:00Z",
       "unit_inspection": {
         "observed_at": "2026-11-07T19:30:01Z",
         "release_ref": "paper-1.21.11-build-3",
@@ -250,7 +270,12 @@
       }
     },
     {
+      "capability_versions": {
+        "execution.unit.inspect": "2",
+        "game.readiness.check": "2"
+      },
       "case_id": "readiness-without-runtime",
+      "readiness_dispatched_at": "2026-11-07T19:30:00Z",
       "readiness_output": {
         "check_results": [
           {
@@ -283,7 +308,6 @@
         "observed_at": "2026-11-07T19:30:05Z",
         "server_id": "minecraft-test"
       },
-      "start_completed_at": "2026-11-07T19:30:00Z",
       "unit_inspection": {
         "observed_at": "2026-11-07T19:30:01Z",
         "release_ref": "paper-1.21.11-build-3",
@@ -298,7 +322,12 @@
       }
     },
     {
+      "capability_versions": {
+        "execution.unit.inspect": "2",
+        "game.readiness.check": "2"
+      },
       "case_id": "inspection-without-runtime",
+      "readiness_dispatched_at": "2026-11-07T19:30:00Z",
       "readiness_output": {
         "check_results": [
           {
@@ -332,10 +361,115 @@
         "runtime_id": "paper-runtime-017",
         "server_id": "minecraft-test"
       },
-      "start_completed_at": "2026-11-07T19:30:00Z",
       "unit_inspection": {
         "observed_at": "2026-11-07T19:30:01Z",
         "release_ref": "paper-1.21.11-build-3",
+        "state": "running",
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "external_id": "paper-server",
+          "resource_kind": "systemd-unit"
+        }
+      }
+    },
+    {
+      "capability_versions": {
+        "execution.unit.inspect": "2",
+        "game.readiness.check": "1"
+      },
+      "case_id": "readiness-capability-version-1",
+      "readiness_dispatched_at": "2026-11-07T19:30:00Z",
+      "readiness_output": {
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "evidence": [
+              "Paper startup completion marker observed."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "evidence": [
+              "Primary world loaded."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          }
+        ],
+        "environment_id": "staging",
+        "game_release_id": "paper-1.21.11-build-3",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "external_id": "instance-paper-test-001",
+          "resource_kind": "instance"
+        },
+        "observed_at": "2026-11-07T19:30:05Z",
+        "runtime_id": "paper-runtime-017",
+        "server_id": "minecraft-test"
+      },
+      "unit_inspection": {
+        "observed_at": "2026-11-07T19:30:01Z",
+        "release_ref": "paper-1.21.11-build-3",
+        "runtime_id": "paper-runtime-017",
+        "state": "running",
+        "unit_ref": {
+          "adapter_id": "execution.systemd",
+          "environment_id": "staging",
+          "external_id": "paper-server",
+          "resource_kind": "systemd-unit"
+        }
+      }
+    },
+    {
+      "capability_versions": {
+        "execution.unit.inspect": "1",
+        "game.readiness.check": "2"
+      },
+      "case_id": "inspect-capability-version-1",
+      "readiness_dispatched_at": "2026-11-07T19:30:00Z",
+      "readiness_output": {
+        "check_results": [
+          {
+            "check_id": "paper.startup-complete",
+            "check_version": "1",
+            "evidence": [
+              "Paper startup completion marker observed."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          },
+          {
+            "check_id": "paper.world-loaded",
+            "check_version": "2",
+            "evidence": [
+              "Primary world loaded."
+            ],
+            "observed_at": "2026-11-07T19:30:05Z",
+            "result": "pass"
+          }
+        ],
+        "environment_id": "staging",
+        "game_release_id": "paper-1.21.11-build-3",
+        "instance_ref": {
+          "adapter_id": "hosting.example",
+          "environment_id": "staging",
+          "external_id": "instance-paper-test-001",
+          "resource_kind": "instance"
+        },
+        "observed_at": "2026-11-07T19:30:05Z",
+        "runtime_id": "paper-runtime-017",
+        "server_id": "minecraft-test"
+      },
+      "unit_inspection": {
+        "observed_at": "2026-11-07T19:30:01Z",
+        "release_ref": "paper-1.21.11-build-3",
+        "runtime_id": "paper-runtime-017",
         "state": "running",
         "unit_ref": {
           "adapter_id": "execution.systemd",
@@ -350,52 +484,75 @@
     "evaluations": [
       {
         "case_id": "fresh-same-runtime",
-        "observed_after_start": true,
+        "observed_after_dispatch": true,
         "ready_transition_permitted": true,
         "runtime_bound": true,
-        "schemas_valid": true
+        "schemas_valid": true,
+        "start_dispatch_permitted": true
       },
       {
-        "case_id": "observed-at-start-completion",
-        "observed_after_start": true,
+        "case_id": "observed-at-skew-allowance",
+        "observed_after_dispatch": true,
         "ready_transition_permitted": true,
         "runtime_bound": true,
-        "schemas_valid": true
+        "schemas_valid": true,
+        "start_dispatch_permitted": true
       },
       {
-        "case_id": "aggregate-before-start",
-        "observed_after_start": false,
+        "case_id": "aggregate-beyond-skew-allowance",
+        "observed_after_dispatch": false,
         "ready_transition_permitted": false,
         "runtime_bound": true,
-        "schemas_valid": true
+        "schemas_valid": true,
+        "start_dispatch_permitted": true
       },
       {
-        "case_id": "check-before-start",
-        "observed_after_start": false,
+        "case_id": "check-beyond-skew-allowance",
+        "observed_after_dispatch": false,
         "ready_transition_permitted": false,
         "runtime_bound": true,
-        "schemas_valid": true
+        "schemas_valid": true,
+        "start_dispatch_permitted": true
       },
       {
         "case_id": "other-runtime",
-        "observed_after_start": true,
+        "observed_after_dispatch": true,
         "ready_transition_permitted": false,
         "runtime_bound": false,
-        "schemas_valid": true
+        "schemas_valid": true,
+        "start_dispatch_permitted": true
       },
       {
         "case_id": "readiness-without-runtime",
-        "observed_after_start": true,
+        "observed_after_dispatch": true,
         "ready_transition_permitted": false,
         "runtime_bound": false,
-        "schemas_valid": true
+        "schemas_valid": true,
+        "start_dispatch_permitted": true
       },
       {
         "case_id": "inspection-without-runtime",
-        "observed_after_start": true,
+        "observed_after_dispatch": true,
         "ready_transition_permitted": false,
         "runtime_bound": false,
-        "schemas_valid": true
+        "schemas_valid": true,
+        "start_dispatch_permitted": true
+      },
+      {
+        "case_id": "readiness-capability-version-1",
+        "observed_after_dispatch": true,
+        "ready_transition_permitted": false,
+        "runtime_bound": true,
+        "schemas_valid": true,
+        "start_dispatch_permitted": false
+      },
+      {
+        "case_id": "inspect-capability-version-1",
+        "observed_after_dispatch": true,
+        "ready_transition_permitted": false,
+        "runtime_bound": true,
+        "schemas_valid": true,
+        "start_dispatch_permitted": false
       }
     ]
   },

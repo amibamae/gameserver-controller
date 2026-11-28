@@ -38,28 +38,31 @@ func runStartReadinessCases(t *testing.T, cases []startReadinessCase) {
 	}
 }
 
-// startReadinessTimes is fresh evidence for one runtime with the unit start
-// completed at completedAt and readiness observed at the given times.
-func startReadinessTimes(completedAt, observedAt, checkObservedAt time.Time) startStopR3Evidence {
+// startReadinessTimes is fresh evidence for one runtime with readiness
+// dispatched at dispatchedAt and observed at the given times.
+func startReadinessTimes(dispatchedAt, observedAt, checkObservedAt time.Time) startStopR3Evidence {
 	evidence := startStopR3FreshEvidence()
-	evidence.startCompletedAt, evidence.observedAt, evidence.checkObservedAt = completedAt, observedAt, checkObservedAt
+	evidence.readinessDispatchedAt, evidence.observedAt, evidence.checkObservedAt = dispatchedAt, observedAt, checkObservedAt
 	return evidence
 }
 
-// TestStartReadinessMustFollowUnitStart pins that server.start readiness
-// evidence, in aggregate and for every check, is no earlier than the
-// completion of this operation's unit start.
-func TestStartReadinessMustFollowUnitStart(t *testing.T) {
-	const aggregateEarly = "readiness observation predates this operation's unit start"
-	const checkEarly = `readiness check "paper.startup-complete" observation predates this operation's unit start`
-	completedAt := time.Now().UTC().Add(-time.Second)
-	before := completedAt.Add(-time.Millisecond)
-	after := completedAt.Add(time.Millisecond)
+// TestStartReadinessMustFollowItsDispatch pins that server.start readiness
+// evidence, in aggregate and for every check, was evaluated no earlier than
+// the readiness step was dispatched, less the 30s clock-skew allowance. The
+// readiness step is first dispatched only after the final unit start attempt
+// succeeded, so this also rejects evidence from before that start.
+func TestStartReadinessMustFollowItsDispatch(t *testing.T) {
+	const aggregateEarly = "readiness observation predates its dispatch by more than the 30s clock-skew allowance"
+	const checkEarly = `readiness check "paper.startup-complete" observation predates its dispatch by more than the 30s clock-skew allowance`
+	dispatchedAt := time.Now().UTC().Add(-time.Second)
+	allowed := dispatchedAt.Add(-30 * time.Second)
+	tooEarly := allowed.Add(-time.Millisecond)
 	runStartReadinessCases(t, []startReadinessCase{
-		{name: "aggregate and checks 1ms before start completion", evidence: startReadinessTimes(completedAt, before, before), want: aggregateEarly},
-		{name: "checks 1ms before start completion", evidence: startReadinessTimes(completedAt, completedAt, before), want: checkEarly},
-		{name: "observed at start completion", evidence: startReadinessTimes(completedAt, completedAt, completedAt)},
-		{name: "observed 1ms after start completion", evidence: startReadinessTimes(completedAt, after, after)},
+		{name: "aggregate and checks 1ms beyond the skew allowance", evidence: startReadinessTimes(dispatchedAt, tooEarly, tooEarly), want: aggregateEarly},
+		{name: "checks 1ms beyond the skew allowance", evidence: startReadinessTimes(dispatchedAt, dispatchedAt, tooEarly), want: checkEarly},
+		{name: "observed at the skew allowance", evidence: startReadinessTimes(dispatchedAt, allowed, allowed)},
+		{name: "observed at dispatch", evidence: startReadinessTimes(dispatchedAt, dispatchedAt, dispatchedAt)},
+		{name: "observed 1ms after dispatch", evidence: startReadinessTimes(dispatchedAt, dispatchedAt.Add(time.Millisecond), dispatchedAt.Add(time.Millisecond))},
 	})
 }
 
@@ -86,13 +89,13 @@ func TestStartReadinessMustNameTheStartedRuntime(t *testing.T) {
 	})
 }
 
-// TestStartReadinessRequiresRecordedStartCompletion pins that a start step
-// without a stored completion time cannot anchor readiness.
-func TestStartReadinessRequiresRecordedStartCompletion(t *testing.T) {
+// TestStartReadinessRequiresRecordedDispatch pins that a readiness step
+// without a stored dispatch time cannot anchor its evidence.
+func TestStartReadinessRequiresRecordedDispatch(t *testing.T) {
 	f := newStartStopR3Fixture(t)
 	operation := startStopR3Ready(t, f)
-	startStopR3SetStep(&operation, startRuntimeStep, func(step *store.OperationStep) { step.CompletedAt = nil })
-	const want = "unit start step has no recorded completion time"
+	startStopR3SetStep(&operation, startReadinessStep, func(step *store.OperationStep) { step.StartedAt = nil })
+	const want = "readiness step has no recorded dispatch time"
 	if got := startStopR3ErrText(f.start.ValidateCompletion(context.Background(), operation)); got != want {
 		t.Fatalf("ValidateCompletion = %q; want %q", got, want)
 	}
@@ -102,12 +105,12 @@ func TestStartReadinessRequiresRecordedStartCompletion(t *testing.T) {
 // workflow cannot reach after schema validation: undecodable output and an
 // unparseable observation time.
 func TestCheckReadinessFollowsStartFailsClosed(t *testing.T) {
-	completedAt := time.Now().UTC()
-	start := startedRuntime{completedAt: completedAt, runtimeID: startStopR3RuntimeID}
+	notBefore := time.Now().UTC()
+	start := startedRuntime{notBefore: notBefore, runtimeID: startStopR3RuntimeID}
 	cases := map[string]string{
 		`[]`: "decode readiness observation",
-		`{"observed_at":"not-a-time","check_results":[]}`: "readiness observation predates this operation's unit start",
-		`{"observed_at":"` + completedAt.Format(time.RFC3339Nano) + `","check_results":[{"check_id":"paper.world-loaded","observed_at":"x"}]}`: `readiness check "paper.world-loaded" observation predates this operation's unit start`,
+		`{"observed_at":"not-a-time","check_results":[]}`: "readiness observation predates its dispatch by more than the 30s clock-skew allowance",
+		`{"observed_at":"` + notBefore.Format(time.RFC3339Nano) + `","check_results":[{"check_id":"paper.world-loaded","observed_at":"x"}]}`: `readiness check "paper.world-loaded" observation predates its dispatch by more than the 30s clock-skew allowance`,
 	}
 	for output, want := range cases {
 		if got := startStopR3ErrText(checkReadinessFollowsStart(json.RawMessage(output), start)); got != want {

@@ -57,7 +57,7 @@ func checkStartRuntime(operation store.OperationRecord, step store.OperationStep
 	if !sameStepReference(operation, startRuntimeStep, startVerifyRuntimeStep, "unit_ref") {
 		return errors.New("runtime start and verification must target the same planned unit")
 	}
-	return nil
+	return checkRuntimeIdentityCapabilities(operation.Steps)
 }
 
 // startRuntimeAttemptAllowed allows the first start attempt from a stopped
@@ -89,6 +89,9 @@ func checkStartReadiness(operation store.OperationRecord, step store.OperationSt
 	if !sameStepReference(operation, startRuntimeStep, startVerifyRuntimeStep, "unit_ref") || !stepBindsRef(step.Input, "instance_ref", server.InstanceRef) {
 		return errors.New("readiness request must be bound to the verified unit and current instance")
 	}
+	if inspection.RuntimeID == "" {
+		return errors.New("game readiness requires the runtime inspection to report a runtime_id")
+	}
 	return nil
 }
 
@@ -108,6 +111,9 @@ func (w *ServerStartWorkflow) HandlePreconditionFailure(_ context.Context, opera
 func startPreconditionFailureMessage(operation store.OperationRecord, stepID string) string {
 	switch stepID {
 	case startRuntimeStep:
+		if checkRuntimeIdentityCapabilities(operation.Steps) != nil {
+			return "The selected execution or game capability does not report runtime identity; no runtime start was issued."
+		}
 		if startInstanceProvenInactive(operation) {
 			return "The exact provider instance is not active; no runtime start was issued."
 		}

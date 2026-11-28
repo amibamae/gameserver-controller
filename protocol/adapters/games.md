@@ -56,6 +56,15 @@ profile resolution and persist the set ID and pairs in the immutable
 at those versions; a missing, duplicate, extra, or version-mismatched result
 cannot permit `ready`.
 
+At `game.readiness.check` capability version 2 the output also reports the
+`runtime_id` of the runtime incarnation the checks observed, in the form
+`execution.unit.inspect` reports it, and every `observed_at` is evaluation time:
+when the adapter evaluated the check for this request, never the time of a game
+event such as a startup log line. `server.start` requires version 2 before it
+starts a runtime, requires the reported `runtime_id` to equal the one the unit
+inspection reported after the start, and rejects observations earlier than the
+readiness request dispatch less a 30-second clock-skew allowance.
+
 `game.validate_installation` reports `valid` only when its output binds the exact target and release and contains exactly one `verified` result with matching expected/observed checksums for every pinned artifact; missing, duplicate, unavailable, mismatched, or unknown results cannot permit start.
 
 A readiness result MUST identify:

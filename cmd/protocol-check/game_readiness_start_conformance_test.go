@@ -32,8 +32,8 @@ func TestReadinessStartBoundRejectsInvalidCases(t *testing.T) {
 			`case "fresh-same-runtime" unit inspection does not match schema`},
 		"readiness schema": {func(c map[string]any) { asObject(c["readiness_output"])["runtime_id"] = "" },
 			`case "fresh-same-runtime" readiness output does not match schema`},
-		"start time": {func(c map[string]any) { c["start_completed_at"] = "not-a-time" },
-			`case "fresh-same-runtime" has no valid start_completed_at`},
+		"dispatch time": {func(c map[string]any) { c["readiness_dispatched_at"] = "not-a-time" },
+			`case "fresh-same-runtime" has no valid readiness_dispatched_at`},
 	}
 	for name, test := range cases {
 		t.Run(name, func(t *testing.T) {

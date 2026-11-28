@@ -65,7 +65,7 @@ func startStopR3ReconcileCommon(unit func(string) string) []startStopR3Reconcile
 			startStopR3DropCapability(f, "execution.fake", "execution.unit.inspect")
 		}, want: ResolutionNeedsOperator, wantRef: true},
 		{name: "capability version changed", change: func(f *startStopR3Fixture, _ *store.OperationRecord) {
-			startStopR3EditCapability(f, "execution.fake", "execution.unit.inspect", func(c *adapter.Capability) { c.Version = "2" })
+			startStopR3EditCapability(f, "execution.fake", "execution.unit.inspect", func(c *adapter.Capability) { c.Version = "3" })
 		}, want: ResolutionNeedsOperator, wantRef: true},
 		needs("invoke fails", startStopR3FailInvoke),
 		needs("wrong JSON-RPC version", startStopR3EditReply(running, func(r *adapter.InvokeResponse) { r.JSONRPC = "1.0" })),

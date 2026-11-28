@@ -129,6 +129,13 @@ func startStopR3Constrained(capability adapter.Capability, constraints map[strin
 	return capability
 }
 
+// startStopR3AtVersion declares capability at version, as the runtime-identity
+// capabilities server.start needs are declared at version 2.
+func startStopR3AtVersion(capability adapter.Capability, version string) adapter.Capability {
+	capability.Version = version
+	return capability
+}
+
 func startStopR3Checks() []ReadinessRequirement {
 	return []ReadinessRequirement{
 		{CheckID: "paper.startup-complete", CheckVersion: "1"},
@@ -160,10 +167,10 @@ func newStartStopR3Fixture(t *testing.T) *startStopR3Fixture {
 			startStopR3Capability(version, "hosting.instance.inspect", "hosting:instance-inspect", false)),
 		"execution.fake": descriptor("execution.fake", adapter.CategoryExecution,
 			startStopR3Capability(version, "execution.unit.start", "execution:systemd-unit-start", true),
-			startStopR3Capability(version, "execution.unit.inspect", "execution:systemd-unit-inspect", false),
+			startStopR3AtVersion(startStopR3Capability(version, "execution.unit.inspect", "execution:systemd-unit-inspect", false), "2"),
 			startStopR3Capability(version, "execution.unit.graceful_stop", "execution:systemd-unit-graceful-stop", true)),
 		"game.paper": descriptor("game.paper", adapter.CategoryGame,
-			startStopR3Constrained(startStopR3Capability(version, "game.readiness.check", "game:readiness-check", false), readiness),
+			startStopR3AtVersion(startStopR3Constrained(startStopR3Capability(version, "game.readiness.check", "game:readiness-check", false), readiness), "2"),
 			startStopR3Capability(version, "game.save.request", "game:save-request", true)),
 	}}
 	servers := &startStopR3Servers{record: store.StoredLogicalServer{Revision: 7, Record: store.LogicalServer{
@@ -258,7 +265,7 @@ func startStopR3PlannedStart(t *testing.T, f *startStopR3Fixture) store.Operatio
 	operation.Steps = steps
 	startStopR3SetStep(&operation, startInspectInstanceStep, startStopR3Succeed(startStopR3InstanceOutput(startTestInstance, "active")))
 	startStopR3SetStep(&operation, startRuntimeStep, startStopR3Succeed(startStopR3UnitResult(startTestUnit, "completed", "running")))
-	startStopR3SetStep(&operation, startVerifyRuntimeStep, startStopR3Succeed(startStopR3UnitOutput(startTestUnit, "running")))
+	startStopR3SetStep(&operation, startVerifyRuntimeStep, startStopR3Succeed(startStopR3RunningUnit(t, startStopR3RuntimeID)))
 	return operation
 }
 

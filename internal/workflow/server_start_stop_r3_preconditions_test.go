@@ -169,7 +169,7 @@ func TestStartStopR3StartCheckPreconditions(t *testing.T) {
 		{name: "readiness with stopped unit", step: startReadinessStep, state: starting,
 			change: startStopR3Step(startVerifyRuntimeStep, startStopR3Output(startStopR3UnitOutput(startTestUnit, "stopped"))), want: readinessRunning},
 		{name: "readiness with verification output for another unit", step: startReadinessStep, state: starting,
-			change: startStopR3Step(startVerifyRuntimeStep, startStopR3Output(startStopR3UnitOutput(startStopR3OtherUnit, "running")))},
+			change: startStopR3Step(startVerifyRuntimeStep, startStopR3Output(`{"unit_ref":`+startStopR3OtherUnit+`,"state":"running","observed_at":"`+startStopR3ObservedAt+`","runtime_id":"`+startStopR3RuntimeID+`"}`))},
 		{name: "readiness with verification of another unit", step: startReadinessStep, state: starting,
 			change: startStopR3Step(startVerifyRuntimeStep, startStopR3Input(`{"unit_ref":`+startStopR3OtherUnit+`}`)), want: readinessBound},
 		{name: "readiness bound to another instance", step: startReadinessStep, state: starting,

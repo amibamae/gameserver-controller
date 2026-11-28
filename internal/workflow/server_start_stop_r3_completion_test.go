@@ -56,29 +56,30 @@ func TestStartStopR3Constructors(t *testing.T) {
 	}
 }
 
-// startStopR3Evidence is when a test start's unit start completed, when its
-// readiness observation and checks were made, and the runtime IDs the unit
-// inspection and the readiness observation report; an empty ID is omitted.
+// startStopR3Evidence is when a test start's readiness step was dispatched,
+// when its readiness observation and checks were made, and the runtime IDs
+// the unit inspection and the readiness observation report; an empty ID is
+// omitted.
 type startStopR3Evidence struct {
-	startCompletedAt   time.Time
-	observedAt         time.Time
-	checkObservedAt    time.Time
-	inspectRuntimeID   string
-	readinessRuntimeID string
+	readinessDispatchedAt time.Time
+	observedAt            time.Time
+	checkObservedAt       time.Time
+	inspectRuntimeID      string
+	readinessRuntimeID    string
 }
 
 const startStopR3RuntimeID = "paper-runtime-r3-001"
 
-// startStopR3FreshEvidence is a unit start completed one second ago and
-// readiness observed now, both naming the same runtime.
+// startStopR3FreshEvidence is readiness dispatched one second ago and
+// observed now, with the inspection and observation naming the same runtime.
 func startStopR3FreshEvidence() startStopR3Evidence {
 	now := time.Now().UTC()
-	return startStopR3Evidence{startCompletedAt: now.Add(-time.Second), observedAt: now, checkObservedAt: now,
+	return startStopR3Evidence{readinessDispatchedAt: now.Add(-time.Second), observedAt: now, checkObservedAt: now,
 		inspectRuntimeID: startStopR3RuntimeID, readinessRuntimeID: startStopR3RuntimeID}
 }
 
 // startStopR3Ready completes a planned start with passing readiness evidence
-// observed now, after the unit start completed.
+// observed now, after the readiness step was dispatched.
 func startStopR3Ready(t *testing.T, f *startStopR3Fixture) store.OperationRecord {
 	t.Helper()
 	return startStopR3ReadyWith(t, f, startStopR3FreshEvidence())
@@ -89,10 +90,10 @@ func startStopR3Ready(t *testing.T, f *startStopR3Fixture) store.OperationRecord
 func startStopR3ReadyWith(t *testing.T, f *startStopR3Fixture, evidence startStopR3Evidence) store.OperationRecord {
 	t.Helper()
 	operation := startStopR3PlannedStart(t, f)
-	completedAt := evidence.startCompletedAt
-	startStopR3SetStep(&operation, startRuntimeStep, func(step *store.OperationStep) { step.CompletedAt = &completedAt })
-	inspection := startStopR3WithRuntime(map[string]any{"unit_ref": json.RawMessage(startTestUnit), "state": "running", "observed_at": startStopR3ObservedAt}, evidence.inspectRuntimeID)
-	startStopR3SetStep(&operation, startVerifyRuntimeStep, startStopR3Succeed(string(startStopR3MustJSON(t, inspection))))
+	dispatchedAt := evidence.readinessDispatchedAt
+	startCompletedAt := dispatchedAt.Add(-time.Second)
+	startStopR3SetStep(&operation, startRuntimeStep, func(step *store.OperationStep) { step.CompletedAt = &startCompletedAt })
+	startStopR3SetStep(&operation, startVerifyRuntimeStep, startStopR3Succeed(startStopR3RunningUnit(t, evidence.inspectRuntimeID)))
 	checkObserved := evidence.checkObservedAt.Format(time.RFC3339Nano)
 	results := []any{}
 	for _, check := range startStopR3Checks() {
@@ -103,8 +104,18 @@ func startStopR3ReadyWith(t *testing.T, f *startStopR3Fixture, evidence startSto
 		"game_release_id": startTestRelease, "observed_at": evidence.observedAt.Format(time.RFC3339Nano), "check_results": results,
 	}, evidence.readinessRuntimeID)
 	startStopR3SetStep(&operation, startReadinessStep, startStopR3Succeed(string(startStopR3MustJSON(t, observation))))
+	startStopR3SetStep(&operation, startReadinessStep, func(step *store.OperationStep) { step.StartedAt = &dispatchedAt })
 	f.server().LifecycleState = protocolstate.ServerValidating
 	return operation
+}
+
+// startStopR3RunningUnit is a running inspection of the test unit that
+// reports runtimeID, or no runtime when it is empty.
+func startStopR3RunningUnit(t *testing.T, runtimeID string) string {
+	t.Helper()
+	return string(startStopR3MustJSON(t, startStopR3WithRuntime(map[string]any{
+		"unit_ref": json.RawMessage(startTestUnit), "state": "running", "observed_at": startStopR3ObservedAt,
+	}, runtimeID)))
 }
 
 // startStopR3WithRuntime adds runtimeID to document as runtime_id unless it
