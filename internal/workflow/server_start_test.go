@@ -17,12 +17,13 @@ import (
 )
 
 const (
-	startTestServerID = "start-test"
-	startTestEnvID    = "staging"
-	startTestRelease  = "paper-1.21.11-build-3"
-	startTestSetID    = "game.paper:paper-1.21.11:checks-v1"
-	startTestInstance = `{"adapter_id":"hosting.fake","environment_id":"staging","resource_kind":"instance","external_id":"vm-start-test"}`
-	startTestUnit     = `{"adapter_id":"execution.fake","environment_id":"staging","resource_kind":"systemd-unit","external_id":"paper-start-test"}`
+	startTestServerID  = "start-test"
+	startTestEnvID     = "staging"
+	startTestRelease   = "paper-1.21.11-build-3"
+	startTestSetID     = "game.paper:paper-1.21.11:checks-v1"
+	startTestInstance  = `{"adapter_id":"hosting.fake","environment_id":"staging","resource_kind":"instance","external_id":"vm-start-test"}`
+	startTestUnit      = `{"adapter_id":"execution.fake","environment_id":"staging","resource_kind":"systemd-unit","external_id":"paper-start-test"}`
+	startTestRuntimeID = "paper-runtime-start-test-001"
 )
 
 func TestServerStartRunsDurablePlanAndProjectsReady(t *testing.T) {
@@ -197,7 +198,7 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 			{Name: "execution.unit.graceful_stop", Version: "1", Mutating: true,
 				InputSchemaURI:  "urn:gameserver-controller:" + version + ":execution:systemd-unit-graceful-stop-input",
 				OutputSchemaURI: "urn:gameserver-controller:" + version + ":execution:systemd-unit-graceful-stop-output", RequiredPermissions: []string{}},
-			{Name: "execution.unit.inspect", Version: "1", Mutating: false,
+			{Name: "execution.unit.inspect", Version: "2", Mutating: false,
 				InputSchemaURI:  "urn:gameserver-controller:" + version + ":execution:systemd-unit-inspect-input",
 				OutputSchemaURI: "urn:gameserver-controller:" + version + ":execution:systemd-unit-inspect-output", RequiredPermissions: []string{}},
 		},
@@ -215,7 +216,7 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 		AdapterID: "game.paper", Category: adapter.CategoryGame, DisplayName: "fake Paper", ImplementationVersion: "test-1",
 		ProtocolVersions: []string{version}, ContractVersions: []string{"1"}, RequiredPermissions: []string{},
 		Capabilities: []adapter.Capability{
-			{Name: "game.readiness.check", Version: "1", Mutating: false,
+			{Name: "game.readiness.check", Version: "2", Mutating: false,
 				InputSchemaURI:  "urn:gameserver-controller:" + version + ":game:readiness-check-input",
 				OutputSchemaURI: "urn:gameserver-controller:" + version + ":game:readiness-check-output", RequiredPermissions: []string{},
 				Constraints: map[string]any{"readiness_check_sets": []any{map[string]any{
@@ -227,7 +228,7 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 				OutputSchemaURI: "urn:gameserver-controller:" + version + ":game:save-request-output", RequiredPermissions: []string{}},
 		},
 	})
-	for _, fake := range []*fakeadapter.Scripted{hosting, execution, game} {
+	for _, fake := range []adapter.Implementation{hosting, execution, freshReadinessGame{game}} {
 		if err := registry.Register(fake); err != nil {
 			t.Fatal(err)
 		}
@@ -295,7 +296,7 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 	if err := hosting.SetScript("hosting.instance.inspect", fakeadapter.Reply{Outcome: adapter.OutcomeCompleted, Output: providerOutput, ObservedAt: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
-	unitOutput := json.RawMessage(fmt.Sprintf(`{"unit_ref":%s,"state":"running","observed_at":%q}`, startTestUnit, observedAt))
+	unitOutput := json.RawMessage(fmt.Sprintf(`{"unit_ref":%s,"state":"running","observed_at":%q,"runtime_id":%q}`, startTestUnit, observedAt, startTestRuntimeID))
 	startState := "completed"
 	unitState := "running"
 	if startOutcome == adapter.OutcomeUnknown {
@@ -327,7 +328,7 @@ func newServerStartFixture(t *testing.T, allReadinessPass bool, startOutcome ada
 	}
 	readinessOutput, err := json.Marshal(map[string]any{
 		"server_id": startTestServerID, "environment_id": startTestEnvID, "instance_ref": json.RawMessage(startTestInstance),
-		"game_release_id": startTestRelease, "observed_at": observedAt, "check_results": readinessResults,
+		"game_release_id": startTestRelease, "observed_at": observedAt, "runtime_id": startTestRuntimeID, "check_results": readinessResults,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -9,6 +9,7 @@
   },
   "game_release_id": "paper-1.21.11-build-3",
   "observed_at": "2026-11-06T09:00:00Z",
+  "runtime_id": "paper-runtime-017",
   "check_results": [
     {
       "check_id": "paper.startup-complete",

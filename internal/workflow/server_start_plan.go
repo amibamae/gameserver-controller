@@ -40,7 +40,7 @@ func (w *ServerStartWorkflow) BuildPlan(ctx context.Context, operation store.Ope
 	if err := w.verifyGameReadiness(server, profile); err != nil {
 		return nil, err
 	}
-	return encodePlannedSteps(w.schemas, rows, capabilities)
+	return requireRuntimeIdentity(encodePlannedSteps(w.schemas, rows, capabilities))
 }
 
 // startPlanRows is the server.start plan: inspect the provider instance,

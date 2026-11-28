@@ -25,7 +25,7 @@ func TestServerDestroyPlanCharacterization(t *testing.T) {
 	unit := json.RawMessage(`{"unit_ref":` + startTestUnit + `}`)
 	want := []store.OperationStep{
 		{StepID: "inspect-instance", StepType: "hosting.instance.inspect", Status: protocolstate.StepPending, AdapterID: "hosting.fake", CapabilityName: "hosting.instance.inspect", CapabilityVersion: "1", Input: instance},
-		{StepID: "inspect-runtime", StepType: "execution.unit.inspect", Status: protocolstate.StepPending, AdapterID: "execution.fake", CapabilityName: "execution.unit.inspect", CapabilityVersion: "1", Input: unit},
+		{StepID: "inspect-runtime", StepType: "execution.unit.inspect", Status: protocolstate.StepPending, AdapterID: "execution.fake", CapabilityName: "execution.unit.inspect", CapabilityVersion: "2", Input: unit},
 		{StepID: "destroy-instance", StepType: "hosting.instance.destroy", Status: protocolstate.StepPending, AdapterID: "hosting.fake", CapabilityName: "hosting.instance.destroy", CapabilityVersion: "1", Input: instance},
 		{StepID: "verify-instance-absence", StepType: "hosting.instance.inspect", Status: protocolstate.StepPending, AdapterID: "hosting.fake", CapabilityName: "hosting.instance.inspect", CapabilityVersion: "1", Input: instance},
 	}
