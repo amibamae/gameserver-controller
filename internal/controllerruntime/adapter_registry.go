@@ -14,7 +14,11 @@ import (
 // Each adapter implementation lives in its own adapter_<name>.go file. That
 // file defines the implementation's settings block, validates it, builds the
 // adapter, and registers both halves from init() with registerAdapter. To add
-// an adapter, add such a file; to remove one, delete its file.
+// an adapter, add such a file; to remove one, delete its file. Its builder
+// must return a real implementation: never a fake, a scripted double, or nil
+// (buildAndRegister refuses nil). The set of registered names is pinned by
+// reviewedProductionAdapters in adapter_registry_guard_test.go, so adding or
+// removing an adapter also means editing that list and having it reviewed.
 
 // adapterBuild is what a builder receives for one configured profile.
 type adapterBuild struct {

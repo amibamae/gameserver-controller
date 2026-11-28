@@ -17,11 +17,13 @@ import (
 var skippedDirs = map[string]bool{".git": true, "graphify-out": true, "node_modules": true, "testdata": true, "vendor": true}
 
 // goSource is one non-test Go file: its package directory relative to the
-// module root, its package doc, and its imports.
+// module root, its package doc, its imports, and the exported top-level
+// names it declares with a test-double prefix (see fakeDeclarations).
 type goSource struct {
 	dir     string
 	doc     string
 	imports []string
+	fakes   []string
 }
 
 func TestEveryListedHarnessIsLabeledAndEveryLabeledPackageIsListed(t *testing.T) {
@@ -127,7 +129,7 @@ func productionGoFile(name string) bool {
 }
 
 func parseSource(root, path string) (goSource, error) {
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly|parser.ParseComments)
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ParseComments|parser.SkipObjectResolution)
 	if err != nil {
 		return goSource{}, err
 	}
@@ -135,7 +137,7 @@ func parseSource(root, path string) (goSource, error) {
 	if err != nil {
 		return goSource{}, err
 	}
-	source := goSource{dir: filepath.ToSlash(dir)}
+	source := goSource{dir: filepath.ToSlash(dir), fakes: fakeDeclarations(file)}
 	if file.Doc != nil {
 		source.doc = file.Doc.Text()
 	}
