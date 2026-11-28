@@ -5,3 +5,11 @@ __pycache__/
 # Coordination CLI lock and temporary files
 COORDINATION/.lock
 COORDINATION/.*.tmp-*
+
+# Built application binaries (build with `go build ./cmd/...`; never commit)
+/bin/
+*.exe
+/supervised-pilot
+/protocol-check
+/controller
+/controller-setup
